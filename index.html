@@ -113,15 +113,29 @@
         .fbs-line-halo { fill: none; stroke: #ffffff; stroke-width: 7px; stroke-linejoin: round; stroke-linecap: round; }
         .fbs-line { fill: none; stroke-width: 2.5px; stroke-linejoin: round; stroke-linecap: round; }
         .fbs-io-box { fill: #f0f0f0; stroke-width: 2px; rx: 4px; ry: 4px; }
-      /* Live-Simulation Styles */
-        .fbs-block, .fbs-io-box, .fbs-line, .fbs-dot, .fbs-bubble { 
-            transition: stroke 0.2s ease, fill 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease; 
+      	/* --- Live-Simulation Styles (MIT AFTERGLOW) --- */
+        
+        /* 1. Ausklingen (Fade-Out): Langsamer Übergang (1s), wenn das Signal wegfällt */
+        .fbs-block, .fbs-io-box, .fbs-line, .fbs-dot, .fbs-bubble, .circ-component { 
+            transition: stroke 1s ease-out, fill 1s ease-out, opacity 1s ease-out, stroke-width 1s ease-out, filter 1s ease-out !important; 
         }
-        svg.sim-running .fbs-block.active { stroke-width: 3.5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2)); }
+        
+        /* 2. Einschalten (Snap-In): Keine Verzögerung (0s), wenn das Signal anliegt */
+        svg.sim-running .active,
+        .circ-component.active {
+            transition: stroke 0s, fill 0s, opacity 0s, stroke-width 0s, filter 0s !important;
+        }
+        
+        /* Glow-Effekte für aktive Zustände (heller Schein) */
+        svg.sim-running .fbs-block.active { stroke-width: 3.5px; filter: drop-shadow(0 0 6px rgba(255,255,255,0.7)); }
+        svg.sim-running .fbs-io-box.active { stroke-width: 3px; filter: drop-shadow(0 0 6px rgba(255,255,255,0.5)); }
+        svg.sim-running .fbs-line.active { stroke-width: 3.5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.6)); }
+        svg.sim-running .fbs-dot.active { filter: drop-shadow(0 0 5px rgba(255,255,255,0.6)); }
+        
+        /* Inaktive Zustände (Das Ziel des Ausfadens) */
         svg.sim-running .fbs-block.inactive { stroke: #444 !important; }
-        svg.sim-running .fbs-io-box.active { stroke-width: 3px; }
         svg.sim-running .fbs-io-box.inactive { stroke: #444 !important; color: #888; }
-        svg.sim-running .fbs-line.inactive { stroke: #333 !important; opacity: 0.3; }
+        svg.sim-running .fbs-line.inactive { stroke: #333 !important; opacity: 0.3; stroke-width: 2.5px; }
         svg.sim-running .fbs-dot.inactive { fill: #333 !important; opacity: 0.3; }
         svg.sim-running .fbs-bubble.inactive { stroke: #333 !important; }
 		/* Schaltplan-spezifische Transitionen */
@@ -1186,50 +1200,54 @@
             if (saveTimeout) clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => { saveIndicator.style.opacity = '0.3'; }, 1000);
         }
-		// NEU: Reparierte Lade-Funktion (Kein Doppel-Klick mehr & korrekter View-Mode)
+		// KUGELSICHERE LADE-FUNKTION
         window.loadExample = function(type) {
             if (!type) return;
             const selectEl = document.querySelector('.btn-reset');
             
-            // FIX 1: Wir verzichten auf setTimeout, damit der Event-Loop des Browsers
-            // beim Bestätigungsfenster nicht unterbrochen wird!
-            if (confirm("Möchtest du deinen Code und die Anlage durch das Beispiel überschreiben?")) {
-                textarea.value = EXAMPLES[type];
-                
-                if (EXAMPLES.types) {
-                    componentTypes = { ...EXAMPLES.types };
-                    localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
-                }
-                
-                spsState = {};
-                updateHighlighting(); 
-                updateEditor(); 
-                saveToStorage();
-                
-                // Anlage aufbauen und Physik vorbereiten
-                if (EXAMPLES.factory) {
-                    // FIX 2: Wir zwingen die Beispiel-Anlage explizit in die Seitenansicht!
-                    EXAMPLES.factory.globalViewMode = 'side';
-                    
-                    localStorage.setItem('logikFactoryState', JSON.stringify(EXAMPLES.factory));
-                    loadFactoryState();
-                    
-                    // AUTOMATIK: Schalte die Schwerkraft AN, damit das Beispiel funktioniert!
-                    globalGravity = true;
-                    const btnGrav = document.getElementById('btn-gravity');
-                    if (btnGrav) {
-                        btnGrav.classList.add('active');
-                        btnGrav.textContent = '🌍 Gravitation: AN';
+            // 10 Millisekunden warten, damit das Dropdown-Menü sich im Browser 
+            // visuell schließen kann, bevor der blockierende Confirm-Dialog aufpoppt!
+            setTimeout(() => {
+                if (confirm("Möchtest du deinen Code und die Anlage durch das Beispiel überschreiben?")) {
+                    try {
+                        textarea.value = EXAMPLES[type];
+                        
+                        if (EXAMPLES.types) {
+                            componentTypes = { ...EXAMPLES.types };
+                            localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
+                        }
+                        
+                        spsState = {};
+                        updateHighlighting(); 
+                        updateEditor(); 
+                        saveToStorage();
+                        
+                        // Anlage aufbauen und Physik vorbereiten
+                        if (EXAMPLES.factory) {
+                            EXAMPLES.factory.globalViewMode = 'side';
+                            localStorage.setItem('logikFactoryState', JSON.stringify(EXAMPLES.factory));
+                            loadFactoryState();
+                        } else {
+                            clearFactory(true); 
+                        }
+                        
+                        // NEU: Wenn der Factory-Tab gerade versteckt ist, klappen wir ihn 
+                        // automatisch auf, damit man das geladene Beispiel sofort sieht!
+                        const factoryPanel = document.getElementById('factory-wrapper');
+                        if (factoryPanel.style.display === 'none') {
+                            toggleWorkspaceView('factory-wrapper');
+                        }
+                        
+                    } catch (e) {
+                        // Falls jemals wieder ein Fehler passiert, zeigt der Editor ihn dir jetzt an!
+                        console.error("Fehler beim Laden des Beispiels:", e);
+                        alert("Fehler beim Laden: " + e.message);
                     }
-                    
-                } else {
-                    clearFactory(true); 
                 }
-            }
-            
-            // FIX 1.2: Das Dropdown wird erst GANZ AM ENDE zurückgesetzt,
-            // egal ob der User "Ok" oder "Abbrechen" geklickt hat.
-            selectEl.selectedIndex = 0;
+                
+                // Dropdown wieder auf "Beispiele..." zurücksetzen
+                selectEl.selectedIndex = 0;
+            }, 10);
         };
         function updateHighlighting() {
             let text = textarea.value;
@@ -1537,24 +1555,34 @@
             }
             currentGraph.nodes.forEach(node => {
                 const val = !!spsState[node.id];
+                
+                // 1. Logik-Blöcke (FBS)
                 const block = document.getElementById(`node-block-${node.id}`);
                 if (block) {
                     if (val) { block.classList.add('active'); block.classList.remove('inactive'); }
                     else { block.classList.add('inactive'); block.classList.remove('active'); }
                 }
+
+                // 2. Leitungen und Punkte (FBS)
                 const nets = document.querySelectorAll(`.net-source-${node.id}`);
                 nets.forEach(el => {
                     if (val) { el.classList.add('active'); el.classList.remove('inactive'); }
                     else { el.classList.add('inactive'); el.classList.remove('active'); }
-                // Status für Schaltplan (IEC) aktualisieren
-                if (currentView === 'IEC') {
+                });
+                
+                // 3. Schaltplan-Spulen/Lampen (IEC)
+                if (document.getElementById('circuit-wrapper').style.display !== 'none') {
                     const circOut = document.getElementById(`circ-out-${node.id}`);
                     if (circOut) {
-                        if (val && isSimulationActive) circOut.setAttribute('fill', '#f58231');
-                        else circOut.setAttribute('fill', '#ffffff');
+                        if (val && isSimulationActive) {
+                            circOut.classList.add('active'); // Löst sofortigen Start aus
+                            circOut.setAttribute('fill', '#f58231');
+                        } else {
+                            circOut.classList.remove('active'); // Löst den langsamen Afterglow aus
+                            circOut.setAttribute('fill', '#ffffff');
+                        }
                     }
                 }
-                });
             });
         }
 		// --- SCHALTPLAN GENERATOR (IEC) ---

@@ -233,7 +233,6 @@
         .circ-moving-contact { transition: transform 0.1s ease-out, stroke 0.3s, filter 0.3s !important; }
         /* Schließer (NO): Geschlossen = 0deg (gerade), Offen = nach links geklappt */
         .circ-moving-contact.is-no.open { transform: rotate(-25deg); } 
-		
         /* Öffner (NC): Geschlossen = 15deg (schräg nach rechts am Haken), Offen = noch weiter rechts weggeklappt! */
         .circ-moving-contact.is-nc { transform: rotate(15deg); }
         .circ-moving-contact.is-nc.open { transform: rotate(40deg); }
@@ -504,6 +503,17 @@
         }
         .factory-zoom-controls button:hover { background: #eee; }
         .factory-zoom-controls button:active { background: #ddd; transform: scale(0.95); }
+		.token.func { color: #DCDCAA; font-weight: bold; }
+		/* --- NEU: Signal-Säule, Drehtisch, 7-Seg Display --- */
+        .f2d-stacklight { position: absolute; width: 24px; height: 70px; background: #212121; border: 2px solid #000; border-radius: 4px; display: flex; flex-direction: column; justify-content: space-around; padding: 2px; box-sizing: border-box; z-index: 15; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+        .f2d-sl-seg { width: 100%; height: 30%; border-radius: 2px; background: #424242; transition: all 0.1s; border: 1px solid #111; box-sizing: border-box;}
+        .f2d-sl-red.on { background: #ff1744; box-shadow: 0 0 10px #ff1744; border-color: #fff;}
+        .f2d-sl-yel.on { background: #ffea00; box-shadow: 0 0 10px #ffea00; border-color: #fff;}
+        .f2d-sl-grn.on { background: #00e676; box-shadow: 0 0 10px #00e676; border-color: #fff;}
+        .f2d-turntable { position: absolute; width: 60px; height: 60px; background: #37474f; border: 2px solid #263238; border-radius: 4px; z-index: 2; box-sizing: border-box; }
+        .f2d-tt-arrow { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold; color: #78909c; transition: color 0.2s, text-shadow 0.2s; pointer-events: none; }
+        .f2d-turntable.active .f2d-tt-arrow { color: #ff9800; filter: drop-shadow(0 0 5px #ff9800); }
+        .f2d-display { position: absolute; width: 60px; height: 30px; background: #000; border: 2px solid #333; border-radius: 4px; color: #ff1744; font-family: monospace; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 15; box-shadow: inset 0 0 8px rgba(255,0,0,0.4); box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -529,16 +539,41 @@
         <div id="editor-container">
             <div class="legend-box">
                 <div class="legend-grid">
-                    <span class="legend-code assign" title="Klicken zum Einfügen" onclick="insertSymbol(' := ')">:=</span> <span>Zuweisung (auch =, &lt;-, IST, GLEICH)</span>
-                    <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' && ')">&amp;&amp;</span> <span>UND (auch &amp;, ∧, ^, AND)</span>
-                    <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' || ')">||</span> <span>ODER (auch |, ∨, v, OR)</span>
+                    <span class="legend-code assign" title="Klicken zum Einfügen" onclick="insertSymbol(' := ')">:=</span> <span>Zuweisung (auch =, <-, IST, GLEICH)</span>
+                    <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' && ')">&amp;&amp;</span> <span>UND (auch &amp;, ∧, AND)</span>
+                    <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' || ')">||</span> <span>ODER (auch |, ∨, OR)</span>
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol('¬')">¬</span> <span>NICHT (auch !, NOT)</span>
                 </div>
-                <div class="legend-rs-note">
-                    <strong>Info Speicherglieder:</strong><br>
-                    <span class="legend-code rs">S1</span> / <span class="legend-code rs">S1_RS</span>, <span class="legend-code rs">R1</span> ➔ Ausgang <span class="legend-code rs">Q1</span> (RS, Rücksetz-dominant)<br>
-                    <span class="legend-code rs">S1_SR</span>, <span class="legend-code rs">R1_SR</span> ➔ Ausgang <span class="legend-code rs">Q1_SR</span> (SR, Setz-dominant)
-                </div>
+                <details style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #444; font-size: 11px;">
+                    <summary style="cursor: pointer; color: #569CD6; font-weight: bold; outline: none; user-select: none;">
+                        Erweiterte Befehle (Speicher, Zeiten, Zähler)
+                    </summary>
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding-left: 5px; color: #ccc; line-height: 1.4;">
+                        <div>
+                            <strong style="color: #fff;">🧲 Speicherglieder (Flip-Flops)</strong><br>
+                            Der Ausgang (Q) wird automatisch generiert. Nummern sind beliebig hochzählbar.
+                            <ul style="margin: 3px 0 0 0; padding-left: 20px;">
+                                <li><span class="legend-code rs">S1</span> / <span class="legend-code rs">S1_RS</span> & <span class="legend-code rs">R1</span> / <span class="legend-code rs">R1_RS</span> ➔ <b>RS (Rücksetzdominant):</b> Standard für Sicherheit. Ausgang ist <span class="legend-code rs">Q1</span> bzw. <span class="legend-code rs">Q1_RS</span>.</li>
+                                <li><span class="legend-code rs">S1_SR</span> & <span class="legend-code rs">R1_SR</span> ➔ <b>SR (Setzdominant):</b> Setzen hat Vorrang. Ausgang ist <span class="legend-code rs">Q1_SR</span>.</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong style="color: #DCDCAA;">⏱️ Zeitglieder (Timers)</strong><br>
+                            Format: <code>OUT := FUNKTION(Signal, Sekunden)</code>
+                            <ul style="margin: 3px 0 0 0; padding-left: 20px;">
+                                <li><code>TON(IN, 2.5)</code> ➔ <b>Einschaltverzögert:</b> Schaltet erst ein, wenn IN für 2.5s anliegt.</li>
+                                <li><code>TOF(IN, 1.5)</code> ➔ <b>Ausschaltverzögert:</b> Bleibt nach Abfall von IN noch 1.5s aktiv.</li>
+                                <li><code>TP(IN, 3.0)</code> ➔ <b>Impuls:</b> Ein kurzer IN-Puls erzeugt ein festes 3.0s Signal.</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong style="color: #DCDCAA;">🔢 Zähler (Counters)</strong>
+                            <ul style="margin: 3px 0 0 0; padding-left: 20px;">
+                                <li><code>OUT := CTU(Zähl_Signal, Reset, Limit)</code> ➔ <b>Vorwärtszähler:</b> Zählt bei jedem Signalwechsel (0 auf 1). Wenn das Limit erreicht ist, schaltet OUT ein.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </details>
             </div>
             <div class="editor-wrapper">
                 <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
@@ -581,6 +616,7 @@
                 </select>
             </div>
             <button id="btn-toggle-sim" class="btn-export" style="background-color: #e6194B; margin-left: 10px;" onclick="toggleSimulation()">Simulation starten</button>
+			<button class="btn-export" style="background-color: #9c27b0; margin-left: 10px;" onclick="openAnalyzerModal()">📊 Oszilloskop</button>
             <button class="btn-export" style="margin-left: 10px;" onclick="exportSVG()">Als SVG speichern</button>
         </div>
         <div id="workspace-container">
@@ -613,6 +649,8 @@
                             <div onclick="addFactoryDevice('schalter')">🔵 Schalter</div>
                             <div onclick="addFactoryDevice('nothalt')">🔴 Not-Halt</div>
                             <div onclick="addFactoryDevice('led')">💡 LED Leuchte</div>
+							<div onclick="addFactoryDevice('stacklight')">🚦 Signal-Säule</div>
+							<div onclick="addFactoryDevice('display')">📟 7-Seg Display</div>
                         </div>
                     </div>
                     <div class="tb-dropdown">
@@ -639,6 +677,7 @@
                         <button class="tb-drop-btn">⚙️ Aktoren ▼</button>
                         <div class="tb-dropdown-content">
                             <div onclick="addFactoryDevice('conveyor')">🛤️ Förderband</div>
+							<div onclick="addFactoryDevice('turntable')">🔄 Drehtisch (Nur Draufsicht)</div>
                             <div onclick="addFactoryDevice('zylinder_single')">🦾 Zylinder (Einfach)</div>
                             <div onclick="addFactoryDevice('zylinder_double')">🦾 Zylinder (Doppel)</div>
                             <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
@@ -678,6 +717,10 @@
                     <div id="fm-group-2" style="margin-bottom: 10px; display: none;">
                         <label id="fm-label-2" style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Variable 2</label>
                         <select id="fm-select-2" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px;"></select>
+                    </div>
+					<div id="fm-group-3" style="margin-bottom: 10px; display: none;">
+                        <label id="fm-label-3" style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Variable 3</label>
+                        <select id="fm-select-3" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px;"></select>
                     </div>
                     <div id="fm-group-color" style="margin-bottom: 15px; display: none;">
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Farbe wählen</label>
@@ -759,15 +802,12 @@
 		<div id="ai-prompt-modal" style="display: none; position: absolute; top: 5%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2500; width: 600px; max-width: 90vw;">
 			<h3 style="margin-top:0; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px;">🤖 KI-Prompt Generator</h3>
 			<p style="color: #aaa; font-size: 11px; margin-bottom: 10px;">Kopiere diesen Text, füge ganz unten deine Aufgabe ein und gib ihn einer KI (ChatGPT, Claude, Gemini). Füge die JSON-Antwort dann in das VALIS Raw-Code Feld ein!</p>
-			
 			<textarea id="ai-prompt-text" readonly style="width: 100%; height: 350px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #555; border-radius: 3px; font-family: monospace; font-size: 11px; padding: 10px; box-sizing: border-box; resize: vertical; white-space: pre;">Du bist ein hochpräziser Experte für SPS-Programmierung und Steuerungstechnik. 
 Deine Aufgabe ist es, eine textuelle Beschreibung einer Steuerung (Szenario) exakt in Boolesche Logikgleichungen und eine Hardware-Konfiguration für den Simulator "VALIS" zu übersetzen.
-
 ### REGELN FÜR DIE ÜBERSETZUNG:
 1. STRICT COMPLIANCE: Übersetze exakt das, was im Szenario steht. Erfinde KEINE zusätzlichen Sicherheitsfunktionen, Verriegelungen oder Quittierungen, wenn diese nicht explizit im Text verlangt werden!
 2. VARIABLENNAMEN: Verwende kurze, treffende, großgeschriebene Namen ohne Leerzeichen (z. B. START_BTN, MOTOR_1).
 3. KEIN ZUSATZTEXT: Deine Antwort darf ausschließlich aus dem JSON-Codeblock bestehen. Keine Erklärungen davor oder danach.
-
 ### SYNTAX-REGELN FÜR DEN LOGIK-CODE:
 - Zuweisung: :=
 - Logisches UND: &amp;&amp;
@@ -775,12 +815,10 @@ Deine Aufgabe ist es, eine textuelle Beschreibung einer Steuerung (Szenario) exa
 - Logisches NICHT: ¬
 - Klammern () für Vorrangregelungen sind erlaubt.
 - Jede Zuweisung steht in einer neuen Zeile.
-
 ### FLIP-FLOPS (SPEICHERGLIEDER):
 Wenn ein Zustand gespeichert werden soll, verwende diese festen Variablen-Namen:
 - Rücksetz-dominant (Standard): Nutze S1 (Setzen) und R1 (Rücksetzen). Der Ausgang ist Q1. (Zahlen hochzählen für weitere Flip-Flops: S2, R2 -> Q2).
 - Setz-dominant: Nutze S1_SR und R1_SR. Der Ausgang ist Q1_SR.
-
 ### ERLAUBTE HARDWARE-TYPEN (Für das "types" Mapping):
 Eingänge (Sensoren/Schalter):
 - "taster" (Schließer/NO Taster)
@@ -791,14 +829,11 @@ Eingänge (Sensoren/Schalter):
 - "sensor_ind" (Induktiver Sensor)
 - "sensor_kap" (Kapazitiver Sensor)
 - "sensor_opt" (Lichtschranke/Optisch)
-
 Ausgänge (Aktoren):
 - "led" (Meldeleuchte)
 - "valve" (Magnetventil / Motor / Band / Zylinder)
-
 ### OUTPUT FORMAT (JSON RAW CODE):
 Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner String mit \n für Zeilenumbrüche in das Feld "code". Die "factory" bleibt leer.
-
 &#96;&#96;&#96;json
 {
   "version": "1.0",
@@ -817,10 +852,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
   }
 }
 &#96;&#96;&#96;
-
 ### HIER IST DAS SZENARIO:
 [FÜGE HIER DEIN STEUERUNGSTECHNISCHES SZENARIO EIN. Z.B.: Ein Motor soll über einen Start-Taster (Schließer) eingeschaltet und über einen Stopp-Taster (Öffner) ausgeschaltet werden. Das Ausschalten hat Vorrang. Eine grüne LED leuchtet, wenn der Motor läuft.]</textarea>
-			
 			<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
 				<span id="ai-copy-indicator" style="color: #4caf50; font-size: 12px; font-weight: bold; opacity: 0; transition: opacity 0.3s;">📋 Prompt kopiert!</span>
 				<div style="display: flex; gap: 10px;">
@@ -828,6 +861,24 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
 					<button onclick="copyAIPrompt()" style="background: #007acc; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;">Kopieren</button>
 				</div>
 			</div>
+		</div> <div id="analyzer-modal" style="display: none; position: fixed; top: 10vh; left: 10vw; background: #2d2d30; padding: 15px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.9); z-index: 3000; width: 80vw; min-width: 400px; height: 75vh; min-height: 300px; flex-direction: column; resize: both; overflow: hidden;">
+            <div id="analyzer-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #555; padding-bottom: 10px; margin-bottom: 10px; cursor: move; user-select: none;">
+                <h3 style="margin:0; color:#fff; pointer-events: none;">📊 Logik-Analysator (Oszilloskop)</h3>
+                <button onclick="closeAnalyzerModal()" style="background: #e6194B; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;">Schließen</button>
+            </div>
+            <div style="display: flex; flex-grow: 1; overflow: hidden; border: 1px solid #444; background: #1e1e1e; border-radius: 3px;">
+                <div id="analyzer-legend-wrapper" style="width: 140px; background: #252526; border-right: 1px solid #444; overflow: hidden; position: relative;">
+                    <div id="analyzer-legend" style="position: absolute; top: 0; left: 0; width: 100%; font-family: monospace; font-size: 11px;"></div>
+                </div>
+                <div id="analyzer-canvas-wrapper" style="flex-grow: 1; overflow-x: hidden; overflow-y: auto; position: relative;">
+                    <canvas id="analyzer-canvas" style="display: block; width: 100%;"></canvas>
+                </div>
+            </div>
+            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
+                <span>Zeichnet jeden Simulations-Tick als Signalflanke (High/Low) auf. EKG läuft automatisch mit.</span>
+                <button onclick="clearAnalyzer()" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">🗑️ Verlauf leeren</button>
+            </div>
+        </div>
 		</div>
     <script>
         const textarea = document.getElementById('code');
@@ -924,7 +975,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 let totalSize = wsStartSizePrev + wsStartSizeNext;
                 let newPrev = Math.max(50, wsStartSizePrev + delta);
                 let newNext = Math.max(50, wsStartSizeNext - delta);
-														   
                 if (newPrev <= 50) newNext = totalSize - 50;
                 if (newNext <= 50) newPrev = totalSize - 50;
                 if (isGridMode) {
@@ -937,7 +987,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         wc.style.setProperty('--grid-row-2', newNext + 'px'); 
                     }
                 } else {
-																											
                     wsPrevPanel.style.flex = `0 0 ${newPrev}px`;
                     wsNextPanel.style.flex = `0 0 ${newNext}px`;
                 }
@@ -1158,8 +1207,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 graph.addNode(gateId, 'GATE', type === '&' ? '&' : '>=1');
                 inputObjs.forEach(inp => graph.addEdge(inp.id, gateId, '', inp.inverted));
                 const operator = type === '&' ? '&&' : '||';
-                const jsInputs = inputObjs.map(inp => (inp.inverted ? '!' : '') + `state.${inp.id}`).join(` ${operator} `);
-                jsCompiledCode += `    state.${gateId} = ${jsInputs || 'false'};\n`;
+                // FIX: Klammern um Variablen (state['VAR'] statt state.VAR), fängt kaputte Tipp-Zwischenzustände ab!
+                const jsInputs = inputObjs.map(inp => (inp.inverted ? '!' : '') + `state['${inp.id}']`).join(` ${operator} `);
+                jsCompiledCode += `    state['${gateId}'] = ${jsInputs || 'false'};\n`;
                 return gateId;
             }
             function evaluateFlat(expr) {
@@ -1232,7 +1282,56 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/gi, '||').replace(/∨/g, '||');
                 expressionStr = expressionStr.replace(/&&/g, '##AND##').replace(/&/g, '&&').replace(/##AND##/g, '&&');
                 expressionStr = expressionStr.replace(/\|\|/g, '##OR##').replace(/\|/g, '||').replace(/##OR##/g, '||');
-                // Pins auf SR und RS prüfen
+                // ==========================================
+                // NEU: TIMER & ZÄHLER ERKENNUNG (Extrem tolerant gegen Tippfehler)
+                // ==========================================
+                let timerMatch = expressionStr.match(/^(TON|TOF|TP)\s*\(\s*([a-zA-Z0-9_]+)\s*,\s*([\d\.]*)\s*(?:s|ms)?\s*\)$/i);
+                let counterMatch = expressionStr.match(/^CTU\s*\(\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*,\s*(\d*)\s*\)$/i);
+                if (timerMatch) {
+                    let funcType = timerMatch[1].toUpperCase(); let inVar = timerMatch[2]; 
+                    let ptVal = parseFloat(timerMatch[3]) || 0; // Sichert ab, falls Zahl gerade gelöscht wurde
+                    let blockId = `${funcType}_${outputStr}`; 
+                    graph.addNode(blockId, funcType, `${funcType} (${ptVal}s)`);
+                    let sourceObj = parseExpression(inVar);
+                    graph.addEdge(sourceObj.id, blockId, 'IN', sourceObj.inverted);
+                    graph.addNode(outputStr, 'OUTPUT', outputStr);
+                    graph.addEdge(blockId, outputStr, 'Q', false);
+                    definedOutputs.add(outputStr);
+                    // SPS Code für Timer (mit state['...'] statt state....)
+                    jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { et: 0, q: false, active: false, lastIn: false };\n`;
+                    jsCompiledCode += `    let in_${blockId} = ${sourceObj.inverted ? '!' : ''}state['${sourceObj.id}'];\n`;
+                    if (funcType === 'TON') {
+                        jsCompiledCode += `    if (in_${blockId}) { timers['${blockId}'].et += deltaMs; if (timers['${blockId}'].et >= ${ptVal * 1000}) timers['${blockId}'].q = true; } else { timers['${blockId}'].et = 0; timers['${blockId}'].q = false; }\n`;
+                    } else if (funcType === 'TOF') {
+                        jsCompiledCode += `    if (in_${blockId}) { timers['${blockId}'].et = 0; timers['${blockId}'].q = true; } else { if (timers['${blockId}'].q) { timers['${blockId}'].et += deltaMs; if (timers['${blockId}'].et >= ${ptVal * 1000}) timers['${blockId}'].q = false; } }\n`;
+                    } else if (funcType === 'TP') {
+                        jsCompiledCode += `    if (in_${blockId} && !timers['${blockId}'].active && !timers['${blockId}'].q) { timers['${blockId}'].active = true; timers['${blockId}'].q = true; timers['${blockId}'].et = 0; }\n`;
+                        jsCompiledCode += `    if (timers['${blockId}'].q) { timers['${blockId}'].et += deltaMs; if (timers['${blockId}'].et >= ${ptVal * 1000}) { timers['${blockId}'].q = false; timers['${blockId}'].active = in_${blockId}; } }\n`;
+                        jsCompiledCode += `    else if (!in_${blockId}) { timers['${blockId}'].active = false; }\n`;
+                    }
+                    jsCompiledCode += `    state['${outputStr}'] = timers['${blockId}'].q;\n`;
+                    return; 
+                }
+                if (counterMatch) {
+                    let funcType = 'CTU'; let cuVar = counterMatch[1]; let rVar = counterMatch[2]; 
+                    let pvVal = parseInt(counterMatch[3]) || 0; // Sichert ab, falls Zahl fehlt
+                    let blockId = `CTU_${outputStr}`;
+                    graph.addNode(blockId, funcType, `CTU (${pvVal})`);
+                    let cuObj = parseExpression(cuVar); let rObj = parseExpression(rVar);
+                    graph.addEdge(cuObj.id, blockId, 'CU', cuObj.inverted); graph.addEdge(rObj.id, blockId, 'R', rObj.inverted);
+                    graph.addNode(outputStr, 'OUTPUT', outputStr); graph.addEdge(blockId, outputStr, 'Q', false);
+                    definedOutputs.add(outputStr);
+                    // SPS Code für Zähler (mit state['...'] statt state....)
+                    jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { cv: 0, q: false, lastCu: false };\n`;
+                    jsCompiledCode += `    let cu_${blockId} = ${cuObj.inverted ? '!' : ''}state['${cuObj.id}']; let r_${blockId} = ${rObj.inverted ? '!' : ''}state['${rObj.id}'];\n`;
+                    jsCompiledCode += `    if (r_${blockId}) { timers['${blockId}'].cv = 0; timers['${blockId}'].q = false; } else {\n`;
+                    jsCompiledCode += `        if (cu_${blockId} && !timers['${blockId}'].lastCu) { timers['${blockId}'].cv++; if (timers['${blockId}'].cv >= ${pvVal}) timers['${blockId}'].q = true; }\n    }\n`;
+                    jsCompiledCode += `    timers['${blockId}'].lastCu = cu_${blockId};\n    state['${outputStr}'] = timers['${blockId}'].q;\n`;
+                    return; 
+                }
+                // ==========================================
+                // STANDARD LOGIK (Abgesichert)
+                // ==========================================
                 const rsMatch = outputStr.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
                 let targetId = outputStr;
                 let targetPin = '';
@@ -1254,27 +1353,23 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 const sourceObj = parseExpression(expressionStr);
                 graph.addEdge(sourceObj.id, targetId, targetPin, sourceObj.inverted);
                 if (rsMatch) {
-                    jsCompiledCode += `    state.${targetId}_${targetPin} = ${sourceObj.inverted ? '!' : ''}state.${sourceObj.id};\n`;
+                    jsCompiledCode += `    state['${targetId}_${targetPin}'] = ${sourceObj.inverted ? '!' : ''}state['${sourceObj.id}'];\n`;
                 } else {
-                    jsCompiledCode += `    state.${targetId} = ${sourceObj.inverted ? '!' : ''}state.${sourceObj.id};\n`;
+                    jsCompiledCode += `    state['${targetId}'] = ${sourceObj.inverted ? '!' : ''}state['${sourceObj.id}'];\n`;
                 }
             });
-            // Generiere SPS-Code für RS und SR Hardware-Logik
+            // Generiere SPS-Code für RS und SR Hardware-Logik (Abgesichert)
             rsBlocks.forEach((type, key) => {
-                // Schneidet _SR oder _RS ab, um die pure Nummer zu bekommen
                 const num = key.replace(/_(?:SR|RS)$/i, '');
                 const blockId = `${type}_${num}`;
-                // FIX: Echte sequenzielle Dominanz-Logik (wie in einer echten SPS)
                 if (type === 'RS') {
-                    // RS: Rücksetzdominant
-                    jsCompiledCode += `    if (state.${blockId}_S) { state.${blockId} = true; }\n`;
-                    jsCompiledCode += `    if (state.${blockId}_R) { state.${blockId} = false; }\n`;
+                    jsCompiledCode += `    if (state['${blockId}_S']) { state['${blockId}'] = true; }\n`;
+                    jsCompiledCode += `    if (state['${blockId}_R']) { state['${blockId}'] = false; }\n`;
                 } else {
-                    // SR: Setzdominant
-                    jsCompiledCode += `    if (state.${blockId}_R) { state.${blockId} = false; }\n`;
-                    jsCompiledCode += `    if (state.${blockId}_S) { state.${blockId} = true; }\n`;
+                    jsCompiledCode += `    if (state['${blockId}_R']) { state['${blockId}'] = false; }\n`;
+                    jsCompiledCode += `    if (state['${blockId}_S']) { state['${blockId}'] = true; }\n`;
                 }
-                jsCompiledCode += `    state.Q${key} = state.${blockId};\n`;
+                jsCompiledCode += `    state['Q${key}'] = state['${blockId}'];\n`;
             });
             graph.nodes.forEach(node => {
                 if (!definedOutputs.has(node.id) && node.type === 'INPUT') node.type = 'PURE_INPUT';
@@ -1315,8 +1410,10 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             Object.keys(columns).forEach(level => {
                 let totalHeight = 0;
                 columns[level].forEach(node => {
-                    node.width = ((node.type === 'RS' || node.type === 'SR') ? 50 : (node.type === 'GATE' ? 45 : Math.max(60, node.label.length * 8 + 10)));
-                    node.height = ((node.type === 'RS' || node.type === 'SR') ? 65 : (node.type === 'GATE' ? Math.max(30, node.inputs.length * 15 + 15) : 30));
+                    // NEU: Breite und Höhe für RS, SR, Timer und Zähler auf einheitliche Größe setzen
+                    node.width = (['RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(node.type)) ? 55 : (node.type === 'GATE' ? 45 : Math.max(60, node.label.length * 8 + 10));
+                    node.height = (['RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(node.type)) ? 65 : (node.type === 'GATE' ? Math.max(30, node.inputs.length * 15 + 15) : 30);
+                    // WICHTIG: Diese Zeile bleibt exakt wie sie war!
                     totalHeight += node.height + MIN_GAP;
                 });
                 totalHeight -= MIN_GAP;
@@ -1416,8 +1513,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         const usableHeight = target.height - 20; 
                         const spacing = usableHeight / Math.max(1, target.inputs.length);
                         endY = target.y + 20 + spacing * (inIndex + 0.5); 
-                    } else if (target.type === 'RS' || target.type === 'SR') {
-                        if (edge.targetPin === 'S') endY = target.y + 15;
+                    } else if (target.type === 'RS' || target.type === 'SR' || target.type === 'CTU') {
+                        // FIX: Auch das CU-Signal vom Zähler muss an den oberen Pin geroutet werden!
+                        if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
                         if (edge.targetPin === 'R') endY = target.y + target.height - 15;
                     }
                     edge.calcEndY = safe(endY);
@@ -1489,11 +1587,11 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     text.setAttribute("x", safe(node.width / 2));
                     text.setAttribute("text-anchor", "middle");
                     text.setAttribute("class", "fbs-text");
-                    if (node.type === 'RS' || node.type === 'SR') {
-                        // IEC Norm: RS oder SR steht mittig oben im Baustein
+                    if (['RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(node.type)) {
+                        // IEC Norm: RS, SR oder Typ steht mittig oben im Baustein
                         text.setAttribute("y", 14);
                         text.textContent = node.type; 
-                        // Den Namen ("RS-Glied 1") setzen wir als kleines Label ÜBER den Baustein
+                        // Den Namen (z.B. "RS-Glied 1" oder "TON (2s)") setzen wir als kleines Label ÜBER den Baustein
                         const titleText = document.createElementNS("http://www.w3.org/2000/svg", "text");
                         titleText.setAttribute("x", safe(node.width / 2));
                         titleText.setAttribute("y", -5); // Schwebt knapp über dem Kasten
@@ -1503,26 +1601,50 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         titleText.setAttribute("fill", "#666");
                         titleText.textContent = node.label;
                         g.appendChild(titleText);
-                        const isRS = node.type === 'RS';
-                        // IEC Norm Dominanz: 
-                        // RS (Rücksetzdominant) -> S, R1
-                        // SR (Setzdominant) -> S1, R
                         const sText = document.createElementNS("http://www.w3.org/2000/svg", "text");
                         sText.setAttribute("x", 4); sText.setAttribute("y", 20); sText.setAttribute("class", "fbs-pin-text"); 
-                        sText.textContent = isRS ? "S" : "S1";
                         const rText = document.createElementNS("http://www.w3.org/2000/svg", "text");
                         rText.setAttribute("x", 4); rText.setAttribute("y", safe(node.height - 11)); rText.setAttribute("class", "fbs-pin-text"); 
-                        rText.textContent = isRS ? "R1" : "R";
                         const qText = document.createElementNS("http://www.w3.org/2000/svg", "text");
                         qText.setAttribute("x", safe(node.width - 12)); qText.setAttribute("y", 20); qText.setAttribute("class", "fbs-pin-text"); 
                         qText.textContent = "Q";
+                        // PIN-BESCHRIFTUNGEN JE NACH BAUTEIL
+                        if (node.type === 'RS' || node.type === 'SR') {
+                            const isRS = node.type === 'RS';
+                            // IEC Norm Dominanz: 
+                            // RS (Rücksetzdominant) -> S, R1
+                            // SR (Setzdominant) -> S1, R
+                            sText.textContent = isRS ? "S" : "S1";
+                            rText.textContent = isRS ? "R1" : "R";
+                        } else if (['TON', 'TOF', 'TP'].includes(node.type)) {
+                            // Timer Eingänge: IN und PT (Preset Time)
+                            sText.textContent = "IN";
+                            rText.textContent = "PT";
+                        } else if (node.type === 'CTU') {
+                            // Zähler Eingänge: CU (Count Up) und R (Reset)
+                            sText.textContent = "CU";
+                            rText.textContent = "R";
+                        }
                         g.appendChild(sText); g.appendChild(rText); g.appendChild(qText);
+                        // NEU: Live-Wert Anzeige für Timers & Zähler (blau, mittig unten)
+                        if (['TON', 'TOF', 'TP', 'CTU'].includes(node.type)) {
+                            const liveText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            liveText.setAttribute("id", `live-val-${node.id}`); 
+                            liveText.setAttribute("x", safe(node.width / 2)); 
+                            liveText.setAttribute("y", safe(node.height - 8)); 
+                            liveText.setAttribute("text-anchor", "middle"); 
+                            liveText.setAttribute("font-size", "10.5px"); 
+                            liveText.setAttribute("fill", "#007acc"); 
+                            liveText.setAttribute("font-weight", "bold");
+                            liveText.textContent = node.type === 'CTU' ? "0" : "0.0s"; 
+                            g.appendChild(liveText);
+                        }
                     } else {
                         // Standard Logik-Gatter (&, >=1)
                         text.setAttribute("y", 15);
                         text.textContent = node.label;
                     }
-                    g.appendChild(text);
+					g.appendChild(text);						
                 } else {
                     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
                     rect.setAttribute("id", `node-block-${node.id}`);
@@ -1565,7 +1687,16 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
         }
         function loadFromStorage() {
             const saved = localStorage.getItem('logikEditorCode');
-            textarea.value = (saved !== null && saved.trim() !== "") ? saved : DEFAULT_CODE;
+            if (saved !== null && saved.trim() !== "") {
+                textarea.value = saved;
+            } else {
+                // Erster Start: Beispiel-Code, Typen und 2D-Anlage direkt in den Speicher laden!
+                textarea.value = EXAMPLES.code;
+                componentTypes = { ...EXAMPLES.types };
+                localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
+                EXAMPLES.factory.globalViewMode = 'side';
+                localStorage.setItem('logikFactoryState', JSON.stringify(EXAMPLES.factory));
+            }
         }
         function saveToStorage() {
             localStorage.setItem('logikEditorCode', textarea.value);
@@ -1626,6 +1757,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             text = text.replace(/(&amp;&amp;|&amp;|\|\||\||\^|∧|\bv\b|∨|¬|!|\bAND\b|\bOR\b|\bUND\b|\bODER\b|\bNOT\b|\bNICHT\b)/gi, '<span class="token operator">$1</span>');
             text = text.replace(/(\(|\))/g, '<span class="token paren">$1</span>');
             text = text.replace(/\b([SRQ]\d+(?:_(?:SR|RS))?)\b/gi, '<span class="token rs">$1</span>');
+			text = text.replace(/\b(TON|TOF|TP|CTU)\b/gi, '<span class="token func">$1</span>');
             highlightingContent.innerHTML = text;
         }
 		// Funktion zum Einfügen von Symbolen an der aktuellen Cursor-Position
@@ -2044,10 +2176,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     while(wsNextPanel && wsNextPanel.style.display === 'none') wsNextPanel = wsNextPanel.nextElementSibling;
                     let rectPrev = wsPrevPanel.getBoundingClientRect();
                     let rectNext = wsNextPanel.getBoundingClientRect();
-																	
                     wsStartSizePrev = isHorizontalMove ? rectPrev.width : rectPrev.height;
                     wsStartSizeNext = isHorizontalMove ? rectNext.width : rectNext.height;
-																			 
                     wsPrevPanel.style.flex = `0 0 ${wsStartSizePrev}px`;
                     wsNextPanel.style.flex = `0 0 ${wsStartSizeNext}px`;
                 }
@@ -2057,8 +2187,23 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             });
         });
         function runSimulationTick() {
+            let now = performance.now();
+            let deltaMs = (now - lastSimulationTime) * window.simSpeed;
+            lastSimulationTime = now;
             if (!simulationFunction || !currentGraph) return;
-            simulationFunction(spsState);
+            // Führe die Logik aus und übergebe Zeit und Timer-Speicher
+            simulationFunction(spsState, deltaMs, window.simTimers);
+            // Live-Update der blauen Zahlen in den FBS-Kästen
+            if (window.simTimers) {
+                for (let [id, t] of Object.entries(window.simTimers)) {
+                    // FIX: CSS.escape verhindert Abstürze bei kaputten Namen
+                    let el = document.getElementById(`live-val-${CSS.escape(id)}`);
+                    if (el) {
+                        if (t.cv !== undefined) el.textContent = t.cv; // Zähler
+                        else if (t.et !== undefined) el.textContent = (t.et / 1000).toFixed(1) + "s"; // Timer
+                    }
+                }
+            }
             for (const [key, value] of Object.entries(spsState)) {
                 // 1. Ausgänge (LEDs) aktualisieren
                 const led = document.getElementById(`sim_out_${key}`);
@@ -2078,18 +2223,19 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             // 3. Logikplan (FBS) Kästen und Linien aktualisieren
             currentGraph.nodes.forEach(node => {
                 const val = !!spsState[node.id];
-                const block = document.getElementById(`node-block-${node.id}`);
+                // FIX: CSS.escape hier extrem wichtig!
+                const block = document.getElementById(`node-block-${CSS.escape(node.id)}`);
                 if (block) {
                     if (val) { block.classList.add('active'); block.classList.remove('inactive'); }
                     else { block.classList.add('inactive'); block.classList.remove('active'); }
                 }
-                const nets = document.querySelectorAll(`.net-source-${node.id}`);
+                const nets = document.querySelectorAll(`.net-source-${CSS.escape(node.id)}`);
                 nets.forEach(el => {
                     if (val) { el.classList.add('active'); el.classList.remove('inactive'); }
                     else { el.classList.add('inactive'); el.classList.remove('active'); }
                 });
-            });
-            // 4. Schaltplan (IEC) aktualisieren - SAUBER AUSSERHALB DER SCHLEIFE!
+            });		
+            // 4. Schaltplan (IEC) aktualisieren
             if (document.getElementById('circuit-wrapper').style.display !== 'none') {
                 document.querySelectorAll('.circ-colored-group, .circ-wire').forEach(el => {
                     let varClass = Array.from(el.classList).find(c => c.startsWith('circ-var-'));
@@ -2097,43 +2243,40 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     let varName = varClass.replace('circ-var-', '');
                     let val = !!spsState[varName]; 
                     let blade = el.querySelector('.circ-moving-contact');
-                    // FIX: Prüft, ob das Element ein Kontakt-Öffner ODER eine Öffner-Linie ist
                     let isNC = blade ? blade.classList.contains('is-nc') : el.classList.contains('is-nc-wire');
-                    // FIX: Einheitliche Logik für Kontakte UND Linien!
-																				   
-                    let isVisuallyActive = val;
-								
-                    let isInput = globalInputs.includes(varName); // Prüft, ob es ein Taster/Sensor ist
-                    if (isNC) {
-                        // Hardware-Öffner: val=true heißt UNBERÜHRT (geschlossen)
-                        // Relais-Öffner: val=true heißt SPULE AKTIV (offen)
-                        isVisuallyActive = isInput ? val : !val;
-                    } else {
-                        // Schließer sind immer geschlossen bei val=true
-                        isVisuallyActive = val;
-                    }
-					 
-					
+											   
+                    let isInput = globalInputs.includes(varName); 
+                    // 1. Mechanischer Zustand (Bewegt die Kontaktklinge physisch)
+                    let isMechanicallyClosed = isNC ? (isInput ? val : !val) : val;
+                    // 2. Elektrischer Stromfluss prüfen (Prüft den Pfad von oben nach unten)
+                    let hasPower = el._checkPower ? el._checkPower(spsState) : true;
+                    // Ein Kontakt leuchtet nur, wenn er geschlossen ist UND Strom fließt. Eine Leitung leuchtet, wenn Strom fließt.
+                    let shouldGlow = el.classList.contains('circ-wire') ? hasPower : (hasPower && isMechanicallyClosed);
                     if (isSimulationActive) {
-                        if (isVisuallyActive) {
+                        // Klinge physisch öffnen/schließen
+                        if (blade) {
+                            if (isMechanicallyClosed) blade.classList.remove('open');
+                            else blade.classList.add('open');
+                        }
+                        // Farbe / Glow (Stromfluss)
+                        if (shouldGlow) {
                             el.dataset.lastOn = Date.now();
                             if (el.offTimeout) { clearTimeout(el.offTimeout); el.offTimeout = null; }
                             el.classList.add('active');
-                            if (blade) blade.classList.remove('open');
+																	  
                         } else {
                             if (!el.offTimeout && el.classList.contains('active')) {
-                                // 300ms Impulsverlängerung (Pulse-Catch)
                                 let elapsed = Date.now() - parseInt(el.dataset.lastOn || 0);
                                 let delay = Math.max(0, 300 - elapsed);
                                 el.offTimeout = setTimeout(() => {
                                     el.classList.remove('active');
-                                    if (blade) blade.classList.add('open');
+																		   
                                     el.offTimeout = null;
                                 }, delay);
                             }
                         }
                     } else {
-                        // Reset bei gestoppter Simulation
+                        // Reset wenn Simulation stoppt
                         if (el.offTimeout) { clearTimeout(el.offTimeout); el.offTimeout = null; }
                         el.classList.remove('active');
                         if (blade) {
@@ -2141,6 +2284,14 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         }
                     }
                 });
+            }
+			// 5. Oszilloskop aufzeichnen (Jeden Tick mitschneiden)
+            if (typeof analyzerHistory !== 'undefined') {
+                // Wir kopieren den aktuellen Booleschen Zustand aller Variablen
+                analyzerHistory.push({ ...spsState });
+                // Begrenze auf 2000 Einträge, damit der RAM nicht platzt
+                if (analyzerHistory.length > 2000) analyzerHistory.shift(); 
+                if (isAnalyzerOpen) drawAnalyzer();
             }
         }
 		// --- SCHALTPLAN GENERATOR (IEC) ---
@@ -2182,7 +2333,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     let kfName = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (${deviceName})` : ''); 
                     symMap[i] = kfName; 
                     contactTypeMap[i] = 'relais';
-																								 
                     preRungsToDraw.push({ id: i, cType: cType, kfName: kfName, deviceName: deviceName });
                 } else {
                     // Details ab Stufe 1 (E/A) anzeigen
@@ -2205,19 +2355,33 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     // Logik-Details NUR in Stufe 2 (ALLE) anzeigen!
                     symMap[n.id] = `-KF${kfCount++}` + (window.configDetails === 2 ? ` (${detail})` : '');
                     contactTypeMap[n.id] = 'relais';
-                } else if (n.type === 'RS' || n.type === 'SR') { 
-                    let numMatch = n.id.match(/\d+(_(?:SR|RS))?/);
-                    let qName = numMatch ? `Q${numMatch[0]}` : n.id;
+                } else if (n.type === 'RS' || n.type === 'SR' || ['TON', 'TOF', 'TP', 'CTU'].includes(n.type)) { 
+                    let isTimer = ['TON', 'TOF', 'TP', 'CTU'].includes(n.type);
+                    let qName = n.label;
+                    if (!isTimer) {
+                        let numMatch = n.id.match(/\d+(_(?:SR|RS))?/);
+                        qName = numMatch ? `Q${numMatch[0]}` : n.id;
+                    }
                     // Logik-Details NUR in Stufe 2 (ALLE) anzeigen!
                     symMap[n.id] = `-KF${kfCount++}` + (window.configDetails === 2 ? ` (${qName})` : '');
-                    contactTypeMap[n.id] = 'relais';
+                    // FIX: Hier bekommt das Bauteil endlich seinen echten Typ ('ton', 'tof'...) statt nur 'relais'!
+                    contactTypeMap[n.id] = isTimer ? n.type.toLowerCase() : 'relais';
                 } else if (n.type === 'OUTPUT') {
                     let cType = componentTypes[n.id] || 'led';
                     if (usedAsSource.has(n.id)) {
                         // Ausgangs-Details ab Stufe 1 (E/A) anzeigen
                         symMap[n.id] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (${n.label})` : '');
                         n.isRelay = true;
-                        contactTypeMap[n.id] = 'relais';
+                        // FIX: Wir prüfen, ob die Quelle dieses Relais ein Timer/Zähler ist und vererben den Typ!
+                        let inEdge = graph.edges.find(e => e.targetId === n.id);
+                        let srcType = 'relais';
+                        if (inEdge) {
+                            let sNode = graph.nodes.get(inEdge.sourceId);
+                            if (sNode && ['TON', 'TOF', 'TP', 'CTU'].includes(sNode.type)) {
+                                srcType = sNode.type.toLowerCase();
+                            }
+                        }
+                        contactTypeMap[n.id] = srcType;
                     } else {
                         // Ausgangs-Details ab Stufe 1 (E/A) anzeigen
                         let prefix = (cType === 'valve') ? `-MB${mbCount++}` : `-P${pCount++}`;
@@ -2278,12 +2442,27 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 g.appendChild(createSvgElement('circle', {cx: x, cy: y + 15, r: 2.5, fill: '#000', class: 'circ-static'}));
                 g.appendChild(createSvgElement('line', {x1: x, y1: y - 15, x2: x, y2: y - 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 g.appendChild(createSvgElement('line', {x1: x, y1: y + 15, x2: x, y2: y + 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
-                // Das bewegliche Teil ist etwas länger, um beim Drehen die Lücke zu schließen
-                let movingLine = createSvgElement('line', { x1: x, y1: y - 6, x2: x, y2: y + 15, stroke: '#000', 'stroke-width': 2, class: `circ-moving-contact ${isNC ? 'is-nc' : 'is-no'}` });                
-                // FIX: Drehpunkt ist jetzt unten am Kontakt!
-                movingLine.style.transformOrigin = `${x}px ${y + 15}px`; 
-                if (!isNC) movingLine.classList.add('open');
-                g.appendChild(movingLine);                
+                // Das bewegliche Teil als Gruppe, damit wir IEC-Schirme (Fallschirme) anhängen können
+                let movingGroup = createSvgElement('g', { class: `circ-moving-contact ${isNC ? 'is-nc' : 'is-no'}`, stroke: '#000' });
+                movingGroup.style.transformOrigin = `${x}px ${y + 15}px`; 
+                if (!isNC) movingGroup.classList.add('open');
+                // Die eigentliche Schaltklinge (ohne eigenen Stroke, erbt von der Gruppe für den Glow-Effekt!)
+                movingGroup.appendChild(createSvgElement('line', { x1: x, y1: y - 6, x2: x, y2: y + 15, 'stroke-width': 2 }));
+                // IEC 60617 Fallschirme für Timer-Kontakte
+                if (type === 'ton') {
+                    // Anzugsverzögert (Bremst das Schließen)
+                    let arc = isNC ? `M ${x} ${y} C ${x+7} ${y-3}, ${x+7} ${y+3}, ${x} ${y+6}` : `M ${x} ${y} C ${x-7} ${y-3}, ${x-7} ${y+3}, ${x} ${y+6}`;
+                    movingGroup.appendChild(createSvgElement('path', { d: arc, fill: 'none', 'stroke-width': 1.5 }));
+                } else if (type === 'tof') {
+                    // Abfallverzögert (Bremst das Öffnen)
+                    let arc = isNC ? `M ${x} ${y} C ${x-7} ${y-3}, ${x-7} ${y+3}, ${x} ${y+6}` : `M ${x} ${y} C ${x+7} ${y-3}, ${x+7} ${y+3}, ${x} ${y+6}`;
+                    movingGroup.appendChild(createSvgElement('path', { d: arc, fill: 'none', 'stroke-width': 1.5 }));
+                } else if (type === 'tp') {
+                    // Wischrelais / Impuls (Beide Richtungen)
+                    movingGroup.appendChild(createSvgElement('path', { d: `M ${x} ${y} C ${x-6} ${y-3}, ${x-6} ${y+3}, ${x} ${y+6}`, fill: 'none', 'stroke-width': 1.5 }));
+                    movingGroup.appendChild(createSvgElement('path', { d: `M ${x} ${y} C ${x+6} ${y-3}, ${x+6} ${y+3}, ${x} ${y+6}`, fill: 'none', 'stroke-width': 1.5 }));
+                }
+                g.appendChild(movingGroup);               
                 // FIX: Der Haken (die feste Kerbe) für den Öffner ist jetzt oben rechts!
                 if (isNC) g.appendChild(createSvgElement('line', {x1: x, y1: y - 5, x2: x + 8, y2: y - 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 // NEU: Intelligente Klemmenbezeichnungen (DIN EN 60947-5-1)
@@ -2302,7 +2481,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     // Die offene NO-Klinge liegt bei ca. x-5, die geschlossene NC-Klinge bei ca. x+3.
                     let dashEndX = isNC ? x + 3 : x - 5; 
                     g.appendChild(createSvgElement('line', {x1: dashEndX, y1: y + 2.5, x2: x - 18, y2: y + 2.5, stroke: '#000', 'stroke-width': 1.5, 'stroke-dasharray': '2,2'}));
-					
                     if (type === 'nothalt') {
                         g.appendChild(createSvgElement('line', {x1: x - 18, y1: y - 2.5, x2: x - 18, y2: y + 7.5, stroke: '#000', 'stroke-width': 1.5}));
                         g.appendChild(createSvgElement('path', {d: `M ${x - 18} ${y - 2.5} A 5 5 0 0 0 ${x - 18} ${y + 7.5} Z`, fill: '#000'}));
@@ -2315,6 +2493,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     }
                 }
                 circuitContent.appendChild(g);
+				return g; // <--- NEU: Diese Zeile einfügen
             };
             const drawCoil = (x, y, label, id, type='relais', color, pathNum) => {
                 let g = createSvgElement('g', {class: `circ-colored-group circ-var-${id}`});
@@ -2323,15 +2502,31 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     if (!relayContacts[id]) relayContacts[id] = { contacts: [] };
                     relayContacts[id].coilX = x;
                 }
+				if (type === 'valve') g.appendChild(createSvgElement('line', {x1: x - 20, y1: y + 10, x2: x + 20, y2: y - 10, stroke: '#000', 'stroke-width': 2}));
+                // NEU: IEC-Norm Symbole für Timer und Zähler
+                if (type === 'ton') {
+                    g.appendChild(createSvgElement('line', {x1: x-20, y1: y-10, x2: x-10, y2: y+10, stroke: '#000', 'stroke-width': 1.5}));
+                    g.appendChild(createSvgElement('line', {x1: x-10, y1: y-10, x2: x-20, y2: y+10, stroke: '#000', 'stroke-width': 1.5}));
+                } else if (type === 'tof') {
+                    g.appendChild(createSvgElement('rect', {x: x-20, y: y-10, width: 10, height: 20, fill: '#000'}));
+                } else if (type === 'tp') {
+                    g.appendChild(createSvgElement('polyline', {points: `${x-18},${y+5} ${x-15},${y+5} ${x-15},${y-5} ${x-5},${y-5} ${x-5},${y+5} ${x-2},${y+5}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
+                } else if (type === 'ctu') {
+                    drawSmallText(g, x-10, y+3, '+1', 'middle');
+                }
                 g.appendChild(createSvgElement('line', {x1: x, y1: y - 20, x2: x, y2: y - 10, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 g.appendChild(createSvgElement('line', {x1: x, y1: y + 10, x2: x, y2: y + 20, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 let rect = createSvgElement('rect', {id: `circ-out-${id}`, class: 'circ-component', x: x - 20, y: y - 10, width: 40, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 2});
                 g.appendChild(rect);
                 if (type === 'valve') g.appendChild(createSvgElement('line', {x1: x - 20, y1: y + 10, x2: x + 20, y2: y - 10, stroke: '#000', 'stroke-width': 2}));
                 addLabelText(g, x + 30, y, label, true);
-                drawSmallText(g, x - 5, y - 15, type === 'valve' ? '1' : 'A1', 'end');
-                drawSmallText(g, x - 5, y + 20, type === 'valve' ? '2' : 'A2', 'end');
+                // FIX: Die Reset-Spule (am "(R)" im Label zu erkennen) bekommt normgerecht die Klemmen A3 und A4!
+                let pinTop = type === 'valve' ? '1' : (label.includes('(R)') ? 'A3' : 'A1');
+                let pinBot = type === 'valve' ? '2' : (label.includes('(R)') ? 'A4' : 'A2');
+                drawSmallText(g, x - 5, y - 15, pinTop, 'end');
+                drawSmallText(g, x - 5, y + 20, pinBot, 'end');
                 circuitContent.appendChild(g);
+				return g; // <--- NEU: Diese Zeile einfügen
             };
             const drawLED = (x, y, label, id, color, pathNum) => {
                 let g = createSvgElement('g', {class: `circ-colored-group circ-var-${id}`});
@@ -2346,61 +2541,70 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 drawSmallText(g, x - 5, y - 18, 'X1', 'end');
                 drawSmallText(g, x - 5, y + 24, 'X2', 'end');
                 circuitContent.appendChild(g);
+				return g; // <--- NEU: Diese Zeile einfügen
             };
+			// NEU: Helfer für das Stromfluss-Routing
+            const setPower = (el, condStr) => {
+                if (el) el._checkPower = new Function('state', `return !!(${condStr || 'true'});`);
+                return el;
+            };
+            const getCond = (edge) => edge ? ((edge.inverted ? "!" : "") + `state['${edge.sourceId}']`) : "false";
             let currX = 100;
             const yTop = 50, yBot = 500;
             preRungsToDraw.forEach(item => {
                 let col = getNodeColor(item.id);
+                let pCond = item.cType === 'nothalt' ? `!state['${item.id}']` : `state['${item.id}']`;
                 if (item.cType === 'nothalt') {
                     let p1 = pathCounter++;
                     drawText(currX, yTop - 25, p1.toString(), true); 
-                    drawLine(currX, yTop, currX, 150 - 15, 2, item.id, col, true); // true am Ende!
-                    drawContact(currX, 150, `${item.deviceName} (${item.id})`, true, 'nothalt', item.id, col, p1);
-                    drawLine(currX, 165, currX, 430, 2, item.id, col, true); // true am Ende!
-                    drawCoil(currX, 450, item.kfName, item.id, 'relais', col, p1);
-                    drawLine(currX, 470, currX, yBot, 2, item.id, col);
+                    setPower(drawLine(currX, yTop, currX, 150 - 15, 2, item.id, col, true), "true"); 
+                    setPower(drawContact(currX, 150, `${item.deviceName} (${item.id})`, true, 'nothalt', item.id, col, p1), "true"); 
+                    setPower(drawLine(currX, 165, currX, 430, 2, item.id, col, true), pCond); 
+                    setPower(drawCoil(currX, 450, item.kfName, item.id, 'relais', col, p1), pCond); 
+                    setPower(drawLine(currX, 470, currX, yBot, 2, item.id, col), pCond);
                     currX += 100; 
                 } else {
-                    let p1 = pathCounter++; 
-                    let p2 = pathCounter++;
-                    drawText(currX, yTop - 25, p1.toString(), true); 
-                    drawText(currX + 60, yTop - 25, p2.toString(), true); 
+                    let p1 = pathCounter++; let p2 = pathCounter++;
+                    drawText(currX, yTop - 25, p1.toString(), true); drawText(currX + 60, yTop - 25, p2.toString(), true); 
+																	 
+																		  
                     let sBoxY = 150;
                     circuitContent.appendChild(createSvgElement('rect', {x: currX - 15, y: sBoxY, width: 30, height: 30, fill: '#fff', stroke: '#000', 'stroke-width': 2}));
                     let diamondPts = `${currX},${sBoxY+3} ${currX+7},${sBoxY+10} ${currX},${sBoxY+17} ${currX-7},${sBoxY+10}`;
                     circuitContent.appendChild(createSvgElement('polygon', {points: diamondPts, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
                     circuitContent.appendChild(createSvgElement('line', {x1: currX - 2.5, y1: sBoxY+5.5, x2: currX - 2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5}));
                     circuitContent.appendChild(createSvgElement('line', {x1: currX + 2.5, y1: sBoxY+5.5, x2: currX + 2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5}));
-                    if (item.cType === 'sensor_ind') {
-                        let indPath = `M ${currX-9} ${sBoxY+26} L ${currX-9} ${sBoxY+23} A 3 3 0 0 1 ${currX-3} ${sBoxY+23} A 3 3 0 0 1 ${currX+3} ${sBoxY+23} A 3 3 0 0 1 ${currX+9} ${sBoxY+23} L ${currX+9} ${sBoxY+26}`;
-                        circuitContent.appendChild(createSvgElement('path', {d: indPath, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
-                    } else if (item.cType === 'sensor_kap') {
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+18, x2: currX, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX-6, y1: sBoxY+22, x2: currX+6, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX-6, y1: sBoxY+25, x2: currX+6, y2: sBoxY+25, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+25, x2: currX, y2: sBoxY+29, stroke: '#000', 'stroke-width': 1.5}));
-                    } else if (item.cType === 'sensor_opt') {
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX-7, y1: sBoxY+27, x2: currX-1, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('polyline', {points: `${currX-4},${sBoxY+21} ${currX-1},${sBoxY+21} ${currX-1},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+27, x2: currX+6, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('polyline', {points: `${currX+3},${sBoxY+21} ${currX+6},${sBoxY+21} ${currX+6},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
-                    } else if (item.cType === 'sensor_mag') {
-                        circuitContent.appendChild(createSvgElement('rect', {x: currX-6, y: sBoxY+22, width: 12, height: 6, fill: '#000'}));
-                        circuitContent.appendChild(createSvgElement('rect', {x: currX-3, y: sBoxY+22, width: 6, height: 3.5, fill: '#fff'})); 
-                    }
+													  
+                    if (item.cType === 'sensor_ind') { circuitContent.appendChild(createSvgElement('path', {d: `M ${currX-9} ${sBoxY+26} L ${currX-9} ${sBoxY+23} A 3 3 0 0 1 ${currX-3} ${sBoxY+23} A 3 3 0 0 1 ${currX+3} ${sBoxY+23} A 3 3 0 0 1 ${currX+9} ${sBoxY+23} L ${currX+9} ${sBoxY+26}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5})); } 
+                    else if (item.cType === 'sensor_kap') { circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+18, x2: currX, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('line', {x1: currX-6, y1: sBoxY+22, x2: currX+6, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('line', {x1: currX-6, y1: sBoxY+25, x2: currX+6, y2: sBoxY+25, stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+25, x2: currX, y2: sBoxY+29, stroke: '#000', 'stroke-width': 1.5})); } 
+                    else if (item.cType === 'sensor_opt') { circuitContent.appendChild(createSvgElement('line', {x1: currX-7, y1: sBoxY+27, x2: currX-1, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('polyline', {points: `${currX-4},${sBoxY+21} ${currX-1},${sBoxY+21} ${currX-1},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('line', {x1: currX, y1: sBoxY+27, x2: currX+6, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5})); circuitContent.appendChild(createSvgElement('polyline', {points: `${currX+3},${sBoxY+21} ${currX+6},${sBoxY+21} ${currX+6},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5})); } 
+																																									  
+																																										  
+																																										  
+																																									  
+															 
+																																										  
+																																																					  
+																																										
+																																																					  
+															 
+																																			
+                    else if (item.cType === 'sensor_mag') { circuitContent.appendChild(createSvgElement('rect', {x: currX-6, y: sBoxY+22, width: 12, height: 6, fill: '#000'})); circuitContent.appendChild(createSvgElement('rect', {x: currX-3, y: sBoxY+22, width: 6, height: 3.5, fill: '#fff'})); }
+					 
                     addLabelText(circuitContent, currX + 20, sBoxY - 5, `${item.deviceName} (${item.id})`, false);
-                    drawLine(currX, yTop, currX, sBoxY, 2, item.id, col); 
-                    drawLine(currX, sBoxY + 30, currX, yBot, 2, item.id, col); 
-                    drawLine(currX + 15, sBoxY + 15, currX + 60, sBoxY + 15, 2, item.id, col); 
-                    drawLine(currX + 60, sBoxY + 15, currX + 60, 430, 2, item.id, col); 
-                    drawCoil(currX + 60, 450, item.kfName, item.id, 'relais', col, p2); 
-                    drawLine(currX + 60, 470, currX + 60, yBot, 2, item.id, col);
+                    setPower(drawLine(currX, yTop, currX, sBoxY, 2, item.id, col), "true"); 
+                    setPower(drawLine(currX, sBoxY + 30, currX, yBot, 2, item.id, col), "true"); 
+                    setPower(drawLine(currX + 15, sBoxY + 15, currX + 60, sBoxY + 15, 2, item.id, col), pCond); 
+                    setPower(drawLine(currX + 60, sBoxY + 15, currX + 60, 430, 2, item.id, col), pCond); 
+                    setPower(drawCoil(currX + 60, 450, item.kfName, item.id, 'relais', col, p2), pCond); 
+                    setPower(drawLine(currX + 60, 470, currX + 60, yBot, 2, item.id, col), pCond);
                     currX += 140;
                 }
             });
-            const nodesToDraw = Array.from(graph.nodes.values())
-                .filter(n => ['GATE', 'RS', 'SR', 'OUTPUT'].includes(n.type))
-                .sort((a,b) => a.level - b.level);
+																										
+																
+            const nodesToDraw = Array.from(graph.nodes.values()).filter(n => ['GATE', 'RS', 'SR', 'TON', 'TOF', 'TP', 'CTU', 'OUTPUT'].includes(n.type)).sort((a,b) => a.level - b.level);
+												  
             nodesToDraw.forEach(node => {
                 let inEdges = graph.edges.filter(e => e.targetId === node.id);
                 let col = node.color;
@@ -2408,7 +2612,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     let p = pathCounter++;
                     drawText(currX, yTop - 25, p.toString(), true);
                     let y = 110, dy = 260 / Math.max(1, inEdges.length);
-                    drawLine(currX, yTop, currX, y - 15, 2, node.id, col);
+                    let pCond = "true";
+                    setPower(drawLine(currX, yTop, currX, y - 15, 2, node.id, col), pCond);
                     inEdges.forEach((edge, idx) => {
                         let name = symMap[edge.sourceId] || edge.sourceId;
                         let type = contactTypeMap[edge.sourceId] || 'relais';
@@ -2416,13 +2621,15 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         let physNC = cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc';
                         let isNC = physNC ? !edge.inverted : edge.inverted;
                         let srcCol = getNodeColor(edge.sourceId);
-                        drawContact(currX, y, name, isNC, type, edge.sourceId, srcCol, p);
-                        if (idx < inEdges.length - 1) drawLine(currX, y + 15, currX, y + dy - 15, 2, node.id, col);
+                        setPower(drawContact(currX, y, name, isNC, type, edge.sourceId, srcCol, p), pCond);
+                        let thisCond = getCond(edge);
+                        pCond = pCond === "true" ? thisCond : `(${pCond}) && ${thisCond}`;
+                        if (idx < inEdges.length - 1) setPower(drawLine(currX, y + 15, currX, y + dy - 15, 2, node.id, col), pCond);
                         y += dy;
                     });
-                    drawLine(currX, (y - dy) + 15, currX, 430, 2, node.id, col); 
-                    drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p);
-                    drawLine(currX, 470, currX, yBot, 2, node.id, col); 
+                    setPower(drawLine(currX, (y - dy) + 15, currX, 430, 2, node.id, col), pCond); 
+                    setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p), pCond);
+                    setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
                     currX += 130;
                 }
                 else if (node.type === 'GATE' && node.label === '>=1') { 
@@ -2431,9 +2638,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         let startP = pathCounter++;
                         drawText(currX, yTop - 25, startP.toString(), true);
                         let startX = currX, endX = currX + (branches - 1) * 90;
-                        drawLine(startX, yTop, startX, 90, 2, node.id, col); 
-                        drawLine(startX, 90, endX, 90, 2, node.id, col); 
-                        drawLine(startX, 350, endX, 350, 2, node.id, col); 
+                        setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
+                        setPower(drawLine(startX, 90, endX, 90, 2, node.id, col), "true"); 
+																		   
                         inEdges.forEach((edge, idx) => {
                             let bx = currX + idx * 90;
                             let bp = (idx === 0) ? startP : pathCounter++;
@@ -2444,81 +2651,119 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                             let physNC = cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc';
                             let isNC = physNC ? !edge.inverted : edge.inverted;
                             let srcCol = getNodeColor(edge.sourceId);
-                            drawLine(bx, 90, bx, 220 - 15, 2, edge.sourceId, srcCol, isNC); // isNC am Ende!
-                            drawContact(bx, 220, name, isNC, type, edge.sourceId, srcCol, bp);
-                            drawLine(bx, 235, bx, 350, 2, edge.sourceId, srcCol, isNC); // isNC am Ende!
+                            setPower(drawLine(bx, 90, bx, 220 - 15, 2, edge.sourceId, srcCol, isNC), "true");
+                            setPower(drawContact(bx, 220, name, isNC, type, edge.sourceId, srcCol, bp), "true");
+                            let thisCond = getCond(edge);
+                            setPower(drawLine(bx, 235, bx, 350, 2, edge.sourceId, srcCol, isNC), thisCond);
                         });
-                        drawLine(startX, 350, startX, 430, 2, node.id, col); 
-                        drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, startP);
-                        drawLine(startX, 470, startX, yBot, 2, node.id, col); 
+                        let outCond = `state['${node.id}']`;
+                        setPower(drawLine(startX, 350, endX, 350, 2, node.id, col), outCond); 
+                        setPower(drawLine(startX, 350, startX, 430, 2, node.id, col), outCond); 
+                        setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, startP), outCond);
+                        setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), outCond); 
                         currX = endX + 130;
                     }
                 }
                 else if (node.type === 'RS' || node.type === 'SR') { 
-                    let p1 = pathCounter++;
-                    let p2 = pathCounter++;
-                    let sEdge = inEdges.find(e => e.targetPin === 'S'), rEdge = inEdges.find(e => e.targetPin === 'R');
+                    let p1 = pathCounter++; let p2 = pathCounter++;
+                    let sEdge = inEdges.find(e => e.targetPin === 'S'); let rEdge = inEdges.find(e => e.targetPin === 'R');
+																		
+																	   
                     let sName = sEdge ? (symMap[sEdge.sourceId] || sEdge.sourceId) : 'N/A';
                     let rName = rEdge ? (symMap[rEdge.sourceId] || rEdge.sourceId) : 'N/A';
                     let sType = sEdge ? (contactTypeMap[sEdge.sourceId] || 'relais') : 'relais';
                     let rType = rEdge ? (contactTypeMap[rEdge.sourceId] || 'relais') : 'relais';
                     let sInverted = sEdge ? sEdge.inverted : false;
-                    if (sEdge) {
-                        let cTypeSrc = componentTypes[sEdge.sourceId];
-                        if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') sInverted = !sInverted;
-                    }
+                    if (sEdge) { let cTypeSrc = componentTypes[sEdge.sourceId]; if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') sInverted = !sInverted; }
+																	  
+																																	 
+					 
                     let rInverted = rEdge ? rEdge.inverted : false;
-                    if (rEdge) {
-                        let cTypeSrc = componentTypes[rEdge.sourceId];
-                        if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') rInverted = !rInverted;
-                    }
+                    if (rEdge) { let cTypeSrc = componentTypes[rEdge.sourceId]; if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') rInverted = !rInverted; }
+																	  
+																																	 
+					 
                     let startX = currX, parX = currX + 90;
-                    drawText(startX, yTop - 25, p1.toString(), true);
-                    drawText(parX, yTop - 25, p2.toString(), true);
-                    drawLine(startX, yTop, startX, 90, 2, node.id, col); 
-                    drawLine(startX, 90, parX, 90, 2, node.id, col);
+                    drawText(startX, yTop - 25, p1.toString(), true); drawText(parX, yTop - 25, p2.toString(), true);
+																   
+                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
+                    setPower(drawLine(startX, 90, parX, 90, 2, node.id, col), "true");
                     let sCol = sEdge ? getNodeColor(sEdge.sourceId) : col;
                     let rCol = rEdge ? getNodeColor(rEdge.sourceId) : col;
+                    let sCond = getCond(sEdge); let qCond = `state['${node.id}']`;
                     if (node.type === 'RS') {
-                        // S-Input ist Links (startX)
-                        drawLine(startX, 90, startX, 150 - 15, 2, sEdge ? sEdge.sourceId : node.id, sCol, sInverted); 
-                        drawContact(startX, 150, sName, sInverted, sType, sEdge ? sEdge.sourceId : 'NONE', sCol, p1); 
-                        drawLine(startX, 165, startX, 230, 2, node.id, col); 
-                        // Selbsthaltung ist Rechts (parX) auf gleicher Höhe (150)
-                        drawLine(parX, 90, parX, 150 - 15, 2, node.id, col); 
-                        drawContact(parX, 150, symMap[node.id], false, 'relais', node.id, col, p2); 
-                        drawLine(parX, 165, parX, 230, 2, node.id, col); 
-                        // Zusammenführen
-                        drawLine(startX, 230, parX, 230, 2, node.id, col); 
-                        // R-Input (Öffner) ist darunter (300)
-                        drawLine(startX, 230, startX, 300 - 15, 2, node.id, col); 
-                        drawContact(startX, 300, rName, !rInverted, rType, rEdge ? rEdge.sourceId : 'NONE', rCol, p1); 
-                        drawLine(startX, 315, startX, 430, 2, node.id, col); 
+                        setPower(drawLine(startX, 90, startX, 150 - 15, 2, sEdge ? sEdge.sourceId : node.id, sCol, sInverted), "true"); 
+                        setPower(drawContact(startX, 150, sName, sInverted, sType, sEdge ? sEdge.sourceId : 'NONE', sCol, p1), "true"); 
+                        setPower(drawLine(startX, 165, startX, 230, 2, node.id, col), sCond); 
+                        setPower(drawLine(parX, 90, parX, 150 - 15, 2, node.id, col), "true"); 
+                        setPower(drawContact(parX, 150, symMap[node.id], false, 'relais', node.id, col, p2), "true"); 
+                        setPower(drawLine(parX, 165, parX, 230, 2, node.id, col), qCond); 
+                        let joinCond = `(${sCond} || ${qCond})`;
+                        setPower(drawLine(startX, 230, parX, 230, 2, node.id, col), joinCond); 
+                        setPower(drawLine(startX, 230, startX, 300 - 15, 2, node.id, col), joinCond); 
+                        setPower(drawContact(startX, 300, rName, !rInverted, rType, rEdge ? rEdge.sourceId : 'NONE', rCol, p1), joinCond); 
+                        setPower(drawLine(startX, 315, startX, 430, 2, node.id, col), qCond); 
+                        setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p1), qCond); 
+                        setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), qCond);
                     } else { // SR
-                        // Selbsthaltung ist Links (startX) oben (150)
-                        drawLine(startX, 90, startX, 150 - 15, 2, node.id, col); 
-                        drawContact(startX, 150, symMap[node.id], false, 'relais', node.id, col, p1); 
-                        drawLine(startX, 165, startX, 230, 2, node.id, col); 
-                        // R-Input (Öffner) ist darunter (300) in Serie zur Selbsthaltung
-                        drawLine(startX, 230, startX, 300 - 15, 2, node.id, col); 
-                        drawContact(startX, 300, rName, !rInverted, rType, rEdge ? rEdge.sourceId : 'NONE', rCol, p1); 
-                        drawLine(startX, 315, startX, 380, 2, node.id, col); 
-                        // S-Input ist Rechts (parX) mittig versetzt (225)
-                        drawLine(parX, 90, parX, 225 - 15, 2, sEdge ? sEdge.sourceId : node.id, sCol, sInverted); 
-                        drawContact(parX, 225, sName, sInverted, sType, sEdge ? sEdge.sourceId : 'NONE', sCol, p2); 
-                        drawLine(parX, 240, parX, 380, 2, node.id, col); 
-                        // Zusammenführen
-                        drawLine(startX, 380, parX, 380, 2, node.id, col); 
-                        drawLine(startX, 380, startX, 430, 2, node.id, col); 
+                        setPower(drawLine(startX, 90, startX, 150 - 15, 2, node.id, col), "true"); 
+                        setPower(drawContact(startX, 150, symMap[node.id], false, 'relais', node.id, col, p1), "true"); 
+                        setPower(drawLine(startX, 165, startX, 230, 2, node.id, col), qCond); 
+                        setPower(drawLine(startX, 230, startX, 300 - 15, 2, node.id, col), qCond); 
+                        setPower(drawContact(startX, 300, rName, !rInverted, rType, rEdge ? rEdge.sourceId : 'NONE', rCol, p1), qCond); 
+                        setPower(drawLine(startX, 315, startX, 380, 2, node.id, col), `(${qCond} && ${getCond(rEdge)})`); 
+                        setPower(drawLine(parX, 90, parX, 225 - 15, 2, sEdge ? sEdge.sourceId : node.id, sCol, sInverted), "true"); 
+                        setPower(drawContact(parX, 225, sName, sInverted, sType, sEdge ? sEdge.sourceId : 'NONE', sCol, p2), "true"); 
+                        setPower(drawLine(parX, 240, parX, 380, 2, node.id, col), sCond); 
+                        setPower(drawLine(startX, 380, parX, 380, 2, node.id, col), qCond); 
+                        setPower(drawLine(startX, 380, startX, 430, 2, node.id, col), qCond); 
+                        setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p1), qCond); 
+                        setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), qCond);
                     }
-                    drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p1); 
-                    drawLine(startX, 470, startX, yBot, 2, node.id, col); 
+																						
+																		  
+                    currX = parX + 130;
+                }
+                else if (node.type === 'CTU') {
+                    let p1 = pathCounter++; let p2 = pathCounter++;
+                    let cuEdge = inEdges.find(e => e.targetPin === 'CU'); let rEdge = inEdges.find(e => e.targetPin === 'R');
+																		  
+																	   
+                    let cuName = cuEdge ? (symMap[cuEdge.sourceId] || cuEdge.sourceId) : 'N/A';
+                    let rName = rEdge ? (symMap[rEdge.sourceId] || rEdge.sourceId) : 'N/A';
+                    let cuType = cuEdge ? (contactTypeMap[cuEdge.sourceId] || 'relais') : 'relais';
+                    let rType = rEdge ? (contactTypeMap[rEdge.sourceId] || 'relais') : 'relais';
+                    let cuInverted = cuEdge ? cuEdge.inverted : false;
+                    if (cuEdge) { let cTypeSrc = componentTypes[cuEdge.sourceId]; if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') cuInverted = !cuInverted; }
+                    let rInverted = rEdge ? rEdge.inverted : false;
+                    if (rEdge) { let cTypeSrc = componentTypes[rEdge.sourceId]; if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') rInverted = !rInverted; }
+                    let startX = currX, parX = currX + 90;
+                    drawText(startX, yTop - 25, p1.toString(), true); drawText(parX, yTop - 25, p2.toString(), true);
+																   
+                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
+                    setPower(drawLine(startX, 90, parX, 90, 2, node.id, col), "true");
+                    let cuCol = cuEdge ? getNodeColor(cuEdge.sourceId) : col;
+                    let rCol = rEdge ? getNodeColor(rEdge.sourceId) : col;
+                    let cuCond = getCond(cuEdge); let rCond = getCond(rEdge);
+                    setPower(drawLine(startX, 90, startX, 220 - 15, 2, cuEdge ? cuEdge.sourceId : node.id, cuCol, cuInverted), "true"); 
+                    setPower(drawContact(startX, 220, cuName, cuInverted, cuType, cuEdge ? cuEdge.sourceId : 'NONE', cuCol, p1), "true"); 
+                    setPower(drawLine(startX, 235, startX, 430, 2, node.id, col), cuCond); 
+																	
+                    setPower(drawLine(parX, 90, parX, 220 - 15, 2, rEdge ? rEdge.sourceId : node.id, rCol, rInverted), "true"); 
+                    setPower(drawContact(parX, 220, rName, rInverted, rType, rEdge ? rEdge.sourceId : 'NONE', rCol, p2), "true"); 
+                    setPower(drawLine(parX, 235, parX, 430, 2, node.id, col), rCond); 
+																		   
+                    setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'ctu', col, p1), cuCond); 
+                    setPower(drawCoil(parX, 450, symMap[node.id] + ' (R)', node.id, 'relais', col, p2), rCond); 
+                    setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), cuCond); 
+                    setPower(drawLine(parX, 470, parX, yBot, 2, node.id, col), rCond); 
                     currX = parX + 130;
                 }
                 else if (node.type === 'OUTPUT') { 
                     let p = pathCounter++;
                     drawText(currX, yTop - 25, p.toString(), true);
                     let edge = inEdges[0];
+                    let pCond = getCond(edge);
                     if (edge) {
                         let name = symMap[edge.sourceId] || edge.sourceId;
                         let type = contactTypeMap[edge.sourceId] || 'relais';
@@ -2526,16 +2771,33 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         let physNC = cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc';
                         let isNC = physNC ? !edge.inverted : edge.inverted;
                         let srcCol = getNodeColor(edge.sourceId);
-                        drawLine(currX, yTop, currX, 220 - 15, 2, edge.sourceId, srcCol, isNC); // isNC am Ende!
-                        drawContact(currX, 220, name, isNC, type, edge.sourceId, srcCol, p);
-                        drawLine(currX, 235, currX, 430, 2, node.id, col); 
+                        setPower(drawLine(currX, yTop, currX, 220 - 15, 2, edge.sourceId, srcCol, isNC), "true");
+                        setPower(drawContact(currX, 220, name, isNC, type, edge.sourceId, srcCol, p), "true");
+                        setPower(drawLine(currX, 235, currX, 430, 2, node.id, col), pCond); 
                     } else { 
-                        drawLine(currX, yTop, currX, 430, 2, node.id, col); 
+                        setPower(drawLine(currX, yTop, currX, 430, 2, node.id, col), "true"); 
                     }
-                    if (node.isRelay) drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p);
-                    else if (node.outType === 'valve') drawCoil(currX, 450, symMap[node.id], node.id, 'valve', col, p);
-                    else drawLED(currX, 450, symMap[node.id], node.id, col, p);
-                    drawLine(currX, 470, currX, yBot, 2, node.id, col); 
+                    if (node.isRelay) setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p), pCond);
+                    else if (node.outType === 'valve') setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'valve', col, p), pCond);
+                    else setPower(drawLED(currX, 450, symMap[node.id], node.id, col, p), pCond);
+                    setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
+                    currX += 130;
+                }
+                else if (['TON', 'TOF', 'TP'].includes(node.type)) { 
+                    let p1 = pathCounter++;
+                    let inEdge = inEdges.find(e => e.targetPin === 'IN');
+                    let sName = inEdge ? (symMap[inEdge.sourceId] || inEdge.sourceId) : 'N/A';
+                    let sType = inEdge ? (contactTypeMap[inEdge.sourceId] || 'relais') : 'relais';
+                    let sInverted = inEdge ? inEdge.inverted : false;
+                    if (inEdge) { let cTypeSrc = componentTypes[inEdge.sourceId]; if (cTypeSrc === 'nothalt' || cTypeSrc === 'taster_nc' || cTypeSrc === 'schalter_nc') sInverted = !sInverted; }
+                    drawText(currX, yTop - 25, p1.toString(), true);
+                    let sCol = inEdge ? getNodeColor(inEdge.sourceId) : col;
+                    let pCond = getCond(inEdge);
+                    setPower(drawLine(currX, yTop, currX, 220 - 15, 2, inEdge ? inEdge.sourceId : node.id, sCol, sInverted), "true"); 
+                    setPower(drawContact(currX, 220, sName, sInverted, sType, inEdge ? inEdge.sourceId : 'NONE', sCol, p1), "true"); 
+                    setPower(drawLine(currX, 235, currX, 430, 2, node.id, col), pCond); 
+                    setPower(drawCoil(currX, 450, symMap[node.id], node.id, node.type.toLowerCase(), col, p1), pCond); 
+                    setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
                     currX += 130;
                 }
             });
@@ -2575,10 +2837,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                             // --- MINIATUR-SYMBOL: WECHSLER (Drehpunkt unten) ---
                             g.appendChild(createSvgElement('line', {x1: rc.coilX, y1: top + 13, x2: rc.coilX, y2: top + 16, stroke: '#000', 'stroke-width': 1})); // Root-Pin unten
                             g.appendChild(createSvgElement('line', {x1: rc.coilX, y1: top + 13, x2: rightX - 1, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // Klinge liegt nach oben rechts an (NC)
-							
                             g.appendChild(createSvgElement('line', {x1: rightX, y1: top + 3, x2: rightX, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // NC Pin
                             g.appendChild(createSvgElement('line', {x1: rightX - 3, y1: top + 6, x2: rightX, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // NC Haken (Kerbe)
-							
                             g.appendChild(createSvgElement('line', {x1: leftX, y1: top + 3, x2: leftX, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // NO Pin
                         } else {
                             // --- MINIATUR-SYMBOL: S & Ö GETRENNT (Drehpunkt unten) ---
@@ -2586,7 +2846,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                             g.appendChild(createSvgElement('line', {x1: leftX, y1: top + 3, x2: leftX, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // Pin oben
                             g.appendChild(createSvgElement('line', {x1: leftX, y1: top + 13, x2: leftX - 4, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // Klinge offen (nach oben links)
                             g.appendChild(createSvgElement('line', {x1: leftX, y1: top + 13, x2: leftX, y2: top + 16, stroke: '#000', 'stroke-width': 1})); // Pin unten
-
                             // Ö (Öffner)
                             g.appendChild(createSvgElement('line', {x1: rightX, y1: top + 3, x2: rightX, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // Pin oben
                             g.appendChild(createSvgElement('line', {x1: rightX, y1: top + 6, x2: rightX + 3, y2: top + 6, stroke: '#000', 'stroke-width': 1})); // Haken oben rechts
@@ -2618,19 +2877,25 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }
             }, 15);
         }
+        window.simTimers = {}; // Globaler Speicher für Zeiten/Zähler
+        let lastSimulationTime = performance.now(); // Hochpräzise Zeiterfassung
         function updateEditor() {
             const code = textarea.value;
+            window.simTimers = {}; // Zurücksetzen beim Tippen
             try {
                 const parsed = parseToGraph(code);
-                try { simulationFunction = new Function('state', parsed.jsCompiledCode); } 
-                catch(e) { console.error(e); simulationFunction = null; }
+                // FIX: Wir übergeben deltaMs und den timer-Speicher an die simulierte SPS!
+                try { 
+                    simulationFunction = new Function('state', 'deltaMs', 'timers', parsed.jsCompiledCode); 
+                } catch(e) { 
+                    console.error(e); 
+                    simulationFunction = null; 
+                }
                 buildSimulatorUI(parsed.inputs, parsed.outputs, parsed.graph);
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
-                // WICHTIG: Den Graphen global speichern, falls wir ihn später einblenden!
                 currentGraph = parsed.graph; 
                 calculateLayout(parsed.graph);
-                // FIX: Nur zeichnen, wenn der jeweilige Tab wirklich sichtbar ist!
                 if (document.getElementById('fbs-wrapper').style.display !== 'none') {
                     drawGraph(parsed.graph);
                 }
@@ -2801,14 +3066,14 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             const directTypes = ['despawner', 'wall', 'frame', 'zone_top', 'zone_side', 'window', 'pusher', 'press'];
             if (directTypes.includes(type)) { createFactoryObject(type, ''); return; }
             pendingFactoryType = type;
-            const modal = document.getElementById('factory-modal');
-            const sel1 = document.getElementById('fm-select-1'); const sel2 = document.getElementById('fm-select-2');
-            const grp1 = document.getElementById('fm-group-1'); const grp2 = document.getElementById('fm-group-2');
+            const modal = document.getElementById('factory-modal'); // WICHTIG: Das Modal-Element!
+            const sel1 = document.getElementById('fm-select-1'); const sel2 = document.getElementById('fm-select-2'); const sel3 = document.getElementById('fm-select-3');
+            const grp1 = document.getElementById('fm-group-1'); const grp2 = document.getElementById('fm-group-2'); const grp3 = document.getElementById('fm-group-3');
             const colorGrp = document.getElementById('fm-group-color'); const intervalGrp = document.getElementById('fm-group-interval');
-            const lbl1 = document.getElementById('fm-label-1'); const lbl2 = document.getElementById('fm-label-2');
+            const lbl1 = document.getElementById('fm-label-1'); const lbl2 = document.getElementById('fm-label-2'); const lbl3 = document.getElementById('fm-label-3');
             const title = document.getElementById('fm-title');
-            sel1.innerHTML = ''; sel2.innerHTML = '';
-            grp1.style.display = 'block'; grp2.style.display = 'none';
+            sel1.innerHTML = ''; sel2.innerHTML = ''; if(sel3) sel3.innerHTML = '';
+            grp1.style.display = 'block'; grp2.style.display = 'none'; if(grp3) grp3.style.display = 'none';
             colorGrp.style.display = 'none'; intervalGrp.style.display = 'none';
             let fillOptions = (selectElem, isOutput, targetType) => {
                 let list = isOutput ? globalOutputs : globalInputs;
@@ -2838,7 +3103,11 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 'led': { t: 'LED Leuchte (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true, col: true },
                 'zylinder_single': { t: 'Einfachwirkender Zylinder (Ausgang):', l1: 'Magnetventil ansteuern (Ausfahren)', out: true },
                 'zylinder_double': { t: 'Doppelwirkender Zylinder (Ausgänge):', l1: 'Kolben AUSfahren (z.B. PZ_V1_AUS)', l2: 'Kolben EINfahren (z.B. PZ_V1_EIN)', out: true },
-                'conveyor': { t: 'Förderband (Ausgang) zuweisen:', l1: 'Motor AN (z.B. MOTOR_1)', out: true }
+                'conveyor': { t: 'Förderband (Ausgang) zuweisen:', l1: 'Motor AN (z.B. MOTOR_1)', out: true },
+                // NEU:
+                'stacklight': { t: 'Signal-Säule (3 Farben):', l1: 'Rot', l2: 'Gelb', l3: 'Grün', out: true },
+                'turntable': { t: 'Drehtisch (Nur für Draufsicht!):', l1: 'Aktivieren (90° Weiche)', out: true },
+                'display': { t: '7-Seg Display:', l1: 'Timer/Zähler auswählen', customList: 'timers' }
             };
             let c = config[type] || { t: 'Sensor (Eingang) zuweisen:', l1: 'SPS Eingangsvariable', out: false };
             if (type.startsWith('spawner_')) c = { t: 'Spawner konfigurieren:', l1: 'Aktivieren durch (Optional)', out: true, spawner: true };
@@ -2846,22 +3115,37 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             if (c.spawner) {
                 let emptyOpt = document.createElement('option'); emptyOpt.value = ""; emptyOpt.textContent = "-- Dauerhaft aktiv --"; sel1.appendChild(emptyOpt);
             }
-            fillOptions(sel1, c.out, type);
+            // NEU: Filter für die Live-Timer/Zähler
+            if (c.customList === 'timers') {
+                if (currentGraph) {
+                    let timers = Array.from(currentGraph.nodes.values()).filter(n => ['TON','TOF','TP','CTU'].includes(n.type));
+                    timers.forEach(n => {
+                        let opt = document.createElement('option'); opt.value = n.id; opt.textContent = n.label || n.id; sel1.appendChild(opt);
+                    });
+                }
+                if (sel1.options.length === 0) { alert("Keine Timer oder Zähler im Logikplan gefunden!"); pendingFactoryType = null; return; }
+            } else {
+                fillOptions(sel1, c.out, type);
+            }
             if (c.col) colorGrp.style.display = 'block';
             if (c.l2) { lbl2.textContent = c.l2; fillOptions(sel2, true, type); grp2.style.display = 'block'; }
-            if (c.spawner) intervalGrp.style.display = 'block';
+            if (c.l3) { lbl3.textContent = c.l3; fillOptions(sel3, true, type); grp3.style.display = 'block'; }
             if (type === 'nothalt') document.getElementById('fm-select-color').value = 'red';
-            if (sel1.options.length === 0 && !type.startsWith('spawner_')) { alert("Keine passenden Variablen im Code gefunden!"); pendingFactoryType = null; return; }
+            if (sel1.options.length === 0 && !type.startsWith('spawner_') && c.customList !== 'timers') { alert("Keine passenden Variablen im Code gefunden!"); pendingFactoryType = null; return; }
             modal.style.display = 'block';
         };
         window.closeFactoryModal = function() { document.getElementById('factory-modal').style.display = 'none'; pendingFactoryType = null; };
         window.confirmFactoryModal = function() {
-            const val1 = document.getElementById('fm-select-1').value; const val2 = document.getElementById('fm-select-2').value;
-            const color = document.getElementById('fm-select-color').value; const interval = parseFloat(document.getElementById('fm-input-interval').value) || 3;
-            createFactoryObject(pendingFactoryType, val1, val2, null, color, interval); closeFactoryModal();
+            const val1 = document.getElementById('fm-select-1').value; 
+            const val2 = document.getElementById('fm-select-2').value;
+            const val3 = document.getElementById('fm-select-3') ? document.getElementById('fm-select-3').value : null; // NEU
+            const color = document.getElementById('fm-select-color').value; 
+            const interval = parseFloat(document.getElementById('fm-input-interval').value) || 3;
+            createFactoryObject(pendingFactoryType, val1, val2, null, color, interval, val3); // var3 übergeben
+            closeFactoryModal();
         };
         const colorMap = { 'green': '#4caf50', 'red': '#f44336', 'blue': '#2196f3', 'yellow': '#ffeb3b', 'white': '#9e9e9e' };
-        function createFactoryObject(type, var1, var2, forceId = null, color = 'green', interval = 3) {
+        function createFactoryObject(type, var1, var2, forceId = null, color = 'green', interval = 3, var3 = null) {
             let el = document.createElement('div');
             let defaultCollision = !(type.startsWith('sensor_') || type === 'despawner' || type.startsWith('spawner_') || type.startsWith('zone_') || type === 'window');
             let obj = { 
@@ -2906,6 +3190,20 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 clip.appendChild(belt); el.appendChild(clip);
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer; el.appendChild(resizer);
                 let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Band (${var1})`; el.appendChild(label);
+			} else if (type === 'stacklight') {
+                obj.linkedVar = var1; obj.linkedVarRet = var2; obj.linkedVar3 = var3; // Rot, Gelb, Grün
+                obj.width = 24; obj.height = 70; el.className = 'f2d-obj f2d-stacklight';
+                el.innerHTML = '<div class="f2d-sl-seg f2d-sl-red"></div><div class="f2d-sl-seg f2d-sl-yel"></div><div class="f2d-sl-seg f2d-sl-grn"></div>';
+                obj.useCollision = false; // Kann überlappt werden
+            } else if (type === 'turntable') {
+                obj.linkedVar = var1; obj.width = 60; obj.height = 60; el.className = 'f2d-obj f2d-turntable';
+                el.innerHTML = '<div class="f2d-tt-arrow">➔</div>';
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+            } else if (type === 'display') {
+                obj.linkedVar = var1; obj.width = 60; obj.height = 30; el.className = 'f2d-obj f2d-display';
+                el.innerHTML = '00.0';
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                obj.useCollision = false;
             } else if (type === 'wall') {
                 obj.width = 100; obj.height = 20; el.className = 'f2d-obj f2d-wall'; el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
@@ -3268,7 +3566,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 let gPushX = pushX * cos - pushY * sin;
                 let gPushY = pushX * sin + pushY * cos;
                 item.x += gPushX; item.y += gPushY;
-                if (type === 'conveyor') {
+                // FIX: Drehtisch verhält sich in der Seitenansicht ab sofort wie ein flaches Förderband,
+                // damit die Blöcke nicht mehr wie an einer Wand abprallen!
+                if (type === 'conveyor' || type === 'turntable') {
                     if (ny < -0.5) { 
                         item.vy = 0; item.vx *= Math.pow(0.5, window.simSpeed); 
                         if (isRunning) { item.x += cos * 2 * window.simSpeed; item.y += sin * 2 * window.simSpeed; item.vx = cos * 2; item.vy = sin * 2; }
@@ -3327,6 +3627,19 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     } else if (obj.type === 'led') {
                         if (!!spsState[obj.linkedVar]) { obj.el.style.backgroundColor = obj.hexColor; obj.el.style.boxShadow = `0 0 20px ${obj.hexColor}, inset 0 0 10px rgba(255,255,255,0.6)`; obj.el.style.color = '#000'; obj.el.style.borderColor = '#fff'; }
                         else { obj.el.style.backgroundColor = '#222'; obj.el.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.4)'; obj.el.style.color = 'rgba(255,255,255,0.4)'; obj.el.style.borderColor = '#444'; }
+                    // NEU: Die neuen Visuals
+                    } else if (obj.type === 'stacklight') {
+                        obj.el.children[0].classList.toggle('on', !!spsState[obj.linkedVar]); // Rot
+                        obj.el.children[1].classList.toggle('on', !!spsState[obj.linkedVarRet]); // Gelb
+                        obj.el.children[2].classList.toggle('on', !!spsState[obj.linkedVar3]); // Grün
+                    } else if (obj.type === 'turntable') {
+                        let isActive = !!spsState[obj.linkedVar];
+                        if (isActive !== obj.isActive) { obj.isActive = isActive; obj.el.classList.toggle('active', isActive); }
+                    } else if (obj.type === 'display') {
+                        if (window.simTimers && window.simTimers[obj.linkedVar]) {
+                            let t = window.simTimers[obj.linkedVar];
+                            obj.el.textContent = t.cv !== undefined ? t.cv : (t.et / 1000).toFixed(1);
+                        } else { obj.el.textContent = '---'; }
                     }
                 });
                 // Schleife für alle Aktoren (Zylinder und Förderbänder)
@@ -3395,14 +3708,23 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     if (item.useCollision !== false) {
                         factoryObjects.forEach(obj => {
                             if (obj.useCollision === false) return; 
-                            if (obj.type === 'conveyor') {
+                            if (obj.type === 'conveyor' || obj.type === 'turntable') {
                                 if (item.activeMode === 'side') {
                                     let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
-                                    resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, obj.type, obj.isRunning);
+                                    resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, obj.type, obj.isRunning || obj.isActive);
                                 } else {
                                     if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
-                                        if (obj.isRunning) {
+                                        if (obj.type === 'conveyor' && obj.isRunning) {
                                             let rad = (obj.rotation || 0) * Math.PI / 180;
+                                            item.x += Math.cos(rad) * 2 * window.simSpeed; item.y += Math.sin(rad) * 2 * window.simSpeed;
+                                            item.vx = Math.cos(rad) * 2; item.vy = Math.sin(rad) * 2;
+                                        } else if (obj.type === 'turntable' && obj.isActive) {
+                                            let rad = (obj.rotation || 0) * Math.PI / 180;
+                                            // Zieht das Item sanft in die Mitte, damit es beim 90° Knick nicht herunterfällt!
+                                            let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
+                                            let icx = item.x + item.width / 2, icy = item.y + item.height / 2;
+                                            item.x += (ocx - icx) * 0.1 * window.simSpeed; item.y += (ocy - icy) * 0.1 * window.simSpeed;
+                                            // Beschleunigt in die gedrehte Richtung
                                             item.x += Math.cos(rad) * 2 * window.simSpeed; item.y += Math.sin(rad) * 2 * window.simSpeed;
                                             item.vx = Math.cos(rad) * 2; item.vy = Math.sin(rad) * 2;
                                         }
@@ -3643,7 +3965,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 items: factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), vx: Math.round(i.vx||0), vy: Math.round(i.vy||0), material: i.material, useGravity: i.useGravity, useCollision: i.useCollision })),
                 objects: factoryObjects.map(o => ({
                     id: o.id, type: o.type, x: Math.round(o.x), y: Math.round(o.y), width: Math.round(o.width), height: Math.round(o.height||0), rotation: Math.round(o.rotation||0),
-                    linkedVar: o.linkedVar, linkedVarExt: o.linkedVarExt, linkedVarRet: o.linkedVarRet,
+                    linkedVar: o.linkedVar, linkedVarExt: o.linkedVarExt, linkedVarRet: o.linkedVarRet, linkedVar3: o.linkedVar3, // NEU
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned 
                 }))
@@ -3679,7 +4001,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 });
                 let idMap = {};
                 state.objects.forEach(o => {
-                    let newObj = createFactoryObject(o.type, o.linkedVar || o.linkedVarExt, o.linkedVarRet, o.id, o.color, o.interval);
+                    let newObj = createFactoryObject(o.type, o.linkedVar || o.linkedVarExt, o.linkedVarRet, o.id, o.color, o.interval, o.linkedVar3); // NEU
                     newObj.x = o.x; newObj.y = o.y; newObj.width = o.width; newObj.rotation = o.rotation;
                     if (o.height) newObj.height = o.height; 
                     if (o.useCollision !== undefined) newObj.useCollision = o.useCollision;
@@ -3718,16 +4040,13 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
         window.openAIPromptModal = function() {
             document.getElementById('ai-prompt-modal').style.display = 'block';
         };
-
         window.closeAIPromptModal = function() {
             document.getElementById('ai-prompt-modal').style.display = 'none';
         };
-
         window.copyAIPrompt = function() {
             const promptInput = document.getElementById('ai-prompt-text');
             promptInput.select();
             document.execCommand("copy");
-            
             // Visuelles Feedback
             const ind = document.getElementById('ai-copy-indicator');
             ind.style.opacity = '1';
@@ -3899,6 +4218,142 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             }
             return false;
         }
+		// ==========================================
+        // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
+        // ==========================================
+        let analyzerHistory = [];
+        let isAnalyzerOpen = false;
+        let analyzerVars = []; 
+        let analyzerColors = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3'];
+        window.openAnalyzerModal = function() {
+            document.getElementById('analyzer-modal').style.display = 'flex';
+            isAnalyzerOpen = true;
+            updateAnalyzerLegend();
+            drawAnalyzer();
+        };
+        window.closeAnalyzerModal = function() {
+            document.getElementById('analyzer-modal').style.display = 'none';
+            isAnalyzerOpen = false;
+        };
+        window.clearAnalyzer = function() {
+            analyzerHistory = [];
+            drawAnalyzer();
+        };
+        // Synchronisiert das Scrollen der Legende mit dem Canvas
+        document.getElementById('analyzer-canvas-wrapper').addEventListener('scroll', function() {
+            document.getElementById('analyzer-legend').style.top = -this.scrollTop + 'px';
+        });
+        function updateAnalyzerLegend() {
+            // Filtere alle benutzten Ein- und Ausgänge
+            analyzerVars = [...new Set([...globalInputs, ...globalOutputs])].sort();
+            const legendDiv = document.getElementById('analyzer-legend');
+            legendDiv.innerHTML = '';
+            analyzerVars.forEach((v, idx) => {
+                let col = analyzerColors[idx % analyzerColors.length];
+                // Jeder Channel bekommt 50px Höhe
+                legendDiv.innerHTML += `<div style="height: 50px; display: flex; align-items: center; padding-left: 10px; color: ${col}; font-weight: bold; border-bottom: 1px dashed #333; box-sizing: border-box;">${v}</div>`;
+            });
+        }
+        function drawAnalyzer() {
+            if (!isAnalyzerOpen) return;
+            const cvs = document.getElementById('analyzer-canvas');
+            const wrapper = document.getElementById('analyzer-canvas-wrapper');
+            const ctx = cvs.getContext('2d');
+            // Passt die Auflösung an die Containerbreite und die nötige Variablen-Höhe an
+            let requiredHeight = Math.max(wrapper.clientHeight, analyzerVars.length * 50);
+            if (cvs.width !== wrapper.clientWidth || cvs.height !== requiredHeight) {
+                cvs.width = wrapper.clientWidth;
+                cvs.height = requiredHeight;
+                document.getElementById('analyzer-legend').style.height = requiredHeight + 'px';
+            }
+            ctx.clearRect(0, 0, cvs.width, cvs.height);
+            // Raster zeichnen
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i = 0; i < analyzerVars.length; i++) {
+                let yBase = 50 + i * 50; 
+                ctx.moveTo(0, yBase);
+                ctx.lineTo(cvs.width, yBase);
+            }
+            ctx.stroke();
+            if (analyzerHistory.length === 0) return;
+            // X-Achse: 2 Pixel pro Tick (Bestimmt die Lauf-Geschwindigkeit)
+            const xStep = 2; 
+            const maxVisible = Math.floor(cvs.width / xStep);
+            // Schneidet den Verlauf fürs Zeichnen so ab, dass er ans Ende des Bildschirms passt (EKG-Effekt)
+            let drawHistory = analyzerHistory;
+            if (analyzerHistory.length > maxVisible) {
+                drawHistory = analyzerHistory.slice(analyzerHistory.length - maxVisible);
+            }
+            // Zeichne jede Variable als Strich-Kurve
+            analyzerVars.forEach((v, idx) => {
+                ctx.strokeStyle = analyzerColors[idx % analyzerColors.length];
+                ctx.lineWidth = 2.5;
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                let yBase = 45 + idx * 50; // "Low" (0) Level
+                let yHigh = yBase - 30;    // "High" (1) Level
+                for (let i = 0; i < drawHistory.length; i++) {
+                    let x = i * xStep;
+                    let state = drawHistory[i][v] ? 1 : 0;
+                    let y = state ? yHigh : yBase;
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        let prevState = drawHistory[i-1][v] ? 1 : 0;
+                        let prevY = prevState ? yHigh : yBase;
+                        // Bei einer Flanke (Zustandswechsel) eine strikte vertikale Linie zeichnen
+                        if (prevState !== state) {
+                            ctx.lineTo(x, prevY);
+                        }
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            });
+        }
+		// --- NEU: Oszilloskop Verschieben & Skalieren ---
+        const analyzerModal = document.getElementById('analyzer-modal');
+        const analyzerHeader = document.getElementById('analyzer-header');
+        let isDraggingAnalyzer = false;
+        let anaDragStartX, analyzerStartLeft, analyzerStartTop;
+        // 1. Drag & Drop Logik
+        analyzerHeader.addEventListener('mousedown', (e) => {
+            if (e.target.tagName.toLowerCase() === 'button') return; // Schließen-Button ignorieren
+            isDraggingAnalyzer = true;
+            anaDragStartX = e.clientX;
+            anaDragStartY = e.clientY;
+            let rect = analyzerModal.getBoundingClientRect();
+            analyzerStartLeft = rect.left;
+            analyzerStartTop = rect.top;
+            document.body.style.cursor = 'move';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingAnalyzer) {
+                let dx = e.clientX - anaDragStartX;
+                let dy = e.clientY - anaDragStartY;
+                // Verhindert, dass man das Fenster aus dem Bild schiebt
+                let newLeft = Math.max(0, Math.min(window.innerWidth - 100, analyzerStartLeft + dx));
+                let newTop = Math.max(0, Math.min(window.innerHeight - 50, analyzerStartTop + dy));
+                analyzerModal.style.left = newLeft + 'px';
+                analyzerModal.style.top = newTop + 'px';
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (isDraggingAnalyzer) {
+                isDraggingAnalyzer = false;
+                document.body.style.cursor = '';
+            }
+        });
+        // 2. Automatisches Neu-Zeichnen beim Skalieren des Fensters
+        const analyzerResizeObserver = new ResizeObserver(() => {
+            if (isAnalyzerOpen) {
+                requestAnimationFrame(drawAnalyzer);
+            }
+        });
+        analyzerResizeObserver.observe(analyzerModal);
         // INITIALISIERUNG
         // 1. Zuerst prüfen, ob wir von einem Link kommen
         if (!checkUrlForState()) {

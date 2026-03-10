@@ -568,8 +568,19 @@
                 </select>
             </div>
             <button id="btn-toggle-sim" class="btn-export" style="background-color: #e6194B; margin-left: 10px;" onclick="toggleSimulation()">Simulation starten</button>
-			<button class="btn-export" style="background-color: #9c27b0; margin-left: 10px;" onclick="openAnalyzerModal()">📊 Oszilloskop</button>
-			<button id="btn-toggle-sound" class="btn-export" style="background-color: #555; margin-left: 10px;" onclick="toggleSound()">🔇 Ton: AUS</button>
+            <button class="btn-export" style="background-color: #9c27b0; margin-left: 10px;" onclick="openAnalyzerModal()">📊 Oszilloskop</button>
+            <button id="btn-toggle-sound" class="btn-export" style="background-color: #555; margin-left: 10px;" onclick="toggleSound()">🔇 Ton: AUS</button>
+            
+            <div class="tb-dropdown" style="margin-left: 10px;">
+                <button class="btn-export" style="background-color: #607d8b; cursor: pointer;">🪟 Multi-Monitor ▼</button>
+                <div class="tb-dropdown-content" style="right: 0; left: auto;">
+                    <div onclick="detachPanel('fbs-wrapper', 'Logikplan')">⏏️ Logikplan abkoppeln</div>
+                    <div onclick="detachPanel('circuit-wrapper', 'Schaltplan')">⏏️ Schaltplan abkoppeln</div>
+                    <div onclick="detachPanel('factory-wrapper', '2D-Anlage')">⏏️ 2D-Anlage abkoppeln</div>
+                    <div onclick="detachPanel('analyzer-modal', 'Oszilloskop')">⏏️ Oszilloskop abkoppeln</div>
+                </div>
+            </div>
+
             <button class="btn-export" style="margin-left: 10px;" onclick="exportSVG()">Als SVG speichern</button>
         </div>
         <div id="workspace-container">
@@ -598,23 +609,22 @@
                 <div id="factory-toolbar">
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn">🎛️ Bedienpult ▼</button>
+                        <div class="tb-dropdown-content" id="menu-bedienpult">
+                            <div onclick="addFactoryDevice('taster')">🟢 Taster (Schließer)</div>
+                            <div onclick="addFactoryDevice('schalter')">🎚️ Schalter (rastend)</div>
+                            <div onclick="addFactoryDevice('nothalt')">🍄 Not-Halt (Öffner)</div>
+                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
+                            <div onclick="addFactoryDevice('led')">💡 Meldeleuchte (LED)</div>
+                        </div>
+                    </div>
+                    <div class="tb-dropdown">
+                        <button class="tb-drop-btn">📦 Werkstücke ▼</button>
                         <div class="tb-dropdown-content" id="menu-werkstuecke">
                             <div onclick="spawnFactoryItem('metall', 0, 200, false)">⬜ Block Normal (Metall)</div>
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, false)">🟨 Block Normal (Kunststoff)</div>
                             <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
                             <div onclick="spawnFactoryItem('metall', 0, 200, true)">🧱 Block Massiv (Metall)</div>
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, true)">🧱 Block Massiv (Kunststoff)</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
-                            <div onclick="addFactoryDevice('spawner_metall')">⏳ Spawner (Metall)</div>
-                            <div onclick="addFactoryDevice('spawner_kunststoff')">⏳ Spawner (Kunststoff)</div>
-                            <div onclick="addFactoryDevice('despawner')">🗑️ Despawner (Entferner)</div>
-                        </div>
-                    </div>
-                    <div class="tb-dropdown">
-                        <button class="tb-drop-btn">📦 Werkstücke ▼</button>
-                        <div class="tb-dropdown-content" id="menu-werkstuecke">
-                            <div onclick="spawnFactoryItem('metall')">⬜ Block (Metall) manuell</div>
-                            <div onclick="spawnFactoryItem('kunststoff')">🟨 Block (Kunststoff) manuell</div>
                             <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
                             <div onclick="addFactoryDevice('spawner_metall')">⏳ Spawner (Metall)</div>
                             <div onclick="addFactoryDevice('spawner_kunststoff')">⏳ Spawner (Kunststoff)</div>
@@ -4700,6 +4710,111 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             }
             return false;
         }
+		// ==========================================
+        // NEU: MULTI-MONITOR / POP-OUT ENGINE
+        // ==========================================
+        window.popOutWindows = {};
+        
+        window.detachPanel = function(panelId, titleName) {
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            
+            // Wenn das Fenster schon offen ist, holen wir es in den Vordergrund
+            if (window.popOutWindows[panelId] && !window.popOutWindows[panelId].closed) {
+                window.popOutWindows[panelId].focus();
+                return;
+            }
+            
+            // Platzhalter erstellen, damit die Engine weiß, wohin das Panel beim Schließen zurückmuss
+            const placeholder = document.createElement('div');
+            placeholder.id = panelId + '-placeholder';
+            placeholder.style.display = 'none';
+            panel.parentNode.insertBefore(placeholder, panel);
+            
+            // Reines, nacktes Browser-Fenster ohne Tabs öffnen
+            const extWin = window.open('', '', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
+            window.popOutWindows[panelId] = extWin;
+            
+            extWin.document.title = "VALIS - " + titleName;
+            extWin.document.body.style.margin = '0';
+            extWin.document.body.style.height = '100vh';
+            extWin.document.body.style.backgroundColor = '#1e1e1e';
+            extWin.document.body.style.overflow = 'hidden';
+            extWin.document.body.style.display = 'flex';
+            
+            // 🌟 MAGIE: Wir kopieren das gesamte CSS live in das neue Fenster!
+            Array.from(document.styleSheets).forEach(sheet => {
+                try {
+                    if (sheet.cssRules) {
+                        const s = extWin.document.createElement('style');
+                        Array.from(sheet.cssRules).forEach(rule => s.appendChild(extWin.document.createTextNode(rule.cssText)));
+                        extWin.document.head.appendChild(s);
+                    }
+                } catch(e) {
+                    if (sheet.href) {
+                        const l = extWin.document.createElement('link'); 
+                        l.rel = 'stylesheet'; l.href = sheet.href; 
+                        extWin.document.head.appendChild(l);
+                    }
+                }
+            });
+            
+            // Panel aus dem Hauptfenster reißen und ins externe Fenster kleben
+            panel.style.display = 'flex';
+            if (panelId === 'analyzer-modal') {
+                panel._oldCss = panel.style.cssText;
+                panel.style.position = 'relative'; panel.style.width = '100%'; panel.style.height = '100%'; panel.style.top = '0'; panel.style.left = '0'; panel.style.transform = 'none'; panel.style.boxShadow = 'none';
+            } else {
+                panel.style.width = '100%'; panel.style.height = '100%';
+            }
+            extWin.document.body.appendChild(panel);
+            
+            // SVG-Engines kurz neustarten, da sie beim Frame-Wechsel die Kamera-Koordinaten verlieren
+            setTimeout(() => {
+                if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                if (panelId === 'analyzer-modal') drawAnalyzer(); // Oszilloskop an neue Größe anpassen
+            }, 100);
+            
+            // 🌟 MOUSE-EVENT-ROUTING: Klicks im 2. Fenster werden zurück an die Engine im 1. Fenster gesendet!
+            const relayEvent = (e) => {
+                let init = { bubbles: true, cancelable: true, view: window };
+                if (e instanceof MouseEvent) {
+                    ['screenX', 'screenY', 'clientX', 'clientY', 'ctrlKey', 'shiftKey', 'altKey', 'metaKey', 'button', 'buttons'].forEach(k => init[k] = e[k]);
+                    let ev = new MouseEvent(e.type, init);
+                    document.dispatchEvent(ev); window.dispatchEvent(ev);
+                } else if (e instanceof KeyboardEvent) {
+                    ['key', 'code', 'ctrlKey', 'shiftKey', 'altKey', 'metaKey'].forEach(k => init[k] = e[k]);
+                    let ev = new KeyboardEvent(e.type, init);
+                    document.dispatchEvent(ev); window.dispatchEvent(ev);
+                }
+            };
+            extWin.addEventListener('mousemove', relayEvent);
+            extWin.addEventListener('mouseup', relayEvent);
+            extWin.addEventListener('keydown', relayEvent);
+            
+            // Wenn der Nutzer das externe Fenster schließt -> Panel zurückholen!
+            extWin.addEventListener('beforeunload', () => {
+                const ph = document.getElementById(panelId + '-placeholder');
+                if (ph) { ph.parentNode.insertBefore(panel, ph); ph.remove(); }
+                
+                if (panelId === 'analyzer-modal') {
+                    panel.style.cssText = panel._oldCss; panel.style.display = 'none'; isAnalyzerOpen = false;
+                } else {
+                    panel.style.width = ''; panel.style.height = ''; panel.style.display = 'none';
+                }
+                delete window.popOutWindows[panelId];
+                
+                // SVG-Engines wieder für das Hauptfenster kalibrieren
+                setTimeout(() => {
+                    if (panelId === 'fbs-wrapper' && document.getElementById('fbs-wrapper').style.display !== 'none') { panZoomInstance = svgPanZoom(customSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                    if (panelId === 'circuit-wrapper' && document.getElementById('circuit-wrapper').style.display !== 'none') { panZoomCircuitInstance = svgPanZoom(circuitSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                }, 100);
+                updateWorkspace();
+            });
+            
+            if (panelId !== 'analyzer-modal') updateWorkspace();
+        };
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
         // ==========================================

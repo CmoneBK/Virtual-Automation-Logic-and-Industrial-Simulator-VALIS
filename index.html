@@ -146,6 +146,7 @@
         }
         .view-btn { background-color: #555; transition: background 0.2s; }
         .view-btn.active { background-color: #f58231; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+		.view-btn.detached { background-color: #2196f3 !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
 		/* NEU: Styles für Aufklapp-Header und den Greifer (Splitter) */
         .section-header { background: #333333; color: #d4d4d4; padding: 6px 10px; font-size: 12px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; user-select: none; transition: background 0.2s; }
         .section-header:hover { background: #444444; color: #fff; }
@@ -571,7 +572,7 @@
 
             <div class="info-box" title="Virtual Automation, Logic & Industrial Simulator" style="margin: 0 10px; text-align: center;">
                 <strong>⚙️ Willkommen bei VALIS:</strong> Logik links tippen • "Simulation starten" für Live-Test.
-																												  
+																																					  
             </div>
 
             <div style="display: flex; gap: 5px; align-items: center;">
@@ -2066,50 +2067,79 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
         };
 		// --- NEU: WORKSPACE PANEL MANAGEMENT ---
         function updateWorkspace() {
-            const pFbs = customSvg.closest('.workspace-panel') || document.getElementById('fbs-wrapper');
-													   
-            const pCirc = circuitSvg.closest('.workspace-panel') || document.getElementById('circuit-wrapper');
-            const pFac = factoryScrollArea.closest('.workspace-panel') || document.getElementById('factory-wrapper');
-            
-            const panels = [pFbs, pCirc, pFac];
+            if (!window.popOutWindows) window.popOutWindows = {};
+
+            // Genialer Check: Wenn es in den popOutWindows steht, ist es drüben. 
+            // Wenn document.getElementById es findet, ist es hier!
+            const checkState = (id) => {
+                let isDetached = window.popOutWindows[id] && !window.popOutWindows[id].closed;
+                let el = document.getElementById(id); // Gibt null zurück, wenn es auf Monitor 2 liegt!
+                let isMainVisible = !isDetached && el && el.style.display !== 'none';
+                return { isDetached, isMainVisible, el };
+            };
+
+            let fbs = checkState('fbs-wrapper');
+            let circ = checkState('circuit-wrapper');
+            let fac = checkState('factory-wrapper');
+
+											   
             const resizer1 = document.getElementById('ws-resizer-1');
             const resizer2 = document.getElementById('ws-resizer-2');
             
-            let p0 = (panels[0] && panels[0].style.display !== 'none') || currentLayout.startsWith('grid-');
-            let p1 = (panels[1] && panels[1].style.display !== 'none') || currentLayout.startsWith('grid-');
-            let p2 = (panels[2] && panels[2].style.display !== 'none') || currentLayout.startsWith('grid-');
-            
+																											
+																											
+																											
+			
             if (currentLayout.startsWith('grid-')) {
                 if (resizer1) resizer1.style.display = 'none';
                 if (resizer2) resizer2.style.display = 'none';
             } else {
-                if (resizer1) resizer1.style.display = (p0 && (p1 || p2)) ? 'block' : 'none';
-                if (resizer2) resizer2.style.display = (p1 && p2) ? 'block' : 'none';
+                if (resizer1) resizer1.style.display = (fbs.isMainVisible && (circ.isMainVisible || fac.isMainVisible)) ? 'block' : 'none';
+                if (resizer2) resizer2.style.display = (circ.isMainVisible && fac.isMainVisible) ? 'block' : 'none';
             }
             
-            document.getElementById('btn-view-fbs').classList.toggle('active', p0);
-            document.getElementById('btn-view-iec').classList.toggle('active', p1);
-            document.getElementById('btn-view-fac').classList.toggle('active', p2);
+            const updateBtn = (btnId, state) => {
+                let b = document.getElementById(btnId);
+                if (!b) return;
+                b.classList.remove('active', 'detached');
+                if (state.isDetached) b.classList.add('detached'); // Macht den Button BLAU
+                else if (state.isMainVisible || currentLayout.startsWith('grid-')) b.classList.add('active'); // Macht ihn ORANGE
+            };
+
+            updateBtn('btn-view-fbs', fbs);
+            updateBtn('btn-view-iec', circ);
+            updateBtn('btn-view-fac', fac);
             
             requestAnimationFrame(() => {
-                if(p0 && panZoomInstance && panels[0] && panels[0].offsetWidth > 0) { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); }
-                if(p1 && panZoomCircuitInstance && panels[1] && panels[1].offsetWidth > 0) { panZoomCircuitInstance.resize(); panZoomCircuitInstance.fit(); panZoomCircuitInstance.center(); }
+                if (fbs.isMainVisible && panZoomInstance && fbs.el.offsetWidth > 0) { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); }
+                if (circ.isMainVisible && panZoomCircuitInstance && circ.el.offsetWidth > 0) { panZoomCircuitInstance.resize(); panZoomCircuitInstance.fit(); panZoomCircuitInstance.center(); }
             });
         }
 
         window.toggleWorkspaceView = function(panelId) {
-            let panel;
-            if (panelId === 'fbs-wrapper') panel = customSvg.closest('.workspace-panel') || document.getElementById(panelId);
-            else if (panelId === 'circuit-wrapper') panel = circuitSvg.closest('.workspace-panel') || document.getElementById(panelId);
-            else if (panelId === 'factory-wrapper') panel = factoryScrollArea.closest('.workspace-panel') || document.getElementById(panelId);
-            else panel = document.getElementById(panelId);
-            
+            if (!window.popOutWindows) window.popOutWindows = {};
+
+            // 1. Wenn es auf Monitor 2 offen ist -> Klick hier schließt es dort und holt es zurück!
+            if (window.popOutWindows[panelId] && !window.popOutWindows[panelId].closed) {
+                window.popOutWindows[panelId].close();
+                return;
+            }
+
+            // 2. Es ist hier im Hauptfenster.
+            let panel = document.getElementById(panelId);
             if (!panel) return;
 
-            const visiblePanels = document.querySelectorAll('.workspace-panel[style*="display: flex"], .workspace-panel:not([style*="display: none"])');
-																				  
-            if (visiblePanels.length === 1 && panel.style.display !== 'none') return;
+            // 3. Zählen: Wie viele sind HIER noch sichtbar?
+            let mainVisibleCount = 0;
+            ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+                let p = document.getElementById(id);
+                if (p && p.style.display !== 'none') mainVisibleCount++;
+            });
             
+            // Letztes aktives Fenster auf dem Hauptmonitor darf nicht geschlossen werden!
+            if (mainVisibleCount <= 1 && panel.style.display !== 'none') return;
+            
+            // 4. Grid-Layout auflösen, wenn man manuell Fenster schließt
             if (currentLayout.startsWith('grid-') && panel.style.display !== 'none') {
                 document.getElementById('layout-selector').value = 'flex-row';
                 currentLayout = 'flex-row';
@@ -2118,9 +2148,10 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 wc.style.flexDirection = 'row';
             }
             
+            // 5. Ein/Ausblenden
             if (panel.style.display === 'none') {
                 panel.style.display = 'flex';
-																					   
+						
                 requestAnimationFrame(() => {
                     if (panelId === 'fbs-wrapper' && currentGraph) drawGraph(currentGraph);
                     if (panelId === 'circuit-wrapper' && currentGraph) drawCircuitPlan(currentGraph, globalInputs, globalOutputs);
@@ -2129,28 +2160,30 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 });
             } else {
                 panel.style.display = 'none';
-																												  
-																	
+																																					  
+				 
                 if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = null; }
-				 
-																			   
+	 
+					  
                 if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = null; }
-				 
+	 
+	
+						  
+				  
 			 
-																									 
-																		
-												 
-											
+		   
             }
             
+            // 6. Den verbleibenden Platz fair aufteilen
             if (!currentLayout.startsWith('grid-')) {
-                // Auch hier per direkter Node-Referenz
-                [customSvg.closest('.workspace-panel') || document.getElementById('fbs-wrapper'), 
-                 circuitSvg.closest('.workspace-panel') || document.getElementById('circuit-wrapper'), 
-                 factoryScrollArea.closest('.workspace-panel') || document.getElementById('factory-wrapper')].forEach(p => {
+													   
+																								  
+																									   
+                ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+                    let p = document.getElementById(id);
                     if (p && p.style.display !== 'none') p.style.flex = '1 1 0%';
-											
-				 
+		   
+	 
                 });
             }
             updateWorkspace();
@@ -2285,10 +2318,24 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     wsStartSizePrev = parseFloat(tracks[0]);
                     wsStartSizeNext = parseFloat(tracks[2]);
                 } else {
-                    wsPrevPanel = resizer.previousElementSibling;
-                    while(wsPrevPanel && wsPrevPanel.style.display === 'none') wsPrevPanel = wsPrevPanel.previousElementSibling;
-                    wsNextPanel = resizer.nextElementSibling;
-                    while(wsNextPanel && wsNextPanel.style.display === 'none') wsNextPanel = wsNextPanel.nextElementSibling;
+                    // ROBUSTE NACHBAR-SUCHE: Ignoriert Platzhalter von abgekoppelten Fenstern!
+                    let p = resizer.previousElementSibling;
+                    while(p && (!p.classList.contains('workspace-panel') || p.style.display === 'none')) {
+                        p = p.previousElementSibling;
+                    }
+                    wsPrevPanel = p;
+                    
+                    let n = resizer.nextElementSibling;
+                    while(n && (!n.classList.contains('workspace-panel') || n.style.display === 'none')) {
+                        n = n.nextElementSibling;
+                    }
+                    wsNextPanel = n;
+                    
+                    if (!wsPrevPanel || !wsNextPanel) {
+                        wsResizing = false; // Sicherheitsabbruch, falls alles drüben ist
+                        return; 
+                    }
+                    
                     let rectPrev = wsPrevPanel.getBoundingClientRect();
                     let rectNext = wsNextPanel.getBoundingClientRect();
                     wsStartSizePrev = isHorizontalMove ? rectPrev.width : rectPrev.height;
@@ -3838,13 +3885,13 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             ctxMenu.innerHTML = '';
             let infoBox = document.createElement('div'); infoBox.style.padding = '6px 15px'; infoBox.style.color = '#ffeb3b'; infoBox.style.fontSize = '10px'; infoBox.style.borderBottom = '1px solid #555'; infoBox.style.cursor = 'default'; infoBox.style.fontFamily = 'monospace';
             infoBox.innerHTML = `📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}<br>📏 W: ${Math.round(obj.width)} | H: ${Math.round(obj.height || obj.width)} | R: ${Math.round(obj.rotation)}°`;
-																		  
+					
             if (selectedElements.includes(obj) && selectedElements.length > 1) {
                 infoBox.innerHTML += `<br><br><span style="color:#007acc;font-weight:bold;">📦 GRUPPE (${selectedElements.length} Objekte)</span>`;
             }
             ctxMenu.appendChild(infoBox);
-														
-																							  
+			  
+						 
             if (!selectedElements.includes(obj) || selectedElements.length === 1) {
                 const addVarSelect = (label, currentVal, listType, varProp) => {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -3854,7 +3901,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     let sel = document.createElement('select');
                     sel.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; cursor: pointer;";
                     let optNone = document.createElement('option'); optNone.value = ""; optNone.textContent = "-- Entfernen (Keine) --"; sel.appendChild(optNone);
-									
+		 
                     let items = [];
                     if (listType === 'in') items = globalInputs;
                     else if (listType === 'out') items = globalOutputs;
@@ -3864,10 +3911,10 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         if (i === currentVal) o.selected = true;
                         sel.appendChild(o);
                     });
-																
+				
                     sel.onchange = (e) => {
                         obj[varProp] = e.target.value || null;
-																	   
+					
                         let v1 = obj.linkedVar || obj.linkedVarExt || ''; let v2 = obj.linkedVarRet || '';
                         if (['taster', 'schalter', 'nothalt', 'led'].includes(obj.type)) {
                             let span = obj.el.querySelector('span'); if (span) span.textContent = v1 ? (v1.length > 5 ? v1.substring(0,4)+'..' : v1) : '---';
@@ -3888,7 +3935,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     };
                     wrapper.appendChild(sel); ctxMenu.appendChild(wrapper);
                 };
-																		
+				  
                 let isInput = ['taster', 'schalter', 'nothalt', 'sensor_ind', 'sensor_kap', 'sensor_opt', 'sensor_mag'].includes(obj.type);
                 let isOutput = ['led', 'conveyor', 'zylinder_single', 'zylinder_double', 'turntable', 'stacklight', 'spawner_metall', 'spawner_kunststoff'].includes(obj.type);
                 if (isInput) addVarSelect('Variable (Eingang)', obj.linkedVar, 'in', 'linkedVar');
@@ -3906,14 +3953,14 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }
                 if (obj.type === 'display') addVarSelect('Timer/Zähler', obj.linkedVar, 'timers', 'linkedVar');
                 // --- PLUGIN-HOOK FÜR EIGENE MENÜS ---
-																										
+																																  
                 if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].contextMenu) {
                     ComponentRegistry[obj.type].contextMenu(obj, ctxMenu, saveFactoryState);
                 }
             }
             let btnDel = document.createElement('div'); btnDel.className = 'ctx-item'; btnDel.textContent = '🗑️ Löschen';
             btnDel.onclick = () => { 
-																					
+					 
                 if (selectedElements.includes(obj)) {
                     selectedElements.forEach(sel => deleteObjRecursive(sel));
                     clearSelection();
@@ -3936,7 +3983,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }; 
                 ctxMenu.appendChild(btnRot);
             }
-												 
+			 
             if (obj.labelEl) {
                 let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
                 let btnPin = document.createElement('div'); btnPin.className = 'ctx-item'; 
@@ -3960,7 +4007,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             }
             if (obj.type && obj.type.startsWith('spawner_')) {
                 let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
-													 
+			  
                 let btnMode = document.createElement('div'); 
                 btnMode.className = 'ctx-item'; 
                 btnMode.innerHTML = obj.spawnSolid ? '🧱 Modus: Massiv (Kollision AN)' : '👻 Modus: Normal (Kollision AUS)';
@@ -3969,19 +4016,19 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     saveFactoryState(); 
                 }; 
                 ctxMenu.appendChild(btnMode);
-															
+			   
                 let intWrapper = document.createElement('div'); intWrapper.style.padding = '5px 15px';
                 intWrapper.onclick = (e) => e.stopPropagation(); 
                 intWrapper.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">⏱️ Intervall (Sekunden)</div>`;
                 let intInput = document.createElement('input');
                 intInput.type = 'number'; intInput.min = '0.5'; intInput.step = '0.5'; intInput.value = obj.interval || 3;
                 intInput.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; box-sizing: border-box;";
-													 
+			  
                 intInput.onchange = (e) => {
                     let newVal = parseFloat(e.target.value);
                     if (newVal > 0) {
                         obj.interval = newVal;
-													  
+			   
                         if (obj.labelEl) {
                             let v1 = obj.linkedVar || '';
                             obj.labelEl.textContent = v1 ? `${v1} (${newVal}s)` : `Immer an (${newVal}s)`;
@@ -3993,7 +4040,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 ctxMenu.appendChild(intWrapper);
             }
             if (obj.type && obj.type.startsWith('zylinder')) {
-																					 
+					  
                 let attachedSensors = obj.children ? obj.children.filter(c => c.type === 'sensor_mag') : [];
                 if (attachedSensors.length > 0) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -4009,7 +4056,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         ctxMenu.appendChild(btnRemove);
                     });
                 }
-																	
+				 
                 let availableMags = globalInputs.filter(inp => componentTypes[inp] === 'sensor_mag' && !factoryObjects.find(o => o.linkedVar === inp));
                 if (availableMags.length > 0) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -4022,7 +4069,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     });
                 }
             }
-																	
+				 
             if (obj.parent && obj.attachmentType === 'rod') {
                 let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
                 let btnDetach = document.createElement('div'); btnDetach.className = 'ctx-item'; btnDetach.textContent = '🔗 Vom Kolben lösen';
@@ -4033,7 +4080,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }; 
                 ctxMenu.appendChild(btnDetach);
             } else if (obj.type !== 'item' && obj.type !== 'sensor_mag') {
-																		 
+				   
                 let nearestCyl = null; let minDist = 200;
                 let objCx = obj.x + obj.width/2; let objCy = obj.y + (obj.height||obj.width)/2;
                 factoryObjects.forEach(cyl => {
@@ -4057,30 +4104,30 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     ctxMenu.appendChild(btnAttach);
                 }
             }
-														 
-																																									  
-																						
-																																	
-									  
-												
-									
-																			  
 			   
-										 
+																																				
+					  
+																											 
+		   
+			
+		 
+					 
+	  
+		   
             // --- NEU: INTELLIGENTER SOUND-MUTE-BUTTON ---
-																						   
+						 
             let makesSound = false;
-			
-																 
+   
+				 
             if (['zylinder_single', 'zylinder_double', 'conveyor'].includes(obj.type)) makesSound = true;
-			
-															   
+   
+				  
             if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].playSound) makesSound = true;
-			
-																 
+   
+				 
             if (obj.children && obj.children.some(c => ComponentRegistry[c.type] && ComponentRegistry[c.type].playSound)) makesSound = true;
 
-																					
+					 
             if (makesSound) {
                 let sepSound = document.createElement('div'); sepSound.style.borderTop = '1px solid #555'; sepSound.style.margin = '5px 0'; ctxMenu.appendChild(sepSound);
                 let btnMute = document.createElement('div'); btnMute.className = 'ctx-item';
@@ -4092,7 +4139,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }; 
                 ctxMenu.appendChild(btnMute);
             }
-			
+   
             let wrapRect = document.getElementById('factory-wrapper').getBoundingClientRect();
             ctxMenu.style.left = (x - wrapRect.left) + 'px'; ctxMenu.style.top = (y - wrapRect.top) + 'px'; ctxMenu.style.display = 'block';
         }
@@ -4810,6 +4857,11 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
         window.popOutWindows = {};
         
         window.detachPanel = function(panelId, titleName) {
+			// Beende Grid-Mode VOR dem Abkoppeln (sonst bricht das CSS-Grid zusammen)
+            if (currentLayout.startsWith('grid-')) {
+                document.getElementById('layout-selector').value = 'flex-row';
+                changeWorkspaceLayout('flex-row');
+            }
             const panel = document.getElementById(panelId);
             if (!panel) return;
             

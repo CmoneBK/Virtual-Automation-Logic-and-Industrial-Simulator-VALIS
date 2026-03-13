@@ -4399,35 +4399,35 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }
             },
 			'heater': {
-                meta: { name: 'Heizelement', icon: '♨️', desc: 'Glüht auf und erhitzt Werkstücke' },
+                meta: { name: 'Heizelement', icon: '♨️', desc: 'Glüht bei Aktivierung auf (Thermischer Prozess)' },
                 modalConfig: { t: 'Heizelement (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true },
                 menuTarget: '#menu-aktoren',
                 menuHtml: `<div onclick="addFactoryDevice('heater')">♨️ Heizelement (Ofen)</div>`,
-                hasHeight: true,
+                hasHeight: true, // Lässt uns das Ding in der Höhe skalieren!
                 css: `
                     .f2d-heater { 
-                        position: absolute; box-sizing: border-box; z-index: 2; 
+                        position: absolute; box-sizing: border-box; z-index: 2;
                         background: #424242; border: 2px solid #212121; border-radius: 2px; 
                         transition: background-color 1.5s ease-in-out, box-shadow 1.5s ease-in-out; 
-                        display: flex; justify-content: center; align-items: center; 
+                        display: flex; justify-content: center; align-items: center;
                     }
                     .f2d-heater.active { 
                         background-color: #ff3d00; 
                         box-shadow: 0 -5px 20px rgba(255, 61, 0, 0.8), inset 0 0 10px #ffea00; 
                     }
-                    .f2d-heater-waves { 
-                        position: absolute; top: -20px; width: 100%; text-align: center; 
-                        font-size: 16px; opacity: 0; transform: translateY(5px); 
-                        transition: opacity 1.5s, transform 1.5s, color 1.5s, text-shadow 1.5s; 
-                        pointer-events: none; 
+                    .f2d-heater-waves {
+                        position: absolute; top: -20px; width: 100%; text-align: center;
+                        font-size: 16px; opacity: 0; transform: translateY(5px);
+                        transition: opacity 1.5s, transform 1.5s, color 1.5s, text-shadow 1.5s;
+                        pointer-events: none;
                     }
-                    .f2d-heater.active .f2d-heater-waves { 
-                        opacity: 1; transform: translateY(0); color: #ffea00; text-shadow: 0 0 5px #ff3d00; 
+                    .f2d-heater.active .f2d-heater-waves {
+                        opacity: 1; transform: translateY(0); color: #ffea00; text-shadow: 0 0 5px #ff3d00;
                     }
                 `,
                 build: function(obj, el, var1) {
-                    obj.linkedVar = var1; obj.width = 80; obj.height = 15; obj.heatingPower = 400; // Standard: 400°C pro Sekunde
-                    el.className = 'f2d-obj f2d-heater'; 
+                    obj.linkedVar = var1; obj.width = 80; obj.height = 15; 
+                    el.className = 'f2d-obj f2d-heater';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                     el.innerHTML = `<div class="f2d-heater-waves">♨️</div>`;
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
@@ -4440,8 +4440,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                     if (isActive !== obj.isActive) {
                         obj.isActive = isActive;
                         obj.el.classList.toggle('active', isActive);
-                        
-                        // SOUND LOGIK (Das sanfte, ansteigende Zischen der Hitze)
                         if (isActive && (window.soundMode === 2 || window.soundMode === 3) && typeof SoundEngine !== 'undefined' && SoundEngine.ctx && !obj.muteSound) {
                             let ctx = SoundEngine.ctx;
                             let bufferSize = ctx.sampleRate * 2; 
@@ -4462,29 +4460,11 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         }
                     }
                 },
-                contextMenu: function(obj, ctxMenu, saveCallback) {
-                    let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
-                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = (e) => e.stopPropagation();
-                    wrap.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">🔥 Heizleistung (°C/s)</div>`;
-                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '10'; inp.max = '5000'; inp.step = '10';
-                    inp.value = obj.heatingPower || 400;
-                    inp.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; box-sizing: border-box;";
-                    inp.onchange = (e) => { let val = parseFloat(e.target.value); if (val > 0) { obj.heatingPower = val; saveCallback(); } };
-                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
-                },
-                physics: function(obj, item, isActive) {
-                    // 1. Physische Kollision (Verhält sich wie eine Mauer)
-                    let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
+                // 🌟 DER FIX: Die Physik-Funktion, die das Heizelement massiv macht!
+                physics: function(obj, item) {
+                    let ocx = obj.x + obj.width / 2; 
+                    let ocy = obj.y + obj.height / 2;
                     resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, 'wall', false);
-                    
-                    // 2. Thermische Übertragung, wenn das Element auf der Platte liegt
-                    if (isActive) {
-                        // Hitbox leicht nach oben erweitern (-20px), um aufliegende Blöcke zu erfassen
-                        if (isBlockInLocalRect(item, obj, -5, -20, obj.width + 10, obj.height + 30)) {
-                            item.temperature = (item.temperature || 20) + ((obj.heatingPower || 400) * 0.0166 * window.simSpeed * timeScale);
-                            item.isHeatedThisFrame = true; // Verhindert sofortiges Auskühlen in der Hauptschleife
-                        }
-                    }
                 }
             }
         }; //Ende von Component Registry 
@@ -4530,13 +4510,12 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 factoryCanvas.appendChild(selectionBoxEl);
             }
         });
-		window.spawnFactoryItem = function(material, x = 0, y = 200, isSolid = false, meltTemp = null) {
+        window.spawnFactoryItem = function(material, x = 0, y = 200, isSolid = false) {
             let el = document.createElement('div');
             el.className = `f2d-obj f2d-item item-${material}`; 
             if (isSolid) el.classList.add('is-solid');
             el.textContent = material === 'metall' ? 'FE' : 'KU';
             let item = { el: el, x: x, y: y, vx: 0, vy: 0, useGravity: true, useCollision: true, material: material, width: 40, height: 40, isSolid: isSolid };
-            item.meltTemp = meltTemp || (material === 'metall' ? 1200 : 150);
             factoryItems.push(item); updateObjTransform(item); factoryCanvas.appendChild(el); makeDraggable(el, item);
             if(!isLoadingFactory) saveFactoryState(); 
         };
@@ -5024,20 +5003,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 };
                 intWrapper.appendChild(intInput);
                 ctxMenu.appendChild(intWrapper);
-				// NEU: Schmelzpunkt-Einstellung für Werkstücke
-                let meltWrapper = document.createElement('div'); meltWrapper.style.padding = '5px 15px';
-                meltWrapper.onclick = (e) => e.stopPropagation(); 
-                meltWrapper.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">🌡️ Schmelzpunkt (°C)</div>`;
-                let meltInput = document.createElement('input');
-                meltInput.type = 'number'; meltInput.min = '50'; meltInput.step = '50'; 
-                meltInput.value = obj.meltTemp || (obj.type.includes('metall') ? 1200 : 150);
-                meltInput.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; box-sizing: border-box;";
-                meltInput.onchange = (e) => {
-                    let newVal = parseFloat(e.target.value);
-                    if (newVal > 0) { obj.meltTemp = newVal; saveFactoryState(); }
-                };
-                meltWrapper.appendChild(meltInput);
-                ctxMenu.appendChild(meltWrapper);
             }
             if (obj.type && obj.type.startsWith('zylinder')) {
                 // NEU: Geschwindigkeits-Regler für Zylinder
@@ -5262,7 +5227,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                             obj.timeAccum = (obj.timeAccum || 0) + deltaMs;
                             if (obj.timeAccum >= obj.interval * 1000) { 
                                 obj.timeAccum -= obj.interval * 1000; 
-                                spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5, obj.y + 5, obj.spawnSolid, obj.meltTemp);
+                                spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5, obj.y + 5, obj.spawnSolid); 
                             }
                         } else { 
                             obj.timeAccum = 0; 
@@ -5432,75 +5397,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         }
                     }
                 }
-                factoryItems.forEach(item => {
-                    updateObjTransform(item);
-
-                    // --- THERMODYNAMIK (Glühen & Schmelzen) ---
-                    item.temperature = item.temperature || 20; // Start bei Raumtemperatur
-                    
-                    // Passives Abkühlen (an der Luft)
-                    if (!item.isHeatedThisFrame && item.temperature > 20) {
-                        item.temperature -= 15 * 0.0166 * window.simSpeed * timeScale;
-                        if (item.temperature < 20) item.temperature = 20;
-                    }
-                    item.isHeatedThisFrame = false; // Reset für den nächsten Frame
-
-                    let maxMelt = item.meltTemp || (item.material === 'metall' ? 1200 : 150);
-
-                    // Visuelles Feedback
-                    if (item.material === 'metall') {
-                        if (item.temperature > 400) {
-                            let ratio = Math.min(1, (item.temperature - 400) / (maxMelt - 400));
-                            let r = 255;
-                            let g = Math.floor(ratio * 255); // Rot driftet zu Gelb
-                            let b = Math.floor(Math.pow(ratio, 4) * 255); // Ganz am Ende schlägt Weiß durch
-                            item.el.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-                            item.el.style.boxShadow = `0 0 ${10 + ratio * 20}px rgba(255, ${g}, 0, ${0.5 + ratio*0.5})`;
-                            item.el.style.borderColor = `rgb(255, ${200 + ratio*55}, ${200 + ratio*55})`;
-                            item.el.style.color = '#000'; 
-                        } else {
-                            item.el.style.backgroundColor = '';
-                            item.el.style.boxShadow = item.isSolid ? 'inset 0 0 10px rgba(0,0,0,0.5)' : '';
-                            item.el.style.borderColor = '';
-                            item.el.style.color = '';
-                        }
-                    } else if (item.material === 'kunststoff') {
-                        if (item.temperature > 60) {
-                            let ratio = Math.min(1, (item.temperature - 60) / (maxMelt - 60));
-                            item.el.style.borderRadius = `${ratio * 50}%`; // Schmilzt zu einem runden Tropfen
-                            item.el.style.opacity = 1 - (ratio * 0.4); // Wird weich und leicht transparent
-                            item.el.style.transform += ` scale(${1 - ratio * 0.3})`; // Schrumpft in sich zusammen
-                        } else {
-                            item.el.style.borderRadius = '';
-                            item.el.style.opacity = '1';
-                        }
-                    }
-
-                    // Schmelzpunkt erreicht!
-                    if (item.temperature >= maxMelt) {
-                        item._isMelted = true;
-                    }
-                });
-
-                // Speicherleck-Fix: Gefallene und geschmolzene Objekte sauber aus dem Array löschen!
-                factoryItems = factoryItems.filter(item => {
-                    if (item.y > 2000 || item._isMelted) {
-                        if (item._isMelted && (window.soundMode === 2 || window.soundMode === 3) && SoundEngine.ctx) {
-                            // Ein Zisch-Sound beim endgültigen Verdampfen
-                            let ctx = SoundEngine.ctx;
-                            let osc = ctx.createOscillator(); osc.type = 'sine'; let gain = ctx.createGain();
-                            osc.frequency.setValueAtTime(800, ctx.currentTime);
-                            osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
-                            gain.gain.setValueAtTime(0.1, ctx.currentTime);
-                            gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                            osc.connect(gain); gain.connect(ctx.destination);
-                            osc.start(); osc.stop(ctx.currentTime + 0.3);
-                        }
-                        item.el.remove();
-                        return false;
-                    }
-                    return true;
-                });
+                factoryItems.forEach(item => updateObjTransform(item));
                 factoryObjects.forEach(obj => {
                     // 🌟 HIER IST DER FIX: Die alte Sensor-Logik ignoriert den mechanischen Schalter rigoros!
                     if (obj.type.startsWith('sensor_') && obj.type !== 'sensor_mech') {
@@ -5705,7 +5602,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 items: factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), vx: Math.round(i.vx||0), vy: Math.round(i.vy||0), material: i.material, useGravity: i.useGravity, useCollision: i.useCollision, isSolid: i.isSolid })),
                 objects: factoryObjects.map(o => ({
                     id: o.id, type: o.type, x: Math.round(o.x), y: Math.round(o.y), width: Math.round(o.width), height: Math.round(o.height||0), rotation: Math.round(o.rotation||0),
-                    thickness: o.thickness, speed: o.speed, heatingPower: o.heatingPower, meltTemp: o.meltTemp, // <--- Nur die Variablen speichern! Kein "if" hier!
+                    thickness: o.thickness, speed: o.speed, // <--- Nur die Variablen speichern! Kein "if" hier!
                     linkedVar: o.linkedVar, linkedVarExt: o.linkedVarExt, linkedVarRet: o.linkedVarRet, linkedVar3: o.linkedVar3, spawnSolid: o.spawnSolid,
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound
@@ -5753,8 +5650,6 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                         newObj.thickness = o.thickness; 
                         newObj.el.style.setProperty('--tk', o.thickness + 'px'); 
                     }
-					if (o.heatingPower) newObj.heatingPower = o.heatingPower;
-                    if (o.meltTemp) newObj.meltTemp = o.meltTemp;
                     if (o.labelPinned) {
                         newObj.labelPinned = true;
                         if (newObj.labelEl) newObj.labelEl.classList.add('f2d-label-pinned');

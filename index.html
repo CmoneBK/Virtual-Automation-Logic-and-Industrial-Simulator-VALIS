@@ -410,7 +410,6 @@
         .f2d-led { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #444; background: #222; z-index: 15; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.4); font-size: 8px; font-weight: bold; text-align: center; transition: all 0.1s; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
         .f2d-control-active { transform: scale(0.95); border-color: #fff; }
         /* FIX: 'transition' bei den fallenden Items entfernt! */
-        .f2d-item { width: 40px; height: 40px; border: 2px solid #000; display: flex; justify-content: center; align-items: center; font-size: 10px; font-weight: bold; z-index: 5; }
         .f2d-item { width: 40px; height: 40px; border: 2px solid #000; display: flex; justify-content: center; align-items: center; font-size: 10px; font-weight: bold; transition: transform 0.1s linear; z-index: 5; }
 		.f2d-item.is-solid { border-width: 4px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); border-color: #333; font-size: 11px; }
         /* NEU: Spawner & Despawner */
@@ -5204,8 +5203,22 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 let gPushX = pushX * cos - pushY * sin;
                 let gPushY = pushX * sin + pushY * cos;
                 item.x += gPushX; item.y += gPushY;
+                
                 // FIX: Dynamische Abfrage für flache Bauteile aus der Registry!
                 let isFlat = type === 'conveyor' || (ComponentRegistry[type] && ComponentRegistry[type].isFlatBelt);
+                
+                // 🌟 ANTI-TUNNELING FIX FÜR FÖRDERBÄNDER 🌟
+                // Wenn ein Block so schnell fällt, dass er tief in das Band eindringt, 
+                // zwingen wir die Engine, ihn IMMER nach OBEN abzustoßen (ny = -1)!
+                if (isFlat && ny >= 0) {
+                    item.x -= gPushX; item.y -= gPushY; // Den falschen Push rückgängig machen
+                    ny = -1; nx = 0;
+                    overlap = ohh + ir + ldy; // Den Weg nach oben berechnen
+                    pushX = 0; pushY = ny * overlap;
+                    gPushX = pushX * cos - pushY * sin; gPushY = pushX * sin + pushY * cos;
+                    item.x += gPushX; item.y += gPushY; // Korrekten Push anwenden
+                }
+
                 if (isFlat) {
                     if (ny < -0.5) { 
                         item.vy = 0; item.vx *= Math.pow(0.5, window.simSpeed); 
@@ -5390,7 +5403,11 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                             else if (obj.type.startsWith('zylinder')) {
                                 let ocx = obj.x + obj.width / 2, ocy = obj.y + 15;
                                 resolveOBBCollision(item, ocx, ocy, obj.width / 2, 15, obj.rotation, 'wall', false);
-                                if (obj.extension > 0) {
+                                
+                                // 🌟 DER FIX: Stange ist nur physisch, wenn KEIN Anbauteil montiert ist!
+                                let hasAttachment = obj.children && obj.children.some(c => c.attachmentType === 'rod');
+                                
+                                if (obj.extension > 0 && !hasAttachment) {
                                     let extPixels = (obj.extension / 100) * obj.width;
                                     let rad = (obj.rotation || 0) * Math.PI / 180;
                                     let fullRodCx = obj.x + obj.width / 2 + extPixels * Math.cos(rad);

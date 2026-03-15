@@ -302,7 +302,66 @@
             text-align: center;
             overflow: hidden; 
         }
+		/* NEU: Animationen für die einklappbare Logik-Werkzeugleiste */
+        #fbs-button-group {
+            display: flex; gap: 5px; overflow: hidden; 
+            max-width: 0; opacity: 0; 
+            transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; 
+            pointer-events: auto; /* Buttons bleiben klickbar */
+            -ms-overflow-style: none; scrollbar-width: none; /* Scrollbar verstecken (Firefox/IE) */
+        }
+        #fbs-button-group::-webkit-scrollbar { 
+            display: none; /* Scrollbar verstecken (Chrome/Safari) */
+        }
+        #fbs-button-group.expanded {
+            max-width: 800px; /* Genug Platz für alle Buttons in voller Breite */
+            opacity: 1;
+            overflow-x: auto; /* Erlaubt seitliches Wischen auf sehr schmalen Handys */
+            overflow-y: hidden;
+        }
+        
+        /* 🌟 DER FIX: Buttons behalten IMMER ihre volle Textbreite */
+        #fbs-button-group .tool-btn {
+            flex: 0 0 auto !important; /* Verhindert jegliches Zusammenquetschen */
+            width: max-content; /* Breite passt sich perfekt dem Inhalt an */
+            white-space: nowrap; /* Text bricht nicht um */
+            padding: 4px 10px; /* Wieder vernünftige Abstände für Finger und Maus */
+            font-size: 11px; 
+        }
+
+        #btn-fbs-toggle {
+            flex: 0 0 34px !important; /* Verhindert, dass das Plus-Icon wächst */
+            height: 34px !important;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s;
+        }
+        #btn-fbs-toggle.expanded {
+            transform: rotate(45deg); /* Macht aus dem Plus-Icon ein X */
+            background-color: #f44336 !important; /* Wird Rot zum Schließen */
+        }
+
+        /* Dezenter Bedienhinweis in der Logik-Toolbar */
+        .fbs-drag-hint {
+            display: flex;
+            align-items: center;
+            color: #888;
+            font-size: 11px;
+            font-style: italic;
+            margin-left: 5px;
+            white-space: nowrap;
+            pointer-events: none;
+            user-select: none;
+        }
         .tool-btn:hover, .tb-drop-btn:hover { background: #007acc; border-color: #007acc; }
+		/* NEU: Responsive Skalierung für die Logikplan-Buttons auf Touchscreens */
+        #fbs-toolbar .tool-btn {
+            flex: 1 1 0%;
+            min-width: 0; /* Verhindert das Überlaufen bei langen Wörtern */
+            font-size: clamp(7px, 2vw, 12px); /* Schrumpft auf Handys stark zusammen */
+            padding: 2px 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis; /* Schneidet Text mit "..." ab, wenn es zu eng wird */
+        }
         /* NEU: Toolbar Dropdowns (Repariert für sauberes Hover) */
         .tb-dropdown { position: relative; display: inline-block; }
         .tb-dropdown-content { display: none; position: absolute; background-color: #2d2d30; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.6); z-index: 1000; border-radius: 4px; border: 1px solid #555; top: 100%; left: 0; }
@@ -410,6 +469,7 @@
         .f2d-led { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #444; background: #222; z-index: 15; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.4); font-size: 8px; font-weight: bold; text-align: center; transition: all 0.1s; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
         .f2d-control-active { transform: scale(0.95); border-color: #fff; }
         /* FIX: 'transition' bei den fallenden Items entfernt! */
+																																													 
         .f2d-item { width: 40px; height: 40px; border: 2px solid #000; display: flex; justify-content: center; align-items: center; font-size: 10px; font-weight: bold; transition: transform 0.1s linear; z-index: 5; }
 		.f2d-item.is-solid { border-width: 4px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); border-color: #333; font-size: 11px; }
         /* NEU: Spawner & Despawner */
@@ -623,12 +683,18 @@
         </div>
         <div id="workspace-container">
             <div id="fbs-wrapper" class="workspace-panel" style="display: flex; grid-area: fbs; background-image: radial-gradient(#e0e0e0 1px, transparent 1px); background-size: 20px 20px;">
-			<div id="fbs-toolbar" style="position: absolute; top: 10px; left: 10px; right: 10px; z-index: 50; display: flex; gap: 5px; flex-wrap: wrap;">
-                    <button class="tool-btn" style="background: #e6194B;" onclick="openFbsAddModal('AND')" draggable="true" ondragstart="startFbsDrag(event, 'AND')">AND (&amp;&amp;)</button>
-                    <button class="tool-btn" style="background: #3cb44b;" onclick="openFbsAddModal('OR')" draggable="true" ondragstart="startFbsDrag(event, 'OR')">OR (||)</button>
-                    <button class="tool-btn" style="background: #4363d8;" onclick="openFbsAddModal('RS')" draggable="true" ondragstart="startFbsDrag(event, 'RS')">FlipFlop (RS/SR)</button>
-                    <button class="tool-btn" style="background: #911eb4;" onclick="openFbsAddModal('TON')" draggable="true" ondragstart="startFbsDrag(event, 'TON')">Timer (Zeiten)</button>
-                    <button class="tool-btn" style="background: #f58231;" onclick="openFbsAddModal('CTU')" draggable="true" ondragstart="startFbsDrag(event, 'CTU')">Counter (Zähler)</button>
+			<div id="fbs-toolbar" style="position: absolute; top: 10px; left: 10px; right: 10px; z-index: 50; display: flex; gap: 5px; align-items: center; pointer-events: none;">
+                    <button id="btn-fbs-toggle" class="tool-btn" style="background: #2196f3; padding: 0; font-size: 16px; pointer-events: auto; border-radius: 50%; width: 34px; height: 34px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.4);" onclick="toggleFbsToolbar()">➕</button>
+                    
+                    <div id="fbs-button-group">
+                        <button class="tool-btn" style="background: #e6194B;" onclick="openFbsAddModal('AND')" draggable="true" ondragstart="startFbsDrag(event, 'AND')" ontouchstart="startFbsTouchDrag(event, 'AND')">AND (&amp;&amp;)</button>
+                        <button class="tool-btn" style="background: #3cb44b;" onclick="openFbsAddModal('OR')" draggable="true" ondragstart="startFbsDrag(event, 'OR')" ontouchstart="startFbsTouchDrag(event, 'OR')">OR (||)</button>
+                        <button class="tool-btn" style="background: #4363d8;" onclick="openFbsAddModal('RS')" draggable="true" ondragstart="startFbsDrag(event, 'RS')" ontouchstart="startFbsTouchDrag(event, 'RS')">FlipFlop</button>
+                        <button class="tool-btn" style="background: #911eb4;" onclick="openFbsAddModal('TON')" draggable="true" ondragstart="startFbsDrag(event, 'TON')" ontouchstart="startFbsTouchDrag(event, 'TON')">Timer</button>
+                        <button class="tool-btn" style="background: #f58231;" onclick="openFbsAddModal('CTU')" draggable="true" ondragstart="startFbsDrag(event, 'CTU')" ontouchstart="startFbsTouchDrag(event, 'CTU')">Counter</button>
+                        
+                        <span class="fbs-drag-hint">👆 Bausteine auf Leitungen ziehen</span>
+                    </div>
                 </div>
                 <svg id="custom-svg" xmlns="http://www.w3.org/2000/svg">
                     <g id="svg-halos"></g>
@@ -1092,7 +1158,72 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
         let globalOutputs = [];
         let currentView = 'FBS'; // 'FBS' oder 'IEC'
         let panZoomCircuitInstance = null; // Instanz für den Schaltplan
-		// --- NEU: UI Splitter & Aufklapp-Logik ---
+        
+        // 🌟 NEU: MULTI-TOUCH ENGINE FÜR SCHALTPLÄNE (Pinch-to-Zoom & Pan) 🌟
+        const svgTouchHandlers = {
+            haltEventListeners: ['touchstart', 'touchend', 'touchmove', 'touchleave', 'touchcancel'],
+            init: function(options) {
+                let instance = options.instance;
+                let initialScale = 1, initialDistance = 0;
+                let isPanning = false, startPanX = 0, startPanY = 0;
+
+                this.touchStart = function(e) {
+                    if (e.touches.length === 2) {
+                        e.preventDefault();
+                        initialDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                        initialScale = instance.getZoom();
+                        isPanning = false;
+                    } else if (e.touches.length === 1) {
+                        e.preventDefault(); // Verhindert versehentliches Scrollen der Seite
+                        isPanning = true;
+                        startPanX = e.touches[0].clientX;
+                        startPanY = e.touches[0].clientY;
+                    }
+                };
+
+                this.touchMove = function(e) {
+                    if (e.touches.length === 2) {
+                        e.preventDefault();
+                        let currentDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                        let targetScale = initialScale * (currentDistance / initialDistance);
+                        
+                        let rect = options.svgElement.getBoundingClientRect();
+                        let centerX = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+                        let centerY = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+                        
+                        instance.zoomAtPoint(targetScale, {x: centerX, y: centerY});
+                    } else if (e.touches.length === 1 && isPanning) {
+                        e.preventDefault();
+                        let dx = e.touches[0].clientX - startPanX;
+                        let dy = e.touches[0].clientY - startPanY;
+                        instance.panBy({x: dx, y: dy});
+                        startPanX = e.touches[0].clientX;
+                        startPanY = e.touches[0].clientY;
+                    }
+                };
+
+                this.touchEnd = function(e) {
+                    if (e.touches.length < 2) initialDistance = 0;
+                    if (e.touches.length === 0) isPanning = false;
+                };
+
+                options.svgElement.addEventListener('touchstart', this.touchStart, {passive: false});
+                options.svgElement.addEventListener('touchmove', this.touchMove, {passive: false});
+                options.svgElement.addEventListener('touchend', this.touchEnd);
+                options.svgElement.addEventListener('touchcancel', this.touchEnd);
+            },
+            destroy: function(options) {
+                options.svgElement.removeEventListener('touchstart', this.touchStart);
+                options.svgElement.removeEventListener('touchmove', this.touchMove);
+                options.svgElement.removeEventListener('touchend', this.touchEnd);
+                options.svgElement.removeEventListener('touchcancel', this.touchEnd);
+            }
+        };
+
+        // Unser zentrales Konfigurationsobjekt (ersetzt das alte, feste Objekt)
+        const svgPanZoomOptions = { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true, customEventsHandler: svgTouchHandlers };
+
+        // --- NEU: UI Splitter & Aufklapp-Logik ---
         const resizer = document.getElementById('panel-resizer');
         const topPanel = document.getElementById('editor-container');
         const bottomPanel = document.getElementById('simulator-container');
@@ -2100,7 +2231,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 let pFbs = customSvg.closest('.workspace-panel') || document.getElementById('fbs-wrapper');
                 if (pFbs && pFbs.offsetWidth > 0) {
                     if (isFirstRun || !panZoomInstance) {
-                        panZoomInstance = svgPanZoom(customSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true });
+                        panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions);
                     } else {
                         // Sanftes Update statt Neubau
                         panZoomInstance.updateBBox();
@@ -3530,7 +3661,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 let pCirc = circuitSvg.closest('.workspace-panel') || document.getElementById('circuit-wrapper');
                 if (pCirc && pCirc.offsetWidth > 0) {
                     if (isFirstRun || !panZoomCircuitInstance) {
-                        panZoomCircuitInstance = svgPanZoom(circuitSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true });
+                        panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions);
                     } else {
                         // Sanftes Update: keepView funktioniert jetzt vollautomatisch!
                         panZoomCircuitInstance.updateBBox();
@@ -3660,6 +3791,47 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 factoryCanvas.style.transform = `scale(${factoryScale})`;
             }
         }, { passive: false });
+		// 🌟 NEU: 2D KAMERA TOUCH-STEUERUNG (Pinch-to-Zoom & Pan) 🌟
+        let touchInitDist = 0, touchInitScale = 1;
+        
+        factoryScrollArea.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isPanActive = false; // Normales Schieben abbrechen
+                // Distanz zwischen Daumen und Zeigefinger berechnen
+                touchInitDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                touchInitScale = factoryScale;
+                e.preventDefault(); // Browser-Zoom blockieren
+            } else if (e.touches.length === 1 && !isSimulationActive) {
+                // 1-Finger Schieben (nur, wenn wir nicht auf ein Bauteil geklickt haben!)
+                if (!e.target.closest('.f2d-obj') && !e.target.closest('.f2d-resize-handle-xy') && !e.target.closest('.f2d-resize-handle')) {
+                    isPanActive = true;
+                    panStartX = e.touches[0].clientX;
+                    panStartY = e.touches[0].clientY;
+                    panScrollLeft = factoryScrollArea.scrollLeft;
+                    panScrollTop = factoryScrollArea.scrollTop;
+                }
+            }
+        }, { passive: false });
+
+        factoryScrollArea.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault(); // Verhindert native Browser-Gesten
+                let currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                let scaleChange = currentDist / touchInitDist;
+                
+                factoryScale = Math.max(0.2, Math.min(touchInitScale * scaleChange, 3.0));
+                factoryCanvas.style.transform = `scale(${factoryScale})`;
+            } else if (e.touches.length === 1 && isPanActive) {
+                e.preventDefault(); // Verhindert lästiges Pull-to-Refresh auf Handys
+                factoryScrollArea.scrollLeft = panScrollLeft - (e.touches[0].clientX - panStartX);
+                factoryScrollArea.scrollTop = panScrollTop - (e.touches[0].clientY - panStartY);
+            }
+        }, { passive: false });
+
+        factoryScrollArea.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) touchInitDist = 0;
+            if (e.touches.length === 0) isPanActive = false;
+        });
         const ctxMenu = document.getElementById('factory-context-menu');
         let factoryObjects = []; 
         let factoryItems = [];   
@@ -6073,8 +6245,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             extWin.document.body.appendChild(panel);
             // SVG-Engines kurz neustarten, da sie beim Frame-Wechsel die Kamera-Koordinaten verlieren
             setTimeout(() => {
-                if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
-                if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
+                if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
                 if (panelId === 'analyzer-modal') drawAnalyzer(); // Oszilloskop an neue Größe anpassen
             }, 100);
             // 🌟 MOUSE-EVENT-ROUTING: Klicks im 2. Fenster werden zurück an die Engine im 1. Fenster gesendet!
@@ -6105,8 +6277,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 delete window.popOutWindows[panelId];
                 // SVG-Engines wieder für das Hauptfenster kalibrieren
                 setTimeout(() => {
-                    if (panelId === 'fbs-wrapper' && document.getElementById('fbs-wrapper').style.display !== 'none') { panZoomInstance = svgPanZoom(customSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
-                    if (panelId === 'circuit-wrapper' && document.getElementById('circuit-wrapper').style.display !== 'none') { panZoomCircuitInstance = svgPanZoom(circuitSvg, { zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }); }
+                    if (panelId === 'fbs-wrapper' && document.getElementById('fbs-wrapper').style.display !== 'none') { panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
+                    if (panelId === 'circuit-wrapper' && document.getElementById('circuit-wrapper').style.display !== 'none') { panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
                 }, 100);
                 updateWorkspace();
             });
@@ -7157,6 +7329,122 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
             e.dataTransfer.effectAllowed = 'copy';
             window.draggedFbsButton = e.target; 
         };
+		// 🌟 NEU: TOUCH-DRAG ENGINE FÜR LOGIKPLAN (Smartphones / Tablets) 🌟
+        let fbsTouchType = null;
+        let fbsTouchGhost = null;
+
+        window.startFbsTouchDrag = function(e, type) {
+            // Nur reagieren, wenn es wirklich ein Touch-Event ist (kein Mausklick)
+            if (e.touches && e.touches.length === 1) {
+                e.preventDefault(); // Verhindert, dass die Seite beim Ziehen scrollt
+                fbsTouchType = type;
+                let touch = e.touches[0];
+                
+                window.draggedFbsButton = e.target;
+                e.target.classList.add('drag-active-target');
+
+                // Wir erschaffen einen sichtbaren "Geist" des Buttons, der dem Finger folgt
+                fbsTouchGhost = document.createElement('div');
+                fbsTouchGhost.textContent = e.target.textContent;
+                fbsTouchGhost.style.cssText = `
+                    position: fixed; left: ${touch.clientX}px; top: ${touch.clientY}px;
+                    transform: translate(-50%, -50%); background: ${window.getComputedStyle(e.target).backgroundColor};
+                    color: #fff; padding: 5px 10px; border-radius: 3px; z-index: 9999;
+                    pointer-events: none; /* WICHTIG! Sonst versperrt der Geist den Touch-Fokus auf die Linien */
+                    opacity: 0.9; font-weight: bold; font-family: monospace; font-size: 11px;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+                `;
+                document.body.appendChild(fbsTouchGhost);
+            }
+        };
+
+        document.addEventListener('touchmove', (e) => {
+            if (fbsTouchGhost && e.touches.length === 1) {
+                e.preventDefault(); // Seite stillhalten
+                let touch = e.touches[0];
+                
+                // Geist dem Finger folgen lassen
+                fbsTouchGhost.style.left = touch.clientX + 'px';
+                fbsTouchGhost.style.top = touch.clientY + 'px';
+
+                // Prüfen, was exakt unter dem Finger liegt
+                let targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+                
+                if (targetElement && (targetElement.classList.contains('fbs-line') || targetElement.classList.contains('fbs-line-halo'))) {
+                    let match = Array.from(targetElement.classList).find(c => c.startsWith('net-source-'));
+                    if (match && lastHighlightedLine !== match) {
+                        if (lastHighlightedLine) document.querySelectorAll('.' + lastHighlightedLine).forEach(el => el.classList.remove('fbs-drag-target'));
+                        document.querySelectorAll('.' + match).forEach(el => el.classList.add('fbs-drag-target'));
+                        lastHighlightedLine = match;
+                    }
+                } else {
+                    if (lastHighlightedLine) { 
+                        document.querySelectorAll('.' + lastHighlightedLine).forEach(el => el.classList.remove('fbs-drag-target')); 
+                        lastHighlightedLine = null; 
+                    }
+                }
+            }
+        }, {passive: false});
+
+        document.addEventListener('touchend', (e) => {
+            if (fbsTouchGhost) {
+                // Geist löschen
+                fbsTouchGhost.remove();
+                fbsTouchGhost = null;
+                
+                if (window.draggedFbsButton) {
+                    window.draggedFbsButton.classList.remove('drag-active-target');
+                    window.draggedFbsButton = null;
+                }
+
+                if (lastHighlightedLine) {
+                    // Extrahiere das Ziel
+                    let rawId = lastHighlightedLine.replace('net-source-', '').replace(/\\/g, '');
+                    
+                    // Optik aufräumen
+                    document.querySelectorAll('.' + lastHighlightedLine).forEach(el => el.classList.remove('fbs-drag-target'));
+                    lastHighlightedLine = null;
+
+                    // DROP LOGIK AUSFÜHREN!
+                    let prefillSource = window.getFbsVariableDisplay(rawId);
+                    let prefillTarget = "";
+                    
+                    let outEdges = currentGraph.edges.filter(ed => ed.sourceId === rawId);
+                    if (outEdges.length > 0) {
+                        let rootCtx = window.getRootContextGlobal(outEdges[0]);
+                        if (rootCtx) {
+                            let tNode = rootCtx.targetNode;
+                            if (tNode.type === 'OUTPUT') prefillTarget = tNode.id;
+                            else if (['TON', 'TOF', 'TP', 'CTU'].includes(tNode.type)) prefillTarget = tNode.id.substring(tNode.type.length + 1);
+                            else if (['RS', 'SR'].includes(tNode.type)) {
+                                let matchNum = tNode.id.match(/\d+/);
+                                if (matchNum) prefillTarget = matchNum[0]; 
+                            }
+                        }
+                    }
+
+                    openFbsAddModal(fbsTouchType);
+                    if (prefillSource) document.getElementById('fbs-add-in1').value = prefillSource;
+                    if (prefillTarget) document.getElementById('fbs-add-out').value = prefillTarget;
+                    
+                    setTimeout(() => {
+                        if (!prefillTarget) {
+                            document.getElementById('fbs-add-out').focus();
+                        } else if (['AND', 'OR', 'CTU', 'RS'].includes(fbsTouchType)) {
+                            let in2 = document.getElementById('fbs-add-in2');
+                            if(in2) in2.focus();
+                        } else {
+                            let param = document.getElementById('fbs-add-param');
+                            if(param) param.focus();
+                        }
+                    }, 10);
+                } else {
+                    // Ins Leere fallen gelassen -> Normales Fenster öffnen
+                    openFbsAddModal(fbsTouchType);
+                }
+                fbsTouchType = null;
+            }
+        });
         document.addEventListener('dragend', () => {
             if (window.draggedFbsButton) { window.draggedFbsButton.classList.remove('drag-active-target'); window.draggedFbsButton = null; }
             if (lastHighlightedLine) { document.querySelectorAll('.' + lastHighlightedLine).forEach(el => el.classList.remove('fbs-drag-target')); lastHighlightedLine = null; }
@@ -7320,6 +7608,17 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 }
                 if (isAnalyzerOpen) drawAnalyzer();
             }, 15);
+        };
+		// ==========================================
+        // NEU: LOGIK-TOOLBAR AUSKLAPPEN
+        // ==========================================
+        window.toggleFbsToolbar = function() {
+            const group = document.getElementById('fbs-button-group');
+            const btn = document.getElementById('btn-fbs-toggle');
+            group.classList.toggle('expanded');
+            btn.classList.toggle('expanded');
+            // Feines Klicken als Audio-Feedback, falls der Ton an ist
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };
         // 3. Engine zünden
         startFactoryEngine();

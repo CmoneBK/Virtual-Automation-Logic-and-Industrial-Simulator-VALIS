@@ -30,6 +30,7 @@ Eine leistungsstarke, browserbasierte Logik-IDE, Schaltplangenerator und 2D-Phys
 ### 🎛️ Interaktiver Visueller Editor (Two-Way Binding)
 * **Klicken & Bearbeiten:** Per Rechtsklick auf Bausteine im Logikplan (FBS) können Sie direkt in die Logik eingreifen. Variablen umbenennen, Gatter-Typen tauschen (UND <-> ODER), Timer-Zeiten ändern oder Knoten löschen.
 * **Smart Reverse-Parsing:** Jede visuelle Änderung wird in Millisekunden in den Quellcode links zurückgeschrieben. Abgeklemmte Variablen gehen nicht verloren, sondern werden sicher im Limbus (`INPUT`) geparkt.
+* **Drag & Drop:** Ziehen Sie Logikbausteine (UND, ODER, Timer, Zähler) direkt aus der oberen Werkzeugleiste auf bestehende Verbindungslinien im Plan. Die Engine splittet das Kabel auf und integriert den neuen Baustein (inklusive korrekter Klammersetzung und Hilfsvariablen) vollautomatisch in den Text-Code.
 
 ### 🏭 2D Anlagen-Physiksimulator (Digitaler Zwilling)
 * **Hintergrund-Simulation:** Die Physikengine läuft nahtlos im Hintergrund weiter. Löst ein Sensor in der 2D-Fabrik aus, schaltet das Logikgatter und zieht den IEC-Schütz an – alles synchron in Echtzeit.
@@ -39,10 +40,13 @@ Eine leistungsstarke, browserbasierte Logik-IDE, Schaltplangenerator und 2D-Phys
 * * `Induktiv`: Erkennt nur metallische Objekte (Metallblöcke, Riffelblech, Alu-Rahmen von Türen).
   * `Kapazitiv` / `Optisch`: Erkennt alle physischen Objekte.
   * `Magnetisch (Reed)`: Lässt sich an Zylinder anheften, um die Endlagen des internen Magneten abzufragen.
+  * `Mechanisch`: Rollenhebelschalter, die präzise auf physischen Kontakt (Kollision) mit Werkstücken oder ausgefahrenen Zylinderstangen reagieren.
+  * `Lichtgitter`: Optoelektronische Schutzeinrichtung (Fail-Safe NC), die einen großen 2D-Bereich mit Laserstrahlen absichert und bei Durchbrechen sofort schaltet.
 * **Sandbox-Steuerung:** Multi-Select (Auswahlrahmen), Kopieren/Einfügen (Strg+C / Strg+V), Drehen, Skalieren und Löschen von Bauteilen.
 * **Tastatursteuerung (Keybindings):** Belege beliebige Taster und Schalter im Bedienpult flexibel mit eigenen Tasten (z.B. WASD für den Portalkran), um deine Anlagen wie in einem Videospiel zu steuern.
 * **Web Audio API Synthesizer:** Prozedurale Sound-Engine (0 Bytes!). Hören Sie das mechanische Klackern von Relais, das Zischen von Pneumatik-Zylindern und das Klicken von Tastern passend zum physikalischen Zustand.
 * **Plugin-Architektur:** Erweitern Sie die Anlage über den Plugin-Manager mit Sonderbauteilen (Signalsäulen, 7-Segment-Anzeigen, Drehtischen oder Pressstempeln).
+* * *Neuestes Plugin: Portalkran (Pick & Place): Ein voll funktionsfähiges, steuerbares 3-Achsen-Portal mit Vakuum-Saugnapf. Heben und transportieren Sie Werkstücke dynamisch durch die Anlage – entfaltet sein volles Potenzial in Kombination mit der WASD-Tastatursteuerung.*
 * **Erweiterte Physik:** Werkstücke besitzen nun elastische Hitboxen und prallen realistisch voneinander ab.
 * **Erweiterte Pneumatik (DIN ISO 1219):** Echte Fluidik-Simulation. Generiere auf Knopfdruck normgerechte Pneumatik-Schaltungen mit Kompressoren (-GQA), Verteilern (-GQ), 5/2-Wege-Ventilen (-QM) und Drosselrückschlagventilen (-RN). Schläuche werden dynamisch geroutet und zeigen visuell an, ob sie unter Druck stehen. Die Zylindergeschwindigkeit berechnet sich in Echtzeit aus Druck und Volumenstrom.
 * **Thermodynamik & Schmelzphysik:** Heizelemente (Öfen) übertragen Temperatur auf Werkstücke. Je nach Material reagiert die Physik: Metall beginnt realistisch rot/gelb zu glühen, während Kunststoff ab einer definierten Temperatur physisch zu Tropfen zerschmilzt.
@@ -51,6 +55,7 @@ Eine leistungsstarke, browserbasierte Logik-IDE, Schaltplangenerator und 2D-Phys
 * **Echtzeit-Signalverfolgung:** Öffnen Sie das Oszilloskop, um Signalflanken (High/Low) aller Ein- und Ausgänge wie bei einem EKG präzise über die Zeit aufzuzeichnen und auszuwerten.
 
 ### 🖥️ Multi-Panel IDE Workspace & Tools
+* **Vollständige Mehrsprachigkeit (i18n):** VALIS ist komplett zweisprachig (Deutsch / Englisch). Die Sprache wird beim ersten Start automatisch anhand der Browsersprache erkannt und live im gesamten UI (inklusive Modals und Rechtsklick-Menüs) übersetzt.
 * **Mobile Ready & PWA (Progressive Web App):** Voller Support für Smartphones und Tablets inklusive Multi-Touch-Panning, Pinch-to-Zoom und einem "Long-Press" Polyfill für Rechtsklick-Kontextmenüs. VALIS lässt sich nativ als App auf dem Startbildschirm (iOS/Android/Desktop) installieren.
 * **Dynamisches Layout:** Öffnen Sie bis zu 3 Ansichten gleichzeitig (Logik, Schaltplan, 2D Anlage). Verschieben Sie die Zwischenräume (Splitter) stufenlos oder wechseln Sie zwischen flexibler Anordnung und festen Profi-Rastern.
 * **Auto-Save & Projektdateien:** Der Editor speichert kontinuierlich im `localStorage`. Projekte (inkl. Code, Bauteilzuweisungen und der kompletten 2D-Matrix) können als `.valisave`-Datei exportiert/importiert oder als Raw-JSON kopiert werden. Alte Speicherstände sind aufwärtskompatibel.
@@ -91,9 +96,6 @@ Die Engine unterstützt industrielle Standard-Funktionen out-of-the-box:
 
 *Beispiel:* `WARN_LED := TON(FEHLER_SENSOR, 2.5)`
 
-## Vollständige Mehrsprachigkeit (i18n)
-VALIS ist komplett zweisprachig (Deutsch / Englisch). Die Sprache wird beim ersten Start automatisch anhand der Browsersprache erkannt und live im gesamten UI (inklusive Modals und Rechtsklick-Menüs) übersetzt.
-
 ### Beispielcode
 
 ```text
@@ -118,6 +120,10 @@ SYSTEM_AKTIV := Q1 && Q2_SR
    *(Tipp: Ein Wechsel zwischen Öffner (NC) und Schließer (NO) invertiert automatisch den Ruhezustand der Hardware in den Plänen und der Simulation!)*
 4. Drücken Sie **"Simulation starten"** und bedienen Sie die Schalter im Panel oder interagieren Sie mit der 2D-Anlage.
 
+## 🛠️ Erstellt mit
+* **HTML5 / CSS3 / Vanilla JavaScript**
+* Eigene OBB-Kinematik-Physikengine
+* [svg-pan-zoom](https://github.com/bumbu/svg-pan-zoom) (v3.6.1) für die Canvas-Manipulation.
 
 ---
 ---
@@ -149,7 +155,8 @@ A powerful, browser-based logic circuit IDE, electrical schematic generator, and
 ### 🎛️ Interactive Visual Editor (Two-Way Binding)
 * **Click-to-Edit:** Right-click any block in the Logic Plan (FBS) to seamlessly alter its configuration. Change variables, swap logic gates (AND <-> OR), cycle timer types, or delete components.
 * **Smart Reverse-Parsing:** Any visual change made in the logic graph instantly rewrites the underlying text code perfectly formatted. Disconnected variables are safely stored in a "Limbo" (`INPUT`) state to prevent data loss.
-
+* **Drag & Drop:** Drag logic blocks (AND, OR, Timers, Counters) directly from the top toolbar onto existing wires in the diagram. The engine automatically splices the connection and integrates the new component (including correct parenthesis and helper variables) flawlessly into your source code.
+  
 ### 🏭 2D Factory Physics Simulator (Digital Twin)
 * **Background Simulation:** The physics engine runs seamlessly in the background. If a sensor triggers in the factory, the logic gate switches, and the IEC relay activates—all in real-time.
 * **Kinematics & Attachments:** Mount objects (like pushers, windows, or sensors) to cylinder rods. When the cylinder extends, all attached children move with it perfectly synchronized.
@@ -158,10 +165,13 @@ A powerful, browser-based logic circuit IDE, electrical schematic generator, and
   * `Inductive`: Detects only metallic objects (FE items, metal frames, aluminum window edges).
   * `Capacitive` / `Optical`: Detects all physical objects.
   * `Magnetic (Reed)`: Snaps directly to cylinders to detect rod extension/retraction.
+  * `Mechanical`: Roller lever limit switches that trigger precisely upon physical collision with workpieces or extended cylinder rods.
+  * `Light Curtain`: Opto-electronic safety device (Fail-Safe NC) that secures a large 2D area with laser beams and triggers instantly when breached.
 * **Sandbox Controls:** Multi-select, copy/paste (Ctrl+C / Ctrl+V), rotate, scale, and delete components. Drag & drop elements like Spawners, Despawners, Safety Doors (Alu/Glass), Presses, and L-shaped Pushers.
 * **Custom Keybindings:** Bind specific keyboard keys (e.g., WASD for the gantry crane) to physical pushbuttons and switches to control your factory setup like a video game.
 * **Web Audio API Synthesizer:** Zero-byte procedural sound engine! Hear mechanical relay clacks, pneumatic cylinder hisses, and synthetic UI clicks based strictly on the physics state.
 * **Plugin Architecture:** Expand the factory with custom components via the Plugin Manager (e.g., Signal Towers, 7-Segment Displays, Rotational Turntables, and Metal Presses).
+* * *Newest Plugin: Gantry Crane (Pick & Place): A fully operational, controllable 3-axis gantry featuring a vacuum suction cup. Dynamically lift and transport workpieces across the factory—unleashes its full potential when paired with WASD custom keybindings.*
 * **Advanced Physics:** Items feature elastic collisions and bounce off each other.
 * **Advanced Pneumatics (DIN ISO 1219):** True fluid dynamics simulation. Auto-generate standardized pneumatic circuits featuring compressors, manifolds, 5/2-way directional valves, and one-way flow control valves. Hoses are routed dynamically and visually indicate pressurization. Cylinder speed is calculated in real-time based on pressure and flow rate.
 * **Thermodynamics & Melting Physics:** Heating elements transfer temperature to workpieces. The physics engine reacts based on the material: metal realistically glows red/yellow, while plastic physically melts into droplets once its melting point is reached.
@@ -170,6 +180,7 @@ A powerful, browser-based logic circuit IDE, electrical schematic generator, and
 * **Real-time Signal Tracking:** Open the built-in logic analyzer to plot boolean states (High/Low) over time, exactly like an EKG or a professional hardware oscilloscope.
 
 ### 🖥️ Multi-Panel IDE Workspace
+* **Full Multilingual Support (i18n):** VALIS is completely bilingual (English / German). The UI automatically adapts to your browser's language on the first launch and translates all menus, modals, and tooltips in real-time.
 * **Mobile Ready & PWA (Progressive Web App):** Full touch support for smartphones and tablets, featuring multi-touch panning, pinch-to-zoom, and a long-press polyfill for context menus. VALIS can be natively installed as a standalone app on your home screen (iOS/Android/Desktop).
 * **Customizable Layout:** Open up to 3 views simultaneously (Logic, Circuit, Factory). Resize panels dynamically using draggable splitters, or toggle between vertical/horizontal and professional grid layouts.
 * **Auto-Save & Project Files:** Never lose your work. The editor auto-saves to `localStorage`. You can also export/import your entire project (code, components, and 2D layout) as `.valisave` files or copy-paste raw JSON. The save system is fully backwards-compatible.
@@ -210,9 +221,6 @@ The engine natively supports industrial timing and counting functions:
 
 *Example:* `WARNING_LED := TON(ERROR_SENSOR, 2.5)`
 
-## Full Multilingual Support (i18n): 
-VALIS is completely bilingual (English / German). The UI automatically adapts to your browser's language on the first launch and translates all menus, modals, and tooltips in real-time.
-
 ### Example Code
 
 ```text
@@ -244,7 +252,4 @@ SYSTEM_ACTIVE := Q1 && Q2_SR
 
 
 
-## 🛠️ Erstellt mit
-* **HTML5 / CSS3 / Vanilla JavaScript**
-* Eigene OBB-Kinematik-Physikengine
-* [svg-pan-zoom](https://github.com/bumbu/svg-pan-zoom) (v3.6.1) für die Canvas-Manipulation.
+

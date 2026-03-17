@@ -9,7 +9,7 @@ Eine leistungsstarke, browserbasierte Logik-IDE, Schaltplangenerator und 2D-Phys
 
 <p align="center">
   <a href="https://cmonebk.github.io/Virtual-Automation-Logic-and-Industrial-Simulator-VALIS/" target="_blank">
-    <img src="/VALIS3.png" alt="Startbildschirm" width="600">
+    <img src="/VALIS3de.png" alt="Startbildschirm" width="600">
   </a>
 </p>
 
@@ -136,7 +136,7 @@ A powerful, browser-based logic circuit IDE, electrical schematic generator, and
 
 <p align="center">
   <a href="https://cmonebk.github.io/Virtual-Automation-Logic-and-Industrial-Simulator-VALIS/" target="_blank">
-    <img src="/VALIS3.png" alt="Startbildschirm" width="600">
+    <img src="/VALIS3en.png" alt="Startbildschirm" width="600">
   </a>  
 </p>
 

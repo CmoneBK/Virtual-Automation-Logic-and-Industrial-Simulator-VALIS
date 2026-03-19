@@ -693,6 +693,20 @@
         .pneu-hose { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.1s; }
         .pneu-hose.pressurized { stroke: #81d4fa; filter: drop-shadow(0 0 3px rgba(3,169,244,0.8)); } /* Unter Druck */
         .pneu-hose.exhaust { stroke: #1565c0; opacity: 0.7; } /* Abluft / Drucklos */
+        /* --- Beispiele Modal --- */
+        #examples-modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.78); z-index: 3500; justify-content: center; align-items: center; }
+        #examples-modal-overlay.open { display: flex; }
+        .examples-modal-box { background: #2d2d30; border: 1px solid #555; border-radius: 8px; box-shadow: 0 10px 50px rgba(0,0,0,0.9); width: 90vw; max-width: 880px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+        .examples-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #444; flex-shrink: 0; }
+        .examples-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 20px; overflow-y: auto; }
+        .example-card { background: #1e1e1e; border: 1px solid #444; border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+        .example-card:hover { border-color: #007acc; box-shadow: 0 0 12px rgba(0,122,204,0.3); }
+        .example-card canvas { width: 100%; display: block; }
+        .example-card-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .example-card-title { font-weight: bold; font-size: 13px; color: #ffffff; }
+        .example-card-desc { font-size: 11px; color: #aaa; line-height: 1.55; flex: 1; }
+        .example-card-btn { align-self: flex-start; margin-top: 8px; background: #007acc; color: #fff; border: none; padding: 5px 16px; border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.15s; }
+        .example-card-btn:hover { background: #0090e0; }
     </style>
 </head>
 <body>
@@ -713,13 +727,7 @@
                 </div>
                 <button class="btn-export" onclick="openHelpModal()" style="background: #17a2b8; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_help">ℹ️ Hilfe / Tipps</button>
                 <button class="btn-export" onclick="openSaveLoadModal()" style="background: #2196f3; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_save_load">💾 Speichern / Laden</button>
-                <select class="btn-reset" onchange="loadExample(this.value)" style="background: #333; padding: 3px 5px; border-radius: 3px;">
-                    <option value="" disabled selected data-i18n="opt_examples">Beispiele...</option>
-                    <option value="code" data-i18n="opt_code">Reiner Code</option>
-                    <option value="comments" data-i18n="opt_comments">Mit Erklärungen</option>
-                    <option value="full_demo" data-i18n="opt_full_demo">Master-Anlage (Alle Bausteine)</option>
-                    <option value="portal_crane" data-i18n="opt_portal_crane">Portalkran (Pick & Place)</option>
-                </select>
+                <button class="btn-export" onclick="openExamplesModal()" style="background: #6a1b9a; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_examples">📋 Beispiele</button>
             </div>
         </div>
         <div class="section-header" onclick="toggleSection('simulator-container', this)">
@@ -1014,6 +1022,16 @@
 				<button onclick="closeHelpModal()" style="background: #007acc; color: white; border: none; padding: 6px 16px; border-radius: 3px; cursor: pointer; font-weight: bold;">Verstanden</button>
 			</div>
 		</div>
+        <!-- Beispiele Modal -->
+        <div id="examples-modal-overlay" onclick="if(event.target===this)closeExamplesModal()">
+            <div class="examples-modal-box">
+                <div class="examples-modal-header">
+                    <h3 style="margin:0; color:#fff; font-size:15px;">📋 Beispielprojekte</h3>
+                    <button onclick="closeExamplesModal()" style="background:none; border:none; color:#aaa; font-size:22px; cursor:pointer; line-height:1; padding:0 4px;" title="Schließen">✕</button>
+                </div>
+                <div class="examples-grid" id="examples-grid"></div>
+            </div>
+        </div>
 		<div id="saveload-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2000; width: 500px;">
             <h3 style="margin-top:0; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px;" data-i18n="sl_title">💾 Projekt Speichern & Laden</h3>
             <div style="display: flex; gap: 10px; margin-bottom: 15px;">
@@ -1165,6 +1183,7 @@
                 "btn_install": "📱 App installieren",
                 "btn_help": "ℹ️ Hilfe / Tipps",
                 "btn_save_load": "💾 Speichern / Laden",
+                "btn_examples": "📋 Beispiele",
                 "opt_examples": "Beispiele...",
                 "opt_code": "Reiner Code",
                 "opt_comments": "Mit Erklärungen",
@@ -1458,6 +1477,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "btn_install": "📱 Install App",
                 "btn_help": "ℹ️ Help / Tips",
                 "btn_save_load": "💾 Save / Load",
+                "btn_examples": "📋 Examples",
                 "opt_examples": "Examples...",
                 "opt_code": "Pure Code",
                 "opt_comments": "With Explanations",
@@ -3149,6 +3169,123 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Dropdown wieder auf "Beispiele..." zurücksetzen
                 selectEl.selectedIndex = 0;
             }, 10);
+        };
+        // ==========================================
+        // BEISPIELE MODAL
+        // ==========================================
+        const EXAMPLE_META = [
+            {
+                key: 'code',
+                title: 'Sortieranlage (Minimal)',       title_en: 'Sorting Plant (Minimal)',
+                desc:  'Kompakte Sortieranlage ohne Kommentare. Perfekte saubere Ausgangsbasis zum Experimentieren.',
+                desc_en: 'Compact sorting plant without comments. Clean starting point for experimentation.',
+            },
+            {
+                key: 'comments',
+                title: 'Sortieranlage (Kommentiert)',   title_en: 'Sorting Plant (Commented)',
+                desc:  'Dieselbe Anlage mit ausführlichen Erklärungen zu jedem Schritt. Ideal für Einsteiger.',
+                desc_en: 'Same plant with detailed explanations for each step. Ideal for beginners.',
+            },
+            {
+                key: 'full_demo',
+                title: 'Master-Anlage (Alle Bausteine)', title_en: 'Master Plant (All Blocks)',
+                desc:  'Vollständige Demo mit RS/SR-Speicher, TON, TOF, TP, CTU, Stacklight, Sirene und Zähler-Display.',
+                desc_en: 'Full demo with RS/SR latches, TON, TOF, TP, CTU, stacklight, siren and counter display.',
+            },
+            {
+                key: 'portal_crane',
+                title: 'Portalkran (Pick & Place)',     title_en: 'Portal Crane (Pick & Place)',
+                desc:  'Steuere einen Vakuum-Portalkran mit WASD und Leertaste. Mit Achsverriegelung und Tastenbelegung.',
+                desc_en: 'Control a vacuum portal crane with WASD and spacebar. With axis interlocking and key bindings.',
+            },
+        ];
+        function renderFactoryPreview(canvas, objects) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            // Hintergrund
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, W, H);
+            // Raster-Punkte als dezente Textur
+            ctx.fillStyle = 'rgba(255,255,255,0.07)';
+            for (let gx = 14; gx < W; gx += 22) for (let gy = 14; gy < H; gy += 22) {
+                ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI * 2); ctx.fill();
+            }
+            if (!objects || objects.length === 0) {
+                ctx.fillStyle = '#555'; ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('Kein 2D-Layout', W / 2, H / 2);
+                return;
+            }
+            // Bounding Box berechnen
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            objects.forEach(o => {
+                minX = Math.min(minX, o.x); minY = Math.min(minY, o.y);
+                maxX = Math.max(maxX, o.x + (o.width || 40)); maxY = Math.max(maxY, o.y + (o.height || 40));
+            });
+            const pad = 14, rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+            const scale = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeY);
+            const offX = pad + ((W - pad * 2) - rangeX * scale) / 2 - minX * scale;
+            const offY = pad + ((H - pad * 2) - rangeY * scale) / 2 - minY * scale;
+            // Farben je Typ
+            const colors = {
+                conveyor: '#607d8b', taster: '#4caf50', taster_nc: '#ef5350', nothalt: '#ef5350',
+                sensor_ind: '#ffc107', sensor_opt: '#ff9800', sensor_mag: '#ce93d8',
+                led: '#fff176', valve: '#ff9800', motor: '#42a5f5', relais: '#ba68c8',
+                spawner_metall: '#90a4ae', spawner_kunststoff: '#ff7043',
+                despawner: '#795548', wall: '#546e7a',
+                zylinder_single: '#b0bec5', zylinder_double: '#b0bec5',
+                portal_crane: '#1565c0', press: '#455a64', fan: '#26c6da',
+                key_switch: '#a1887f', siren: '#ef5350', display: '#37474f',
+                stacklight: '#66bb6a', pusher: '#78909c',
+            };
+            objects.forEach(o => {
+                const sx = o.x * scale + offX, sy = o.y * scale + offY;
+                const sw = Math.max(3, (o.width || 40) * scale);
+                const sh = Math.max(3, (o.height || 40) * scale);
+                ctx.save();
+                ctx.globalAlpha = 0.88;
+                ctx.fillStyle = colors[o.type] || '#888';
+                if (o.rotation && o.rotation % 180 !== 0) {
+                    ctx.translate(sx + sw / 2, sy + sh / 2);
+                    ctx.rotate(o.rotation * Math.PI / 180);
+                    ctx.fillRect(-sw / 2, -sh / 2, sw, sh);
+                } else {
+                    ctx.fillRect(sx, sy, sw, sh);
+                }
+                ctx.restore();
+            });
+        }
+        window.openExamplesModal = function() {
+            const overlay = document.getElementById('examples-modal-overlay');
+            const grid = document.getElementById('examples-grid');
+            const isDE = (window.currentLang || 'de') === 'de';
+            grid.innerHTML = '';
+            EXAMPLE_META.forEach(meta => {
+                const exData = EXAMPLES[meta.key];
+                const factory = (typeof exData === 'object' && exData.factory) ? exData.factory : EXAMPLES.factory;
+                const card = document.createElement('div');
+                card.className = 'example-card';
+                // Canvas Vorschau
+                const canvas = document.createElement('canvas');
+                canvas.width = 440; canvas.height = 185;
+                canvas.style.cssText = 'width:100%;height:148px;';
+                card.appendChild(canvas);
+                // Karteninhalt
+                const body = document.createElement('div');
+                body.className = 'example-card-body';
+                body.innerHTML = `
+                    <div class="example-card-title">${isDE ? meta.title : meta.title_en}</div>
+                    <div class="example-card-desc">${isDE ? meta.desc : meta.desc_en}</div>
+                    <button class="example-card-btn" onclick="loadExample('${meta.key}');closeExamplesModal();">▶ Laden</button>
+                `;
+                card.appendChild(body);
+                grid.appendChild(card);
+                renderFactoryPreview(canvas, factory ? factory.objects : []);
+            });
+            overlay.classList.add('open');
+        };
+        window.closeExamplesModal = function() {
+            document.getElementById('examples-modal-overlay').classList.remove('open');
         };
         function updateHighlighting() {
             let text = textarea.value;

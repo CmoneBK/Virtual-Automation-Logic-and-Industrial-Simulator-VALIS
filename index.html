@@ -865,6 +865,7 @@
                         <button id="btn-toggle-colors" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleCircuitColors()" data-i18n="iec_colors_off">🌈 Bunte Pfade: AUS</button>
                         <button id="btn-toggle-wech" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleWechsler()" data-i18n="iec_wech_off">🔀 Wechslernummerierung: AUS</button>
                         <button id="btn-toggle-seq" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleSeqNum()" data-i18n="iec_seq_off">🔢 Fortlaufende Nrn: AUS</button>
+                        <button id="btn-toggle-dual" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleDualCircuit()" data-i18n="iec_dual_off">⚡ Getrennte Stromkreise: AUS</button>
                         <button id="btn-toggle-details" class="btn-export" style="background-color: #911eb4; border: 1px solid #333;" onclick="toggleDetails()" data-i18n="iec_det_all">🏷️ Details: ALLE</button>
                     </div>
                 </div>
@@ -1222,6 +1223,10 @@
                 "iec_wech_on": "🔀 Wechslernummerierung: AN",
                 "iec_seq_off": "🔢 Fortlaufende Nrn: AUS",
                 "iec_seq_on": "🔢 Fortlaufende Nrn: AN",
+                "iec_dual_off": "⚡ Getrennte Stromkreise: AUS",
+                "iec_dual_on":  "⚡ Getrennte Stromkreise: AN",
+                "iec_label_control": "Steuerstromkreis",
+                "iec_label_load": "Verbraucherstromkreis",
                 "iec_det_all": "🏷️ Details: ALLE",
                 "iec_det_io": "🏷️ Details: E/A",
                 "iec_det_off": "🏷️ Details: AUS",
@@ -1530,6 +1535,10 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "iec_wech_on": "🔀 CO Contact Num: ON",
                 "iec_seq_off": "🔢 Sequential Num: OFF",
                 "iec_seq_on": "🔢 Sequential Num: ON",
+                "iec_dual_off": "⚡ Split Circuits: OFF",
+                "iec_dual_on":  "⚡ Split Circuits: ON",
+                "iec_label_control": "Control Circuit",
+                "iec_label_load": "Load Circuit",
                 "iec_det_all": "🏷️ Details: ALL",
                 "iec_det_io": "🏷️ Details: I/O",
                 "iec_det_off": "🏷️ Details: OFF",
@@ -3492,6 +3501,7 @@ You must output exactly this JSON format. The logic code goes as a single string
 		// --- NEU: SCHALTPLAN DARSTELLUNGS-OPTIONEN ---
         window.configWechsler = false;
         window.configSeqNum = false;
+        window.configDualCircuit = false;
         window.configDetails = 2; // 0 = Aus, 1 = E/A, 2 = Alle
         // 🌟 HELFER: Sucht immer im abgekoppelten Fenster, falls es offen ist!
         function getCircDoc() {
@@ -3569,6 +3579,17 @@ You must output exactly this JSON format. The logic code goes as a single string
             if(btn){
                 btn.style.backgroundColor = window.configSeqNum ? '#911eb4' : '#555';
                 let key = window.configSeqNum ? 'iec_seq_on' : 'iec_seq_off';
+                btn.setAttribute('data-i18n', key);
+                btn.textContent = t(key);
+            }
+            if (currentGraph) { drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true); runSimulationTick(); }
+        };
+        window.toggleDualCircuit = function() {
+            window.configDualCircuit = !window.configDualCircuit;
+            const btn = getCircDoc().getElementById('btn-toggle-dual');
+            if (btn) {
+                btn.style.backgroundColor = window.configDualCircuit ? '#e67e22' : '#555';
+                let key = window.configDualCircuit ? 'iec_dual_on' : 'iec_dual_off';
                 btn.setAttribute('data-i18n', key);
                 btn.textContent = t(key);
             }
@@ -4505,6 +4526,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             let currX = 100;
             const yTop = 50, yBot = 500;
+            // --- DUAL CIRCUIT: Verbraucher-OUTPUTs klassifizieren ---
+            const dualLoadNodeIds = new Set();
+            if (window.configDualCircuit) {
+                graph.nodes.forEach(n => {
+                    if (n.type === 'OUTPUT' && !n.isRelay) dualLoadNodeIds.add(n.id);
+                });
+            }
             preRungsToDraw.forEach(item => {
                 let col = getNodeColor(item.id);
                 // 🌟 FIX: Keine Invertierung mehr! Ein ungedrückter Not-Halt (NC) lässt Strom durch und zieht das Relais an!
@@ -4557,9 +4585,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     currX += 140;
                 }
             });
-            nodesToDraw.forEach(node => {
+            const processNode = (node, dualPass) => {
                 let inEdges = graph.edges.filter(e => e.targetId === node.id);
                 let col = node.color;
+                if (window.configDualCircuit) {
+                    if (dualPass === 1 && dualLoadNodeIds.has(node.id)) return;
+                    if (dualPass === 2 && !dualLoadNodeIds.has(node.id)) return;
+                }
                 if (node.type === 'GATE') {
                     if (window.configEconMode) return; 
                     let p = pathCounter++;
@@ -4735,7 +4767,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
                     currX += (w1 > 90 ? (w1-90)/2 : 0) + 130;
                 }
-            });
+            };
+            nodesToDraw.forEach(n => processNode(n, 1));
             // 🌟 FIX: Koppelrelais Strompfade am Ende des Plans anhängen!
             requiredAuxRelays.forEach(hwId => {
                 let p = pathCounter++;
@@ -4810,6 +4843,35 @@ You must output exactly this JSON format. The logic code goes as a single string
                     circuitContent.appendChild(g);
                 }
             });
+            // --- DUAL CIRCUIT: Pass 2 (Verbraucherstromkreis) ---
+            if (window.configDualCircuit && dualLoadNodeIds.size > 0) {
+                const DUAL_OFFSET = 700;
+                // Steuerstromkreis-Label oben einfügen
+                let lblCtrl = createSvgElement('text', {x: 25, y: 30, 'font-size': '12', 'font-weight': 'bold', fill: '#888', 'font-family': 'Segoe UI, Tahoma, sans-serif'});
+                lblCtrl.textContent = `\u2014 ${t('iec_label_control')} (L+ / M) \u2014`;
+                circuitContent.insertBefore(lblCtrl, circuitContent.firstChild);
+                // Startindex für Pass-2-Elemente merken
+                let pass2Start = circuitContent.childNodes.length;
+                // Verbraucherstromkreis-Label
+                let lblLoad = createSvgElement('text', {x: 25, y: 30, 'font-size': '12', 'font-weight': 'bold', fill: '#888', 'font-family': 'Segoe UI, Tahoma, sans-serif'});
+                lblLoad.textContent = `\u2014 ${t('iec_label_load')} (L1 / N) \u2014`;
+                circuitContent.appendChild(lblLoad);
+                // currX zurücksetzen und Pass 2 zeichnen
+                currX = 100;
+                nodesToDraw.forEach(n => processNode(n, 2));
+                // L1/N Stromschienen
+                let totalWidth2 = Math.max(1000, currX + 50);
+                let l1Rail = drawLine(20, yTop, totalWidth2 - 20, yTop, 3);
+                l1Rail.setAttribute('stroke', '#e74c3c'); l1Rail.classList.remove('circ-wire');
+                drawText(25, yTop - 10, 'L1 (230V AC)', true);
+                let nRail = drawLine(20, yBot, totalWidth2 - 20, yBot, 3);
+                nRail.setAttribute('stroke', '#2c3e50'); nRail.classList.remove('circ-wire');
+                drawText(25, yBot + 20, 'N', true);
+                // Alle Pass-2-Elemente in eine verschobene Gruppe packen
+                let gPass2 = createSvgElement('g', {transform: `translate(0, ${DUAL_OFFSET})`});
+                Array.from(circuitContent.childNodes).slice(pass2Start).forEach(el => gPass2.appendChild(el));
+                circuitContent.appendChild(gPass2);
+            }
             setTimeout(() => {
                 let pCirc = circuitSvg.closest('.workspace-panel') || document.getElementById('circuit-wrapper');
                 if (pCirc && pCirc.offsetWidth > 0 && pCirc.offsetHeight > 0) { 

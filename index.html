@@ -3993,6 +3993,19 @@ You must output exactly this JSON format. The logic code goes as a single string
             for (let k in attrs) el.setAttribute(k, attrs[k]);
             return el;
         }
+        // INTELLIGENTER PFAD-SUCHER (Global verfügbar für Drag&Drop)
+        window.getRootContextGlobal = function(specificEdge) {
+            let edge = specificEdge;
+            while (edge) {
+                let target = currentGraph.nodes.get(edge.targetId);
+                if (!target) break;
+                if (['OUTPUT', 'RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(target.type)) {
+                    return { targetNode: target, targetPin: edge.targetPin };
+                }
+                edge = currentGraph.edges.find(e => e.sourceId === target.id);
+            }
+            return null;
+        };
         // 🌟 NEU: Zentraler Helper, der zielsicher die Textzeile für verschachtelte Kontakte ermittelt
         window.getLinePrefixForEdge = function(edge) {
             if (!edge) return '';
@@ -9528,19 +9541,6 @@ You must output exactly this JSON format. The logic code goes as a single string
 		// ==========================================
         // NEU: VISUAL EDITOR AUSBAUSTUFE 2 (Drag & Drop + Click to Fill)
         // ==========================================
-        // INTELLIGENTER PFAD-SUCHER (Global verfügbar für Drag&Drop)
-        window.getRootContextGlobal = function(specificEdge) {
-            let edge = specificEdge;
-            while (edge) {
-                let target = currentGraph.nodes.get(edge.targetId);
-                if (!target) break;
-                if (['OUTPUT', 'RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(target.type)) {
-                    return { targetNode: target, targetPin: edge.targetPin };
-                }
-                edge = currentGraph.edges.find(e => e.sourceId === target.id);
-            }
-            return null;
-        };
         // Hilfsfunktion: Übersetzt interne IDs (wie AND_0) in echte SPS-Variablen oder Formeln
         window.getFbsVariableDisplay = function(id) {
             if (!currentGraph) return id;

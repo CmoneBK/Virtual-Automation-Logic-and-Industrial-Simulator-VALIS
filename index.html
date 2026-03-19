@@ -1276,6 +1276,7 @@
                 "ctx_iec_contact_swap": "🔀 <b>Kontakt-Belegung</b> wechseln (NO ↔ NC)",
                 "ctx_iec_hw_swap": "⚙️ <b>Anlagen-Hardware</b> umbauen (NO ↔ NC)",
                 "ctx_iec_sensor_type": "Sensor-Typ ändern:",
+                "ctx_iec_hw_type": "Hardware-Typ wechseln:",
                 "ctx_iec_del_component": "🗑️ Komplettes Bauteil ausbauen",
                 "ctx_iec_del_contact": "Kontakt löschen:",
                 "ctx_iec_bridge": "➖ Drahtbrücke setzen (Dauerstrom)",
@@ -1588,6 +1589,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "ctx_iec_contact_swap": "🔀 <b>Contact Type</b> toggle (NO ↔ NC)",
                 "ctx_iec_hw_swap": "⚙️ <b>Rebuild Hardware</b> (NO ↔ NC)",
                 "ctx_iec_sensor_type": "Change sensor type:",
+                "ctx_iec_hw_type": "Change hardware type:",
                 "ctx_iec_del_component": "🗑️ Remove complete component",
                 "ctx_iec_del_contact": "Delete contact:",
                 "ctx_iec_bridge": "➖ Insert wire bridge (permanent ON)",
@@ -9068,14 +9070,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     };
                     menu.appendChild(btnLogic);
                 }
-                // 2. Hardware Taster umbauen
+                // 2. Hardware NO/NC umbauen (schneller Toggle für einfache Schalter/Taster)
                 if (canSwapHardware) {
                     let btnHard = document.createElement('div');
                     btnHard.className = 'ctx-item';
                     btnHard.innerHTML = t('ctx_iec_hw_swap');
                     btnHard.onclick = () => {
                         if (currentType.endsWith('_nc')) componentTypes[iecId] = currentType.replace('_nc', '');
-                        else if (currentType === 'nothalt') componentTypes[iecId] = 'taster'; 
+                        else if (currentType === 'nothalt') componentTypes[iecId] = 'taster';
                         else componentTypes[iecId] = currentType + '_nc';
                         localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
                         if (spsState.hasOwnProperty(iecId)) spsState[iecId] = !spsState[iecId];
@@ -9084,15 +9086,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     };
                     menu.appendChild(btnHard);
                 }
-                // 3. Sensor-Typ umbauen
-                if (isSensor) {
+                // 3. Hardware-Typ wechseln (alle verfügbaren Typen)
+                if (isHardwareInput && !isGate) {
                     let typeWrap = document.createElement('div'); typeWrap.style.padding = '5px 15px'; typeWrap.onclick = e => e.stopPropagation();
-                    typeWrap.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">${t('ctx_iec_sensor_type')}</div>`;
+                    typeWrap.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">${t('ctx_iec_hw_type')}</div>`;
                     let selType = document.createElement('select');
                     selType.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; cursor: pointer;";
-                    ['sensor_ind', 'sensor_kap', 'sensor_opt', 'sensor_mag', 'mech_sensor', 'light_curtain'].forEach(t => {
-                        let opt = document.createElement('option'); opt.value = t; opt.textContent = window.t('type_' + t) || t.toUpperCase();
-                        if (currentType === t) opt.selected = true;
+                    ['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','sensor_ind','sensor_kap','sensor_opt','sensor_mag','mech_sensor','light_curtain'].forEach(tp => {
+                        let opt = document.createElement('option'); opt.value = tp; opt.textContent = window.t('type_' + tp) || tp;
+                        if (currentType === tp) opt.selected = true;
                         selType.appendChild(opt);
                     });
                     selType.onchange = (e) => {

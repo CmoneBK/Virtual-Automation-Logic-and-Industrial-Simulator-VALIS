@@ -2490,8 +2490,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             // NEU: Wenn zwischen Öffner (NC) und Schließer (NO) gewechselt wird, 
             // invertieren wir das Signal sofort. Ein unbetätigter Schließer (FALSE) 
             // wird so automatisch zu einem unbetätigten Öffner (TRUE).
-            let wasNC = oldVal === 'nothalt' || oldVal === 'taster_nc' || oldVal === 'schalter_nc' || oldVal === 'light_curtain';
-            let isNC = val === 'nothalt' || val === 'taster_nc' || val === 'schalter_nc' || val === 'light_curtain';
+            let wasNC = oldVal === 'nothalt' || oldVal === 'taster_nc' || oldVal === 'schalter_nc' || (ComponentRegistry[oldVal] && ComponentRegistry[oldVal].isNC);
+            let isNC = val === 'nothalt' || val === 'taster_nc' || val === 'schalter_nc' || (ComponentRegistry[val] && ComponentRegistry[val].isNC);
             if (wasNC !== isNC && spsState.hasOwnProperty(id)) {
                 spsState[id] = !spsState[id];
             }
@@ -3427,16 +3427,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             const offX = pad + ((W - pad * 2) - rangeX * scale) / 2 - minX * scale;
             const offY = pad + ((H - pad * 2) - rangeY * scale) / 2 - minY * scale;
             // Farben je Typ
+            // Farben für Built-in-Typen (ComponentRegistry-Plugins haben color direkt im Eintrag)
             const colors = {
                 conveyor: '#607d8b', taster: '#4caf50', taster_nc: '#ef5350', nothalt: '#ef5350',
-                sensor_ind: '#ffc107', sensor_opt: '#ff9800', sensor_mag: '#ce93d8',
+                sensor_ind: '#ffc107', sensor_mag: '#ce93d8', sensor_kap: '#ffb300',
                 led: '#fff176', valve: '#ff9800', motor: '#42a5f5', relais: '#ba68c8',
                 spawner_metall: '#90a4ae', spawner_kunststoff: '#ff7043',
                 despawner: '#795548', wall: '#546e7a',
                 zylinder_single: '#b0bec5', zylinder_double: '#b0bec5',
-                portal_crane: '#1565c0', press: '#455a64', fan: '#26c6da',
-                key_switch: '#a1887f', siren: '#ef5350', display: '#37474f',
-                stacklight: '#66bb6a', pusher: '#78909c',
+                schalter: '#66bb6a', schalter_nc: '#ef9a9a',
             };
             objects.forEach(o => {
                 const sx = o.x * scale + offX, sy = o.y * scale + offY;
@@ -3444,7 +3443,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const sh = Math.max(3, (o.height || 40) * scale);
                 ctx.save();
                 ctx.globalAlpha = 0.88;
-                ctx.fillStyle = colors[o.type] || '#888';
+                ctx.fillStyle = (ComponentRegistry[o.type] && ComponentRegistry[o.type].color) || colors[o.type] || '#888';
                 if (o.rotation && o.rotation % 180 !== 0) {
                     ctx.translate(sx + sw / 2, sy + sh / 2);
                     ctx.rotate(o.rotation * Math.PI / 180);
@@ -3532,7 +3531,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     componentTypes[name] = isNotHalt ? 'nothalt' : (isSchalter ? 'schalter' : 'taster');
                 }
                 let cType = componentTypes[name];
-                let isNCContact = cType === 'nothalt' || cType === 'taster_nc' || cType === 'schalter_nc' || cType === 'light_curtain';
+                let isNCContact = cType === 'nothalt' || cType === 'taster_nc' || cType === 'schalter_nc' || (ComponentRegistry[cType] && ComponentRegistry[cType].isNC);
                 if (oldState.hasOwnProperty(name)) {
                     spsState[name] = oldState[name];
                 } else {
@@ -5695,6 +5694,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'turntable': {
+                role: 'output', color: '#9575cd',
                 i18n: {
                     de: { name: 'Drehtisch', desc: 'Dreht Items um 90° (Nur Draufsicht)' },
                     en: { name: 'Turntable', desc: 'Rotates items by 90° (Top view only)' }
@@ -5751,6 +5751,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'stacklight': {
+                role: 'output', color: '#66bb6a',
                 i18n: {
                     de: { name: 'Signal-Säule', desc: 'Optische Statusanzeige (Rot, Gelb, Grün)' },
                     en: { name: 'Stacklight', desc: 'Visual status indicator (Red, Yellow, Green)' }
@@ -5781,6 +5782,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'display': {
+                color: '#37474f',
                 i18n: {
                     de: { name: '7-Seg Display', desc: 'Zeigt Werte von Timern & Zählern an' },
                     en: { name: '7-Seg Display', desc: 'Shows values from Timers & Counters' }
@@ -5837,7 +5839,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // NEU: Präzise Sensor-Kollision (Raycast) nur für die massiven Schenkel des L-Schiebers
                 customSensorHit: function(targetObj, sensorObj, lx, ly, lw, lh) {
                     let sRad = (sensorObj.rotation || 0) * Math.PI / 180;
-                    let steps = sensorObj.type === 'sensor_opt' ? 5 : 2;
+                    let steps = (ComponentRegistry[sensorObj.type] && ComponentRegistry[sensorObj.type].sensorSteps) || 2;
                     let tk = targetObj.thickness || 20;
                     for(let i=0; i<=steps; i++) {
                         let stepX = lx + (lw/steps)*i; 
@@ -5866,6 +5868,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'pusher': {
+                color: '#78909c',
                 i18n: {
                     de: { name: 'L-Schieber', desc: 'Winkelförmiger Aufsatz für Zylinder' },
                     en: { name: 'L-Pusher', desc: 'L-shaped attachment for cylinders' }
@@ -5972,6 +5975,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'press': {
+                role: 'output', color: '#455a64',
                 i18n: {
                     de: { name: 'Pressstempel', desc: 'Massiver Block für Zylinder (Stanzen/Pressen)' },
                     en: { name: 'Press Ram', desc: 'Solid block for cylinders (Punching/Pressing)' }
@@ -6041,6 +6045,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }, // Ende von 'press'
 			'fan': {
+                role: 'output', color: '#26c6da',
                 i18n: {
                     de: { name: 'Lüfter / Gebläse', desc: 'Dreht sich, wenn aktiviert (Kühlung/Absaugung)' },
                     en: { name: 'Fan / Blower', desc: 'Spins when activated (cooling/exhaust)' }
@@ -6143,6 +6148,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 playSound: function(obj, engine) { }
             },
 			'mech_sensor': {
+                role: 'input',
                 i18n: {
                     de: { name: 'Mech. Positionsschalter', desc: 'Rollenhebelschalter (Kollision am Hebel)' },
                     en: { name: 'Limit Switch (Mech.)', desc: 'Roller lever switch (collision on lever)' }
@@ -6219,6 +6225,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'key_switch': {
+                role: 'input', clickSimulate: true, color: '#a1887f',
                 i18n: {
                     de: { name: 'Schlüsselschalter', desc: 'Rastender Schalter mit Schlüssel (Override)' },
                     en: { name: 'Key Switch', desc: 'Latching switch with key (Override)' }
@@ -6248,6 +6255,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'light_curtain': {
+                role: 'input', isNC: true,
                 i18n: {
                     de: { name: 'Sicherheits-Lichtgitter', desc: 'Schützt einen ganzen Bereich (Fail-Safe NC)' },
                     en: { name: 'Safety Light Curtain', desc: 'Protects an entire area (Fail-Safe NC)' }
@@ -6322,6 +6330,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'siren': {
+                role: 'output', color: '#ef5350',
                 i18n: {
                     de: { name: 'Sirene / Hupe', desc: 'Akustischer Alarm (Wackelt und tönt bei Aktivierung)' },
                     en: { name: 'Siren / Horn', desc: 'Acoustic alarm (shakes and sounds on activation)' }
@@ -6410,6 +6419,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'heater': {
+                role: 'output', color: '#ff7043',
                 i18n: {
                     de: { name: 'Heizelement', desc: 'Glüht auf und erhitzt Werkstücke' },
                     en: { name: 'Heating Element', desc: 'Glows and heats up workpieces' }
@@ -6501,6 +6511,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'portal_crane': {
+                role: 'output', color: '#1565c0',
                 i18n: {
                     de: { name: 'Portalkran (Pick & Place)', desc: '3-Achsen Greifarm mit Vakuum-Sauger' },
                     en: { name: 'Gantry Crane (Pick & Place)', desc: '3-axis gripper arm with vacuum suction cup' }
@@ -6621,8 +6632,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     speedInp.onchange = e => { obj.speed = parseInt(e.target.value); saveCallback(); };
                     speedWrap.appendChild(speedInp); ctxMenu.appendChild(speedWrap);
                 }
-            }
-        }; //Ende von Component Registry 
+            },
+            // Stubs für Built-in-Typen: nur Metadaten, keine build/animate-Logik
+            'sensor_opt': { role: 'input', sensorSteps: 5, color: '#ff9800' },
+        }; //Ende von Component Registry
+        // Einmalig berechnet: Typen die keine Rotation brauchen (Built-ins + ComponentRegistry-Plugins mit noRotate:true)
+        const noRotateTypes = new Set([
+            'taster', 'schalter', 'nothalt', 'led', 'despawner',
+            ...Object.keys(ComponentRegistry).filter(k => ComponentRegistry[k].noRotate)
+        ]);
         window.toggleGlobalViewMode = function() {
             const btn = document.getElementById('btn-viewmode');
             if (globalViewMode === 'side') {
@@ -6859,9 +6877,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let resizerXY = document.createElement('div'); resizerXY.className = 'f2d-resize-handle-xy'; 
                 obj.resizerEl = resizerXY; el.appendChild(resizerXY);
             }
-            // NEU: Bestimmte Bauteile benötigen keine Rotation!
-            const noRotate = ['taster', 'schalter', 'nothalt', 'led', 'despawner'];
-            if (type !== 'item' && !type.startsWith('zone_') && !noRotate.includes(type)) {
+            // Bestimmte Bauteile benötigen keine Rotation (via noRotateTypes)
+            if (type !== 'item' && !type.startsWith('zone_') && !noRotateTypes.has(type)) {
                 let rotator = document.createElement('div');
                 rotator.className = 'f2d-rotate-handle';
                 el.appendChild(rotator);
@@ -6896,7 +6913,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (e.button !== 0) return; 
                 // 1. Klicks im Simulationsmodus (Taster/Schalter)
                 // 1. Klicks im Simulationsmodus (Taster/Schalter)
-                if (isSimulationActive && (dataObj.type === 'taster' || dataObj.type === 'schalter' || dataObj.type === 'nothalt' || dataObj.type === 'key_switch')) {
+                if (isSimulationActive && (dataObj.type === 'taster' || dataObj.type === 'schalter' || dataObj.type === 'nothalt' || (ComponentRegistry[dataObj.type] && ComponentRegistry[dataObj.type].clickSimulate))) {
                     e.stopPropagation(); 
                     let varName = dataObj.linkedVar; 
                     let domBox = document.getElementById(`sim_in_${varName}`);
@@ -7098,8 +7115,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     };
                     wrapper.appendChild(sel); ctxMenu.appendChild(wrapper);
                 };
-                let isInput = ['taster', 'schalter', 'nothalt', 'sensor_ind', 'sensor_kap', 'sensor_opt', 'sensor_mag', 'mech_sensor', 'key_switch', 'light_curtain'].includes(obj.type);
-                let isOutput = ['led', 'conveyor', 'zylinder_single', 'zylinder_double', 'turntable', 'stacklight', 'spawner_metall', 'spawner_kunststoff'].includes(obj.type);
+                let isInput = ['taster', 'schalter', 'nothalt', 'sensor_ind', 'sensor_kap', 'sensor_opt', 'sensor_mag'].includes(obj.type)
+                    || (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].role === 'input');
+                let isOutput = ['led', 'conveyor', 'zylinder_single', 'zylinder_double', 'spawner_metall', 'spawner_kunststoff'].includes(obj.type)
+                    || (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].role === 'output');
                 if (isInput) addVarSelect(window.t('ctx_fac_var_in'), obj.linkedVar, 'in', 'linkedVar');
                 if (isOutput) {
                     if (obj.type.startsWith('zylinder')) {
@@ -7129,8 +7148,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 saveFactoryState(); 
             }; 
             ctxMenu.appendChild(btnDel);
-            const noRotate = ['taster', 'schalter', 'nothalt', 'led', 'despawner'];
-            if (!noRotate.includes(obj.type)) {
+            if (!noRotateTypes.has(obj.type)) {
                 let btnRot = document.createElement('div'); btnRot.className = 'ctx-item'; btnRot.textContent = window.t('ctx_fac_rot');
                 btnRot.onclick = () => { 
                     if (selectedElements.includes(obj)) {

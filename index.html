@@ -3330,7 +3330,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     alert("Fehler beim Laden: " + e.message);
                 }
                 // Dropdown wieder auf "Beispiele..." zurücksetzen
-                selectEl.selectedIndex = 0;
+                if (selectEl) selectEl.selectedIndex = 0;
             }, 10);
         };
         // ==========================================
@@ -4667,6 +4667,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (window.configEconMode && edge && graph.nodes.get(edge.sourceId) && graph.nodes.get(edge.sourceId).type === 'GATE') return getTreeW(edge.sourceId);
                 return 90;
             }
+            // Berechnet die benötigte Vertikalhöhe eines Baums im Wirtschaftlich-Modus (60px/Blatt)
+            function getTreeH(nodeId) {
+                let node = graph.nodes.get(nodeId);
+                if (!node || node.type !== 'GATE') return 60;
+                let ie = graph.edges.filter(e => e.targetId === nodeId);
+                if (ie.length === 0) return 60;
+                if (node.label === '&') return ie.reduce((sum, e) => sum + getTreeH(e.sourceId), 0);
+                else return Math.max(60, ...ie.map(e => getTreeH(e.sourceId)));
+            }
+            // Gibt die benötigte Pin-Höhe zurück (im Econ-Modus bei GATE-Quellen getTreeH+30, sonst Standardwert)
+            function calcPinH(edge, defaultH = 140) {
+                if (window.configEconMode && edge) {
+                    let src = graph.nodes.get(edge.sourceId);
+                    if (src && src.type === 'GATE') return getTreeH(edge.sourceId) + 30;
+                }
+                return defaultH;
+            }
             function drawInputPin(edge, cx, yStart, yEnd, pNum, baseCond = "true", forceInvertNC = false) {
                 if (!edge) { setPower(drawLine(cx, yStart, cx, yEnd, 2, 'NONE', '#000'), baseCond); return baseCond; }
                 let targetLinePrefix = window.getLinePrefixForEdge(edge);
@@ -4722,7 +4739,32 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             let currX = 100;
-            const yTop = 50, yBot = 500;
+            const yTop = 50;
+            // Additiver Platzbedarf: Nur der Kontaktbereich wächst — Spulen-Stutzen bleiben konstant
+            const _maxAndIn = Math.max(0, ...Array.from(graph.nodes.values())
+                .filter(n => n.type === 'GATE' && n.label === '&')
+                .map(n => graph.edges.filter(e => e.targetId === n.id).length));
+            const contactZoneH = Math.max(260, _maxAndIn * 65); // 65 px Mindestabstand je Kontakt
+            let extraY = contactZoneH - 260; // zusätzliche Pixel gegenüber dem Basiswert
+            // RS-Flipflops: S- und R-Eingang teilen dieselbe X-Spalte → kombinierten Baum berücksichtigen
+            if (window.configEconMode) {
+                graph.nodes.forEach(n => {
+                    if (n.type === 'RS') {
+                        let ie = graph.edges.filter(e => e.targetId === n.id);
+                        let sE = ie.find(e => e.targetPin === 'S'), rE = ie.find(e => e.targetPin === 'R');
+                        let sh = (sE && graph.nodes.get(sE.sourceId)?.type === 'GATE') ? getTreeH(sE.sourceId) + 30 : 140;
+                        let rh = (rE && graph.nodes.get(rE.sourceId)?.type === 'GATE') ? getTreeH(rE.sourceId) + 30 : 200;
+                        let jY = Math.max(230, 90 + sh);
+                        let rEndY = Math.max(430, jY + rh);
+                        extraY = Math.max(extraY, rEndY - 430);
+                    }
+                });
+            }
+            // Alle fixen Positionen unterhalb der Kontaktzone verschieben
+            const coilApproachY = 430 + extraY; // Draht zur Spule
+            const coilY        = 450 + extraY; // Spulenmitte
+            const coilExitY    = 470 + extraY; // Draht ab Spule
+            const yBot         = 500 + extraY; // M-Schiene
             // --- DUAL CIRCUIT: Verbraucher-OUTPUTs klassifizieren ---
             const dualLoadNodeIds = new Set();
             if (window.configDualCircuit) {
@@ -4737,11 +4779,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (item.cType === 'nothalt') {
                     let p1 = pathCounter++;
                     drawText(currX, yTop - 25, p1.toString(), true); 
-                    setPower(drawLine(currX, yTop, currX, 150 - 15, 2, item.id, col, true), "true"); 
-                    setPower(drawContact(currX, 150, `${item.deviceName} (${item.id})`, true, 'nothalt', item.id, col, p1, item.id), "true"); 
-                    setPower(drawLine(currX, 165, currX, 430, 2, item.id, col, true), pCond); 
-                    setPower(drawCoil(currX, 450, item.kfName, item.id, 'relais', col, p1), pCond); 
-                    setPower(drawLine(currX, 470, currX, yBot, 2, item.id, col), pCond);
+                    setPower(drawLine(currX, yTop, currX, 135, 2, item.id, col, true), "true");
+                    setPower(drawContact(currX, 150, `${item.deviceName} (${item.id})`, true, 'nothalt', item.id, col, p1, item.id), "true");
+                    setPower(drawLine(currX, 165, currX, coilApproachY, 2, item.id, col, true), pCond);
+                    setPower(drawCoil(currX, coilY, item.kfName, item.id, 'relais', col, p1), pCond);
+                    setPower(drawLine(currX, coilExitY, currX, yBot, 2, item.id, col), pCond);
                     currX += 100; 
                 } else {
                     let p1 = pathCounter++; let p2 = pathCounter++;
@@ -4776,12 +4818,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                     setPower(drawLine(currX, yTop, currX, sBoxY, 2, item.id, col), "true");
                     setPower(drawLine(currX, sBoxY + 30, currX, yBot, 2, item.id, col), "true"); 
                     setPower(drawLine(currX + 15, sBoxY + 15, currX + 60, sBoxY + 15, 2, item.id, col), pCond); 
-                    setPower(drawLine(currX + 60, sBoxY + 15, currX + 60, 430, 2, item.id, col), pCond); 
-                    setPower(drawCoil(currX + 60, 450, item.kfName, item.id, 'relais', col, p2), pCond); 
-                    setPower(drawLine(currX + 60, 470, currX + 60, yBot, 2, item.id, col), pCond);
+                    setPower(drawLine(currX + 60, sBoxY + 15, currX + 60, coilApproachY, 2, item.id, col), pCond);
+                    setPower(drawCoil(currX + 60, coilY, item.kfName, item.id, 'relais', col, p2), pCond);
+                    setPower(drawLine(currX + 60, coilExitY, currX + 60, yBot, 2, item.id, col), pCond);
                     currX += 140;
                 }
             });
+            const findGateRungId = (gateId) => {
+                let oe = graph.edges.filter(e => e.sourceId === gateId);
+                for (let e of oe) {
+                    let tgt = graph.nodes.get(e.targetId);
+                    if (!tgt) continue;
+                    if (tgt.type === 'OUTPUT') return tgt.id;
+                    if (tgt.type === 'RS' || tgt.type === 'SR') {
+                        let n = tgt.id.match(/\d+/)?.[0] || '1';
+                        return `${e.targetPin}${n}${tgt.type === 'SR' ? '_SR' : ''}`;
+                    }
+                    if (tgt.type === 'GATE') { let f = findGateRungId(tgt.id); if (f) return f; }
+                }
+                return null;
+            };
             const processNode = (node, dualPass) => {
                 let inEdges = graph.edges.filter(e => e.targetId === node.id);
                 let col = node.color;
@@ -4794,8 +4850,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (window.configEconMode) return; 
                     let p = pathCounter++;
                     drawText(currX, yTop - 25, p.toString(), true);
-                    if (node.label === '&') { 
-                        let y = 110, dy = 260 / Math.max(1, inEdges.length);
+                    if (node.label === '&') {
+                        let y = 110, dy = contactZoneH / Math.max(1, inEdges.length);
                         let pCond = "true";
                         setPower(drawLine(currX, yTop, currX, y - 15, 2, node.id, col), pCond);
                         inEdges.forEach((edge, idx) => {
@@ -4830,17 +4886,30 @@ You must output exactly this JSON format. The logic code goes as a single string
                             if (idx < inEdges.length - 1) setPower(drawLine(currX, y + 15, currX, y + dy - 15, 2, node.id, col), pCond);
                             y += dy;
                         });
-                        setPower(drawLine(currX, (y - dy) + 15, currX, 430, 2, node.id, col), pCond); 
-                        setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p), pCond);
-                        setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
+                        setPower(drawLine(currX, (y - dy) + 15, currX, coilApproachY, 2, node.id, col), pCond);
+                        setPower(drawCoil(currX, coilY, symMap[node.id], node.id, 'relais', col, p), pCond);
+                        setPower(drawLine(currX, coilExitY, currX, yBot, 2, node.id, col), pCond);
                         currX += 130;
+                        // Drop-Zone für AND-Gatter-Eingang (OUTPUT oder RS/SR-Pin, auch rekursiv)
+                        if (dualPass === 1 && window.configCircPalette) {
+                            let directOutId = findGateRungId(node.id);
+                            if (directOutId) {
+                                let dz = createSvgElement('rect', { x: _rungStartX, y: yTop + 5, width: currX - _rungStartX, height: yBot - yTop - 10, fill: 'transparent', rx: 6, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': directOutId, style: 'pointer-events: none;' });
+                                circuitContent.appendChild(dz);
+                                let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': directOutId });
+                                let delBg = createSvgElement('rect', { x: _rungStartX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                                let delTx = createSvgElement('text', { x: _rungStartX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                                delTx.textContent = '✕'; delG.appendChild(delBg); delG.appendChild(delTx);
+                                circuitContent.appendChild(delG);
+                            }
+                        }
                     }
                     else if (node.label === '>=1') { 
                         let branches = inEdges.length;
                         if(branches > 0) {
                             let startX = currX, endX = currX + (branches - 1) * 90;
-                            setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
-                            setPower(drawLine(startX, 90, endX, 90, 2, node.id, col), "true"); 
+                            setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true");
+                            setPower(drawLine(startX, 90, endX, 90, 2, node.id, col), "true");
                             inEdges.forEach((edge, idx) => {
                                 let bx = currX + idx * 90;
                                 let bp = (idx === 0) ? p : pathCounter++;
@@ -4868,18 +4937,31 @@ You must output exactly this JSON format. The logic code goes as a single string
                                         isNC = edge.inverted;
                                     }
                                     let srcCol = getNodeColor(edge.sourceId);
-                                    setPower(drawLine(bx, 90, bx, 220 - 15, 2, edge.sourceId, srcCol, isNC), "true");
+                                    setPower(drawLine(bx, 90, bx, 205, 2, edge.sourceId, srcCol, isNC), "true");
                                     setPower(drawContact(bx, 220, name, isNC, type, edge.sourceId, srcCol, bp, prefix), "true");
                                     let thisCond = getCond(edge);
                                     setPower(drawLine(bx, 235, bx, 350, 2, edge.sourceId, srcCol, isNC), thisCond);
                                 }
                             });
                             let outCond = `state['${node.id}']`;
-                            setPower(drawLine(startX, 350, endX, 350, 2, node.id, col), outCond); 
-                            setPower(drawLine(startX, 350, startX, 430, 2, node.id, col), outCond); 
-                            setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p), outCond);
-                            setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), outCond); 
+                            setPower(drawLine(startX, 350, endX, 350, 2, node.id, col), outCond);
+                            setPower(drawLine(startX, 350, startX, coilApproachY, 2, node.id, col), outCond);
+                            setPower(drawCoil(startX, coilY, symMap[node.id], node.id, 'relais', col, p), outCond);
+                            setPower(drawLine(startX, coilExitY, startX, yBot, 2, node.id, col), outCond);
                             currX = endX + 130;
+                            // Drop-Zone für OR-Gatter-Eingang (OUTPUT oder RS/SR-Pin, auch rekursiv)
+                            if (dualPass === 1 && window.configCircPalette) {
+                                let directOutId = findGateRungId(node.id);
+                                if (directOutId) {
+                                    let dz = createSvgElement('rect', { x: _rungStartX, y: yTop + 5, width: currX - _rungStartX, height: yBot - yTop - 10, fill: 'transparent', rx: 6, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': directOutId, style: 'pointer-events: none;' });
+                                    circuitContent.appendChild(dz);
+                                    let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': directOutId });
+                                    let delBg = createSvgElement('rect', { x: _rungStartX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                                    let delTx = createSvgElement('text', { x: _rungStartX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                                    delTx.textContent = '✕'; delG.appendChild(delBg); delG.appendChild(delTx);
+                                    circuitContent.appendChild(delG);
+                                }
+                            }
                         }
                     }
                 }
@@ -4891,54 +4973,73 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let gap = Math.max(90, w1/2 + w2/2 + 20);
                     let parX = startX + gap;
                     drawText(startX, yTop - 25, p1.toString(), true); drawText(parX, yTop - 25, p2.toString(), true);
-                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
+                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true");
                     setPower(drawLine(startX, 90, parX, 90, 2, node.id, col), "true");
                     let qCond = `state['${node.id}']`;
                     if (node.type === 'RS') {
-                        let sCond = drawInputPin(sEdge, startX, 90, 230, p1, "true", false);
-                        setPower(drawLine(parX, 90, parX, 150 - 15, 2, node.id, col), "true"); 
-                        setPower(drawContact(parX, 150, symMap[node.id], false, 'relais', node.id, col, p2, node.id), "true"); 
-                        setPower(drawLine(parX, 165, parX, 230, 2, node.id, col), qCond); 
+                        // Dynamische Trennlinie zwischen S- und R-Eingang (verhindert Überlappung bei tiefen Bäumen)
+                        let sPinH = calcPinH(sEdge, 140);
+                        let rPinH = calcPinH(rEdge, 200);
+                        let joinY  = Math.max(230, 90 + sPinH);
+                        let rEndY  = Math.max(coilApproachY, joinY + rPinH);
+                        let rsCoilY = rEndY + 20;
+                        let sCond = drawInputPin(sEdge, startX, 90, joinY, p1, "true", false);
+                        setPower(drawLine(parX, 90, parX, 135, 2, node.id, col), "true");
+                        setPower(drawContact(parX, 150, symMap[node.id], false, 'relais', node.id, col, p2, node.id), "true");
+                        setPower(drawLine(parX, 165, parX, joinY, 2, node.id, col), qCond);
                         let joinCond = `(${sCond} || ${qCond})`;
-                        setPower(drawLine(startX, 230, parX, 230, 2, node.id, col), joinCond); 
-                        let rCond = drawInputPin(rEdge, startX, 230, 430, p1, joinCond, true); 
-                        setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p1), rCond); 
-                        setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), rCond);
+                        setPower(drawLine(startX, joinY, parX, joinY, 2, node.id, col), joinCond);
+                        let rCond = drawInputPin(rEdge, startX, joinY, rEndY, p1, joinCond, true);
+                        setPower(drawCoil(startX, rsCoilY, symMap[node.id], node.id, 'relais', col, p1), rCond);
+                        setPower(drawLine(startX, rsCoilY + 20, startX, yBot, 2, node.id, col), rCond);
+                        // Drop-Zone basiert auf dynamischen Y-Werten
+                        if (dualPass === 1 && window.configCircPalette) {
+                            let rsNum = node.id.match(/\d+/)?.[0] || '1';
+                            let sfx = node.type === 'SR' ? '_SR' : '';
+                            const mkZone = (zoneX, zoneY, zoneH, zoneVarId) => {
+                                let dz = createSvgElement('rect', { x: zoneX - 20, y: zoneY, width: 60, height: zoneH, fill: 'transparent', rx: 4, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': zoneVarId, style: 'pointer-events: none;' });
+                                circuitContent.appendChild(dz);
+                                let dg = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': zoneVarId });
+                                let db = createSvgElement('rect', { x: zoneX - 18, y: zoneY + 2, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                                let dt = createSvgElement('text', { x: zoneX - 9, y: zoneY + 14, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                                dt.textContent = '✕'; dg.appendChild(db); dg.appendChild(dt);
+                                circuitContent.appendChild(dg);
+                            };
+                            mkZone(startX, yTop + 5, joinY - yTop - 10, `S${rsNum}${sfx}`);
+                            mkZone(startX, joinY - 5, rEndY - joinY + 5, `R${rsNum}${sfx}`);
+                        }
                     } else { // SR
-                        setPower(drawLine(startX, 90, startX, 150 - 15, 2, node.id, col), "true"); 
-                        setPower(drawContact(startX, 150, symMap[node.id], false, 'relais', node.id, col, p1, node.id), "true"); 
-                        setPower(drawLine(startX, 165, startX, 230, 2, node.id, col), qCond); 
-                        let rCond = drawInputPin(rEdge, startX, 230, 380, p1, qCond, true); 
-                        let sCond = drawInputPin(sEdge, parX, 90, 380, p2, "true", false);
-                        setPower(drawLine(startX, 380, parX, 380, 2, node.id, col), qCond); 
-                        setPower(drawLine(startX, 380, startX, 430, 2, node.id, col), qCond); 
-                        setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'relais', col, p1), qCond); 
-                        setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), qCond);
-                    }
-                    currX = parX + (w2 > 90 ? (w2-90)/2 : 0) + 80;
-                    // Drop-Zonen für RS/SR-Eingänge (S und R Strang)
-                    if (dualPass === 1 && window.configCircPalette) {
-                        let rsNum = node.id.match(/\d+/)?.[0] || '1';
-                        let sfx = node.type === 'SR' ? '_SR' : '';
-                        const mkZone = (zoneX, zoneY, zoneH, zoneVarId) => {
-                            let dz = createSvgElement('rect', { x: zoneX - 20, y: zoneY, width: 60, height: zoneH, fill: 'transparent', rx: 4, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': zoneVarId, style: 'pointer-events: none;' });
-                            circuitContent.appendChild(dz);
-                            let dg = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': zoneVarId });
-                            let db = createSvgElement('rect', { x: zoneX - 18, y: zoneY + 2, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
-                            let dt = createSvgElement('text', { x: zoneX - 9, y: zoneY + 14, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
-                            dt.textContent = '✕'; dg.appendChild(db); dg.appendChild(dt);
-                            circuitContent.appendChild(dg);
-                        };
-                        if (node.type === 'RS') {
-                            // RS: S-Eingang oben (yTop→235), R-Eingang unten (235→yBot)
-                            mkZone(startX, yTop + 5, 180, `S${rsNum}${sfx}`);
-                            mkZone(startX, yTop + 185, yBot - yTop - 195, `R${rsNum}${sfx}`);
-                        } else {
-                            // SR: R-Eingang links (startX), S-Eingang rechts (parX), beide full-height
+                        // SR: R-Pin auf startX (165 → rEndY), S-Pin auf parX (90 → rEndY) — verschiedene X, kein Überlapp
+                        let rPinH = calcPinH(rEdge, 150);
+                        let sPinH = calcPinH(sEdge, 290);
+                        let rEndY = Math.max(380, 90 + Math.max(rPinH + 90, sPinH));
+                        setPower(drawLine(startX, 90, startX, 135, 2, node.id, col), "true");
+                        setPower(drawContact(startX, 150, symMap[node.id], false, 'relais', node.id, col, p1, node.id), "true");
+                        setPower(drawLine(startX, 165, startX, Math.max(230, 175), 2, node.id, col), qCond);
+                        let rCond = drawInputPin(rEdge, startX, Math.max(230, 175), rEndY, p1, qCond, true);
+                        let sCond = drawInputPin(sEdge, parX, 90, rEndY, p2, "true", false);
+                        setPower(drawLine(startX, rEndY, parX, rEndY, 2, node.id, col), qCond);
+                        setPower(drawLine(startX, rEndY, startX, rEndY + 50, 2, node.id, col), qCond);
+                        setPower(drawCoil(startX, rEndY + 50, symMap[node.id], node.id, 'relais', col, p1), qCond);
+                        setPower(drawLine(startX, rEndY + 70, startX, yBot, 2, node.id, col), qCond);
+                        // Drop-Zonen
+                        if (dualPass === 1 && window.configCircPalette) {
+                            let rsNum = node.id.match(/\d+/)?.[0] || '1';
+                            let sfx = '_SR';
+                            const mkZone = (zoneX, zoneY, zoneH, zoneVarId) => {
+                                let dz = createSvgElement('rect', { x: zoneX - 20, y: zoneY, width: 60, height: zoneH, fill: 'transparent', rx: 4, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': zoneVarId, style: 'pointer-events: none;' });
+                                circuitContent.appendChild(dz);
+                                let dg = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': zoneVarId });
+                                let db = createSvgElement('rect', { x: zoneX - 18, y: zoneY + 2, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                                let dt = createSvgElement('text', { x: zoneX - 9, y: zoneY + 14, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                                dt.textContent = '✕'; dg.appendChild(db); dg.appendChild(dt);
+                                circuitContent.appendChild(dg);
+                            };
                             mkZone(startX, yTop + 5, yBot - yTop - 10, `R${rsNum}${sfx}`);
                             mkZone(parX, yTop + 5, yBot - yTop - 10, `S${rsNum}${sfx}`);
                         }
                     }
+                    currX = parX + (w2 > 90 ? (w2-90)/2 : 0) + 80;
                 }
                 else if (node.type === 'CTU') {
                     let p1 = pathCounter++; let p2 = pathCounter++;
@@ -4948,15 +5049,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let gap = Math.max(90, w1/2 + w2/2 + 20);
                     let parX = startX + gap;
                     drawText(startX, yTop - 25, p1.toString(), true); drawText(parX, yTop - 25, p2.toString(), true);
-                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true"); 
+                    setPower(drawLine(startX, yTop, startX, 90, 2, node.id, col), "true");
                     setPower(drawLine(startX, 90, parX, 90, 2, node.id, col), "true");
-                    let cuCond = drawInputPin(cuEdge, startX, 90, 430, p1, "true", false);
-                    let rCond = drawInputPin(rEdge, parX, 90, 430, p2, "true", false);
-                    setPower(drawCoil(startX, 450, symMap[node.id], node.id, 'ctu', col, p1), cuCond); 
-                    setPower(drawCoil(parX, 450, symMap[node.id] + ' (R)', node.id, 'relais', col, p2), rCond); 
-                    setPower(drawLine(startX, 470, startX, yBot, 2, node.id, col), cuCond); 
-                    setPower(drawLine(parX, 470, parX, yBot, 2, node.id, col), rCond); 
+                    let cuCond = drawInputPin(cuEdge, startX, 90, coilApproachY, p1, "true", false);
+                    let rCond = drawInputPin(rEdge, parX, 90, coilApproachY, p2, "true", false);
+                    setPower(drawCoil(startX, coilY, symMap[node.id], node.id, 'ctu', col, p1), cuCond);
+                    setPower(drawCoil(parX, coilY, symMap[node.id] + ' (R)', node.id, 'relais', col, p2), rCond);
+                    setPower(drawLine(startX, coilExitY, startX, yBot, 2, node.id, col), cuCond);
+                    setPower(drawLine(parX, coilExitY, parX, yBot, 2, node.id, col), rCond);
                     currX = parX + (w2 > 90 ? (w2-90)/2 : 0) + 80;
+                    // Drop-Zone auf dem Eingangsstrang des Zählers (CU-Pin)
+                    if (dualPass === 1 && window.configCircPalette) {
+                        let ctuOutId = node.id.substring('CTU_'.length);
+                        let dz = createSvgElement('rect', { x: _rungStartX, y: yTop + 5, width: currX - _rungStartX, height: yBot - yTop - 10, fill: 'transparent', rx: 6, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': ctuOutId, style: 'pointer-events: none;' });
+                        circuitContent.appendChild(dz);
+                        let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': ctuOutId });
+                        let delBg = createSvgElement('rect', { x: _rungStartX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                        let delTx = createSvgElement('text', { x: _rungStartX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                        delTx.textContent = '✕'; delG.appendChild(delBg); delG.appendChild(delTx);
+                        circuitContent.appendChild(delG);
+                    }
                 }
                 else if (node.type === 'OUTPUT') { 
                     let p = pathCounter++;
@@ -4965,16 +5077,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                     currX += (w1 > 90 ? (w1-90)/2 : 0);
                     drawText(currX, yTop - 25, p.toString(), true);
                     let pCond = "false";
-                    if (edge) pCond = drawInputPin(edge, currX, yTop, 430, p, "true", false);
-                    else setPower(drawLine(currX, yTop, currX, 430, 2, node.id, col), "false"); 
-                    if (node.isRelay) setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p), pCond);
-                    else if (node.outType === 'valve') setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'valve', col, p), pCond);
-                    else if (node.outType === 'siren') setPower(drawSiren(currX, 450, symMap[node.id], node.id, col), pCond);
-                    else if (node.outType === 'motor') setPower(drawMotor(currX, 450, symMap[node.id], node.id, col), pCond);
-                    else if (node.outType === 'heater') setPower(drawHeater(currX, 450, symMap[node.id], node.id, col), pCond);
-                    else if (node.outType === 'contactor') setPower(drawCoil(currX, 450, symMap[node.id], node.id, 'relais', col, p), pCond);
-                    else setPower(drawLED(currX, 450, symMap[node.id], node.id, col, p), pCond);
-                    setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
+                    if (edge) pCond = drawInputPin(edge, currX, yTop, coilApproachY, p, "true", false);
+                    else setPower(drawLine(currX, yTop, currX, coilApproachY, 2, node.id, col), "false");
+                    if (node.isRelay) setPower(drawCoil(currX, coilY, symMap[node.id], node.id, 'relais', col, p), pCond);
+                    else if (node.outType === 'valve') setPower(drawCoil(currX, coilY, symMap[node.id], node.id, 'valve', col, p), pCond);
+                    else if (node.outType === 'siren') setPower(drawSiren(currX, coilY, symMap[node.id], node.id, col), pCond);
+                    else if (node.outType === 'motor') setPower(drawMotor(currX, coilY, symMap[node.id], node.id, col), pCond);
+                    else if (node.outType === 'heater') setPower(drawHeater(currX, coilY, symMap[node.id], node.id, col), pCond);
+                    else if (node.outType === 'contactor') setPower(drawCoil(currX, coilY, symMap[node.id], node.id, 'relais', col, p), pCond);
+                    else setPower(drawLED(currX, coilY, symMap[node.id], node.id, col, p), pCond);
+                    setPower(drawLine(currX, coilExitY, currX, yBot, 2, node.id, col), pCond); 
                     currX += Math.max(130, w1 + 40); 
                 }
                 else if (['TON', 'TOF', 'TP'].includes(node.type)) { 
@@ -4983,31 +5095,47 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let w1 = calcPinW(inEdge);
                     currX += (w1 > 90 ? (w1-90)/2 : 0);
                     drawText(currX, yTop - 25, p1.toString(), true);
-                    let pCond = drawInputPin(inEdge, currX, yTop, 430, p1, "true", false);
-                    setPower(drawCoil(currX, 450, symMap[node.id], node.id, node.type.toLowerCase(), col, p1), pCond); 
-                    setPower(drawLine(currX, 470, currX, yBot, 2, node.id, col), pCond); 
+                    let pCond = drawInputPin(inEdge, currX, yTop, coilApproachY, p1, "true", false);
+                    setPower(drawCoil(currX, coilY, symMap[node.id], node.id, node.type.toLowerCase(), col, p1), pCond);
+                    setPower(drawLine(currX, coilExitY, currX, yBot, 2, node.id, col), pCond);
                     currX += (w1 > 90 ? (w1-90)/2 : 0) + 130;
+                    // Drop-Zone auf dem Eingangsstrang des Timers
+                    if (dualPass === 1 && window.configCircPalette) {
+                        let timerOutId = node.id.substring(node.type.length + 1);
+                        let dz = createSvgElement('rect', { x: _rungStartX, y: yTop + 5, width: currX - _rungStartX, height: yBot - yTop - 10, fill: 'transparent', rx: 6, class: 'circ-dropzone circ-extend-zone', 'data-zone-type': 'extend', 'data-zone-id': timerOutId, style: 'pointer-events: none;' });
+                        circuitContent.appendChild(dz);
+                        let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': timerOutId });
+                        let delBg = createSvgElement('rect', { x: _rungStartX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                        let delTx = createSvgElement('text', { x: _rungStartX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                        delTx.textContent = '✕'; delG.appendChild(delBg); delG.appendChild(delTx);
+                        circuitContent.appendChild(delG);
+                    }
                 }
                 // Drop-Zone für diesen Strang (nur in Pass 1, nur wenn Palette aktiv)
+                // Bei Timer/Zähler-Ausgängen: Drop-Zone gesperrt (liegt bereits auf dem Eingangsstrang)
                 if (dualPass === 1 && window.configCircPalette && node.type === 'OUTPUT') {
-                    let dzX = Math.max(60, _rungStartX - 15);
-                    let dz = createSvgElement('rect', {
-                        x: dzX, y: yTop + 5,
-                        width: Math.max(80, currX - _rungStartX + 10), height: yBot - yTop - 10,
-                        fill: 'transparent', rx: 6,
-                        class: 'circ-dropzone circ-extend-zone',
-                        'data-zone-type': 'extend',
-                        'data-zone-id': node.id,
-                        style: 'pointer-events: none;'
-                    });
-                    circuitContent.appendChild(dz);
-                    // ✕ Strang löschen Button
-                    let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': node.id });
-                    let delBg = createSvgElement('rect', { x: dzX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
-                    let delTx = createSvgElement('text', { x: dzX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
-                    delTx.textContent = '✕';
-                    delG.appendChild(delBg); delG.appendChild(delTx);
-                    circuitContent.appendChild(delG);
+                    // Im Wirtschaftlich-Modus werden GATE-Kontakte direkt im OUTPUT gerendert → OUTPUT-Zone nicht sperren
+                    let isFedByTimer = inEdges.some(e => { let src = graph.nodes.get(e.sourceId); return src && (['TON', 'TOF', 'TP', 'CTU'].includes(src.type) || (src.type === 'GATE' && !window.configEconMode)); });
+                    if (!isFedByTimer) {
+                        let dzX = Math.max(60, _rungStartX - 15);
+                        let dz = createSvgElement('rect', {
+                            x: dzX, y: yTop + 5,
+                            width: Math.max(80, currX - _rungStartX + 10), height: yBot - yTop - 10,
+                            fill: 'transparent', rx: 6,
+                            class: 'circ-dropzone circ-extend-zone',
+                            'data-zone-type': 'extend',
+                            'data-zone-id': node.id,
+                            style: 'pointer-events: none;'
+                        });
+                        circuitContent.appendChild(dz);
+                        // ✕ Strang löschen Button
+                        let delG = createSvgElement('g', { class: 'circ-del-rung-btn', 'data-rung-id': node.id });
+                        let delBg = createSvgElement('rect', { x: dzX + 2, y: yTop + 7, width: 18, height: 16, rx: 3, fill: '#c0392b', opacity: '0.8' });
+                        let delTx = createSvgElement('text', { x: dzX + 11, y: yTop + 19, 'font-size': '12', fill: '#fff', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'sans-serif', style: 'pointer-events: none; user-select: none;' });
+                        delTx.textContent = '✕';
+                        delG.appendChild(delBg); delG.appendChild(delTx);
+                        circuitContent.appendChild(delG);
+                    }
                 }
             };
             nodesToDraw.forEach(n => processNode(n, 1));
@@ -5021,14 +5149,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let auxName = auxRelayNames[hwId]; // Nutzt den generierten -KF Namen!
                 currX += (currX === 100 ? 0 : 40);
                 drawText(currX, yTop - 25, p.toString(), true);
-                setPower(drawLine(currX, yTop, currX, 150 - 15, 2, hwId, srcCol), "true");
+                setPower(drawLine(currX, yTop, currX, 135, 2, hwId, srcCol), "true");
                 let g = drawContact(currX, 150, name, pNC, cType.replace('_nc', ''), hwId, srcCol, p, hwId);
                 setPower(g, "true");
                 let pCond = `state['${hwId}']`;
-                setPower(drawLine(currX, 165, currX, 430, 2, hwId, srcCol), pCond);
-                let coilG = drawCoil(currX, 450, auxName, `AUX_${hwId}`, 'relais', srcCol, p);
+                setPower(drawLine(currX, 165, currX, coilApproachY, 2, hwId, srcCol), pCond);
+                let coilG = drawCoil(currX, coilY, auxName, `AUX_${hwId}`, 'relais', srcCol, p);
                 setPower(coilG, pCond);
-                setPower(drawLine(currX, 470, currX, yBot, 2, hwId, srcCol), pCond);
+                setPower(drawLine(currX, coilExitY, currX, yBot, 2, hwId, srcCol), pCond);
                 currX += 130;
             });
             let totalWidth = Math.max(1000, currX + 50);
@@ -9782,6 +9910,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 <input type="hidden" id="circ-add-type" value="${dragType}">
                 <input type="hidden" id="circ-add-zone-type" value="${zoneType}">
                 <input type="hidden" id="circ-add-zone-id" value="${zoneId}">
+                <input type="hidden" id="circ-add-branch-path" value="[]">
             `);
 
             const add = (html) => { modal.insertAdjacentHTML('beforeend', html); };
@@ -9802,7 +9931,45 @@ You must output exactly this JSON format. The logic code goes as a single string
             const subtitle = zoneType === 'extend' ? ` – ${t('circ_add_extend')}` : ` – ${t('circ_add_new_rung')}`;
             modal.querySelector('#circ-add-title').textContent = (titles[dragType] || titles[cat] || dragType) + subtitle;
 
+            // Hilfsfunktionen für Sub-Ausdruck-Analyse
+            const peelParens = (expr) => {
+                let s = expr.trim();
+                let peeled = true;
+                while (peeled && s.startsWith('(') && s.endsWith(')')) {
+                    peeled = false;
+                    let d = 0;
+                    for (let i = 0; i < s.length - 1; i++) {
+                        if (s[i] === '(') d++;
+                        else if (s[i] === ')') d--;
+                        if (d === 0) break; // Klammern schließen zu früh → kein Wrapper
+                    }
+                    if (d === 1) { s = s.slice(1, -1).trim(); peeled = true; }
+                }
+                return s;
+            };
+            const splitTopOr = (expr) => {
+                let parts = [], d = 0, start = 0;
+                for (let i = 0; i < expr.length - 1; i++) {
+                    if (expr[i] === '(') d++;
+                    else if (expr[i] === ')') d--;
+                    else if (d === 0 && expr[i] === '|' && expr[i+1] === '|') { parts.push(expr.slice(start, i).trim()); start = i + 2; i++; }
+                }
+                parts.push(expr.slice(start).trim());
+                return parts;
+            };
+            const splitTopAnd = (expr) => {
+                let parts = [], d = 0, start = 0;
+                for (let i = 0; i < expr.length - 1; i++) {
+                    if (expr[i] === '(') d++;
+                    else if (expr[i] === ')') d--;
+                    else if (d === 0 && expr[i] === '&' && expr[i+1] === '&') { parts.push(expr.slice(start, i).trim()); start = i + 2; i++; }
+                }
+                parts.push(expr.slice(start).trim());
+                return parts;
+            };
+
             // Ziel-Strang (extend only) — Spezial-Stränge sperren
+            let branchTree = []; // rekursiver OR-Ast-Baum für Sub-Ausdruck-Picker
             if (zoneType === 'extend' && zoneId) {
                 // Prüfen ob RHS einen Funktionsaufruf enthält (TON, CTU etc.) → nicht erweiterbar
                 let existingRhs = '';
@@ -9817,19 +9984,82 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let isSpecialRhs = /\b(TON|TOF|TP|CTU)\s*\(/.test(existingRhs);
                 if (isSpecialRhs) {
                     add(`<div style="padding:8px 10px; background:#1a2a1a; border:1px solid #4caf50; border-radius:4px; color:#81c784; font-size:11px; margin-bottom:8px;">
-                        ℹ️ Kontakt wird in den <b>Eingang des Timers/Zählers</b> eingefügt.</div>`);
+                        ✅ Kontakt wird dem <b>Eingang des Timers/Zählers</b> hinzugefügt.</div>`);
                 }
                 add(`<div style="margin-bottom:10px;"><label style="color:#aaa; font-size:11px; display:block; margin-bottom:3px;">${t('circ_add_target_lbl')}</label>
                      <input type="text" id="circ-add-target" readonly value="${window.getFbsVariableDisplay ? window.getFbsVariableDisplay(zoneId) : zoneId}"
                        style="width:100%; padding:6px; background:#333; color:#9CDCFE; border:1px solid #555; border-radius:3px; font-size:12px; box-sizing:border-box;"></div>`);
+                // Rekursiven OR-Ast-Baum aufbauen (für Sub-Ausdruck-Picker)
+                if (!isSpecialRhs && existingRhs) {
+                    // Pfad-Schritte: {or:i} für OR-Ast i, {and:i} für AND-Operand i
+                    const buildBranchTree = (expr, path) => {
+                        let inner = peelParens(expr.trim());
+                        let orParts = splitTopOr(inner);
+                        if (orParts.length > 1) {
+                            // Dieses Sub-Ausdruck ist eine OR-Verknüpfung — jeder Ast ist wählbar
+                            return orParts.map((b, i) => {
+                                let p = [...path, {or: i}];
+                                return { path: p, label: b.trim(), children: buildBranchTree(b.trim(), p) };
+                            });
+                        }
+                        // Kein OR auf oberster Ebene — AND-Operanden auf verschachtelte OR-Ausdrücke prüfen
+                        let andParts = splitTopAnd(inner);
+                        if (andParts.length > 1) {
+                            let result = [];
+                            andParts.forEach((part, i) => {
+                                let partInner = peelParens(part.trim());
+                                if (splitTopOr(partInner).length > 1) {
+                                    // Dieser AND-Operand ist selbst ein OR-Ausdruck → direkt wählbar
+                                    let p = [...path, {and: i}];
+                                    result.push({ path: p, label: part.trim(), children: buildBranchTree(part.trim(), p) });
+                                } else {
+                                    // Tiefer suchen
+                                    result.push(...buildBranchTree(part.trim(), [...path, {and: i}]));
+                                }
+                            });
+                            return result;
+                        }
+                        return [];
+                    };
+                    branchTree = buildBranchTree(existingRhs, []);
+                }
             }
 
             if (cat === 'CONTACT') {
                 add(inp('circ-add-var1', t('circ_add_var1_contact'), 'text', '', 'z.B. START'));
-                if (zoneType === 'extend') add(`<div style="margin-bottom:12px;"><label style="color:#aaa; font-size:11px; display:block; margin-bottom:5px;">${t('circ_add_link_lbl')}</label>
-                    <label style="color:#fff; font-size:12px; cursor:pointer; margin-right:12px;"><input type="radio" name="circ-link" value="AND" checked> In Reihe (AND)</label>
-                    <label style="color:#fff; font-size:12px; cursor:pointer;"><input type="radio" name="circ-link" value="OR"> Parallel (OR)</label></div>`);
-                else add(inp('circ-add-out', t('circ_add_out_lbl'), 'text', '', 'z.B. MOTOR_1'));
+                // Typ-Selektor: zeigt/ändert den Bauteiltyp des neuen Kontakts
+                const ctypeOpts = [
+                    ['taster','Taster (NO)'],['taster_nc','Taster (NC)'],['schalter','Schalter (NO)'],['schalter_nc','Schalter (NC)'],
+                    ['nothalt','Not-Halt (NC)'],['key_switch','Schlüssel (NO)'],['sensor_ind','Sensor (Ind.)'],
+                    ['sensor_kap','Sensor (Kap.)'],['sensor_opt','Sensor (Opt.)'],['sensor_mag','Sensor (Mag.)'],
+                    ['mech_sensor','Pos.-Schalter'],['light_curtain','Lichtgitter (NC)']
+                ].map(([v,l]) => `<option value="${v}"${v === (subtype||'taster') ? ' selected' : ''}>${l}</option>`).join('');
+                add(`<div style="margin-bottom:10px;"><label style="color:#aaa; font-size:11px; display:block; margin-bottom:3px;">Bauteiltyp:</label><select id="circ-add-ctype" style="width:100%; padding:6px; background:#1e1e1e; color:#fff; border:1px solid #555; border-radius:3px; font-size:12px;">${ctypeOpts}</select></div>`);
+                if (zoneType === 'extend') {
+                    // Sub-Ausdruck-Picker: bei verschachtelten OR-Ausdrücken den Ziel-Ast wählen (beliebig tief)
+                    if (branchTree.length > 0) {
+                        const renderBranchTree = (nodes, depth) => nodes.map(node => {
+                            let pj = JSON.stringify(node.path).replace(/"/g, '&quot;');
+                            let indent = 8 + depth * 14;
+                            let lastStep = node.path[node.path.length - 1];
+                            let isAndOp = lastStep && 'and' in lastStep;
+                            let color = isAndOp ? '#b5cea8' : (depth === 0 ? '#9CDCFE' : '#CE9178');
+                            let fsize = depth === 0 ? '11' : '10';
+                            let stepLabel = isAndOp
+                                ? `↳ UND-Op. ${lastStep.and + 1} (OR):`
+                                : `ODER-Ast ${lastStep.or + 1}:`;
+                            let row = `<label style="color:${color};font-size:${fsize}px;cursor:pointer;display:block;margin-bottom:3px;margin-left:${indent}px;"><input type="radio" name="circ-branch" value="${pj}" onchange="document.getElementById('circ-add-branch-path').value='${pj}'"> ${stepLabel} <span style="color:#CE9178">${node.label}</span></label>`;
+                            if (node.children.length > 0) row += renderBranchTree(node.children, depth + 1);
+                            return row;
+                        }).join('');
+                        let branchHtml = `<label style="color:#fff;font-size:12px;cursor:pointer;display:block;margin-bottom:4px;"><input type="radio" name="circ-branch" value="[]" checked onchange="document.getElementById('circ-add-branch-path').value='[]'"> <b>Ganzer Ausdruck</b></label>`;
+                        branchHtml += renderBranchTree(branchTree, 0);
+                        add(`<div style="margin-bottom:10px;padding:8px;background:#1a1a2e;border:1px solid #555;border-radius:4px;"><label style="color:#aaa;font-size:11px;display:block;margin-bottom:6px;">📍 Ziel-Teilausdruck:</label>${branchHtml}</div>`);
+                    }
+                    add(`<div style="margin-bottom:12px;"><label style="color:#aaa; font-size:11px; display:block; margin-bottom:5px;">${t('circ_add_link_lbl')}</label>
+                        <label style="color:#fff; font-size:12px; cursor:pointer; margin-right:12px;"><input type="radio" name="circ-link" value="AND" checked> In Reihe (AND)</label>
+                        <label style="color:#fff; font-size:12px; cursor:pointer;"><input type="radio" name="circ-link" value="OR"> Parallel (OR)</label></div>`);
+                } else add(inp('circ-add-out', t('circ_add_out_lbl'), 'text', '', 'z.B. MOTOR_1'));
 
             } else if (cat === 'RELAY_CONTACT') {
                 let relayOpts = (globalOutputs || []).map(v => `<option value="${v}">${v}</option>`).join('');
@@ -9935,6 +10165,54 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!varName) { alert('Bitte Variable ausfüllen!'); return; }
                 let link = document.querySelector('input[name="circ-link"]:checked')?.value || 'AND';
                 let op   = link === 'AND' ? '&&' : '||';
+                let branchPath = JSON.parse(document.getElementById('circ-add-branch-path')?.value || '[]');
+
+                // Hilfsfunktionen (gespiegelt aus openCircAddModal)
+                const peelP = (s) => {
+                    s = s.trim();
+                    let p = true;
+                    while (p && s.startsWith('(') && s.endsWith(')')) {
+                        p = false;
+                        let d = 0;
+                        for (let i = 0; i < s.length - 1; i++) {
+                            if (s[i] === '(') d++;
+                            else if (s[i] === ')') d--;
+                            if (d === 0) break; // Klammern schließen zu früh
+                        }
+                        if (d === 1) { s = s.slice(1, -1).trim(); p = true; }
+                    }
+                    return s;
+                };
+                const splitOr = (expr) => {
+                    let parts = [], d = 0, start = 0;
+                    for (let i = 0; i < expr.length - 1; i++) {
+                        if (expr[i] === '(') d++;
+                        else if (expr[i] === ')') d--;
+                        else if (d === 0 && expr[i] === '|' && expr[i+1] === '|') { parts.push(expr.slice(start, i).trim()); start = i + 2; i++; }
+                    }
+                    parts.push(expr.slice(start).trim());
+                    return parts;
+                };
+                const splitAnd = (expr) => {
+                    let parts = [], d = 0, start = 0;
+                    for (let i = 0; i < expr.length - 1; i++) {
+                        if (expr[i] === '(') d++;
+                        else if (expr[i] === ')') d--;
+                        else if (d === 0 && expr[i] === '&' && expr[i+1] === '&') { parts.push(expr.slice(start, i).trim()); start = i + 2; i++; }
+                    }
+                    parts.push(expr.slice(start).trim());
+                    return parts;
+                };
+                const getTopOp = (expr) => {
+                    let d = 0, hasAnd = false, hasOr = false;
+                    for (let i = 0; i < expr.length - 1; i++) {
+                        if (expr[i] === '(') d++;
+                        else if (expr[i] === ')') d--;
+                        else if (d === 0 && expr[i] === '&' && expr[i+1] === '&') hasAnd = true;
+                        else if (d === 0 && expr[i] === '|' && expr[i+1] === '|') hasOr = true;
+                    }
+                    return hasOr ? '||' : (hasAnd ? '&&' : null);
+                };
 
                 if (zoneType === 'extend') {
                     let idx = circFindLine(zoneId);
@@ -9947,8 +10225,51 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                     } else {
                         let [lhs, rhs] = circSplitAssign(lines[idx]);
+
+                        if (branchPath.length > 0) {
+                            // Pfad-gesteuerte Erweiterung: rekursiv in OR- und AND-Baum navigieren
+                            // Pfad-Schritte: {or:i} → OR-Ast i, {and:i} → AND-Operand i
+                            const extendAtPath = (expr, path) => {
+                                let inner = peelP(expr);
+                                if (path.length === 0) {
+                                    let topOp = getTopOp(inner);
+                                    return (topOp === null || topOp === op)
+                                        ? `${inner} ${op} ${varName}`
+                                        : `(${inner}) ${op} ${varName}`;
+                                }
+                                let step = path[0], rest = path.slice(1);
+                                if ('or' in step) {
+                                    let orParts = splitOr(inner);
+                                    let i = step.or;
+                                    if (i >= orParts.length) return inner;
+                                    let newPart = extendAtPath(orParts[i].trim(), rest);
+                                    orParts[i] = `(${newPart})`;
+                                    return orParts.join(' || ');
+                                } else if ('and' in step) {
+                                    let andParts = splitAnd(inner);
+                                    let i = step.and;
+                                    if (i >= andParts.length) return inner;
+                                    let newPart = extendAtPath(andParts[i].trim(), rest);
+                                    andParts[i] = `(${newPart})`;
+                                    return andParts.join(' && ');
+                                }
+                                return inner;
+                            };
+                            lines[idx] = `${lhs} := (${extendAtPath(rhs, branchPath)})`;
+                        } else {
                         let extended = circExtendFnArg(rhs, op, varName);
-                        lines[idx] = extended ? `${lhs} := ${extended}` : `${lhs} := (${rhs}) ${op} ${varName}`;
+                        if (extended) {
+                            lines[idx] = `${lhs} := ${extended}`;
+                        } else {
+                            // Prüfen ob der Top-Level-Operator des RHS mit op übereinstimmt
+                            // → gleicher Operator: flach erweitern (kein neues Gatter)
+                            // → anderer Operator: Klammern setzen
+                            let topOp = getTopOp(rhs);
+                            lines[idx] = (topOp === null || topOp === op)
+                                ? `${lhs} := ${rhs} ${op} ${varName}`
+                                : `${lhs} := (${rhs}) ${op} ${varName}`;
+                        }
+                        }
                     }
                 } else {
                     let outVar = gv('circ-add-out');
@@ -9963,8 +10284,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (circFindLine(otherVar) === -1) lines.push(`${otherVar} := TRUE`);
                     }
                 }
-                if (cat === 'CONTACT' && !componentTypes[varName]) {
-                    componentTypes[varName] = subtype || 'taster';
+                if (cat === 'CONTACT') {
+                    // Typ aus Dialog-Selektor übernehmen (immer, damit neue UND bestehende Variablen korrekt typisiert werden)
+                    let selectedType = document.getElementById('circ-add-ctype')?.value || subtype || 'taster';
+                    componentTypes[varName] = selectedType;
                     localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
                 }
 

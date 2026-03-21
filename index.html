@@ -64,8 +64,9 @@
         }
         /* NEU: Unabhängiges Hover-Menü für den Info-Button (wird nicht vom JS gelöscht) */
         .info-hover-wrapper { position: relative; display: inline-block; z-index: 1100; }
-        .info-hover-content { display: none; position: absolute; left: 50%; transform: translateX(-50%); top: 100%; margin-top: 5px; min-width: 260px; padding: 12px; cursor: default; background: #e3f2fd; border: 2px solid #17a2b8; color: #0d47a1; text-align: center; border-radius: 4px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 12px; }
-        .info-hover-wrapper:hover .info-hover-content { display: block; }
+        .info-hover-content { display: none; position: absolute; right: 0; top: 100%; margin-top: 5px; min-width: 300px; max-width: 360px; max-height: 70vh; overflow-y: auto; padding: 14px 16px; cursor: default; background: #e3f2fd; border: 2px solid #17a2b8; color: #0d47a1; text-align: left; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); font-size: 12px; line-height: 1.55; z-index: 1200; }
+        .info-hover-content.info-open { display: block; }
+        .info-hover-content code { background: rgba(0,0,0,0.1); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 11px; }
         .legend-box { background-color: #1e1e1e; border: 1px solid #444; padding: 10px; font-size: 12px; line-height: 1.4; color: #ccc; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; }
         .legend-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 15px; align-items: center; }
         .legend-code { font-family: 'Courier New', Courier, monospace; background: #2d2d30; padding: 2px 6px; border-radius: 3px; font-weight: bold; color: #569CD6; user-select: all; cursor: pointer; border: 1px solid #555; }
@@ -472,7 +473,7 @@
         .tb-menu-cat { padding: 5px 12px 3px !important; color: #888 !important; font-size: 10px !important; text-transform: uppercase !important; letter-spacing: 0.8px !important; cursor: default !important; background: #252526 !important; font-weight: bold !important; pointer-events: none !important; border-top: 1px solid #3a3a3a !important; }
         .tb-menu-cat:hover { background: #252526 !important; }
         .tb-dropdown:hover .tb-dropdown-content { display: block; }
-        .tb-dropdown-content.multi-col { columns: 2; column-gap: 0; }
+        .tb-dropdown-content.multi-col { column-gap: 0; column-fill: auto; }
         .tb-dropdown-content.multi-col .tb-menu-cat { column-span: all; }
         .tb-dropdown-content.multi-col .tb-submenu { column-span: all; }
 		.tb-drop-btn { background: #444; color: #fff; border: 1px solid #666; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.1s; }
@@ -960,10 +961,8 @@
                 </div>
                 <button onclick="startTutorial()" class="btn-export" style="background-color: #5c6bc0; box-shadow: none;" title="Interaktive Schritt-für-Schritt-Tour">🎓 Tour</button>
                 <div class="info-hover-wrapper">
-                    <button class="btn-export" style="background-color: #17a2b8; cursor: help;" data-i18n="btn_info">ℹ️ Info</button>
-                    <div class="info-hover-content" data-i18n="info_text">
-                        <strong>⚙️ Willkommen bei VALIS:</strong><br><br>Logik links tippen • "Simulation starten" für Live-Test.
-                    </div>
+                    <button class="btn-export" id="btn-info" style="background-color: #17a2b8; cursor: help;" onclick="toggleInfoPanel()">ℹ️ Info</button>
+                    <div class="info-hover-content" id="info-panel"></div>
                 </div>
             </div>
             <div style="display: flex; gap: 5px; align-items: center;">
@@ -1378,13 +1377,387 @@
 		<div id="plugin-modal" style="display: none; position: fixed; top: 10vh; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.9); z-index: 3000; width: 500px; max-width: 90vw; max-height: 80vh; flex-direction: column;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #555; padding-bottom: 10px; margin-bottom: 15px;">
                 <h3 style="margin:0; color:#fff;" data-i18n="plug_mgr_title">🧩 Plugin Manager</h3>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="file" id="plugin-file-input" accept=".js" style="display:none" onchange="handlePluginUpload(this)">
+                    <button onclick="document.getElementById('plugin-file-input').click()" style="background: #4caf50; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;" title="Plugin als .js-Datei hochladen">📤 Plugin hochladen</button>
                     <button onclick="toggleAllPlugins()" style="background: #007acc; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;" data-i18n="plug_mgr_toggle_all">Alle An / Aus</button>
                     <button onclick="closePluginModal()" style="background: #e6194B; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;" data-i18n="plug_mgr_close">Schließen</button>
                 </div>
             </div>
             <div id="plugin-list" style="overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 5px;">
             </div>
+            <details style="margin-top:12px; border-top:1px solid #444; padding-top:10px;">
+                <summary style="color:#607d8b; font-size:12px; cursor:pointer; user-select:none; font-weight:bold;">📄 Plugin-Format Dokumentation (.js)</summary>
+                <div style="font-size:10px; color:#aaa; margin-top:10px; max-height:520px; overflow-y:auto; padding-right:4px;">
+
+                  <!-- STRUCTURE -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ Grundstruktur</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">({
+  // ── Pflichtfelder ──────────────────────────────────────────────
+  meta:       { name: 'Mein Plugin', icon: '🔵', desc: 'Kurzbeschreibung' },
+  menuTarget: '#menu-aktoren',   // Ziel-Menü (siehe unten)
+  // ⚠️ WICHTIG: Der Schlüssel in addFactoryDevice() MUSS dem Dateinamen entsprechen!
+  // Dateiname: mein_plugin.js  →  Schlüssel: 'mein_plugin'
+  menuHtml:   '&lt;div onclick="addFactoryDevice(\'mein_plugin\')"&gt;🔵 Mein Plugin&lt;/div&gt;',
+  build:      function(obj, el, var1, var2, var3, color, interval) { /* ... */ },
+
+  // ── Optionale Felder ───────────────────────────────────────────
+  i18n:        { de: { name: '...', desc: '...' }, en: { name: '...', desc: '...' } },
+  modalConfig: { t: 'Titel:', l1: 'Variable:', l2: 'Var2:', l3: 'Var3:', out: true, customList: 'timers' },
+  css:         '.meine-klasse { color: red; }', // CSS wird in &lt;head&gt; eingefügt
+  role:        'output',         // NUR 'output' (Aktor) oder 'input' (Sensor) — steuert Kontextmenü!
+  color:       '#4caf50',        // Standard-Farbe des Objekts
+  noRodAttach:      true,  // true → Objekt kann NICHT an Zylinder-Kolben montiert werden
+  canMount:         true,  // true → andere Objekte können an dieses Plugin montiert werden
+  noContainerStyle: true,  // true → entfernt f2d-obj Box-Shadow/Hintergrund vom Container
+                           //   nötig wenn das Plugin eigene Kind-Divs für seine Grafik nutzt
+  directSpawn: true,             // true → kein Modal, sofort platzieren
+  hasHeight:   true,             // true → Objekt hat einstellbare Höhe (z.B. Regal)
+  isFlatBelt:  true,             // true → behandelt als flaches Förderband
+  clickSimulate: true,           // true → Klick im Simulationsmodus toggelt linkedVar
+  isNC:        true,             // true → Öffner-Logik (normally closed)
+  noRotate:    true,             // true → Objekt kann nicht rotiert werden
+  sensorSteps: 4,                // Anzahl Abtastpunkte entlang des Sensors (Standard: 1)
+
+  animate:          function(obj, spsState) { /* ... */ },
+  physics:          function(obj, item, isRunning, rad) { /* ... */ },
+  contextMenu:      function(obj, ctxMenu, saveCallback) { /* ... */ },
+  customSensorHit:  function(targetObj, sensorObj, lx, ly, lw, lh) { /* ... */ },
+})</pre>
+
+                  <!-- menuTarget -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ menuTarget — Menü-Kategorien</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">menuTarget: '#menu-aktoren'    // Aktoren  (Lampen, Motoren, Zylinder …)
+menuTarget: '#menu-sensoren'   // Sensoren (Lichtschranken, Taster …)
+menuTarget: '#menu-bedienpult' // Bedienpanel (Taster, Schalter, Ampeln …)</pre>
+
+                  <!-- role -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ role — Typ-Kennzeichnung (wichtig für Kontextmenü!)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">role: 'output'  // Aktor: liest SPS-Ausgangsvariablen (z.B. Motor, Lampe, Zylinder)
+                // → Rechtsklick-Kontextmenü zeigt "Ausgangsvariable ändern"-Dropdown
+
+role: 'input'   // Sensor: schreibt SPS-Eingangsvariablen (z.B. Taster, Lichtschranke)
+                // → Rechtsklick-Kontextmenü zeigt "Eingangsvariable ändern"-Dropdown
+
+// ⚠️ Achtung: Nur 'output' und 'input' sind gültige Werte!
+// 'actuator', 'sensor' o.ä. werden NICHT erkannt und führen dazu, dass im
+// Kontextmenü kein Variablen-Dropdown erscheint.</pre>
+
+                  <!-- modalConfig -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ modalConfig — Konfigurations-Dialog</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">modalConfig: {
+  t:          'Beschriftung:',  // Überschrift des Modals (Pflicht)
+  l1:         'Variable 1',     // Label für das erste Dropdown (optional, Alias für t)
+  l2:         'Variable 2',     // Label für zweites Dropdown  (optional, z.B. Einfahren)
+  l3:         'Variable 3',     // Label für drittes Dropdown  (optional, z.B. Greifer)
+
+  // ── out: bestimmt welche SPS-Variablenliste im Dropdown erscheint ─────────
+  out: true,   // Dropdown zeigt SPS-AUSGANGSVARIABLEN (linke Seite von ':=' im Code)
+               // Verwenden für: Aktoren, Motoren, Lampen, Zylinder …
+               // Code-Injektion beim Anlegen: 'VARNAME := FALSE'
+
+  out: false,  // Dropdown zeigt SPS-EINGANGSVARIABLEN (per 'INPUT' deklariert)
+  // (fehlt)   // Verwenden für: Sensoren, Taster, Lichtschranken …
+               // Code-Injektion beim Anlegen: 'INPUT VARNAME'
+
+  // ⚠️ 'out' und 'role' müssen zusammenpassen:
+  //   Aktor  → out: true,  role: 'output'
+  //   Sensor → out: false, role: 'input'
+
+  customList: 'timers',  // Dropdown zeigt stattdessen Timer/Zähler-Variablen aus dem Logikplan
+                         // (TON, TOF, TP, CTU) — l2/l3 werden dann ignoriert
+}</pre>
+
+                  <!-- build -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ build(obj, el, var1, var2, var3, color, interval)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Wird beim Platzieren/Laden eines Objekts aufgerufen.
+// obj      → das Factory-Objekt (persistenter Zustand, wird gespeichert)
+// el       → das DOM-Element in der 2D-Anlage
+// var1..3  → Variablennamen aus dem Modal (strings)
+// color    → Hex-Farbe (z.B. '#4caf50') — bereits aufgelöst, KEIN Farbname!
+// interval → Takt-Intervall (Sekunden, z.B. bei Timern)
+//
+// ⚠️ el.style.position NICHT setzen — VALIS verwaltet die Positionierung selbst!
+// ✅ el.style.width/height NICHT nötig — VALIS setzt beides automatisch nach build()!
+//    (VALIS liest obj.width/height und überträgt diese auf el.style.width/height)
+// ⚠️ DOM-Referenzen auf Kind-Elemente in build() cachen, NICHT in animate() suchen!
+
+build: function(obj, el, var1, var2, var3, color, interval) {
+  // ── Pflicht: SPS-Variablen zuweisen ────────────────────────────
+  obj.linkedVar    = var1;   // Primäre SPS-Variable
+  obj.linkedVarExt = var2;   // Zweite Variable  (z.B. Zylinder-Ausfahren)
+  obj.linkedVarRet = var2;   // Alias für "Rückzug" bei Zylindern (oft = var2)
+  obj.linkedVar3   = var3;   // Dritte Variable  (z.B. Greifer)
+
+  // Achsen-Steuerung (z.B. Portalachse):
+  obj.linkedVarX_Plus  = var1;   obj.linkedVarX_Minus = var2;
+  obj.linkedVarY_Plus  = var3;   obj.linkedVarY_Minus = '...';
+  obj.linkedVarGrab    = '...';  // Greifer-Signal
+
+  // ── Pflicht: Größe ──────────────────────────────────────────────
+  obj.width  = 40;   // Breite  in Pixeln
+  obj.height = 40;   // Höhe    in Pixeln
+
+  // ── DOM-Element aufbauen ────────────────────────────────────────
+  el.className = 'f2d-obj';
+  el.innerHTML = '🔵';                         // oder komplexes HTML
+  el.style.fontSize  = '24px';
+  el.style.background = color || '#4caf50';    // color ist bereits Hex!
+
+  // ⭐ DOM-Referenzen HIER cachen, nicht in animate() per querySelector suchen!
+  obj.armEl  = el.querySelector('.mein-arm');  // Einmalig → kein querySelector pro Tick
+  obj.ledEl  = el.querySelector('.mein-led');
+
+  // ── Physik-Eigenschaften ────────────────────────────────────────
+  obj.useCollision = true;   // Objekt wirkt als Hindernis für Werkstücke
+  obj.isMetallic   = true;   // Wird von Magnet-Greifer erfasst
+  obj.isActive     = false;  // Allgemeiner Aktiv-Zustand (eigene Nutzung)
+
+  // ── Sonstiges ──────────────────────────────────────────────────
+  obj.color    = color;      // Hex-Farbe speichern (für spätere Nutzung in animate)
+  obj.interval = interval;
+  obj.label    = var1;       // Angezeigter Label-Text
+  obj.audioNodes = null;     // Web Audio API (intern)
+}</pre>
+
+                  <!-- animate -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ animate(obj, spsState)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Wird jeden Simulations-Tick aufgerufen (~20 ms Intervall).
+// spsState → { 'VARIABLENNAME': true/false, … }
+//
+// ⚠️ Kein querySelector() hier — DOM-Referenzen in build() als obj.xxxEl cachen!
+// ⚠️ spsState ist NUR hier verfügbar — NICHT als window.spsState!
+// ⚠️ resolveLinked() statt spsState[obj.linkedVar] verwenden (→ Formel-Support)!
+
+animate: function(obj, spsState) {
+  const aktiv = resolveLinked(obj, spsState);   // ✅ unterstützt auch linkedFormula
+
+  // Gecachte DOM-Referenz aus build() verwenden:
+  if (obj.armEl) obj.armEl.style.transform = aktiv ? 'rotate(90deg)' : 'rotate(0deg)';
+  if (obj.ledEl) obj.ledEl.style.background = aktiv ? '#0f0' : '#333';
+
+  obj.el.style.opacity = aktiv ? '1' : '0.3';
+
+  // Mehrere Variablen:
+  const v2 = !!spsState[obj.linkedVarExt];
+  const v3 = !!spsState[obj.linkedVar3];
+}</pre>
+
+                  <!-- physics -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ physics(obj, item, isRunning, rad)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Wird für jedes bewegliche Werkstück aufgerufen das sich im Bereich des Objekts befindet.
+// obj       → das Factory-Objekt (z.B. Förderer)
+// item      → das bewegliche Werkstück
+// isRunning → ob der Förderer/Aktor aktiv ist (boolean)
+// rad       → Rotation des Objekts in Radiant
+
+physics: function(obj, item, isRunning, rad) {
+  if (!isRunning) return;
+  const speed = 1.5;
+  item.x += Math.cos(rad) * speed;
+  item.y += Math.sin(rad) * speed;
+}</pre>
+
+                  <!-- contextMenu -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ contextMenu(obj, ctxMenu, saveCallback)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Wird beim Rechtsklick auf das Objekt aufgerufen.
+// Hier können eigene Einträge ans Kontextmenü angehängt werden.
+// ctxMenu      → das DOM-Element des Kontextmenüs
+// saveCallback → nach Änderung aufrufen um den Zustand zu speichern
+//
+// ⚠️ spsState ist hier NICHT verfügbar (kein Parameter, kein window.spsState)!
+//    Nur obj-Eigenschaften lesen/schreiben — animate() kümmert sich um die Darstellung.
+
+contextMenu: function(obj, ctxMenu, saveCallback) {
+  // Einfacher Schalter:
+  const btn = document.createElement('div');
+  btn.className = 'ctx-item';
+  btn.textContent = obj.meineSetting ? '✅ Option an' : '☑️ Option aus';
+  btn.onclick = () => { obj.meineSetting = !obj.meineSetting; saveCallback(); };
+  ctxMenu.appendChild(btn);
+
+  // Input-Feld (Zahl):
+  const wrap = document.createElement('div');
+  wrap.style.padding = '5px 15px';
+  wrap.onclick = e => e.stopPropagation();
+  wrap.innerHTML = '&lt;div style="color:#aaa;font-size:10px;"&gt;Wert (0–100)&lt;/div&gt;';
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = '0'; inp.max = '100'; inp.value = obj.meineZahl || 50;
+  inp.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+  inp.onchange = e => { obj.meineZahl = parseInt(e.target.value); saveCallback(); };
+  wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+}</pre>
+
+                  <!-- customSensorHit -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ customSensorHit(targetObj, sensorObj, lx, ly, lw, lh)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Überschreibt die Standard-Kollisionserkennung für diesen Sensor.
+// Nur für Sensor-Plugins relevant (role: 'input').
+// targetObj → das zu prüfende Objekt (Werkstück oder Factory-Objekt)
+// sensorObj → das Sensor-Objekt selbst
+// lx,ly     → linke obere Ecke des Sensor-Bereichs (Weltkoordinaten)
+// lw,lh     → Breite und Höhe des Sensor-Bereichs
+// Rückgabe: true wenn Sensor auslöst, sonst false
+
+customSensorHit: function(targetObj, sensorObj, lx, ly, lw, lh) {
+  if (!targetObj.isMetallic) return false;   // Nur metallische Objekte erkennen
+  const tx = targetObj.x, ty = targetObj.y;
+  return tx >= lx &amp;&amp; tx &lt;= lx + lw &amp;&amp; ty >= ly &amp;&amp; ty &lt;= ly + lh;
+}</pre>
+
+                  <!-- obj properties -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ obj — Persistente Eigenschaften (automatisch gesetzt)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">obj.type          // Plugin-Schlüssel (z.B. 'mein_plugin')
+obj.el            // DOM-Element (nach build() gesetzt)
+obj.x, obj.y      // Position in der 2D-Anlage (Pixel) — von VALIS verwaltet!
+obj.rotation      // Absolute Rotation in Grad (0/90/180/270) — von VALIS verwaltet!
+obj.width, obj.height // Größe (Pixel) — in build() setzen! VALIS setzt el.style.width/height auto.
+obj.linkedVar     // Primäre SPS-Variable (string)
+obj.linkedFormula // Formel-Ausdruck (z.B. 'E1 AND NOT E2'), gesetzt wenn Nutzer Formel eingibt
+obj._compiledFormula // intern gecachte JS-Funktion (von resolveLinked() automatisch erzeugt)
+obj.useCollision  // true → Physik-Engine berücksichtigt als Hindernis für Werkstücke
+obj.isMetallic    // true → von Magnet-Greifer erfassbar
+obj.isRunning     // (Förderer) ob gerade aktiv — wird als 3. Parameter an physics() übergeben
+obj.isActive      // allg. Aktiv-Zustand (frei verwendbar, z.B. für physics() → canMount)
+obj.audioNodes    // Web Audio API Knoten (intern)
+// ── Montage ── (von VALIS gesetzt)
+obj.children      // Array der montierten Kind-Objekte (leer wenn kein canMount)
+obj.parent        // Elternobjekt (Zylinder oder canMount-Plugin), an dem dieses montiert ist
+obj.attachmentType // 'rod' = an Zylinder-Kolben | 'mount' = an canMount-Plugin</pre>
+
+                  <!-- rod attachment -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ Montage — Objekte an Zylinder hängen (Kolben-Montage)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Jedes Plugin KANN standardmäßig per Rechtsklick → "An Kolben montieren"
+// an einen nahe gelegenen Zylinder gehängt werden — keine extra Code nötig!
+// VALIS bewegt das Plugin-Objekt linear mit der Kolbenstange mit.
+//
+// Montage an Zylinder verhindern:
+noRodAttach: true   // kein "An Kolben montieren" im Kontextmenü
+
+// Nach der Montage setzt VALIS automatisch:
+//   obj.parent         = &lt;Zylinder-Objekt&gt;
+//   obj.attachmentType = 'rod'
+//   obj.el.classList   → enthält 'is-child' (Rotier-Anfasser ausgeblendet)
+// VALIS speichert/lädt die Verbindung automatisch — kein Plugin-Code nötig.</pre>
+
+                  <!-- canMount -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ canMount — Plugin als Montage-Elternteil (z.B. Drehaktor, Greifer)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Ein Plugin mit canMount: true wird im Kontextmenü von nahe gelegenen Objekten
+// als Montage-Ziel angeboten: Rechtsklick → "🔩 An [Name] montieren"
+//
+// Nach der Montage setzt VALIS:
+//   child.parent         = &lt;Plugin-Objekt&gt;
+//   child.attachmentType = 'mount'
+//   child.el.classList   → enthält 'is-child'
+//
+// ⚠️ VALIS bewegt 'mount'-Kinder NICHT automatisch — das Plugin ist zuständig!
+//    In animate() obj.children iterieren und Kind-Positionen manuell setzen,
+//    dann window.updateObjTransform(child) aufrufen.
+//
+// Beispiel: Drehaktor mit montiertem Greifer/Werkzeug
+
+canMount: true,   // im Plugin-Objekt-Literal setzen
+
+// In animate() des Eltern-Plugins:
+animate: function(obj, spsState) {
+  const aktiv = resolveLinked(obj, spsState);
+  const winkelDeg = (obj.rotation || 0) + (aktiv ? (obj.inverted ? -90 : 90) : 0);
+  const winkelRad = winkelDeg * Math.PI / 180;
+
+  // Arm-Darstellung (wie gehabt)…
+  if (obj.armEl) obj.armEl.style.transform = `rotate(${aktiv ? 90 : 0}deg)`;
+
+  // Montierte Kinder mitbewegen:
+  if (obj.children) {
+    const armLen = 35; // Abstand vom Drehpunkt zum Kind
+    obj.children.forEach(child => {
+      if (child.attachmentType !== 'mount') return;
+      // Drehpunkt liegt bei obj.x + 30, obj.y + 24 (Basis-Mittelpunkt)
+      child.x = obj.x + 30 + Math.cos(winkelRad) * armLen - child.width / 2;
+      child.y = obj.y + 24 + Math.sin(winkelRad) * armLen - child.height / 2;
+      child.rotation = winkelDeg;
+      window.updateObjTransform(child); // ✅ DOM-Position aktualisieren
+    });
+  }
+},</pre>
+
+                  <!-- resolveLinked hint -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ resolveLinked — Formel-Auswertung</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">// Immer resolveLinked() statt spsState[obj.linkedVar] verwenden!
+// Unterstützt: AND, OR, NOT, XOR, Klammerungen, TRUE/FALSE
+// Nur verfügbar als Argument in animate() — NICHT in contextMenu()!
+const aktiv = resolveLinked(obj, spsState);
+
+// Beispiel-Formeln die Nutzer eingeben können:
+//   LAMPE := Q1 AND NOT STOP
+//   MOTOR := (S1 OR S2) AND NOT NOTHALT
+//   E1    (einfache Variable, kein :=)</pre>
+
+                  <!-- common mistakes -->
+                  <div style="color:#e57373; font-weight:bold; margin-bottom:4px; font-size:11px;">⚠️ Häufige Fehler</div>
+                  <pre style="color:#e57373; font-size:10px; margin:0 0 10px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">❌ role: 'actuator'          → Ungültig! Nutze role: 'output'
+❌ role: 'sensor'            → Ungültig! Nutze role: 'input'
+❌ window.spsState           → spsState ist nur in animate() als Parameter verfügbar
+❌ querySelector() in animate() pro Tick → Stattdessen in build() als obj.xxxEl cachen
+❌ el.style.position = 'absolute' → Position wird von VALIS verwaltet, nicht setzen!
+❌ el.style.width/height in build() manuell setzen → nicht nötig, VALIS setzt es nach build() auto!
+❌ el.style.position = 'absolute' setzen → wird von VALIS verwaltet, nicht setzen!
+❌ Kind-Divs in el ohne noContainerStyle → f2d-obj Box-Shadow erscheint als sichtbares Quadrat
+   → Fix: noContainerStyle: true im Plugin setzen (entfernt Hintergrund + Shadow vom Container)
+❌ canMount: true ohne Kind-Positionierung in animate() → montierte Objekte bewegen sich nicht mit
+❌ window.updateObjTransform(child) vergessen → child.x/y/rotation geändert, DOM bleibt an alter Stelle
+❌ obj.rot verwendet statt obj.rotation → Eigenschaft heißt 'rotation' (Grad, 0/90/180/270)
+❌ menuHtml-Schlüssel stimmt nicht mit Dateiname überein → Objekt lässt sich nicht einfügen
+❌ role: 'actuator' oder 'sensor' → ungültig! Nur 'output' (Aktor) und 'input' (Sensor)
+❌ window.spsState in contextMenu → spsState ist NUR in animate() als Parameter verfügbar</pre>
+
+                  <!-- full example -->
+                  <div style="color:#80cbc4; font-weight:bold; margin-bottom:4px; font-size:11px;">▶ Vollständiges Beispiel-Plugin (Datei: signalleuchte.js)</div>
+                  <pre style="color:#aaa; font-size:10px; margin:0 0 6px 0; background:#1a1a2e; padding:8px; border-radius:3px; overflow-x:auto; white-space:pre;">({
+  meta: { name: 'Signalleuchte', icon: '💡', desc: 'Einfache Signallampe' },
+  i18n: { de: { name: 'Signalleuchte', desc: 'Leuchtet wenn Variable aktiv' } },
+  menuTarget: '#menu-aktoren',
+  // Schlüssel 'signalleuchte' muss dem Dateinamen 'signalleuchte.js' entsprechen!
+  menuHtml: '&lt;div onclick="addFactoryDevice(\'signalleuchte\')"&gt;💡 Signalleuchte&lt;/div&gt;',
+  modalConfig: { t: 'Ausgang:', l1: 'Variable', out: true },
+  role: 'output',      // ✅ 'output' für Aktoren (nicht 'actuator'!)
+  color: '#ffeb3b',
+
+  build: function(obj, el, var1, var2, var3, color, interval) {
+    obj.linkedVar = var1;
+    obj.width  = 36;
+    obj.height = 36;
+    obj.color  = color;          // Hex-Farbe merken
+    el.className = 'f2d-obj';
+    el.style.cssText = 'font-size:28px;text-align:center;line-height:36px;';
+    el.innerHTML = '⚫';
+    // ✅ Kein obj.xxxEl nötig hier — el selbst wird direkt beschrieben
+  },
+
+  animate: function(obj, spsState) {
+    // ✅ resolveLinked statt spsState[obj.linkedVar]
+    // ✅ spsState ist NUR hier als Parameter verfügbar
+    const an = resolveLinked(obj, spsState);
+    obj.el.innerHTML     = an ? '💡' : '⚫';
+    obj.el.style.filter  = an ? 'drop-shadow(0 0 6px #ff0)' : 'none';
+    obj.el.style.opacity = an ? '1' : '0.4';
+  },
+
+  contextMenu: function(obj, ctxMenu, saveCallback) {
+    // ✅ Kein spsState hier — nur obj-Eigenschaften ändern
+    const btn = document.createElement('div');
+    btn.className = 'ctx-item';
+    btn.textContent = '🎨 Farbe wechseln';
+    btn.onclick = () => {
+      obj.color = obj.color === '#ffeb3b' ? '#f44336' : '#ffeb3b';
+      saveCallback(); // Zustand speichern — animate() aktualisiert die Darstellung
+    };
+    ctxMenu.appendChild(btn);
+  }
+})</pre>
+
+                  <p style="color:#e57373; font-size:10px; margin:4px 0 0 0;">⚠️ Plugin-Dateien führen JavaScript aus. Nur eigene oder vertrauenswürdige Dateien hochladen.</p>
+                </div>
+            </details>
         </div>
         <!-- PDF Export Modal -->
         <div id="pdf-export-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#2d2d30;padding:24px;border:1px solid #444;border-radius:6px;box-shadow:0 4px 30px rgba(0,0,0,0.9);z-index:4000;width:380px;color:#ccc;font-family:'Segoe UI',sans-serif;">
@@ -6572,6 +6945,166 @@ You must output exactly this JSON format. The logic code goes as a single string
                     osc.start(); osc.stop(engine.ctx.currentTime + 0.15);
                 }
             }, // Ende von 'press'
+
+            // ── GREIFER ──────────────────────────────────────────────────────
+            'vacuum_gripper': {
+                role: 'output', color: '#c62828',
+                i18n: {
+                    de: { name: 'Sauggreifer', desc: 'Vakuum-Sauggreifer: hält Werkstücke durch Unterdruck' },
+                    en: { name: 'Vacuum Gripper', desc: 'Vacuum suction gripper: holds workpieces by suction' }
+                },
+                meta: { name: 'Sauggreifer', icon: '🔴', desc: 'Hält Werkstücke durch Vakuum — montierbar an Zylinderkolben' },
+                menuTarget: '#menu-anbauteile',
+                menuHtml: `<div onclick="addFactoryDevice('vacuum_gripper')">🔴 Sauggreifer (Vakuum)</div>`,
+                modalConfig: { t: 'Sauggreifer – Signal zuweisen:', l1: 'SPS-Ausgang (Vakuum EIN)', out: true },
+                noContainerStyle: true,
+                css: `
+                    .f2d-vac-gripper { position: absolute; display: flex; flex-direction: column; align-items: center; }
+                    .f2d-vac-body { width: 28px; height: 16px; background: linear-gradient(180deg, #607d8b 0%, #37474f 100%); border: 2px solid #1c313a; border-radius: 4px 4px 2px 2px; box-shadow: inset 0 2px 3px rgba(255,255,255,0.12), 0 2px 4px rgba(0,0,0,0.5); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+                    .f2d-vac-body-label { color: rgba(255,255,255,0.6); font-size: 6px; font-weight: bold; letter-spacing: 0.5px; user-select: none; }
+                    .f2d-vac-hose { width: 5px; height: 7px; background: #263238; flex-shrink: 0; }
+                    .f2d-vac-cup { width: 24px; height: 10px; background: radial-gradient(ellipse at 50% 30%, #ef9a9a 0%, #c62828 100%); border-radius: 0 0 60% 60%; border: 1.5px solid #b71c1c; border-top: none; transition: background 0.12s, box-shadow 0.12s; flex-shrink: 0; }
+                    .f2d-vac-cup.vac-on { background: radial-gradient(ellipse at 50% 30%, #fff176 0%, #f9a825 100%); box-shadow: 0 0 10px 3px rgba(255,200,0,0.8); border-color: #e65100; }
+                `,
+                build: function(obj, el, var1) {
+                    obj.width = 28; obj.height = 33;
+                    obj.linkedVar = var1 || obj.linkedVar || '';
+                    obj.grabbedItemObj = null;
+                    el.className = 'f2d-obj f2d-vac-gripper';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    el.innerHTML = '<div class="f2d-vac-body"><span class="f2d-vac-body-label">VAC</span></div>' +
+                                   '<div class="f2d-vac-hose"></div>' +
+                                   '<div class="f2d-vac-cup"></div>';
+                },
+                animate: function(obj, spsState) {
+                    if (!obj._cupEl) obj._cupEl = obj.el.querySelector('.f2d-vac-cup');
+                    const active = !!(obj.linkedVar && spsState[obj.linkedVar]);
+                    if (obj._cupEl) obj._cupEl.classList.toggle('vac-on', active);
+
+                    // Discard reference if item was despawned
+                    if (obj.grabbedItemObj && factoryItems.indexOf(obj.grabbedItemObj) === -1) {
+                        obj.grabbedItemObj = null;
+                    }
+
+                    // Suction-cup tip: bottom center of the element
+                    const cupX = obj.x + obj.width / 2;
+                    const cupY = obj.y + obj.height;
+
+                    if (active) {
+                        if (!obj.grabbedItemObj) {
+                            let best = null, bestDist = 26;
+                            factoryItems.forEach(function(item) {
+                                const icx = item.x + item.width / 2;
+                                const icy = item.y + (item.height || item.width) / 2;
+                                const d = Math.hypot(cupX - icx, cupY - icy);
+                                if (d < bestDist) { bestDist = d; best = item; }
+                            });
+                            if (best) {
+                                obj.grabbedItemObj = best;
+                                if (typeof SoundEngine !== 'undefined') SoundEngine.pneumatic();
+                            }
+                        }
+                    } else {
+                        if (obj.grabbedItemObj) {
+                            obj.grabbedItemObj = null;
+                            if (typeof SoundEngine !== 'undefined') SoundEngine.pneumatic();
+                        }
+                    }
+
+                    if (obj.grabbedItemObj) {
+                        const item = obj.grabbedItemObj;
+                        item.x = cupX - item.width / 2;
+                        item.y = cupY;
+                        item.vx = 0; item.vy = 0;
+                        if (typeof updateObjTransform === 'function') updateObjTransform(item);
+                    }
+                }
+            },
+
+            'pneumatic_gripper': {
+                role: 'output', color: '#1565c0',
+                i18n: {
+                    de: { name: 'Pneumatikgreifer', desc: 'Zwei-Backen-Greifer: öffnet/schließt pneumatisch' },
+                    en: { name: 'Pneumatic Gripper', desc: 'Two-jaw gripper: opens/closes pneumatically' }
+                },
+                meta: { name: 'Pneumatikgreifer', icon: '🤏', desc: 'Greift Werkstücke seitlich — montierbar an Zylinderkolben' },
+                menuTarget: '#menu-anbauteile',
+                menuHtml: `<div onclick="addFactoryDevice('pneumatic_gripper')">🤏 Pneumatikgreifer</div>`,
+                modalConfig: { t: 'Pneumatikgreifer – Signal zuweisen:', l1: 'SPS-Ausgang (Greifer SCHLIESSEN)', out: true },
+                noContainerStyle: true,
+                css: `
+                    .f2d-pg-wrap { position: absolute; display: flex; flex-direction: column; align-items: center; }
+                    .f2d-pg-body { width: 48px; height: 18px; background: linear-gradient(180deg, #1976d2 0%, #0d47a1 100%); border: 2px solid #01347a; border-radius: 5px; box-shadow: inset 0 2px 4px rgba(255,255,255,0.14), 0 2px 5px rgba(0,0,0,0.5); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+                    .f2d-pg-body-lbl { color: rgba(255,255,255,0.65); font-size: 7px; font-weight: bold; letter-spacing: 0.8px; user-select: none; }
+                    .f2d-pg-fingers { position: relative; width: 48px; height: 28px; flex-shrink: 0; }
+                    .f2d-pg-fl, .f2d-pg-fr { position: absolute; top: 0; width: 12px; height: 28px; background: linear-gradient(180deg, #42a5f5 0%, #1565c0 100%); border: 1.5px solid #0d47a1; border-top: none; border-radius: 0 0 3px 3px; box-sizing: border-box; transition: left 0.16s cubic-bezier(0.4,0,0.2,1), right 0.16s cubic-bezier(0.4,0,0.2,1); }
+                    .f2d-pg-fl { left: 2px; }
+                    .f2d-pg-fr { right: 2px; }
+                    .f2d-pg-wrap.pg-closed .f2d-pg-fl { left: 12px; }
+                    .f2d-pg-wrap.pg-closed .f2d-pg-fr { right: 12px; }
+                    .f2d-pg-wrap.pg-closed .f2d-pg-fl,
+                    .f2d-pg-wrap.pg-closed .f2d-pg-fr { background: linear-gradient(180deg, #1565c0 0%, #0d47a1 100%); border-color: #0a2f6b; }
+                    .f2d-pg-gap-ind { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 0; height: 4px; background: rgba(255,255,255,0.25); transition: width 0.16s cubic-bezier(0.4,0,0.2,1); border-radius: 1px; }
+                    .f2d-pg-wrap.pg-closed .f2d-pg-gap-ind { width: 24px; }
+                `,
+                build: function(obj, el, var1) {
+                    obj.width = 48; obj.height = 46;
+                    obj.linkedVar = var1 || obj.linkedVar || '';
+                    obj.grabbedItemObj = null;
+                    el.className = 'f2d-obj f2d-pg-wrap';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    el.innerHTML = '<div class="f2d-pg-body"><span class="f2d-pg-body-lbl">GREIFER</span></div>' +
+                                   '<div class="f2d-pg-fingers">' +
+                                     '<div class="f2d-pg-fl"></div>' +
+                                     '<div class="f2d-pg-fr"></div>' +
+                                     '<div class="f2d-pg-gap-ind"></div>' +
+                                   '</div>';
+                },
+                animate: function(obj, spsState) {
+                    const closed = !!(obj.linkedVar && spsState[obj.linkedVar]);
+                    obj.el.classList.toggle('pg-closed', closed);
+
+                    // Discard reference if item was despawned
+                    if (obj.grabbedItemObj && factoryItems.indexOf(obj.grabbedItemObj) === -1) {
+                        obj.grabbedItemObj = null;
+                    }
+
+                    // Grip centre: between finger tips, lower third of element
+                    const gripX = obj.x + obj.width / 2;
+                    const gripY = obj.y + obj.height - 6;
+
+                    if (closed) {
+                        if (!obj.grabbedItemObj) {
+                            let best = null, bestDist = 28;
+                            factoryItems.forEach(function(item) {
+                                const icx = item.x + item.width / 2;
+                                const icy = item.y + (item.height || item.width) / 2;
+                                const d = Math.hypot(gripX - icx, gripY - icy);
+                                if (d < bestDist) { bestDist = d; best = item; }
+                            });
+                            if (best) {
+                                obj.grabbedItemObj = best;
+                                if (typeof SoundEngine !== 'undefined') SoundEngine.pneumatic();
+                            }
+                        }
+                    } else {
+                        if (obj.grabbedItemObj) {
+                            obj.grabbedItemObj = null;
+                            if (typeof SoundEngine !== 'undefined') SoundEngine.pneumatic();
+                        }
+                    }
+
+                    if (obj.grabbedItemObj) {
+                        const item = obj.grabbedItemObj;
+                        item.x = gripX - item.width / 2;
+                        item.y = gripY - (item.height || item.width) / 2;
+                        item.vx = 0; item.vy = 0;
+                        if (typeof updateObjTransform === 'function') updateObjTransform(item);
+                    }
+                }
+            },
+            // ─────────────────────────────────────────────────────────────────
+
 			'fan': {
                 role: 'output', color: '#26c6da', noRodAttach: true,
                 i18n: {
@@ -7940,6 +8473,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (ComponentRegistry[type] && ComponentRegistry[type].build) {
                 // Das Plugin baut sich selbst!
                 ComponentRegistry[type].build(obj, el, var1, var2, var3, hexColor, interval);
+                // Auto-Sizing: Plugin muss el.style.width/height nicht manuell setzen
+                el.style.width  = obj.width  + 'px';
+                el.style.height = obj.height + 'px';
+                // noContainerStyle: true → Container-Hintergrund und Box-Shadow entfernen
+                // (für Plugins die eigene Kind-Elemente für ihre Grafik nutzen)
+                if (ComponentRegistry[type].noContainerStyle) { el.style.background = 'transparent'; el.style.boxShadow = 'none'; }
             } else if (type === 'taster' || type === 'schalter' || type === 'nothalt') {
                 obj.linkedVar = var1; el.className = `f2d-obj f2d-${type}`;
                 let shortName = var1.length > 5 ? var1.substring(0,4)+'..' : var1;
@@ -8039,6 +8578,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 innerSpan.style.transform = `rotate(${-obj.rotation}deg)`; innerSpan.style.display = 'inline-block';
             }
         }
+        window.updateObjTransform = updateObjTransform; // Für Plugin-Zugriff in animate()
         function moveObjRecursive(obj, dx, dy) {
             obj.x += dx; obj.y += dy; updateObjTransform(obj);
             if (obj.children) obj.children.forEach(child => moveObjRecursive(child, dx, dy));
@@ -8577,21 +9117,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
                 }
             }
-            if (obj.parent && obj.attachmentType === 'rod') {
+            if (obj.parent && (obj.attachmentType === 'rod' || obj.attachmentType === 'mount')) {
                 let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
-                let btnDetach = document.createElement('div'); btnDetach.className = 'ctx-item'; 
+                let btnDetach = document.createElement('div'); btnDetach.className = 'ctx-item';
                 btnDetach.textContent = window.t('ctx_fac_rod_detach');
-                btnDetach.onclick = () => { 
+                btnDetach.onclick = () => {
                     obj.parent.children = obj.parent.children.filter(c => c !== obj);
                     obj.parent = null; obj.attachmentType = null;
                     obj.el.classList.remove('is-child');
-                    saveFactoryState(); 
+                    saveFactoryState();
                     ctxMenu.style.display = 'none';
-                }; 
+                };
                 ctxMenu.appendChild(btnDetach);
             } else if (obj.type !== 'item' && obj.type !== 'sensor_mag' && !obj.type.startsWith('zylinder') && !obj.type.startsWith('spawner') && obj.type !== 'despawner' && !obj.type.startsWith('zone') && obj.type !== 'taster' && obj.type !== 'schalter' && obj.type !== 'nothalt' && obj.type !== 'led' && obj.type !== 'wall' && obj.type !== 'conveyor' && !(ComponentRegistry[obj.type] && ComponentRegistry[obj.type].noRodAttach)) {
-                let nearestCyl = null; let minDist = 800; 
                 let objCx = obj.x + obj.width/2; let objCy = obj.y + (obj.height||obj.width)/2;
+                let nearestCyl = null; let minDist = 800;
                 factoryObjects.forEach(cyl => {
                     if (cyl.type && cyl.type.startsWith('zylinder') && cyl !== obj) {
                         let cylCx = cyl.x + cyl.width/2; let cylCy = cyl.y + cyl.height/2;
@@ -8599,22 +9139,46 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (dist < minDist) { minDist = dist; nearestCyl = cyl; }
                     }
                 });
+                // Auch canMount-Plugins als mögliche Eltern suchen
+                let nearestMount = null; let minDistM = 800;
+                factoryObjects.forEach(mp => {
+                    if (mp !== obj && !mp.parent && ComponentRegistry[mp.type] && ComponentRegistry[mp.type].canMount) {
+                        let mpCx = mp.x + mp.width/2; let mpCy = mp.y + (mp.height||mp.width)/2;
+                        let dist = Math.hypot(objCx - mpCx, objCy - mpCy);
+                        if (dist < minDistM) { minDistM = dist; nearestMount = mp; }
+                    }
+                });
+                let addedSep = false;
+                const ensureSep = () => { if (!addedSep) { let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep); addedSep = true; } };
                 if (nearestCyl) {
-                    let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
-                    let btnAttach = document.createElement('div'); btnAttach.className = 'ctx-item'; 
+                    ensureSep();
+                    let btnAttach = document.createElement('div'); btnAttach.className = 'ctx-item';
                     let cName = nearestCyl.linkedVarExt || 'Zylinder';
-                    // Besonderer Trick für dynamische Strings in i18n (wir nutzen replace)
-                    let attachText = window.t('ctx_fac_rod_attach');
-                    btnAttach.textContent = `${attachText} (${cName})`;
-                    btnAttach.onclick = () => { 
+                    btnAttach.textContent = `${window.t('ctx_fac_rod_attach')} (${cName})`;
+                    btnAttach.onclick = () => {
                         obj.parent = nearestCyl; obj.attachmentType = 'rod';
                         if (!nearestCyl.children) nearestCyl.children = [];
                         nearestCyl.children.push(obj);
                         obj.el.classList.add('is-child');
-                        saveFactoryState(); 
-                        ctxMenu.style.display = 'none'; 
-                    }; 
+                        saveFactoryState();
+                        ctxMenu.style.display = 'none';
+                    };
                     ctxMenu.appendChild(btnAttach);
+                }
+                if (nearestMount) {
+                    ensureSep();
+                    let btnMount = document.createElement('div'); btnMount.className = 'ctx-item';
+                    let mName = (ComponentRegistry[nearestMount.type].meta && ComponentRegistry[nearestMount.type].meta.name) || nearestMount.linkedVar || nearestMount.type;
+                    btnMount.textContent = `🔩 An ${mName} montieren`;
+                    btnMount.onclick = () => {
+                        obj.parent = nearestMount; obj.attachmentType = 'mount';
+                        if (!nearestMount.children) nearestMount.children = [];
+                        nearestMount.children.push(obj);
+                        obj.el.classList.add('is-child');
+                        saveFactoryState();
+                        ctxMenu.style.display = 'none';
+                    };
+                    ctxMenu.appendChild(btnMount);
                 }
             }
             let makesSound = false;
@@ -8875,7 +9439,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 factoryObjects.forEach(obj => {
                     // 1. Plugin-Animationen (Hier feuert der Mechanische Schalter!)
-                    if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].animate) {
+                    // 'mount'-Kinder werden vom Eltern-Plugin positioniert — kein eigenes animate()
+                    if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].animate && obj.attachmentType !== 'mount') {
                         ComponentRegistry[obj.type].animate(obj, spsState);
                     }
                     if (obj.type === 'taster' || obj.type === 'schalter' || obj.type === 'nothalt') {
@@ -9361,9 +9926,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                             newObj.labelPinned = true;
                             if (newObj.labelEl) newObj.labelEl.classList.add('f2d-label-pinned');
                         }
-                        if(newObj.resizerEl) newObj.el.style.width = newObj.width + 'px';
-                        if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].hasHeight)) { 
-                            newObj.el.style.height = newObj.height + 'px'; 
+                        if(newObj.resizerEl || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].build)) newObj.el.style.width = newObj.width + 'px';
+                        if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
+                            newObj.el.style.height = newObj.height + 'px';
                         }
                         newObj.attachmentType = data.attachmentType;
                         newObj._tempOldParentId = data.oldParentId; // Temporär merken für Schritt 3
@@ -9531,9 +10096,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                         newObj.frameVisible = o.frameVisible;
                         if (!o.frameVisible) newObj.el.classList.add('frame-hidden');
                     }
-                    if(newObj.resizerEl) newObj.el.style.width = newObj.width + 'px';
-                    if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].hasHeight)) { 
-                        newObj.el.style.height = newObj.height + 'px'; 
+                    if(newObj.resizerEl || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].build)) newObj.el.style.width = newObj.width + 'px';
+                    if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
+                        newObj.el.style.height = newObj.height + 'px';
                     }
                     newObj.attachmentType = o.attachmentType; // WICHTIG FÜR DIE ZYLINDER-KOLBEN!
                     updateObjTransform(newObj);
@@ -9596,7 +10161,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 types: componentTypes,
                 keyBindings: window.inputKeyBindings,
                 factory: getFactoryStateObj(),
-                plugins: activePlugins 
+                plugins: activePlugins,
+                userPlugins: userPlugins
             };
             let jsonString = JSON.stringify(saveData);
             textArea.value = JSON.stringify(saveData, null, 2);
@@ -9711,6 +10277,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Speichert sofort in den LocalStorage
                 localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
                 // 🌟 NEU: Plugin-Konfiguration laden und Menüs updaten
+                if (data.userPlugins) {
+                    Object.entries(data.userPlugins).forEach(([k, code]) => {
+                        if (!userPlugins[k]) { // Nur neue, nicht bereits vorhandene
+                            userPlugins[k] = code;
+                            registerUserPlugin(k, code);
+                        }
+                    });
+                    localStorage.setItem('valisUserPlugins', JSON.stringify(userPlugins));
+                }
                 if (data.plugins !== undefined) {
                     activePlugins = { ...activePlugins, ...data.plugins }; // Mergen (schützt neue Plugins)
                     localStorage.setItem('valisPlugins', JSON.stringify(activePlugins));
@@ -9768,6 +10343,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (data.types !== undefined) componentTypes = data.types;
                     localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
                     // 🌟 NEU: Plugin-Konfiguration aus dem Link laden
+                    if (data.userPlugins) {
+                        Object.entries(data.userPlugins).forEach(([k, code]) => {
+                            if (!userPlugins[k]) { userPlugins[k] = code; registerUserPlugin(k, code); }
+                        });
+                        localStorage.setItem('valisUserPlugins', JSON.stringify(userPlugins));
+                    }
                     if (data.plugins !== undefined) {
                         activePlugins = { ...activePlugins, ...data.plugins };
                         localStorage.setItem('valisPlugins', JSON.stringify(activePlugins));
@@ -10042,6 +10623,19 @@ You must output exactly this JSON format. The logic code goes as a single string
         // NEU: PLUGIN MANAGER LOGIK
         // ==========================================
         let activePlugins = JSON.parse(localStorage.getItem('valisPlugins')) || {};
+        let userPlugins = JSON.parse(localStorage.getItem('valisUserPlugins')) || {}; // Nutzer-Plugins (Code-Strings)
+        // Nutzer-Plugins beim Start laden und in ComponentRegistry registrieren
+        Object.entries(userPlugins).forEach(([key, code]) => {
+            try {
+                const def = new Function('return (' + code + ')')();
+                def.isUserPlugin = true;
+                ComponentRegistry[key] = def;
+                if (def.i18n) {
+                    if (def.i18n.de) { window.i18n.de[`plug_${key}_name`] = def.i18n.de.name; window.i18n.de[`plug_${key}_desc`] = def.i18n.de.desc; }
+                    if (def.i18n.en) { window.i18n.en[`plug_${key}_name`] = def.i18n.en.name; window.i18n.en[`plug_${key}_desc`] = def.i18n.en.desc; }
+                }
+            } catch(e) { console.error(`Nutzer-Plugin "${key}" konnte nicht geladen werden:`, e); }
+        });
         // Neue (noch nicht gespeicherte) Plugins standardmäßig aktivieren
         Object.keys(ComponentRegistry).forEach(k => {
             if (activePlugins[k] === undefined) activePlugins[k] = true;
@@ -10146,13 +10740,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let mDesc = m.desc || '';
                         textBox.innerHTML = `<strong style="color: #fff; font-size: 12px;">${mName}</strong><p style="color: #aaa; font-size: 10px; margin: 2px 0 0 0; line-height: 1.2;">${mDesc}</p>`;
                     }
-                    let switchBox = document.createElement('label'); 
-                    switchBox.className = 'switch'; 
+                    let switchBox = document.createElement('label');
+                    switchBox.className = 'switch';
                     switchBox.style.marginLeft = '10px';
                     switchBox.innerHTML = `<input type="checkbox" class="plugin-toggle-cb" ${isActive ? 'checked' : ''} onchange="togglePlugin('${key}', this.checked)"><span class="slider"></span>`;
-                    row.appendChild(previewBox); 
-                    row.appendChild(textBox); 
-                    row.appendChild(switchBox); 
+                    row.appendChild(previewBox);
+                    row.appendChild(textBox);
+                    row.appendChild(switchBox);
+                    if (p.isUserPlugin) {
+                        let delBtn = document.createElement('button');
+                        delBtn.textContent = '🗑️';
+                        delBtn.title = 'Plugin löschen';
+                        delBtn.style.cssText = 'background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:3px 7px;cursor:pointer;margin-left:6px;font-size:13px;';
+                        delBtn.onclick = () => deleteUserPlugin(key);
+                        row.appendChild(delBtn);
+                    }
                     catCard.appendChild(row); // Reihe in die Karte legen
                 });
                 list.appendChild(catCard); // Karte in den Grid-Container legen
@@ -10160,6 +10762,89 @@ You must output exactly this JSON format. The logic code goes as a single string
             modal.style.display = 'flex';
         };
         window.closePluginModal = function() { document.getElementById('plugin-modal').style.display = 'none'; };
+
+        // Nutzer-Plugin registrieren (ComponentRegistry + CSS + Menü + i18n)
+        function registerUserPlugin(key, code) {
+            try {
+                const def = new Function('return (' + code + ')')();
+                def.isUserPlugin = true;
+                ComponentRegistry[key] = def;
+                if (def.i18n) {
+                    if (def.i18n.de) { window.i18n.de[`plug_${key}_name`] = def.i18n.de.name; window.i18n.de[`plug_${key}_desc`] = def.i18n.de.desc; }
+                    if (def.i18n.en) { window.i18n.en[`plug_${key}_name`] = def.i18n.en.name; window.i18n.en[`plug_${key}_desc`] = def.i18n.en.desc; }
+                }
+                // CSS einfügen
+                let oldStyle = document.getElementById('plugin-style-' + key);
+                if (oldStyle) oldStyle.remove();
+                if (def.css) {
+                    let styleEl = document.createElement('style');
+                    styleEl.id = 'plugin-style-' + key;
+                    styleEl.innerText = def.css;
+                    document.head.appendChild(styleEl);
+                }
+                // Menü-Eintrag einfügen (alten entfernen falls vorhanden)
+                let oldMenu = document.getElementById('plugin-menu-' + key);
+                if (oldMenu) oldMenu.remove();
+                if (def.menuTarget && def.menuHtml) {
+                    let target = document.querySelector(def.menuTarget);
+                    if (target) {
+                        let tmp = document.createElement('div');
+                        tmp.innerHTML = def.menuHtml;
+                        let el = tmp.firstElementChild;
+                        el.id = 'plugin-menu-' + key;
+                        el.style.display = activePlugins[key] !== false ? 'block' : 'none';
+                        target.appendChild(el);
+                    }
+                }
+                if (activePlugins[key] === undefined) activePlugins[key] = true;
+                return true;
+            } catch(e) {
+                alert('Plugin-Fehler:\n' + e.message);
+                return false;
+            }
+        }
+
+        // Datei-Upload verarbeiten
+        window.handlePluginUpload = function(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const key = file.name.replace(/\.js$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+            if (!key) { alert('Ungültiger Dateiname.'); return; }
+            if (ComponentRegistry[key] && !userPlugins[key]) {
+                alert(`Ein eingebautes Plugin mit dem Schlüssel "${key}" existiert bereits.\nBitte Datei umbenennen.`);
+                input.value = ''; return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const code = e.target.result;
+                if (registerUserPlugin(key, code)) {
+                    userPlugins[key] = code;
+                    localStorage.setItem('valisUserPlugins', JSON.stringify(userPlugins));
+                    localStorage.setItem('valisPlugins', JSON.stringify(activePlugins));
+                    updateMenuVisibility();
+                    openPluginModal();
+                }
+            };
+            reader.readAsText(file);
+            input.value = '';
+        };
+
+        // Nutzer-Plugin löschen
+        window.deleteUserPlugin = function(key) {
+            if (!confirm(`Plugin "${key}" wirklich löschen?`)) return;
+            delete ComponentRegistry[key];
+            delete activePlugins[key];
+            delete userPlugins[key];
+            let menuEl = document.getElementById('plugin-menu-' + key);
+            if (menuEl) menuEl.remove();
+            let styleEl = document.getElementById('plugin-style-' + key);
+            if (styleEl) styleEl.remove();
+            localStorage.setItem('valisUserPlugins', JSON.stringify(userPlugins));
+            localStorage.setItem('valisPlugins', JSON.stringify(activePlugins));
+            updateMenuVisibility();
+            openPluginModal();
+        };
+
         window.togglePlugin = function(key, state) {
             activePlugins[key] = state;
             localStorage.setItem('valisPlugins', JSON.stringify(activePlugins));
@@ -10262,17 +10947,34 @@ You must output exactly this JSON format. The logic code goes as a single string
             document.head.appendChild(styleSheet);
         }
         updateMenuVisibility();
-        // Mehrspaltige Dropdowns: wenn scrollHeight die verfügbare Höhe übersteigt -> 2 Spalten
+        // Mehrspaltige Dropdowns: dynamische Spaltenanzahl + Höhenbegrenzung
+        function adjustDropdownLayout(dd) {
+            const content = dd.querySelector('.tb-dropdown-content');
+            if (!content || content.style.display === 'none') return;
+
+            // Reset to measure natural single-column height
+            content.classList.remove('multi-col');
+            content.style.removeProperty('column-count');
+            content.style.removeProperty('max-height');
+
+            const fw = document.getElementById('factory-wrapper');
+            const fwBottom = fw ? fw.getBoundingClientRect().bottom : window.innerHeight;
+            const available = Math.max(120, fwBottom - dd.getBoundingClientRect().bottom - 10);
+            const naturalH = content.scrollHeight;
+
+            if (naturalH > available) {
+                const cols = Math.min(5, Math.ceil(naturalH / available));
+                content.classList.add('multi-col');
+                content.style.columnCount = String(cols);
+                content.style.maxHeight = available + 'px';
+            }
+        }
+
         document.querySelectorAll('.tb-dropdown').forEach(dd => {
-            dd.addEventListener('mouseenter', () => {
-                let content = dd.querySelector('.tb-dropdown-content');
-                if (!content) return;
-                let fw = document.getElementById('factory-wrapper');
-                let fwBottom = fw ? fw.getBoundingClientRect().bottom : window.innerHeight;
-                let btnBottom = dd.getBoundingClientRect().bottom;
-                let available = Math.max(120, fwBottom - btnBottom - 6);
-                content.classList.toggle('multi-col', content.scrollHeight > available);
-            });
+            // Use rAF so the CSS :hover display:block is fully laid out before measuring
+            dd.addEventListener('mouseenter', () => requestAnimationFrame(() => adjustDropdownLayout(dd)));
+            // Re-adjust on window resize while a menu might be open
+            window.addEventListener('resize', () => { if (dd.matches(':hover')) adjustDropdownLayout(dd); }, { passive: true });
         });
         // INITIALISIERUNG
         // 1. Zuerst prüfen, ob wir von einem Link kommen
@@ -12929,6 +13631,359 @@ You must output exactly this JSON format. The logic code goes as a single string
             window.closeTutorial = function () {
                 document.getElementById('tutorial-overlay').classList.remove('active');
             };
+        })();
+
+        // ==========================================
+        // KONTEXTUELLES INFO-SYSTEM
+        // ==========================================
+        (function () {
+            let _activeFactoryDropdown = null;
+            let _dropdownLeaveTimer = null;
+
+            const INFO = {
+                welcome_multi: {
+                    title: '⚙️ Willkommen bei VALIS',
+                    body: 'VALIS hat drei Arbeitsbereiche:<br>• <b>Logikplan</b> – Verknüpfe Ein-/Ausgänge mit Logikbausteinen<br>• <b>Schaltplan</b> – Zeichne Steuerungsschaltpläne (IEC 60617)<br>• <b>2D Anlage</b> – Simuliere deine Anlage in Echtzeit',
+                    hint: '💡 Schließe alle bis auf eine Ansicht um hier kontextbezogene Hilfe zu erhalten.'
+                },
+                fbs_general: {
+                    title: '📐 Logikplan (FBS)',
+                    body: 'Erstelle Funktionsbausteinpläne für deine SPS-Logik:<br>• Tippe Logikzeilen in den Editor, z.B. <code>A1 := E1 AND E2</code><br>• Verbinde Bausteine per Drag &amp; Drop auf Leitungen<br>• Klicke auf Leitungen oder Bausteine um sie zu bearbeiten<br>• "Simulation starten" testet die Logik live',
+                    hint: '💡 Klicke auf <b>➕</b> oben links für die Bausteinliste, auf <b>⚙️ Optionen</b> für Darstellungseinstellungen.'
+                },
+                fbs_toolbar: {
+                    title: '🔧 Bausteine hinzufügen',
+                    body: '• <b>UND (&&)</b> – Ausgang HIGH wenn ALLE Eingänge HIGH<br>• <b>ODER (||)</b> – Ausgang HIGH wenn mind. EIN Eingang HIGH<br>• <b>Speicher (RS/SR)</b> – Flip-Flop: hält Zustand nach Flanke<br>• <b>Timer (TON)</b> – Einschaltverzögerung in Sekunden<br>• <b>Zähler (CTU)</b> – Zählt steigende Flanken bis Zielwert<br><br><b>Zwei Wege zum Platzieren:</b><br>① Klicken → Variablen eingeben → ins Diagramm klicken<br>② Direkt auf eine bestehende Leitung ziehen — der Baustein übernimmt dabei die Variablen der Leitung und wird automatisch eingebaut',
+                    hint: '💡 Beim Drag &amp; Drop auf eine Leitung wird die Verbindung automatisch aufgetrennt und neu geknüpft.'
+                },
+                fbs_options: {
+                    title: '⚙️ Logikplan-Optionen',
+                    body: '• <b>🌈 Bunte Linien</b> – Jede Signalleitung bekommt eine eigene Farbe; erleichtert das Lesen komplexer Pläne<br>• <b>📐 Dichte</b> – Wechselt zwischen drei Layoutmodi:<br>&nbsp;&nbsp;– <i>Normal</i>: Standard-Abstände<br>&nbsp;&nbsp;– <i>Kompakt</i>: engere Abstände, mehr Bausteine auf einen Blick<br>&nbsp;&nbsp;– <i>Weit</i>: großzügige Abstände für bessere Lesbarkeit',
+                    hint: '💡 Das Layout wird sofort neu gezeichnet — keine Simulation notwendig.'
+                },
+                fbs_modal_and_or: {
+                    title: '➕ UND / ODER Gatter',
+                    body: '• <b>Eingang 1</b> – Erste Eingangsvariable, Pflichtfeld (z.B. <code>E1</code>)<br>• <b>Eingang 2</b> – Optionale zweite Eingangsvariable<br>• <b>Ausgang</b> – Name der Ausgangsvariablen (z.B. <code>A1</code>)<br>Negation mit <code>NOT</code> voranstellen: <code>NOT E1</code>',
+                    hint: '💡 Nach "Generieren" ins Diagramm klicken um den Baustein zu platzieren.'
+                },
+                fbs_modal_rs: {
+                    title: '🔄 Speicherbaustein (RS/SR)',
+                    body: '• <b>Set (S)</b> – Setzt den Ausgang dauerhaft auf 1<br>• <b>Reset (R)</b> – Setzt den Ausgang dauerhaft auf 0<br>• <b>Ausgang (Q)</b> – Der gespeicherte Zustand<br>RS = Reset dominant (R hat Vorrang) | SR = Set dominant',
+                    hint: '💡 Perfekt für Zustände die gehalten werden sollen, z.B. Merker oder Notaus-Verriegelung.'
+                },
+                fbs_modal_ton: {
+                    title: '⏱️ Timer Baustein (TON/TOF)',
+                    body: '• <b>Eingang (IN)</b> – Startsignal für den Timer<br>• <b>Ausgang (Q)</b> – Aktiv nach Ablauf der Verzögerungszeit<br>• <b>Zeitwert (PT)</b> – Verzögerungszeit in Sekunden<br>TON = Einschaltverzögerung | TOF = Ausschaltverzögerung',
+                    hint: '💡 Zeitwert ohne Einheit eingeben, z.B. <code>2.5</code> für 2,5 Sekunden.'
+                },
+                fbs_modal_ctu: {
+                    title: '🔢 Zähler Baustein (CTU)',
+                    body: '• <b>Zähleingang (CU)</b> – Inkrementiert bei jeder steigenden Flanke<br>• <b>Reset (R)</b> – Setzt den Zähler auf 0 zurück<br>• <b>Vorwahlwert (PV)</b> – Zielwert bei dem Q aktiv wird<br>• <b>Ausgang (Q)</b> – Aktiv wenn Zähler ≥ PV',
+                    hint: '💡 Ideal für Stückzählungen, Taktfolgen und wiederholende Abläufe.'
+                },
+                circuit_general: {
+                    title: '⚡ Schaltplan (IEC)',
+                    body: 'Erstelle Steuerungsschaltpläne nach IEC 60617:<br>• Klicke auf <b>➕</b> um die Bauteilpalette zu öffnen<br>• Ziehe Bauteile per Drag &amp; Drop in die Strompfade<br>• Jeder Strompfad (Rung) entspricht einer SPS-Ausgangsspule<br>• Rechtsklick auf Bauteile zum Bearbeiten oder Löschen',
+                    hint: '💡 Im Optionen-Menü kannst du Darstellungsmodus und Beschriftung anpassen.'
+                },
+                circuit_palette: {
+                    title: '🎛️ Bauteilpalette',
+                    body: 'Ziehe Bauteile per Drag &amp; Drop in die Strompfade:<br>• <b>Schließer (NO)</b> – Kontakt, aktiv wenn Signal HIGH<br>• <b>Öffner (NC)</b> – Kontakt, aktiv wenn Signal LOW (invertiert)<br>• <b>Spule</b> – Ausgangsrelais oder Aktor, beendet den Strompfad<br>• <b>Wechsler</b> – Schließer und Öffner in einem Bauteil<br>• <b>Timer / Zähler</b> – Zeitglieder und Zählbausteine im Strompfad',
+                    hint: '💡 Mehrere Kontakte im selben Strompfad: nebeneinander = Reihe (AND), übereinander = Parallel (OR).'
+                },
+                circuit_options: {
+                    title: '⚙️ Schaltplan-Optionen',
+                    body: '• <b>♾️ Hardware-Limit</b><br>&nbsp;&nbsp;– <i>SINGLE</i>: Jede Klemme darf nur einmal als Kontakt erscheinen (reale Verdrahtung)<br>&nbsp;&nbsp;– <i>MULTI</i>: Beliebig viele Kontakte pro Klemme (Schützschaltplan)<br><br>• <b>💼 Modus</b><br>&nbsp;&nbsp;– <i>Relais</i>: Klassische Darstellung mit Hilfsrelais und Spulen<br>&nbsp;&nbsp;– <i>Direkt</i>: Vereinfachte Darstellung ohne Hilfsrelais<br><br>• <b>🌈 Bunte Pfade</b> – Jeder Strompfad bekommt eine eigene Farbe<br><br>• <b>🔀 Wechslernummerierung</b> – Öffner und Schließer eines Wechslers bekommen eigene Bauteilnummern<br><br>• <b>🔢 Fortlaufende Nummern</b> – Bauteile werden durchgehend nummeriert statt pro Strompfad<br><br>• <b>⚡ Getrennte Stromkreise</b> – Zwei unabhängige Stromkreise (Haupt- und Steuerstromkreis) werden parallel dargestellt<br><br>• <b>🏷️ Details</b><br>&nbsp;&nbsp;– <i>ALLE</i>: Variablenname + Bauteilnummer<br>&nbsp;&nbsp;– <i>Nur I/O</i>: Nur Variablennamen<br>&nbsp;&nbsp;– <i>Keine</i>: Nur Symbole, keine Beschriftung',
+                    hint: '💡 Alle Änderungen wirken sich sofort auf den gesamten Schaltplan aus.'
+                },
+                circuit_add_modal: {
+                    title: '➕ Bauteil in Schaltplan einfügen',
+                    body: 'Weise dem Bauteil eine SPS-Variable zu:<br>• Für Kontakte (Schließer/Öffner): Eingangsvariable wählen<br>• Für Spulen (Aktoren): Ausgangsvariable wählen<br>• Verbindung im Strang: <b>In Reihe (AND)</b> oder <b>Parallel (OR)</b>',
+                    hint: '💡 Nur im Logikplan definierte Variablen erscheinen in der Auswahlliste.'
+                },
+                factory_general: {
+                    title: '🏭 2D Anlage',
+                    body: 'Simuliere deine Automatisierungsanlage in Echtzeit:<br>• Wähle Bauteile aus den Dropdown-Menüs oben<br>• Bewege Bauteile per Drag &amp; Drop auf der Arbeitsfläche<br>• Rechtsklick auf ein Bauteil → Variable zuweisen<br>• Verbinde Sensoren/Aktoren mit dem Logikplan und starte die Simulation',
+                    hint: '💡 Fahre über ein Menü oben um Informationen zu den Bauteilen zu erhalten.'
+                },
+                factory_bedienpult: {
+                    title: '🎛️ Bedienpult',
+                    body: 'Bedien- und Anzeigeelemente für das HMI:<br>• <b>Taster (Schließer)</b> – Setzt Signal HIGH solange gedrückt<br>• <b>Schalter (rastend)</b> – Schaltet um und bleibt in Position<br>• <b>Not-Halt (Öffner)</b> – Signal LOW im Normalzustand (Sicherheit)<br>• <b>Meldeleuchte (LED)</b> – Zeigt Signalzustand farbig an',
+                    hint: '💡 Rechtsklick auf ein platziertes Element → SPS-Variable zuweisen.'
+                },
+                factory_werkstuecke: {
+                    title: '📦 Werkstücke',
+                    body: 'Transportierte Objekte in der Anlage:<br>• <b>Block Normal</b> – Standardwerkstück in Metall oder Kunststoff<br>• <b>Block Massiv</b> – Schwer, wird nicht automatisch transportiert<br>• <b>Spawner</b> – Erzeugt Werkstücke automatisch im einstellbaren Intervall<br>• <b>Despawner</b> – Entfernt Werkstücke bei Berührung (Endpunkt)',
+                    hint: '💡 Induktive Sensoren erkennen nur Metall — kapazitive erkennen alle Materialien.'
+                },
+                factory_sensoren: {
+                    title: '📡 Sensoren',
+                    body: 'Sensoren erfassen Werkstücke und liefern Eingangssignale für die SPS:<br>• <b>Induktiv</b> – Erkennt nur metallische Werkstücke<br>• <b>Kapazitiv</b> – Erkennt alle Materialien (Metall + Kunststoff)<br>• <b>Optisch</b> – Lichtschranke, erkennt alle Materialien<br>• <b>Magnetisch (Reed)</b> – Detektiert die Position des Zylinderkolbens',
+                    hint: '💡 Rechtsklick → Eingangsvariable zuweisen → im Logikplan als Eingang verwenden.'
+                },
+                factory_aktoren: {
+                    title: '⚙️ Aktoren',
+                    body: 'Aktoren reagieren auf SPS-Ausgangssignale und bewegen die Anlage:<br>• <b>Förderband</b> – Transportiert Werkstücke horizontal<br>• <b>Zylinder (Einfach)</b> – Einfachwirkend, federkraft-rückgestellt<br>• <b>Zylinder (Doppel)</b> – Doppeltwirkend, zwei Steuersignale<br>• <b>Anbauteile ▶</b> – Greifer und Werkzeuge die am Kolben montiert werden',
+                    hint: '💡 Rechtsklick → Ausgangsvariable zuweisen → Simulation starten und testen.'
+                },
+                factory_anbauteile: {
+                    title: '🔩 Anbauteile (Greifer & Werkzeuge)',
+                    body: 'Anbauteile werden per Rechtsklick an Zylinderkolben montiert:<br>• <b>🔴 Sauggreifer (Vakuum)</b> – Hält Werkstücke durch Unterdruck. Signal HIGH = Vakuum an. Erkennt Werkstücke im 26 px-Radius unter dem Saugnapf<br>• <b>🤏 Pneumatikgreifer</b> – Zwei Backen greifen seitlich. Signal HIGH = Backen schließen und greifen. Erkennt Werkstücke im 28 px-Radius<br>• <b>🧲 L-Schieber</b> – Schiebt Werkstücke; L-förmige Kollisionsfläche<br>• <b>💥 Pressstempel</b> – Massiver Block zum Stanzen/Pressen',
+                    hint: '💡 Reihenfolge: Zylinder platzieren → Anbauteil platzieren → Rechtsklick auf Anbauteil → "An Kolben montieren".'
+                },
+                factory_struktur: {
+                    title: '🏗️ Struktur',
+                    body: 'Rahmen und Grundstruktur der Anlage:<br>• <b>Ziegelwand</b> – Feste Wand, blockiert Werkstücke physisch<br>• <b>Metallrahmen / Boden</b> – Optischer Rahmen ohne physisches Hindernis<br>• <b>Zone (Draufsicht)</b> – Farbiger Markierungsbereich im Draufsicht-Modus<br>• <b>Zone (Seitenansicht)</b> – Farbiger Markierungsbereich im Seitenansicht-Modus',
+                    hint: '💡 Strukturelemente haben keine Logikverbindung — sie dienen nur der optischen Darstellung.'
+                },
+                factory_plugin_modal: {
+                    title: '🧩 Plugins',
+                    body: 'Erweitere VALIS mit eigenen Bauteiltypen:<br>• Lade eine <code>.js</code> Plugin-Datei hoch<br>• Das Plugin erscheint dann in den Werkzeug-Menüs<br>• Plugins können eigene Animationen, Physik und Logik haben<br>Grundstruktur: <code>ComponentRegistry[\'name\'] = { meta, build, animate }</code>',
+                    hint: '💡 Die vollständige Plugin-Dokumentation findest du weiter unten auf der Seite.'
+                },
+                factory_device_modal: {
+                    title: '🔧 Bauteil konfigurieren',
+                    body: 'Weise diesem Bauteil eine SPS-Variable zu:<br>• <b>Variable wählen</b> – Aus vorhandenen Signalen im Logikplan auswählen<br>• <b>Formel</b> – Komplexe Logik direkt eingeben, z.B. <code>E1 AND NOT E2</code><br>Aktoren → Ausgangsvariable | Sensoren → Eingangsvariable',
+                    hint: '💡 Variablen müssen im Logikplan als Ein- oder Ausgang definiert sein.'
+                }
+            };
+
+            function render(key) {
+                const d = INFO[key];
+                if (!d) return '';
+                return '<strong>' + d.title + '</strong><br><br>' + d.body + '<br><br><em>' + d.hint + '</em>';
+            }
+
+            function getVisibleViews() {
+                return ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].filter(id => {
+                    const el = document.getElementById(id);
+                    return el && el.style.display !== 'none';
+                });
+            }
+
+            function computeKey() {
+                const views = getVisibleViews();
+                if (views.length !== 1) return 'welcome_multi';
+                const v = views[0];
+
+                if (v === 'fbs-wrapper') {
+                    const modal = document.getElementById('fbs-add-modal');
+                    if (modal && modal.style.display !== 'none') {
+                        const type = (document.getElementById('fbs-add-type') || {}).value || '';
+                        if (type === 'AND' || type === 'OR') return 'fbs_modal_and_or';
+                        if (type === 'RS') return 'fbs_modal_rs';
+                        if (type === 'TON' || type === 'TOF') return 'fbs_modal_ton';
+                        if (type === 'CTU') return 'fbs_modal_ctu';
+                        return 'fbs_modal_and_or';
+                    }
+                    const optsGrp = document.getElementById('fbs-options-group');
+                    if (optsGrp && optsGrp.classList.contains('expanded')) return 'fbs_options';
+                    const grp = document.getElementById('fbs-button-group');
+                    if (grp && grp.classList.contains('expanded')) return 'fbs_toolbar';
+                    return 'fbs_general';
+                }
+
+                if (v === 'circuit-wrapper') {
+                    const modal = document.getElementById('circ-add-modal');
+                    if (modal && modal.style.display !== 'none') return 'circuit_add_modal';
+                    const palette = document.getElementById('circ-palette-panel');
+                    if (palette && palette.style.display !== 'none') return 'circuit_palette';
+                    const grp = document.getElementById('iec-button-group');
+                    if (grp && grp.classList.contains('expanded')) return 'circuit_options';
+                    return 'circuit_general';
+                }
+
+                if (v === 'factory-wrapper') {
+                    const pm = document.getElementById('plugin-modal');
+                    if (pm && pm.style.display !== 'none') return 'factory_plugin_modal';
+                    const fm = document.getElementById('factory-modal');
+                    if (fm && fm.style.display !== 'none') return 'factory_device_modal';
+                    if (_activeFactoryDropdown) return 'factory_' + _activeFactoryDropdown;
+                    return 'factory_general';
+                }
+
+                return 'welcome_multi';
+            }
+
+            function updateInfoPanel() {
+                const panel = document.getElementById('info-panel');
+                if (!panel || !panel.classList.contains('info-open')) return;
+                panel.innerHTML = render(computeKey());
+            }
+            window._updateInfoPanel = updateInfoPanel;
+
+            window.toggleInfoPanel = function () {
+                const panel = document.getElementById('info-panel');
+                const btn = document.getElementById('btn-info');
+                if (!panel) return;
+                const opening = !panel.classList.contains('info-open');
+                if (opening) {
+                    panel.innerHTML = render(computeKey());
+                    panel.classList.add('info-open');
+                    if (btn) btn.style.backgroundColor = '#0d8fa3';
+                } else {
+                    panel.classList.remove('info-open');
+                    if (btn) btn.style.backgroundColor = '#17a2b8';
+                }
+            };
+
+            // Close when clicking outside
+            document.addEventListener('click', function (e) {
+                const wrapper = document.querySelector('.info-hover-wrapper');
+                if (wrapper && !wrapper.contains(e.target)) {
+                    const panel = document.getElementById('info-panel');
+                    const btn = document.getElementById('btn-info');
+                    if (panel) panel.classList.remove('info-open');
+                    if (btn) btn.style.backgroundColor = '#17a2b8';
+                }
+            });
+
+            // Patch toggleWorkspaceView
+            const _origView = window.toggleWorkspaceView;
+            window.toggleWorkspaceView = function (id) {
+                if (_origView) _origView(id);
+                setTimeout(updateInfoPanel, 60);
+            };
+
+            // Patch FBS toolbar toggle
+            const _origFbsTb = window.toggleFbsToolbar;
+            window.toggleFbsToolbar = function () {
+                if (_origFbsTb) _origFbsTb();
+                setTimeout(updateInfoPanel, 10);
+            };
+
+            // Patch FBS options toggle
+            const _origFbsOpts = window.toggleFbsOptions;
+            window.toggleFbsOptions = function () {
+                if (_origFbsOpts) _origFbsOpts();
+                setTimeout(updateInfoPanel, 10);
+            };
+
+            // Patch FBS add modal
+            const _origFbsModal = window.openFbsAddModal;
+            window.openFbsAddModal = function (type) {
+                if (_origFbsModal) _origFbsModal(type);
+                setTimeout(updateInfoPanel, 10);
+            };
+
+            // Patch circuit palette
+            const _origCircPalette = window.toggleCircPalette;
+            window.toggleCircPalette = function () {
+                if (_origCircPalette) _origCircPalette();
+                setTimeout(updateInfoPanel, 10);
+            };
+
+            // Patch IEC toolbar
+            const _origIecTb = window.toggleIecToolbar;
+            window.toggleIecToolbar = function () {
+                if (_origIecTb) _origIecTb();
+                setTimeout(updateInfoPanel, 10);
+            };
+
+            // Watch modals via MutationObserver (catches openPluginModal, addFactoryDevice, etc.)
+            function watchModal(id) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                new MutationObserver(updateInfoPanel).observe(el, { attributes: true, attributeFilter: ['style'] });
+            }
+            ['fbs-add-modal', 'circ-add-modal', 'factory-modal', 'plugin-modal'].forEach(watchModal);
+
+            // Factory dropdown hover tracking — with grace-period delay so user can move to Info button
+            // top-level factory dropdowns (each maps to a .tb-dropdown wrapper)
+            const DROPDOWN_MAP = {
+                'menu-bedienpult': 'bedienpult',
+                'menu-werkstuecke': 'werkstuecke',
+                'menu-sensoren': 'sensoren',
+                'menu-aktoren': 'aktoren',
+                'menu-struktur': 'struktur'
+            };
+
+            function setupDropdownTracking() {
+                Object.keys(DROPDOWN_MAP).forEach(function (menuId) {
+                    const menuEl = document.getElementById(menuId);
+                    if (!menuEl) return;
+                    const wrapper = menuEl.closest('.tb-dropdown');
+                    if (!wrapper) return;
+                    wrapper.addEventListener('mouseenter', function () {
+                        if (_dropdownLeaveTimer) { clearTimeout(_dropdownLeaveTimer); _dropdownLeaveTimer = null; }
+                        _activeFactoryDropdown = DROPDOWN_MAP[menuId];
+                        updateInfoPanel();
+                    });
+                    wrapper.addEventListener('mouseleave', function () {
+                        // 600 ms grace period: user can move mouse to the Info button without losing context
+                        _dropdownLeaveTimer = setTimeout(function () {
+                            _activeFactoryDropdown = null;
+                            _dropdownLeaveTimer = null;
+                            updateInfoPanel();
+                        }, 600);
+                    });
+                });
+
+                // Anbauteile is a CSS submenu inside the Aktoren dropdown — handle separately
+                const anbauEl = document.getElementById('menu-anbauteile');
+                if (anbauEl) {
+                    const subWrap = anbauEl.closest('.tb-submenu');
+                    if (subWrap) {
+                        subWrap.addEventListener('mouseenter', function () {
+                            if (_dropdownLeaveTimer) { clearTimeout(_dropdownLeaveTimer); _dropdownLeaveTimer = null; }
+                            _activeFactoryDropdown = 'anbauteile';
+                            updateInfoPanel();
+                        });
+                        subWrap.addEventListener('mouseleave', function () {
+                            // Revert to Aktoren context (still inside the parent dropdown)
+                            _activeFactoryDropdown = 'aktoren';
+                            updateInfoPanel();
+                        });
+                    }
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', setupDropdownTracking);
+            } else {
+                setupDropdownTracking();
+            }
+
+            // ── Plugin-Modal verschiebbar machen ──────────────────────────────
+            function makePluginModalDraggable() {
+                const modal = document.getElementById('plugin-modal');
+                if (!modal) return;
+                const handle = modal.querySelector('h3');
+                if (!handle) return;
+                handle.style.cursor = 'move';
+                handle.title = 'Ziehen um das Fenster zu verschieben';
+                let dragging = false, ox, oy, sl, st;
+                handle.addEventListener('mousedown', function (e) {
+                    if (e.target.tagName === 'BUTTON') return;
+                    const r = modal.getBoundingClientRect();
+                    // Switch from transform-based centering to explicit position
+                    modal.style.left = r.left + 'px';
+                    modal.style.top = r.top + 'px';
+                    modal.style.transform = 'none';
+                    dragging = true; ox = e.clientX; oy = e.clientY;
+                    sl = r.left; st = r.top;
+                    e.preventDefault();
+                });
+                document.addEventListener('mousemove', function (e) {
+                    if (!dragging) return;
+                    modal.style.left = (sl + e.clientX - ox) + 'px';
+                    modal.style.top = (st + e.clientY - oy) + 'px';
+                });
+                document.addEventListener('mouseup', function () { dragging = false; });
+                // Reset position when modal is closed so it re-centers on next open
+                new MutationObserver(function () {
+                    if (modal.style.display === 'none') {
+                        modal.style.left = '50%';
+                        modal.style.top = '10vh';
+                        modal.style.transform = 'translateX(-50%)';
+                    }
+                }).observe(modal, { attributes: true, attributeFilter: ['style'] });
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', makePluginModalDraggable);
+            } else {
+                makePluginModalDraggable();
+            }
         })();
     </script>
 

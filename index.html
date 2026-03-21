@@ -207,13 +207,16 @@
             background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
         }
         /* 2D Toolbar: Feste Höhe aufheben, damit sie umbrechen kann */
-        #factory-toolbar { 
+        #factory-toolbar {
             flex: 0 0 auto; min-height: 50px; height: auto;
-            display: flex; flex-wrap: wrap !important; align-items: center; 
-            background: #333; padding: 5px 10px; gap: 5px; 
+            display: flex; flex-wrap: wrap !important; align-items: center;
+            background: #333; padding: 5px 10px; gap: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000;
-            overflow: visible !important; 
+            overflow: visible !important;
         }
+        /* Factory-Wrapper darf overflow: visible, damit Toolbar-Dropdowns nicht abgeschnitten werden.
+           Der Canvas-Bereich klemmt den Inhalt selbst. */
+        #factory-wrapper { overflow: visible !important; }
         #factory-canvas-area {
             flex-grow: 1; position: relative; width: 100%; height: 100%; overflow: auto; /* Erlaubt das Pannen/Scrollen */
         }
@@ -466,7 +469,12 @@
         .tb-dropdown-content > div:not(.tb-submenu), .tb-submenu > div:first-child, .tb-submenu-content > div { color: white; padding: 10px 15px; font-size: 11px; cursor: pointer; border-bottom: 1px solid #444; font-weight: bold; transition: background 0.1s; }
         .tb-dropdown-content > div:not(.tb-submenu):hover, .tb-submenu > div:first-child:hover, .tb-submenu-content > div:hover { background-color: #007acc; }
         .tb-dropdown-content > div:last-child, .tb-submenu-content > div:last-child { border-bottom: none; }
+        .tb-menu-cat { padding: 5px 12px 3px !important; color: #888 !important; font-size: 10px !important; text-transform: uppercase !important; letter-spacing: 0.8px !important; cursor: default !important; background: #252526 !important; font-weight: bold !important; pointer-events: none !important; border-top: 1px solid #3a3a3a !important; }
+        .tb-menu-cat:hover { background: #252526 !important; }
         .tb-dropdown:hover .tb-dropdown-content { display: block; }
+        .tb-dropdown-content.multi-col { columns: 2; column-gap: 0; }
+        .tb-dropdown-content.multi-col .tb-menu-cat { column-span: all; }
+        .tb-dropdown-content.multi-col .tb-submenu { column-span: all; }
 		.tb-drop-btn { background: #444; color: #fff; border: 1px solid #666; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.1s; }
         .tb-drop-btn:hover { background: #555; border-color: #888; }
         /* F2D-CSS-START */
@@ -575,7 +583,7 @@
         #factory-wrapper.sim-active .f2d-resize-handle { display: none !important; }
         .f2d-schalter { border-radius: 6px; } 
         .f2d-nothalt { border: 4px solid #b71c1c; width: 45px; height: 45px; } 
-        .f2d-led { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #444; background: #222; z-index: 15; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.4); font-size: 8px; font-weight: bold; text-align: center; transition: all 0.1s; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
+        .f2d-led { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #444; background: #222; z-index: 20; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.4); font-size: 8px; font-weight: bold; text-align: center; transition: all 0.1s; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
         .f2d-control-active { transform: scale(0.95); border-color: #fff; }
         /* FIX: 'transition' bei den fallenden Items entfernt! */
         .f2d-item { width: 40px; height: 40px; border: 2px solid #000; display: flex; justify-content: center; align-items: center; font-size: 10px; font-weight: bold; transition: transform 0.1s linear; z-index: 5; }
@@ -1126,22 +1134,24 @@
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_hmi">🎛️ Bedienpult ▼</button>
                         <div class="tb-dropdown-content" id="menu-bedienpult">
+                            <div class="tb-menu-cat">Bedienelemente</div>
                             <div onclick="addFactoryDevice('taster')" data-i18n="fac_hmi_btn">🟢 Taster (Schließer)</div>
                             <div onclick="addFactoryDevice('schalter')" data-i18n="fac_hmi_switch">🎚️ Schalter (rastend)</div>
                             <div onclick="addFactoryDevice('nothalt')" data-i18n="fac_hmi_estop">🍄 Not-Halt (Öffner)</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
+                            <div id="menu-hmi-cat-anzeige" class="tb-menu-cat">Anzeigeelemente</div>
                             <div onclick="addFactoryDevice('led')" data-i18n="fac_hmi_led">💡 Meldeleuchte (LED)</div>
+                            <div id="menu-hmi-cat-rahmen" class="tb-menu-cat">Rahmen</div>
                         </div>
                     </div>
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_items">📦 Werkstücke ▼</button>
                         <div class="tb-dropdown-content" id="menu-werkstuecke">
+                            <div class="tb-menu-cat">Werkstücke</div>
                             <div onclick="spawnFactoryItem('metall', 0, 200, false)" data-i18n="fac_item_metal">⬜ Block Normal (Metall)</div>
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, false)" data-i18n="fac_item_plastic">🟨 Block Normal (Kunststoff)</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
                             <div onclick="spawnFactoryItem('metall', 0, 200, true)" data-i18n="fac_item_metal_solid">🧱 Block Massiv (Metall)</div>
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, true)" data-i18n="fac_item_plastic_solid">🧱 Block Massiv (Kunststoff)</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
+                            <div id="menu-items-cat-spawner" class="tb-menu-cat">Spawner / Entfernen</div>
                             <div onclick="addFactoryDevice('spawner_metall')" data-i18n="fac_spawner_metal">⏳ Spawner (Metall)</div>
                             <div onclick="addFactoryDevice('spawner_kunststoff')" data-i18n="fac_spawner_plastic">⏳ Spawner (Kunststoff)</div>
                             <div onclick="addFactoryDevice('despawner')" data-i18n="fac_despawner">🗑️ Despawner (Entferner)</div>
@@ -1150,32 +1160,39 @@
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_sensors">📡 Sensoren ▼</button>
                         <div class="tb-dropdown-content" id="menu-sensoren">
+                            <div class="tb-menu-cat">Berührungslos</div>
                             <div onclick="addFactoryDevice('sensor_ind')" data-i18n="fac_sens_ind">🧲 Induktiv (Metall)</div>
                             <div onclick="addFactoryDevice('sensor_kap')" data-i18n="fac_sens_kap">🔋 Kapazitiv (Alles)</div>
                             <div onclick="addFactoryDevice('sensor_opt')" data-i18n="fac_sens_opt">🔦 Optisch (Licht)</div>
                             <div onclick="addFactoryDevice('sensor_mag')" data-i18n="fac_sens_mag">🧲 Magnetisch (Reed)</div>
+                            <div id="menu-sens-cat-mech" class="tb-menu-cat">Mechanisch</div>
+                            <div id="menu-sens-cat-safety" class="tb-menu-cat">Sicherheit</div>
                         </div>
                     </div>
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_actuators">⚙️ Aktoren ▼</button>
                         <div class="tb-dropdown-content" id="menu-aktoren">
+                            <div class="tb-menu-cat">Fördertechnik</div>
                             <div onclick="addFactoryDevice('conveyor')" data-i18n="fac_act_belt">🛤️ Förderband</div>
+                            <div id="menu-act-cat-pneu" class="tb-menu-cat">Pneumatik / Zylinder</div>
                             <div onclick="addFactoryDevice('zylinder_single')" data-i18n="fac_act_cyl1">🦾 Zylinder (Einfach)</div>
                             <div onclick="addFactoryDevice('zylinder_double')" data-i18n="fac_act_cyl2">🦾 Zylinder (Doppel)</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
                             <div class="tb-submenu">
                                 <div data-i18n="fac_menu_addons">🧩 Anbauteile</div>
                                 <div class="tb-submenu-content" id="menu-anbauteile">
                                 </div>
                             </div>
+                            <div id="menu-act-cat-handling" class="tb-menu-cat">Handling</div>
+                            <div id="menu-act-cat-env" class="tb-menu-cat">Umgebung</div>
                         </div>
                     </div>
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_structure">🏗️ Struktur ▼</button>
                         <div class="tb-dropdown-content" id="menu-struktur">
+                            <div class="tb-menu-cat">Wände / Böden</div>
                             <div onclick="addFactoryDevice('wall')" data-i18n="fac_struct_wall">🧱 Ziegelwand (Mauer)</div>
                             <div onclick="addFactoryDevice('frame')" data-i18n="fac_struct_frame">⛓️ Metallrahmen / Boden</div>
-                            <div style="border-top: 1px solid #555; margin: 2px 0;"></div>
+                            <div id="menu-struct-cat-zones" class="tb-menu-cat">Zonen</div>
                             <div onclick="addFactoryDevice('zone_top')" data-i18n="fac_struct_zone_top">🛸 Zone (Draufsicht)</div>
                             <div onclick="addFactoryDevice('zone_side')" data-i18n="fac_struct_zone_side">🌍 Zone (Seitenansicht)</div>
                         </div>
@@ -5977,7 +5994,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         const ComponentRegistry = {
             // 🌟 PNEUMATIK BASIS-KOMPONENTEN
             'pneumatic_zone': {
-                directSpawn: true,
+                directSpawn: true, noRodAttach: true,
                 build: function(obj, el) {
                     obj.width = 400; obj.height = 300; el.className = 'f2d-obj f2d-pneumatic-zone';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
@@ -5986,7 +6003,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'compressor': {
-                directSpawn: true,
+                directSpawn: true, noRodAttach: true,
                 build: function(obj, el) {
                     obj.width = 100; obj.height = 60; obj.pressure = 6.0; obj.maxFlow = 200; // 6 bar, 200 l/min
                     el.className = 'f2d-obj f2d-compressor';
@@ -6010,7 +6027,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'throttle': {
-                directSpawn: true,
+                directSpawn: true, noRodAttach: true,
                 build: function(obj, el) {
                     obj.width = 40; obj.height = 35; obj.opening = 100;
                     el.className = 'f2d-obj f2d-throttle';
@@ -6046,7 +6063,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'valve_pneu': {
-                directSpawn: true,
+                directSpawn: true, noRodAttach: true,
                 build: function(obj, el, var1, var2) {
                     // 🌟 FIX: Ventil ist wieder 50px breit! (Schläuche können so exakt ankern)
                     obj.width = 50; obj.height = 40; obj.isDouble = (var2 === 'double'); 
@@ -6168,7 +6185,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'manifold': {
-                directSpawn: true,
+                directSpawn: true, noRodAttach: true,
                 build: function(obj, el) {
                     obj.width = 200; obj.height = 15; el.className = 'f2d-obj f2d-manifold';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
@@ -6177,15 +6194,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'turntable': {
-                role: 'output', color: '#9575cd',
+                role: 'output', color: '#9575cd', noRodAttach: true,
                 i18n: {
                     de: { name: 'Drehtisch', desc: 'Dreht Items um 90° (Nur Draufsicht)' },
                     en: { name: 'Turntable', desc: 'Rotates items by 90° (Top view only)' }
                 },
                 meta: { icon: '🔄' }, // Icon bleibt für das Plugin-Modal erhalten
                 modalConfig: { t: 'Drehtisch (Nur für Draufsicht):', l1: 'Aktivieren (90° Weiche)', out: true },
-                menuTarget: '#menu-aktoren', 
-                insertBefore: 'div[onclick*="zylinder_single"]',
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
                 menuHtml: `<div onclick="addFactoryDevice('turntable')">🔄 <span data-i18n="plug_turntable_name">Drehtisch</span></div>`,
                 css: `
                     /* ... bestehendes CSS ... */
@@ -6234,7 +6251,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'stacklight': {
-                role: 'output', color: '#66bb6a',
+                role: 'output', color: '#66bb6a', noRodAttach: true,
                 i18n: {
                     de: { name: 'Signal-Säule', desc: 'Optische Statusanzeige (Rot, Gelb, Grün)' },
                     en: { name: 'Stacklight', desc: 'Visual status indicator (Red, Yellow, Green)' }
@@ -6242,9 +6259,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '🚦' },
                 modalConfig: { t: 'Signal-Säule (3 Farben):', l1: 'Rot', l2: 'Gelb', l3: 'Grün', out: true },
                 menuTarget: '#menu-bedienpult',
+                insertBefore: '#menu-hmi-cat-rahmen',
                 menuHtml: `<div onclick="addFactoryDevice('stacklight')">🚦 <span data-i18n="plug_stacklight_name">Signal-Säule</span></div>`,
                 css: `
-                    .f2d-stacklight { position: absolute; width: 24px; height: 70px; background: #212121; border: 2px solid #000; border-radius: 4px; display: flex; flex-direction: column; justify-content: space-around; padding: 2px; box-sizing: border-box; z-index: 15; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+                    .f2d-stacklight { position: absolute; width: 24px; height: 70px; background: #212121; border: 2px solid #000; border-radius: 4px; display: flex; flex-direction: column; justify-content: space-around; padding: 2px; box-sizing: border-box; z-index: 20; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
                     .f2d-sl-seg { width: 100%; height: 30%; border-radius: 2px; background: #424242; transition: all 0.1s; border: 1px solid #111; box-sizing: border-box;}
                     .f2d-sl-red.on { background: #ff1744; box-shadow: 0 0 10px #ff1744; border-color: #fff;}
                     .f2d-sl-yel.on { background: #ffea00; box-shadow: 0 0 10px #ffea00; border-color: #fff;}
@@ -6265,7 +6283,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             'display': {
-                color: '#37474f',
+                color: '#37474f', noRodAttach: true,
                 i18n: {
                     de: { name: '7-Seg Display', desc: 'Zeigt Werte von Timern & Zählern an' },
                     en: { name: '7-Seg Display', desc: 'Shows values from Timers & Counters' }
@@ -6273,10 +6291,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '📟' },
                 modalConfig: { t: '7-Seg Display:', l1: 'Timer/Zähler auswählen', customList: 'timers' },
                 menuTarget: '#menu-bedienpult',
+                insertBefore: '#menu-hmi-cat-rahmen',
                 menuHtml: `<div onclick="addFactoryDevice('display')">📟 <span data-i18n="plug_display_name">7-Seg Display</span></div>`,
                 css: `
                     /* ... bestehendes CSS ... */
-                    .f2d-display { position: absolute; width: 60px; height: 30px; background: #000; border: 2px solid #333; border-radius: 4px; color: #ff1744; font-family: monospace; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 15; box-shadow: inset 0 0 8px rgba(255,0,0,0.4); box-sizing: border-box; }
+                    .f2d-display { position: absolute; width: 60px; height: 30px; background: #000; border: 2px solid #333; border-radius: 4px; color: #ff1744; font-family: monospace; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 20; box-shadow: inset 0 0 8px rgba(255,0,0,0.4); box-sizing: border-box; }
                 `,
                 build: function(obj, el, var1) {
                     obj.linkedVar = var1; obj.width = 60; obj.height = 30; el.className = 'f2d-obj f2d-display';
@@ -6528,7 +6547,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }, // Ende von 'press'
 			'fan': {
-                role: 'output', color: '#26c6da',
+                role: 'output', color: '#26c6da', noRodAttach: true,
                 i18n: {
                     de: { name: 'Lüfter / Gebläse', desc: 'Dreht sich, wenn aktiviert (Kühlung/Absaugung)' },
                     en: { name: 'Fan / Blower', desc: 'Spins when activated (cooling/exhaust)' }
@@ -6537,6 +6556,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 modalConfig: { t: 'Lüfter (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true },
                 hasHeight: true, 
                 menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-sep',
                 menuHtml: `<div onclick="addFactoryDevice('fan')">🌀 <span data-i18n="plug_fan_name">Lüfter / Gebläse</span></div>`,
                 css: `
                     .f2d-fan { position: absolute; background: #263238; border: 4px solid #546e7a; border-radius: 50%; box-sizing: border-box; z-index: 2; display: flex; justify-content: center; align-items: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,0,0,0.9); overflow: hidden; }
@@ -6639,6 +6659,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '⚙️' },
                 modalConfig: { t: 'Mechanischer Schalter:', l1: 'SPS Eingangsvariable', out: false },
                 menuTarget: '#menu-sensoren',
+                insertBefore: '#menu-sens-cat-safety',
                 menuHtml: `<div onclick="addFactoryDevice('mech_sensor')">⚙️ <span data-i18n="plug_mech_sensor_name">Mechanisch (Rolle)</span></div>`,
                 css: `
                     .f2d-mech-sensor { width: 20px; height: 30px; background: #757575; border: 2px solid #424242; border-radius: 2px; display: flex; align-items: flex-end; justify-content: center; font-size: 8px; font-weight: bold; color: white; z-index: 10; }
@@ -6708,7 +6729,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'key_switch': {
-                role: 'input', clickSimulate: true, color: '#a1887f',
+                role: 'input', clickSimulate: true, color: '#a1887f', noRodAttach: true,
                 i18n: {
                     de: { name: 'Schlüsselschalter', desc: 'Rastender Schalter mit Schlüssel (Override)' },
                     en: { name: 'Key Switch', desc: 'Latching switch with key (Override)' }
@@ -6716,9 +6737,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '🔑' },
                 modalConfig: { t: 'Schlüsselschalter (Eingang):', l1: 'SPS Eingangsvariable', out: false },
                 menuTarget: '#menu-bedienpult',
+                insertBefore: '#menu-hmi-cat-anzeige',
                 menuHtml: `<div onclick="addFactoryDevice('key_switch')">🔑 <span data-i18n="plug_key_switch_name">Schlüsselschalter</span></div>`,
                 css: `
-                    .f2d-key-switch { width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; border: 3px solid #757575; position: relative; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
+                    .f2d-key-switch { width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; border: 3px solid #757575; position: relative; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); z-index: 20; }
                     .f2d-key-cylinder { width: 24px; height: 24px; border-radius: 50%; background: #212121; position: relative; display: flex; justify-content: center; align-items: center; transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: inset 0 0 4px #000; }
                     .f2d-key { position: absolute; width: 4px; height: 18px; background: #cfd8dc; top: -8px; border-radius: 2px; box-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
                     .f2d-key::before { content: ''; position: absolute; top: -10px; left: -6px; width: 16px; height: 12px; border: 3px solid #cfd8dc; border-radius: 8px 8px 0 0; box-sizing: border-box; }
@@ -6813,7 +6835,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'siren': {
-                role: 'output', color: '#ef5350',
+                role: 'output', color: '#ef5350', noRodAttach: true,
                 i18n: {
                     de: { name: 'Sirene / Hupe', desc: 'Akustischer Alarm (Wackelt und tönt bei Aktivierung)' },
                     en: { name: 'Siren / Horn', desc: 'Acoustic alarm (shakes and sounds on activation)' }
@@ -6821,9 +6843,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '📢' },
                 modalConfig: { t: 'Sirene (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true },
                 menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-sep',
                 menuHtml: `<div onclick="addFactoryDevice('siren')">📢 <span data-i18n="plug_siren_name">Sirene / Hupe</span></div>`,
                 css: `
-                    .f2d-siren { position: absolute; width: 40px; height: 40px; z-index: 5; display: flex; align-items: center; justify-content: center; }
+                    .f2d-siren { position: absolute; width: 40px; height: 40px; z-index: 20; display: flex; align-items: center; justify-content: center; }
                     .f2d-siren-base { width: 12px; height: 20px; background: #424242; border-radius: 2px; position: relative; z-index: 2; }
                     .f2d-siren-horn { 
                         width: 0; height: 0; 
@@ -6910,6 +6933,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '♨️' },
                 modalConfig: { t: 'Heizelement (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true },
                 menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-sep',
                 menuHtml: `<div onclick="addFactoryDevice('heater')">♨️ <span data-i18n="plug_heater_name">Heizelement (Ofen)</span></div>`,
                 hasHeight: true,
                 css: `
@@ -6994,7 +7018,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
 			'portal_crane': {
-                role: 'output', color: '#1565c0',
+                role: 'output', color: '#1565c0', noRodAttach: true,
                 i18n: {
                     de: { name: 'Portalkran (Pick & Place)', desc: '3-Achsen Greifarm mit Vakuum-Sauger' },
                     en: { name: 'Gantry Crane (Pick & Place)', desc: '3-axis gripper arm with vacuum suction cup' }
@@ -7002,6 +7026,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 meta: { icon: '🏗️' },
                 modalConfig: { t: 'Portalkran anlegen:', l1: 'X+ (Nach Rechts)', l2: 'Y+ (Nach Unten)', l3: 'Greifen (Vakuum)', out: true },
                 menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-env',
                 menuHtml: `<div onclick="addFactoryDevice('portal_crane')">🏗️ <span data-i18n="plug_portal_crane_name">Portalkran (Pick&Place)</span></div>`,
                 css: `
                     .f2d-portal-crane { position: absolute; border-top: 6px solid #455a64; box-sizing: border-box; z-index: 6; }
@@ -7116,8 +7141,450 @@ You must output exactly this JSON format. The logic code goes as a single string
                     speedWrap.appendChild(speedInp); ctxMenu.appendChild(speedWrap);
                 }
             },
+            // ── Fördertechnik-Plugins ──────────────────────────────────────────────
+            'conveyor_roller': {
+                isFlatBelt: true, directSpawn: true, hasHeight: true, noRodAttach: true,
+                i18n: {
+                    de: { name: 'Rollenbahn', desc: 'Passive Rollenbahn – Werkstücke rollen durch Neigung / Schwerkraft' },
+                    en: { name: 'Roller Conveyor', desc: 'Passive roller conveyor – items roll by gravity / inclination' }
+                },
+                meta: { icon: '🛞' },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
+                menuHtml: `<div onclick="addFactoryDevice('conveyor_roller')">🛞 <span data-i18n="plug_conveyor_roller_name">Rollenbahn</span></div>`,
+                css: `
+                    .f2d-conveyor-roller {
+                        position: absolute; box-sizing: border-box; z-index: 2; overflow: hidden;
+                        border: 2px solid #455a64; border-radius: 2px;
+                        background: repeating-linear-gradient(
+                            90deg,
+                            #546e7a 0px, #546e7a 3px,
+                            #78909c 3px, #78909c 16px,
+                            #607d8b 16px, #607d8b 18px,
+                            #78909c 18px, #78909c 20px
+                        );
+                    }
+                    .f2d-conveyor-roller .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.25); z-index: 10; }
+                `,
+                build: function(obj, el) {
+                    obj.width = 120; obj.height = 40;
+                    el.className = 'f2d-obj f2d-conveyor-roller';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    if (obj.rollerSpeed === undefined) obj.rollerSpeed = 1.0;
+                    obj.useGravity = false;
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                },
+                physics: function(obj, item, isActive, rad) {
+                    let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
+                    if (item.activeMode === 'side') {
+                        resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, 'conveyor_roller', false);
+                        return;
+                    }
+                    resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, 'conveyor_roller', false);
+                    if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
+                        let spd = (obj.rollerSpeed || 1.0) * window.simSpeed * timeScale;
+                        item.x += Math.cos(rad) * spd; item.y += Math.sin(rad) * spd;
+                        item.vx = Math.cos(rad) * (obj.rollerSpeed || 1.0);
+                        item.vy = Math.sin(rad) * (obj.rollerSpeed || 1.0);
+                    }
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
+                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Rollgeschwindigkeit (px/s)</div>`;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '0'; inp.max = '10'; inp.step = '0.1'; inp.value = obj.rollerSpeed !== undefined ? obj.rollerSpeed : 1.0;
+                    inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inp.onchange = e => { obj.rollerSpeed = parseFloat(e.target.value); saveCallback(); };
+                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+                }
+            },
+            'conveyor_curve': {
+                hasHeight: true, noRodAttach: true,
+                role: 'output', color: '#0288d1',
+                i18n: {
+                    de: { name: 'Förderbandkurve', desc: 'Kurve lenkt Werkstücke um einen einstellbaren Winkel um' },
+                    en: { name: 'Conveyor Curve', desc: 'Curves redirect items by a configurable angle' }
+                },
+                meta: { icon: '↩️' },
+                modalConfig: { t: 'Förderbandkurve:', l1: 'Antrieb (Motor AN)', out: true },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
+                menuHtml: `<div onclick="addFactoryDevice('conveyor_curve')">↩️ <span data-i18n="plug_conveyor_curve_name">Förderbandkurve</span></div>`,
+                css: `
+                    .f2d-conveyor-curve {
+                        position: absolute; box-sizing: border-box; z-index: 2;
+                        background: transparent; border: none;
+                    }
+                    .f2d-conveyor-curve .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.25); z-index: 10; }
+                    .f2d-conveyor-curve.active .f2d-curve-slats { animation: curveSlatFlow 0.6s linear infinite; }
+                    @keyframes curveSlatFlow { to { stroke-dashoffset: -11; } }
+                `,
+                _draw: function(obj) {
+                    let svg = obj.curveSvgEl; if (!svg) return;
+                    let ns = 'http://www.w3.org/2000/svg';
+                    let angle = obj.curveAngle || 90;
+                    let a = angle * Math.PI / 180;
+                    let a0 = -Math.PI / 2, a1 = a0 + a;
+                    let ro = 65, ri = 22, pad = 8;
+                    // Compute bounding box: sample arc endpoints + any 90°-multiple angles within range
+                    function arcPts(r) {
+                        let pts = [[r * Math.cos(a0), r * Math.sin(a0)], [r * Math.cos(a1), r * Math.sin(a1)]];
+                        for (let k = -2; k <= 5; k++) {
+                            let ak = k * Math.PI / 2;
+                            if (ak > a0 + 1e-9 && ak < a1 - 1e-9) pts.push([r * Math.cos(ak), r * Math.sin(ak)]);
+                        }
+                        return pts;
+                    }
+                    let pts = [...arcPts(ro), ...arcPts(ri)];
+                    let bxMin = Math.min(...pts.map(p => p[0]));
+                    let bxMax = Math.max(...pts.map(p => p[0]));
+                    let byMin = Math.min(...pts.map(p => p[1]));
+                    let byMax = Math.max(...pts.map(p => p[1]));
+                    let W = Math.ceil(bxMax - bxMin) + 2 * pad;
+                    let H = Math.ceil(byMax - byMin) + 2 * pad;
+                    // Pivot position within element coordinate space
+                    let cx = -bxMin + pad, cy = -byMin + pad;
+                    obj._pivLocalX = cx; obj._pivLocalY = cy;
+                    obj.width = W; obj.height = H;
+                    if (obj.el) { obj.el.style.width = W + 'px'; obj.el.style.height = H + 'px'; }
+                    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+                    svg.innerHTML = '';
+                    let laf = a > Math.PI ? 1 : 0;
+                    let c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+                    // Belt fill
+                    let d = `M${cx+ro*c0},${cy+ro*s0} A${ro},${ro} 0 ${laf} 1 ${cx+ro*c1},${cy+ro*s1} L${cx+ri*c1},${cy+ri*s1} A${ri},${ri} 0 ${laf} 0 ${cx+ri*c0},${cy+ri*s0} Z`;
+                    let belt = document.createElementNS(ns, 'path');
+                    belt.setAttribute('d', d); belt.setAttribute('fill', '#555'); belt.setAttribute('stroke', '#222'); belt.setAttribute('stroke-width', '2');
+                    svg.appendChild(belt);
+                    // Animated slat overlay
+                    let rm = (ri + ro) / 2, bw = ro - ri;
+                    let slatPath = document.createElementNS(ns, 'path');
+                    slatPath.setAttribute('d', `M${cx+rm*c0},${cy+rm*s0} A${rm},${rm} 0 ${laf} 1 ${cx+rm*c1},${cy+rm*s1}`);
+                    slatPath.setAttribute('fill', 'none'); slatPath.setAttribute('stroke', '#333');
+                    slatPath.setAttribute('stroke-width', bw); slatPath.setAttribute('stroke-linecap', 'butt');
+                    slatPath.setAttribute('stroke-dasharray', '3 8'); slatPath.setAttribute('stroke-dashoffset', '0');
+                    slatPath.setAttribute('class', 'f2d-curve-slats');
+                    svg.appendChild(slatPath);
+                    // Direction arrow at mid-arc
+                    let am = a0 + a / 2;
+                    let arx = cx + rm * Math.cos(am), ary = cy + rm * Math.sin(am);
+                    let tangDeg = (am + Math.PI / 2) * 180 / Math.PI;
+                    let arr = document.createElementNS(ns, 'text');
+                    arr.setAttribute('x', arx); arr.setAttribute('y', ary);
+                    arr.setAttribute('text-anchor', 'middle'); arr.setAttribute('dominant-baseline', 'middle');
+                    arr.setAttribute('font-size', '12');
+                    arr.setAttribute('fill', obj.isActive ? '#ff9800' : 'rgba(255,255,255,0.5)');
+                    arr.setAttribute('transform', `rotate(${tangDeg},${arx},${ary})`);
+                    arr.setAttribute('pointer-events', 'none');
+                    arr.textContent = '▶';
+                    obj.curveArrowEl = arr;
+                    svg.appendChild(arr);
+                },
+                build: function(obj, el, var1) {
+                    obj.linkedVar = var1;
+                    if (obj.curveAngle === undefined) obj.curveAngle = 90;
+                    el.className = 'f2d-obj f2d-conveyor-curve';
+                    obj.useGravity = false;
+                    let svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;';
+                    obj.curveSvgEl = svg; el.appendChild(svg);
+                    ComponentRegistry['conveyor_curve']._draw(obj);
+                },
+                animate: function(obj, spsState) {
+                    let isActive = !!spsState[obj.linkedVar];
+                    if (isActive !== obj.isActive) {
+                        obj.isActive = isActive;
+                        obj.el.classList.toggle('active', isActive);
+                        if (obj.curveArrowEl) obj.curveArrowEl.setAttribute('fill', isActive ? '#ff9800' : 'rgba(255,255,255,0.5)');
+                    }
+                },
+                // Keine Wandkollision – Werkstücke fahren frei in die Zone.
+                // Wenn aktiv: tangentiale Richtung relativ zum Bogendrehpunkt berechnen.
+                physics: function(obj, item, isActive, rad) {
+                    if (!isActive) return;
+                    if (!isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) return;
+                    // Arc pivot in world coordinates via stored local pivot offset
+                    let objRad = (obj.rotation || 0) * Math.PI / 180;
+                    let cos = Math.cos(objRad), sin = Math.sin(objRad);
+                    let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
+                    let lpx = (obj._pivLocalX || obj.width / 2) - obj.width / 2;
+                    let lpy = (obj._pivLocalY || obj.height / 2) - obj.height / 2;
+                    let pivX = ocx + lpx * cos - lpy * sin;
+                    let pivY = ocy + lpx * sin + lpy * cos;
+                    let icx = item.x + item.width / 2;
+                    let icy = item.y + (item.height || item.width) / 2;
+                    let dx = icx - pivX, dy = icy - pivY;
+                    let len = Math.sqrt(dx * dx + dy * dy);
+                    if (len < 1) return;
+                    // Clockwise tangent: (-dy, dx) / len
+                    let tx = -dy / len, ty = dx / len;
+                    let spd = 2 * window.simSpeed * timeScale;
+                    item.x += tx * spd; item.y += ty * spd;
+                    item.vx = tx * 2; item.vy = ty * 2;
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
+                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">↩ Kurvenwinkel (5°–355°)</div>`;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '5'; inp.max = '355'; inp.step = '5'; inp.value = obj.curveAngle !== undefined ? obj.curveAngle : 90;
+                    inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inp.onchange = e => {
+                        obj.curveAngle = Math.min(355, Math.max(5, parseFloat(e.target.value) || 90));
+                        ComponentRegistry['conveyor_curve']._draw(obj);
+                        saveCallback();
+                    };
+                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+                }
+            },
+            'conveyor_lift': {
+                directSpawn: false, hasHeight: true, noRodAttach: true,
+                role: 'output', color: '#5d4037',
+                i18n: {
+                    de: { name: 'Hubstation', desc: 'Transportiert Werkstücke in Drehrichtung des Elements wenn aktiv. Rotieren zum Ausrichten.' },
+                    en: { name: 'Lift Station', desc: 'Transports items in element rotation direction when active. Rotate to align.' }
+                },
+                meta: { icon: '⬆️' },
+                modalConfig: { t: 'Hubstation anlegen:', l1: 'Hub aktiv (Motor AN)', out: true },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
+                menuHtml: `<div onclick="addFactoryDevice('conveyor_lift')">⬆️ <span data-i18n="plug_conveyor_lift_name">Hubstation</span></div>`,
+                css: `
+                    .f2d-conveyor-lift {
+                        position: absolute; box-sizing: border-box; z-index: 2; overflow: hidden;
+                        background: #4e342e; border: 2px solid #3e2723;
+                    }
+                    .f2d-lift-chain {
+                        position: absolute; left: 50%; transform: translateX(-50%);
+                        width: 6px; height: 100%;
+                        background: repeating-linear-gradient(180deg, #795548 0px, #795548 5px, #3e2723 5px, #3e2723 10px);
+                    }
+                    .f2d-lift-platform {
+                        position: absolute; left: 2px; right: 2px; height: 8px;
+                        background: #ff9800; border: 1px solid #e65100; border-radius: 1px;
+                        transition: top 0.4s ease-in-out;
+                    }
+                    .f2d-conveyor-lift.active .f2d-lift-chain { animation: liftChain 0.4s linear infinite; }
+                    @keyframes liftChain { from { background-position-y: 0px; } to { background-position-y: 10px; } }
+                    .f2d-conveyor-lift .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.25); z-index: 10; }
+                `,
+                build: function(obj, el, var1) {
+                    obj.linkedVar = var1; obj.width = 50; obj.height = 120;
+                    el.className = 'f2d-obj f2d-conveyor-lift';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    if (obj.liftSpeed === undefined) obj.liftSpeed = 2;
+                    obj.useGravity = false;
+                    let chain = document.createElement('div'); chain.className = 'f2d-lift-chain'; el.appendChild(chain);
+                    let platform = document.createElement('div'); platform.className = 'f2d-lift-platform';
+                    platform.style.top = (obj.height - 10) + 'px'; obj.platformEl = platform; el.appendChild(platform);
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                },
+                animate: function(obj, spsState) {
+                    let isActive = !!spsState[obj.linkedVar];
+                    if (isActive !== obj.isActive) {
+                        obj.isActive = isActive;
+                        obj.el.classList.toggle('active', isActive);
+                        if (obj.platformEl) obj.platformEl.style.top = isActive ? '2px' : (obj.height - 10) + 'px';
+                    }
+                },
+                // Keine seitlichen Wände – Werkstücke treten frei von der Seite ein.
+                // Wenn inaktiv: Bodenplatte hält Werkstücke auf der Plattform.
+                // Wenn aktiv: immer nach oben heben (unabhängig von Rotation).
+                physics: function(obj, item, isActive, rad) {
+                    let ih = item.height || item.width;
+                    if (isActive) {
+                        if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
+                            let spd = (obj.liftSpeed || 2) * window.simSpeed * timeScale;
+                            item.y -= spd;
+                            item.vy = -(obj.liftSpeed || 2);
+                            item.vx *= Math.pow(0.85, window.simSpeed * timeScale);
+                        }
+                    } else {
+                        // Nur Bodenplatte – Werkstücke können seitlich eintreten
+                        if (!isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) return;
+                        let platformTop = obj.y + obj.height - 10;
+                        if (item.y + ih > platformTop - 2 && item.vy >= 0) {
+                            item.y = platformTop - ih;
+                            item.vy = 0;
+                        }
+                    }
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
+                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Transportgeschwindigkeit (px/s)</div>`;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '0.5'; inp.max = '20'; inp.step = '0.5'; inp.value = obj.liftSpeed !== undefined ? obj.liftSpeed : 2;
+                    inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inp.onchange = e => { obj.liftSpeed = parseFloat(e.target.value); saveCallback(); };
+                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+                }
+            },
+            'sorter_flap': {
+                directSpawn: false, noRodAttach: true,
+                role: 'output', color: '#ef6c00',
+                i18n: {
+                    de: { name: 'Weiche / Klappe', desc: 'Quer über ein Förderband legen. Wenn aktiv, lenkt die Klappe Werkstücke seitlich ab.' },
+                    en: { name: 'Sorter Flap', desc: 'Place across a conveyor. When active, deflects items sideways.' }
+                },
+                meta: { icon: '↔️' },
+                modalConfig: { t: 'Weiche / Klappe anlegen: (Draufsicht)', l1: 'Klappe ausfahren', out: true },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
+                menuHtml: `<div onclick="addFactoryDevice('sorter_flap')">↔️ <span data-i18n="plug_sorter_flap_name">Weiche / Klappe</span></div>`,
+                css: `
+                    .f2d-sorter-flap {
+                        position: absolute; box-sizing: border-box; z-index: 3;
+                        background: transparent; overflow: visible;
+                    }
+                    .f2d-flap-base {
+                        position: absolute; top: 50%; left: 0; right: 0; height: 4px;
+                        background: #78909c; border-radius: 2px; transform: translateY(-50%);
+                        pointer-events: none;
+                    }
+                    .f2d-flap-blade {
+                        position: absolute; top: 50%; left: 0; right: 0; height: 7px;
+                        background: #ef6c00; border-radius: 3px;
+                        transform: translateY(-50%) rotate(0deg);
+                        transform-origin: center center;
+                        transition: transform 0.15s ease-out;
+                        pointer-events: none;
+                    }
+                    .f2d-sorter-flap.active .f2d-flap-blade { transform: translateY(-50%) rotate(var(--flap-angle, -40deg)); }
+                    .f2d-sorter-flap .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.2); z-index: 10; }
+                `,
+                build: function(obj, el, var1) {
+                    obj.linkedVar = var1; obj.width = 80; obj.height = 30;
+                    if (obj.flapAngle === undefined) obj.flapAngle = 40;
+                    if (obj.flapAnchor === undefined) obj.flapAnchor = 'center';
+                    el.className = 'f2d-obj f2d-sorter-flap';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    el.style.setProperty('--flap-angle', `-${obj.flapAngle}deg`);
+                    obj.useGravity = false;
+                    let base = document.createElement('div'); base.className = 'f2d-flap-base'; el.appendChild(base);
+                    let blade = document.createElement('div'); blade.className = 'f2d-flap-blade';
+                    blade.style.transformOrigin = obj.flapAnchor === 'edge' ? 'left center' : 'center center';
+                    el.appendChild(blade);
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                },
+                animate: function(obj, spsState) {
+                    let isActive = !!spsState[obj.linkedVar];
+                    if (isActive !== obj.isActive) { obj.isActive = isActive; obj.el.classList.toggle('active', isActive); }
+                },
+                // Wenn inaktiv: kein Hindernis (Werkstücke passieren). Wenn aktiv: Klappe als Wand.
+                physics: function(obj, item, isActive, rad) {
+                    if (!isActive) return;
+                    let flapDeg = (obj.rotation || 0) - (obj.flapAngle || 40);
+                    let flapRad = flapDeg * Math.PI / 180;
+                    let ocx, ocy;
+                    if (obj.flapAnchor === 'edge') {
+                        let pivX = obj.x, pivY = obj.y + obj.height / 2;
+                        ocx = pivX + (obj.width / 2) * Math.cos(flapRad);
+                        ocy = pivY + (obj.width / 2) * Math.sin(flapRad);
+                    } else {
+                        ocx = obj.x + obj.width / 2;
+                        ocy = obj.y + obj.height / 2;
+                    }
+                    resolveOBBCollision(item, ocx, ocy, obj.width / 2, 5, flapDeg, 'wall', false);
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
+                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">↔ Klappenwinkel (5°–85°)</div>`;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '5'; inp.max = '85'; inp.step = '5'; inp.value = obj.flapAngle !== undefined ? obj.flapAngle : 40;
+                    inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inp.onchange = e => {
+                        obj.flapAngle = Math.min(85, Math.max(5, parseFloat(e.target.value) || 40));
+                        obj.el.style.setProperty('--flap-angle', `-${obj.flapAngle}deg`);
+                        saveCallback();
+                    };
+                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+                    let wrapA = document.createElement('div'); wrapA.style.padding = '5px 15px'; wrapA.onclick = e => e.stopPropagation();
+                    wrapA.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚓ Drehpunkt</div>`;
+                    let selA = document.createElement('select'); selA.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    [['center','↔ Mitte'],['edge','◀ Linker Rand']].forEach(([v,t]) => {
+                        let o = document.createElement('option'); o.value = v; o.textContent = t;
+                        if ((obj.flapAnchor || 'center') === v) o.selected = true;
+                        selA.appendChild(o);
+                    });
+                    selA.onchange = e => {
+                        obj.flapAnchor = e.target.value;
+                        let blade = obj.el.querySelector('.f2d-flap-blade');
+                        if (blade) blade.style.transformOrigin = obj.flapAnchor === 'edge' ? 'left center' : 'center center';
+                        saveCallback();
+                    };
+                    wrapA.appendChild(selA); ctxMenu.appendChild(wrapA);
+                }
+            },
             // Stubs für Built-in-Typen: nur Metadaten, keine build/animate-Logik
             'sensor_opt': { role: 'input', sensorSteps: 5, color: '#ff9800' },
+			'hmi_panel': {
+                directSpawn: true, hasHeight: true, noRotate: true, noRodAttach: true,
+                i18n: {
+                    de: { name: 'Bedienpult-Rahmen', desc: 'Gruppenrahmen für HMI-Elemente – bewegt Bedienelemente beim Verschieben mit' },
+                    en: { name: 'HMI Panel Frame', desc: 'Group frame for HMI elements – moves controls along when dragged' }
+                },
+                meta: { icon: '🎛️' },
+                menuTarget: '#menu-bedienpult',
+                menuHtml: `<div onclick="addFactoryDevice('hmi_panel')">🎛️ <span data-i18n="plug_hmi_panel_name">Bedienpult-Rahmen</span></div>`,
+                css: `
+                    .f2d-hmi-panel {
+                        position: absolute; box-sizing: border-box; z-index: 0;
+                        background:
+                            repeating-linear-gradient(90deg, rgba(255,255,255,0.055) 0px, rgba(255,255,255,0.055) 1px, transparent 1px, transparent 22px),
+                            repeating-linear-gradient(0deg,  rgba(0,0,0,0.045)       0px, rgba(0,0,0,0.045)       1px, transparent 1px, transparent 22px),
+                            linear-gradient(155deg, #cbcbc3 0%, #b2b2aa 45%, #bebebc 100%);
+                        border: 3px solid #787870;
+                        border-radius: 4px;
+                        box-shadow:
+                            inset 0 2px 0 rgba(255,255,255,0.5),
+                            inset 0 -2px 0 rgba(0,0,0,0.18),
+                            inset 2px 0 0 rgba(255,255,255,0.28),
+                            inset -2px 0 0 rgba(0,0,0,0.1),
+                            3px 5px 16px rgba(0,0,0,0.45);
+                    }
+                    /* Schrauben-Ecken */
+                    .f2d-hmi-panel::before, .f2d-hmi-panel::after {
+                        content: ''; position: absolute;
+                        width: 8px; height: 8px; border-radius: 50%;
+                        background: radial-gradient(circle at 35% 35%, #d0d0c8, #888880);
+                        border: 1px solid #606058;
+                        box-shadow: inset 0 1px 1px rgba(255,255,255,0.4);
+                        pointer-events: none;
+                    }
+                    .f2d-hmi-panel::before { top: 5px; left: 5px; }
+                    .f2d-hmi-panel::after  { top: 5px; right: 5px; }
+                    .f2d-hmi-panel.frame-hidden { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+                    .f2d-hmi-panel.frame-hidden::before, .f2d-hmi-panel.frame-hidden::after { display: none; }
+                    .f2d-hmi-panel .f2d-hmi-panel-label {
+                        position: absolute; top: 4px; left: 20px; right: 20px;
+                        font-size: 9px; font-weight: bold; text-align: center;
+                        color: #484840;
+                        text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+                        pointer-events: none; user-select: none; letter-spacing: 2px; text-transform: uppercase;
+                    }
+                    .f2d-hmi-panel.frame-hidden .f2d-hmi-panel-label { display: none; }
+                    .f2d-hmi-panel .f2d-resize-handle-xy { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.3); }
+                    .f2d-hmi-panel.frame-hidden .f2d-resize-handle-xy { background: rgba(3, 169, 244, 0.15); border: none; }
+                `,
+                build: function(obj, el) {
+                    if (!obj.width || obj.width < 10) obj.width = 300;
+                    if (!obj.height || obj.height < 10) obj.height = 200;
+                    if (obj.frameVisible === undefined) obj.frameVisible = true;
+                    el.className = 'f2d-obj f2d-hmi-panel';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    if (!obj.frameVisible) el.classList.add('frame-hidden');
+                    let lbl = document.createElement('div'); lbl.className = 'f2d-hmi-panel-label'; lbl.textContent = 'Bedienpult'; el.appendChild(lbl);
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                    obj.useCollision = false; obj.useGravity = false;
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let sep = document.createElement('div'); sep.style.cssText = 'border-top: 1px solid #555; margin: 5px 0;'; ctxMenu.appendChild(sep);
+                    let btn = document.createElement('div');
+                    btn.style.cssText = 'padding: 6px 15px; cursor: pointer; color: #03a9f4; font-size: 11px;';
+                    btn.textContent = obj.frameVisible ? '👁️ Rahmen verbergen' : '👁️ Rahmen anzeigen';
+                    btn.onclick = () => {
+                        obj.frameVisible = !obj.frameVisible;
+                        obj.el.classList.toggle('frame-hidden', !obj.frameVisible);
+                        saveCallback();
+                    };
+                    ctxMenu.appendChild(btn);
+                }
+            },
         }; //Ende von Component Registry
         // Einmalig berechnet: Typen die keine Rotation brauchen (Built-ins + ComponentRegistry-Plugins mit noRotate:true)
         const noRotateTypes = new Set([
@@ -7150,16 +7617,46 @@ You must output exactly this JSON format. The logic code goes as a single string
             requestAnimationFrame(factoryLoop);
         }
         // NEU: Hilfsfunktion zum Leeren der Auswahl
+        window.activeGroupId = null; // Welche Gruppe ist gerade im "Gruppen-Modus" (erster Klick)
         window.clearSelection = function() {
             selectedElements.forEach(obj => { if(obj.el) obj.el.classList.remove('f2d-selected'); });
             selectedElements = [];
+            window.activeGroupId = null;
         };
+        // ==========================================
+        // GRUPPEN-FUNKTIONEN
+        // ==========================================
+        window.createGroup = function(objs) {
+            let newId = Math.random().toString(36).substr(2, 7);
+            objs.forEach(o => { o.groupId = newId; o.el.classList.add('f2d-grouped'); });
+            saveFactoryState();
+        };
+        window.dissolveGroup = function(groupId) {
+            factoryObjects.forEach(o => { if (o.groupId === groupId) { o.groupId = null; o.el.classList.remove('f2d-grouped'); } });
+            window.activeGroupId = null;
+            saveFactoryState();
+        };
+        window.removeFromGroup = function(obj) {
+            obj.groupId = null;
+            obj.el.classList.remove('f2d-grouped');
+            saveFactoryState();
+        };
+        // Gruppen-CSS injizieren
+        (function() {
+            let s = document.createElement('style');
+            s.textContent = `
+                .f2d-grouped { outline: 1.5px dashed rgba(255, 193, 7, 0.5); outline-offset: 3px; }
+                .f2d-grouped:hover { outline-color: rgba(255, 193, 7, 0.85); }
+                .f2d-grouped.f2d-selected { outline: 2px dashed #007acc !important; outline-offset: 3px !important; box-shadow: 0 0 15px rgba(0,122,204,0.6) !important; }
+            `;
+            document.head.appendChild(s);
+        })();
         // NEU: Event-Listener für das Aufziehen der Auswahl-Box auf dem Hintergrund
         factoryCanvas.addEventListener('mousedown', (e) => {
             if (e.button !== 0 || isSimulationActive) return;
             let targetObj = e.target.closest('.f2d-obj');
             if (!targetObj) {
-                if (!e.shiftKey) clearSelection();
+                if (!e.shiftKey && !e.ctrlKey) clearSelection();
                 isSelecting = true;
                 let rect = factoryCanvas.getBoundingClientRect();
                 // FIX: Koordinaten an den Zoom anpassen!
@@ -7442,15 +7939,40 @@ You must output exactly this JSON format. The logic code goes as a single string
                     e.stopPropagation(); return;
                 }
                 // 5. Drag & Drop (Normales Verschieben)
-                let dragTarget = dataObj.parent ? dataObj.parent : dataObj; 
-                // Multi-Select Klick-Logik
-                if (!selectedElements.includes(dragTarget) && !e.shiftKey && !e.ctrlKey) {
-                    clearSelection();
-                    selectedElements = [dragTarget];
-                    dragTarget.el.classList.add('f2d-selected');
-                } else if (!selectedElements.includes(dragTarget) && (e.shiftKey || e.ctrlKey)) {
-                    selectedElements.push(dragTarget);
-                    dragTarget.el.classList.add('f2d-selected');
+                let dragTarget = dataObj.parent ? dataObj.parent : dataObj;
+                // Gruppen-Klick-Logik
+                window._pendingGroupDrill = null;
+                if (dragTarget.groupId && !e.shiftKey && !e.ctrlKey) {
+                    if (selectedElements.includes(dragTarget)) {
+                        // Bereits in Auswahl → Drill nur vormerken, wenn aktive Gruppe; sonst einfach ziehen
+                        if (window.activeGroupId === dragTarget.groupId) {
+                            window._pendingGroupDrill = dragTarget;
+                            window._pendingGroupDrillX = e.clientX;
+                            window._pendingGroupDrillY = e.clientY;
+                        }
+                        // Bei Mischauswahl (activeGroupId != groupId): Auswahl unverändert lassen
+                    } else {
+                        // Erster Klick auf eine Gruppe → alle Mitglieder auswählen
+                        window.activeGroupId = dragTarget.groupId;
+                        clearSelection();
+                        factoryObjects.forEach(o => {
+                            if (o.groupId === dragTarget.groupId) {
+                                selectedElements.push(o);
+                                o.el.classList.add('f2d-selected');
+                            }
+                        });
+                    }
+                } else {
+                    // Normaler (ungrouped) Klick oder mit Shift/Ctrl
+                    if (!dragTarget.groupId) window.activeGroupId = null;
+                    if (!selectedElements.includes(dragTarget) && !e.shiftKey && !e.ctrlKey) {
+                        clearSelection();
+                        selectedElements = [dragTarget];
+                        dragTarget.el.classList.add('f2d-selected');
+                    } else if (!selectedElements.includes(dragTarget) && (e.shiftKey || e.ctrlKey)) {
+                        selectedElements.push(dragTarget);
+                        dragTarget.el.classList.add('f2d-selected');
+                    }
                 }
                 if (dragTarget.locked) return; // Gesperrte Objekte nicht ziehen
                 draggedElement = { el: dragTarget.el, data: dragTarget };
@@ -7465,7 +7987,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
             });
         }
-        document.addEventListener('mouseup', (e) => { 
+        document.addEventListener('mouseup', (e) => {
+            // Gruppen-Drill: Einzelobjekt nur auswählen wenn kein Drag stattgefunden hat
+            if (window._pendingGroupDrill) {
+                let dt = window._pendingGroupDrill;
+                let moved = Math.abs(e.clientX - window._pendingGroupDrillX) > 4 || Math.abs(e.clientY - window._pendingGroupDrillY) > 4;
+                if (!moved) {
+                    window.activeGroupId = null;
+                    clearSelection();
+                    selectedElements = [dt];
+                    dt.el.classList.add('f2d-selected');
+                }
+                window._pendingGroupDrill = null;
+            }
             // 0. Linkes Panel: Resize beenden und Mauszeiger entbuggen!
             if (isResizing) {
                 isResizing = false;
@@ -7491,15 +8025,32 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let boxRect = selectionBoxEl.getBoundingClientRect();
                     selectionBoxEl.remove(); selectionBoxEl = null;
                     [...factoryObjects, ...factoryItems].forEach(obj => {
+                        if (obj.type === 'hmi_panel') return; // Bedienpult-Rahmen nicht per Marquee markieren
                         let objRect = obj.el.getBoundingClientRect();
                         if (checkOverlap(boxRect, objRect)) {
-                            let target = obj.parent ? obj.parent : obj; 
+                            let target = obj.parent ? obj.parent : obj;
                             if (!selectedElements.includes(target)) {
                                 selectedElements.push(target);
                                 target.el.classList.add('f2d-selected');
                             }
+                            // Ist das Objekt Teil einer Gruppe → ganze Gruppe mitauswählen
+                            if (target.groupId) {
+                                factoryObjects.forEach(grpObj => {
+                                    if (grpObj.groupId === target.groupId && !selectedElements.includes(grpObj)) {
+                                        selectedElements.push(grpObj);
+                                        grpObj.el.classList.add('f2d-selected');
+                                    }
+                                });
+                            }
                         }
                     });
+                    // activeGroupId setzen, wenn alle markierten Objekte zur selben Gruppe gehören
+                    if (selectedElements.length > 0) {
+                        let groupIds = [...new Set(selectedElements.map(o => o.groupId).filter(Boolean))];
+                        if (groupIds.length === 1 && selectedElements.every(o => o.groupId === groupIds[0])) {
+                            window.activeGroupId = groupIds[0];
+                        }
+                    }
                 }
             }
             if(draggedElement || resizingElement || resizingElementXY || rotatingElement) saveFactoryState(); 
@@ -7609,6 +8160,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 btnZoom.textContent = '🔍 Auf Auswahl zoomen';
                 btnZoom.onclick = () => { zoomToSelection(); ctxMenu.style.display = 'none'; };
                 ctxMenu.appendChild(btnZoom);
+                // Gruppen-Button bei Mehrfachauswahl
+                let sepGrp = document.createElement('div'); sepGrp.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepGrp);
+                const allSameGroup = selectedElements.length > 1 && selectedElements.every(s => s.groupId && s.groupId === selectedElements[0].groupId);
+                let btnGrp = document.createElement('div'); btnGrp.className = 'ctx-item'; btnGrp.style.cssText = 'font-size:11px;padding:5px 15px;color:#ffc107;font-weight:bold;';
+                btnGrp.textContent = allSameGroup ? '🔗 Gruppe auflösen' : '🔗 Als Gruppe zusammenfassen';
+                btnGrp.onclick = () => {
+                    if (allSameGroup) { window.dissolveGroup(selectedElements[0].groupId); }
+                    else { window.createGroup([...selectedElements]); }
+                    ctxMenu.style.display = 'none';
+                };
+                ctxMenu.appendChild(btnGrp);
             }
             if (!selectedElements.includes(obj) || selectedElements.length === 1) {
                 const addVarSelect = (label, currentVal, listType, varProp) => {
@@ -7714,6 +8276,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                     saveFactoryState();
                 };
                 ctxMenu.appendChild(btnLock);
+            }
+            // Gruppen-Verwaltung (Einzelobjekt)
+            if (obj.groupId && (!selectedElements.includes(obj) || selectedElements.length === 1)) {
+                let sepGrpS = document.createElement('div'); sepGrpS.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepGrpS);
+                let btnGrpRemove = document.createElement('div'); btnGrpRemove.className = 'ctx-item'; btnGrpRemove.style.color = '#ffc107';
+                btnGrpRemove.textContent = '🔗 Aus Gruppe entfernen';
+                btnGrpRemove.onclick = () => { window.removeFromGroup(obj); ctxMenu.style.display = 'none'; };
+                ctxMenu.appendChild(btnGrpRemove);
+                let btnGrpDissolve = document.createElement('div'); btnGrpDissolve.className = 'ctx-item'; btnGrpDissolve.style.color = '#ffc107';
+                btnGrpDissolve.textContent = '💥 Gruppe auflösen';
+                btnGrpDissolve.onclick = () => { window.dissolveGroup(obj.groupId); ctxMenu.style.display = 'none'; };
+                ctxMenu.appendChild(btnGrpDissolve);
             }
             if (obj.labelEl) {
                 let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -7860,7 +8434,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ctxMenu.style.display = 'none';
                 }; 
                 ctxMenu.appendChild(btnDetach);
-            } else if (obj.type !== 'item' && obj.type !== 'sensor_mag' && !obj.type.startsWith('zylinder') && !obj.type.startsWith('spawner') && obj.type !== 'despawner' && !obj.type.startsWith('zone')) {
+            } else if (obj.type !== 'item' && obj.type !== 'sensor_mag' && !obj.type.startsWith('zylinder') && !obj.type.startsWith('spawner') && obj.type !== 'despawner' && !obj.type.startsWith('zone') && obj.type !== 'taster' && obj.type !== 'schalter' && obj.type !== 'nothalt' && obj.type !== 'led' && obj.type !== 'wall' && obj.type !== 'conveyor' && !(ComponentRegistry[obj.type] && ComponentRegistry[obj.type].noRodAttach)) {
                 let nearestCyl = null; let minDist = 800; 
                 let objCx = obj.x + obj.width/2; let objCy = obj.y + (obj.height||obj.width)/2;
                 factoryObjects.forEach(cyl => {
@@ -7905,6 +8479,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             let wrapRect = document.getElementById('factory-wrapper').getBoundingClientRect();
             ctxMenu.style.left = (x - wrapRect.left) + 'px'; ctxMenu.style.top = (y - wrapRect.top) + 'px'; ctxMenu.style.display = 'block';
+            requestAnimationFrame(() => {
+                let mr = ctxMenu.getBoundingClientRect();
+                let vw = window.innerWidth, vh = window.innerHeight;
+                if (mr.right > vw) ctxMenu.style.left = (parseFloat(ctxMenu.style.left) - (mr.right - vw)) + 'px';
+                if (mr.bottom > vh) ctxMenu.style.top = (parseFloat(ctxMenu.style.top) - (mr.bottom - vh)) + 'px';
+            });
         }
         function deleteObjRecursive(obj) {
             obj.el.remove(); factoryObjects = factoryObjects.filter(o => o !== obj); factoryItems = factoryItems.filter(o => o !== obj); 
@@ -8080,6 +8660,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                     });
                     window.pneumaticZoneMemory[obj.id] = insideIds;
+                }
+            });
+            // ==========================================
+            // HMI-PANEL TRACKER (Bedienelemente mitbewegen)
+            // ==========================================
+            factoryObjects.forEach(obj => {
+                if (obj.type === 'hmi_panel') {
+                    const hmiTypes = ['taster', 'schalter', 'nothalt', 'led', 'stacklight', 'display', 'key_switch', 'siren'];
+                    const isHmi = (t) => hmiTypes.includes(t) || (ComponentRegistry[t] && ComponentRegistry[t].menuTarget === '#menu-bedienpult');
+                    if (obj.lastX !== undefined && obj.lastY !== undefined) {
+                        let dx = obj.x - obj.lastX, dy = obj.y - obj.lastY;
+                        if (dx !== 0 || dy !== 0) {
+                            factoryObjects.forEach(o => {
+                                if (o !== obj && isHmi(o.type)) {
+                                    let wasInside = (o.x >= obj.lastX - 5 && o.y >= obj.lastY - 5 &&
+                                                     o.x + (o.width || 40) <= obj.lastX + obj.width + 5 &&
+                                                     o.y + (o.height || 40) <= obj.lastY + obj.height + 5);
+                                    if (wasInside) { o.x += dx; o.y += dy; if (typeof updateObjTransform === 'function') updateObjTransform(o); }
+                                }
+                            });
+                        }
+                    }
+                    obj.lastX = obj.x; obj.lastY = obj.y;
                 }
             });
             // ==========================================
@@ -8654,7 +9257,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // 🌟 FIX: parentId und attachmentType MÜSSEN gespeichert werden, sonst fällt der Stempel ab!
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType, normLabel: o.normLabel, originalLabelText: o.originalLabelText,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound, locked: o.locked || false,
-					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, posX: o.posX, posY: o.posY
+					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, posX: o.posX, posY: o.posY,
+                    groupId: o.groupId || null
                 }))
             };
         }
@@ -8668,7 +9272,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             historyIndex = factoryHistory.length - 1;
         }
         function undoFactory() {
-            if (isSimulationActive || historyIndex <= 0) return;
+            if (historyIndex <= 0) return;
             historyIndex--;
             isApplyingHistory = true;
             localStorage.setItem('logikFactoryState', factoryHistory[historyIndex]);
@@ -8676,7 +9280,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             isApplyingHistory = false;
         }
         function redoFactory() {
-            if (isSimulationActive || historyIndex >= factoryHistory.length - 1) return;
+            if (historyIndex >= factoryHistory.length - 1) return;
             historyIndex++;
             isApplyingHistory = true;
             localStorage.setItem('logikFactoryState', factoryHistory[historyIndex]);
@@ -8725,6 +9329,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.linkedVarY_Minus) newObj.linkedVarY_Minus = o.linkedVarY_Minus;
                     if (o.linkedVarGrab) newObj.linkedVarGrab = o.linkedVarGrab;
                     if (o.posX !== undefined) { newObj.posX = o.posX; newObj.posY = o.posY; }
+                    if (o.groupId) { newObj.groupId = o.groupId; newObj.el.classList.add('f2d-grouped'); }
                     newObj.x = o.x; newObj.y = o.y; newObj.width = o.width; newObj.rotation = o.rotation;
                     if (o.height) newObj.height = o.height; 
                     if (o.useCollision !== undefined) newObj.useCollision = o.useCollision;
@@ -8765,6 +9370,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                         newObj.locked = true;
                         newObj.el.classList.add('f2d-locked');
                         let b = document.createElement('div'); b.className = 'f2d-lock-badge'; b.textContent = '🔒'; newObj.el.appendChild(b); newObj.lockBadge = b;
+                    }
+                    if (newObj.type === 'hmi_panel' && o.frameVisible !== undefined) {
+                        newObj.frameVisible = o.frameVisible;
+                        if (!o.frameVisible) newObj.el.classList.add('frame-hidden');
                     }
                     if(newObj.resizerEl) newObj.el.style.width = newObj.width + 'px';
                     if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].hasHeight)) { 
@@ -9497,6 +10106,18 @@ You must output exactly this JSON format. The logic code goes as a single string
             document.head.appendChild(styleSheet);
         }
         updateMenuVisibility();
+        // Mehrspaltige Dropdowns: wenn scrollHeight die verfügbare Höhe übersteigt -> 2 Spalten
+        document.querySelectorAll('.tb-dropdown').forEach(dd => {
+            dd.addEventListener('mouseenter', () => {
+                let content = dd.querySelector('.tb-dropdown-content');
+                if (!content) return;
+                let fw = document.getElementById('factory-wrapper');
+                let fwBottom = fw ? fw.getBoundingClientRect().bottom : window.innerHeight;
+                let btnBottom = dd.getBoundingClientRect().bottom;
+                let available = Math.max(120, fwBottom - btnBottom - 6);
+                content.classList.toggle('multi-col', content.scrollHeight > available);
+            });
+        });
         // INITIALISIERUNG
         // 1. Zuerst prüfen, ob wir von einem Link kommen
         if (!checkUrlForState()) {
@@ -10009,9 +10630,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             delWrap.appendChild(btnDel); menu.appendChild(delWrap);
             let wrapper = customSvg.closest('.workspace-panel') || document.getElementById('fbs-wrapper');
             let wrapRect = wrapper.getBoundingClientRect();
-            menu.style.left = (x - wrapRect.left + 10) + 'px'; 
-            menu.style.top = (y - wrapRect.top + 10) + 'px'; 
+            menu.style.left = (x - wrapRect.left + 10) + 'px';
+            menu.style.top = (y - wrapRect.top + 10) + 'px';
             menu.style.display = 'block';
+            requestAnimationFrame(() => {
+                let mr = menu.getBoundingClientRect();
+                let vw = window.innerWidth, vh = window.innerHeight;
+                if (mr.right > vw) menu.style.left = (parseFloat(menu.style.left) - (mr.right - vw)) + 'px';
+                if (mr.bottom > vh) menu.style.top = (parseFloat(menu.style.top) - (mr.bottom - vh)) + 'px';
+            });
         };
 		window.showIecContextMenu = function(x, y, iecId, role, cType, svgElement) {
             const menu = document.getElementById('iec-context-menu');
@@ -10271,9 +10898,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             let wrapper = svgElement.closest('.workspace-panel') || document.getElementById('circuit-wrapper');
             let wrapRect = wrapper.getBoundingClientRect();
-            menu.style.left = (x - wrapRect.left + 10) + 'px'; 
-            menu.style.top = (y - wrapRect.top + 10) + 'px'; 
+            menu.style.left = (x - wrapRect.left + 10) + 'px';
+            menu.style.top = (y - wrapRect.top + 10) + 'px';
             menu.style.display = 'block';
+            requestAnimationFrame(() => {
+                let mr = menu.getBoundingClientRect();
+                let vw = window.innerWidth, vh = window.innerHeight;
+                if (mr.right > vw) menu.style.left = (parseFloat(menu.style.left) - (mr.right - vw)) + 'px';
+                if (mr.bottom > vh) menu.style.top = (parseFloat(menu.style.top) - (mr.bottom - vh)) + 'px';
+            });
         };
 		// ==========================================
         // NEU: AUSBAUSTUFE 2 - Logikbausteine hinzufügen

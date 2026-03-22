@@ -496,6 +496,7 @@
         .task-mgr-btn.primary:hover { background:#1976d2; }
         .task-mgr-btn.danger { background:#c62828; border-color:#b71c1c; }
         .task-mgr-btn.danger:hover { background:#b71c1c; }
+        .task-device-hidden { display: none !important; }
 		.tb-drop-btn { background: #444; color: #fff; border: 1px solid #666; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: background 0.1s; }
         .tb-drop-btn:hover { background: #555; border-color: #888; }
         /* F2D-CSS-START */
@@ -1370,7 +1371,7 @@
         <div id="task-editor-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#2d2d30; border:1px solid #555; border-radius:8px; z-index:3100; padding:0; width:640px; max-height:90vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.7); flex-direction:column;">
             <div style="background:#1565c0; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-radius:7px 7px 0 0; position:sticky; top:0; z-index:10; flex-shrink:0;">
                 <span style="color:#fff; font-weight:bold;">✏️ Aufgaben-Editor</span>
-                <button onclick="document.getElementById('task-editor-modal').style.display='none'" style="background:none; border:none; color:#fff; cursor:pointer; font-size:16px;">✖</button>
+                <button onclick="window._taskEditorClose()" style="background:none; border:none; color:#fff; cursor:pointer; font-size:16px;">✖</button>
             </div>
             <div id="task-editor-body" style="padding:16px; color:#fff; font-size:12px;"></div>
         </div>
@@ -6374,7 +6375,86 @@ You must output exactly this JSON format. The logic code goes as a single string
                 document.getElementById('task-panel-timer').style.display = 'none';
             }
             document.getElementById('task-panel').style.display = 'block';
+            // Objektbeschränkung anwenden (falls aktiviert)
+            if (taskObj.restrictObjects) {
+                const allowed = (taskObj.conditions || [])
+                    .filter(c => c.type === 'factory_object' && c.objectType)
+                    .map(c => c.objectType);
+                _taskApplyObjectRestrictions(allowed);
+            }
         };
+
+        function _taskAnnotateDeviceItems() {
+            // Annotiert alle addFactoryDevice-Einträge mit data-device-type (idempotent)
+            document.querySelectorAll('[onclick*="addFactoryDevice"]').forEach(el => {
+                if (!el.dataset.deviceType) {
+                    const m = (el.getAttribute('onclick') || '').match(/addFactoryDevice\(['"]([^'"]+)['"]\)/);
+                    if (m) el.dataset.deviceType = m[1];
+                }
+            });
+        }
+
+        function _taskApplyObjectRestrictions(allowedTypes) {
+            _taskAnnotateDeviceItems();
+            // CSS-Klasse auf alle nicht-erlaubten Einträge setzen
+            document.querySelectorAll('[data-device-type]').forEach(el => {
+                if (!allowedTypes.includes(el.dataset.deviceType)) {
+                    el.classList.add('task-device-hidden');
+                }
+            });
+            // Safety-Net: addFactoryDevice wrappen, fängt alle Aufrufer ab
+            if (!window._origAddFactoryDevice) {
+                window._origAddFactoryDevice = window.addFactoryDevice;
+                window.addFactoryDevice = function(type) {
+                    if (activeTask && activeTask.restrictObjects) {
+                        const allowed = (activeTask.conditions || [])
+                            .filter(c => c.type === 'factory_object' && c.objectType)
+                            .map(c => c.objectType);
+                        if (!allowed.includes(type)) return;
+                    }
+                    window._origAddFactoryDevice(type);
+                };
+            }
+        }
+
+        function _taskRestoreObjectRestrictions() {
+            document.querySelectorAll('.task-device-hidden').forEach(el => {
+                el.classList.remove('task-device-hidden');
+            });
+            if (window._origAddFactoryDevice) {
+                window.addFactoryDevice = window._origAddFactoryDevice;
+                delete window._origAddFactoryDevice;
+            }
+        }
+
+        // Lesbare Kurzbezeichnung ohne Spoiler (zeigt WAS zu tun ist, nicht WIE)
+        function _condNoSpoilerLabel(cond) {
+            switch(cond.type) {
+                case 'sps_output':      return 'SPS-Ausgang prüfen';
+                case 'sps_input':       return 'SPS-Eingang prüfen';
+                case 'variable_exists': return 'Variable deklarieren';
+                case 'code_contains':   return 'Code-Struktur prüfen';
+                case 'factory_object':  return 'Fabrikobjekt platzieren';
+                case 'sim_running':     return 'Simulation laufen lassen';
+                case 'despawner_count': return 'Teile verarbeiten';
+                case 'custom_js':       return 'Bedingung erfüllen';
+                default:                return cond.type;
+            }
+        }
+        // Detailtext mit konkreten Werten (Spoiler)
+        function _condSpoilerLabel(cond) {
+            switch(cond.type) {
+                case 'sps_output':
+                case 'sps_input':       return `${cond.variable} = ${cond.value ? '1 (aktiv)' : '0 (inaktiv)'}`;
+                case 'variable_exists': return `"${cond.variable}" deklariert`;
+                case 'code_contains':   return `Enthält: ${cond.pattern}`;
+                case 'factory_object':  return `${cond.objectType}` + (cond.linkedVar ? ` → ${cond.linkedVar}` : '');
+                case 'sim_running':     return `≥ ${cond.minSeconds} s`;
+                case 'despawner_count': return `${cond.count} Teile`;
+                case 'custom_js':       return cond.expression || '(JS)';
+                default:                return '';
+            }
+        }
 
         function _taskRenderConditions() {
             if (!activeTask) return;
@@ -6384,12 +6464,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let div = document.createElement('div');
                 div.className = 'task-cond pending';
                 div.id = 'task-cond-' + i;
-                div.innerHTML = '<span class="task-cond-icon"></span><span>' + _escHtml(cond.label || cond.type) + '</span>';
+
+                // Anzeigetext: label des Erstellers hat Vorrang, sonst lesbare Kurzform
+                const displayLabel = cond.label || _condNoSpoilerLabel(cond);
+                const spoiler = _condSpoilerLabel(cond);
+                // Spoiler-Button nur wenn kein Creator-Label gesetzt (dann ist der Spoiler nützlich)
+                const showSpoilerBtn = !cond.label && spoiler;
+
+                div.innerHTML =
+                    '<span class="task-cond-icon"></span>' +
+                    '<span class="task-cond-text" style="flex:1;">' + _escHtml(displayLabel) + '</span>' +
+                    (showSpoilerBtn
+                        ? '<span class="task-cond-spoiler-btn" title="Hinweis anzeigen" style="cursor:pointer;opacity:0.5;font-size:10px;margin-left:4px;flex-shrink:0;">👁</span>' +
+                          '<span class="task-cond-spoiler" style="display:none;width:100%;font-size:10px;color:#78909c;padding-left:20px;margin-top:1px;">' + _escHtml(spoiler) + '</span>'
+                        : '');
+
+                if (showSpoilerBtn) {
+                    div.style.flexWrap = 'wrap';
+                    div.querySelector('.task-cond-spoiler-btn').addEventListener('click', function() {
+                        let sp = div.querySelector('.task-cond-spoiler');
+                        const visible = sp.style.display !== 'none';
+                        sp.style.display = visible ? 'none' : 'block';
+                        this.style.opacity = visible ? '0.5' : '1';
+                    });
+                }
                 list.appendChild(div);
             });
         }
 
         window._taskAbandon = function() {
+            _taskRestoreObjectRestrictions();
             activeTask = null;
             taskSolved = false;
             if (_taskTimerInterval) { clearInterval(_taskTimerInterval); _taskTimerInterval = null; }
@@ -6457,6 +6561,20 @@ You must output exactly this JSON format. The logic code goes as a single string
             { value:'custom_js',       label:'Eigener JS-Ausdruck' },
         ];
 
+        // Alle verfügbaren Fabrik-Objekttypen: Built-ins + dynamisch aus ComponentRegistry
+        function _getFactoryObjectTypes() {
+            const builtins = [
+                'conveyor', 'despawner', 'frame',
+                'led', 'nothalt', 'schalter', 'taster',
+                'sensor_ind', 'sensor_kap', 'sensor_mag', 'sensor_opt',
+                'spawner_kunststoff', 'spawner_metall',
+                'wall', 'zone_side', 'zone_top',
+                'zylinder_double', 'zylinder_single',
+            ];
+            const registry = typeof ComponentRegistry !== 'undefined' ? Object.keys(ComponentRegistry) : [];
+            return [...new Set([...builtins, ...registry])].sort();
+        }
+
         function _buildCondExtra(cond) {
             switch(cond.type) {
                 case 'sps_output': case 'sps_input':
@@ -6472,11 +6590,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return `<label class="task-ed-label">Variable</label><input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. A_LAMPE">`;
                 case 'code_contains':
                     return `<label class="task-ed-label">Regex-Muster</label><input class="task-ed-input cond-pattern" type="text" value="${_escHtml(cond.pattern||'')}" placeholder="z.B. SR oder TON">`;
-                case 'factory_object':
-                    return `<div style="display:flex;gap:6px;">
-                        <div style="flex:1;"><label class="task-ed-label">Objekttyp</label><input class="task-ed-input cond-objtype" type="text" value="${_escHtml(cond.objectType||'')}" placeholder="z.B. led, conveyor"></div>
+                case 'factory_object': {
+                    const dlId = 'task-obj-types-dl';
+                    const dlOpts = _getFactoryObjectTypes().map(t => `<option value="${_escHtml(t)}">`).join('');
+                    return `<datalist id="${dlId}">${dlOpts}</datalist>
+                    <div style="display:flex;gap:6px;">
+                        <div style="flex:1;"><label class="task-ed-label">Objekttyp</label>
+                            <input class="task-ed-input cond-objtype" type="text" list="${dlId}" value="${_escHtml(cond.objectType||'')}" placeholder="Tippen oder Dropdown ▼" autocomplete="off">
+                        </div>
                         <div style="flex:1;"><label class="task-ed-label">Verknüpfte Variable</label><input class="task-ed-input cond-linkedvar" type="text" value="${_escHtml(cond.linkedVar||'')}" placeholder="z.B. A_LAMPE"></div>
                     </div>`;
+                }
                 case 'sim_running':
                     return `<label class="task-ed-label">Mindest-Simulationszeit (Sekunden)</label><input class="task-ed-input cond-minsec" type="number" min="0" value="${cond.minSeconds||5}">`;
                 case 'despawner_count':
@@ -6554,6 +6678,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             let tl = parseInt(document.getElementById('ted-time').value) || 0;
             task.timeLimit = tl > 0 ? tl : null;
             task.conditions = _taskCollectConditions();
+            let restrictEl = document.getElementById('ted-restrict');
+            task.restrictObjects = restrictEl ? restrictEl.checked : false;
             return task;
         }
 
@@ -6570,8 +6696,21 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (infoEl) infoEl.textContent = '✅ Preset gespeichert (Code + Fabrik-Zustand)';
         };
 
+        window._taskEditorClose = function() {
+            // Formularstand sichern bevor der Modal versteckt wird
+            if (document.getElementById('ted-name')) {
+                _taskCollectFromEditor();
+            }
+            document.getElementById('task-editor-modal').style.display = 'none';
+        };
+
         window._openTaskEditor = function(taskObj) {
             let modal = document.getElementById('task-editor-modal');
+            // Dieselbe Aufgabe erneut öffnen → Formular ist noch intakt, einfach wieder anzeigen
+            if (taskObj && modal._editTask && modal._editTask.id === taskObj.id && document.getElementById('ted-name')) {
+                modal.style.display = 'flex';
+                return;
+            }
             let task = taskObj ? JSON.parse(JSON.stringify(taskObj)) : {
                 version:'1.0', type:'valitask',
                 id:'task-' + Date.now() + '-' + Math.random().toString(36).substr(2,6),
@@ -6608,11 +6747,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">✅ Bedingungen (alle müssen erfüllt sein)</div>
                     <div id="ted-cond-list"></div>
                     <button onclick="window._taskAddCondition()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">+ Bedingung hinzufügen</button>
+                    <label style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                        <input type="checkbox" id="ted-restrict" ${task.restrictObjects ? 'checked' : ''}>
+                        Nur geforderte Objekte (<code style="background:#111;padding:1px 4px;border-radius:2px;font-size:10px;">factory_object</code>-Bedingungen) in den Menüs erlauben
+                    </label>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #444;padding-top:12px;">
                     <button onclick="window._taskEditorSave()" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:bold;">💾 Lokal speichern</button>
                     <button onclick="window._taskEditorExport()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">📤 Als .valitask exportieren</button>
-                    <button onclick="document.getElementById('task-editor-modal').style.display='none'" style="background:#555;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">✖ Schließen</button>
+                    <button onclick="window._taskEditorClose()" style="background:#555;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">✖ Schließen</button>
                 </div>`;
             (task.conditions || []).forEach((cond, i) => _taskRenderCondRow(cond, i));
             modal.style.display = 'flex';
@@ -10040,6 +10183,8 @@ You must output exactly this JSON format. The logic code goes as a single string
         });
         document.addEventListener('click', () => { ctxMenu.style.display = 'none'; });
         function showContextMenu(x, y, obj) {
+            // Factory items (workpieces from factoryItems) have no .type — skip device-specific menu
+            if (!obj.type) return;
             ctxMenu.innerHTML = '';
             let infoBox = document.createElement('div'); infoBox.style.padding = '6px 15px'; infoBox.style.color = '#ffeb3b'; infoBox.style.fontSize = '10px'; infoBox.style.borderBottom = '1px solid #555'; infoBox.style.cursor = 'default'; infoBox.style.fontFamily = 'monospace';
             infoBox.innerHTML = `📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}<br>📏 W: ${Math.round(obj.width)} | H: ${Math.round(obj.height || obj.width)} | R: ${Math.round(obj.rotation)}°`;
@@ -10211,9 +10356,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const isMultiSel = selectedElements.includes(obj) && selectedElements.length > 1;
                 const targets = isMultiSel ? selectedElements : [obj];
                 const allLocked = targets.every(o => o.locked);
+                // Gesperrte Objekte während einer Aufgabe nicht entsperrbar anzeigen
+                if (!(activeTask && allLocked)) {
                 let btnLock = document.createElement('div'); btnLock.className = 'ctx-item';
                 btnLock.textContent = allLocked ? '🔓 Entsperren' : '🔒 Sperren';
                 btnLock.onclick = () => {
+                    // Während einer aktiven Aufgabe dürfen gesperrte Objekte nicht entsperrt werden
+                    if (activeTask && allLocked) return;
                     const newState = !allLocked;
                     targets.forEach(o => {
                         o.locked = newState;
@@ -10226,6 +10375,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     saveFactoryState();
                 };
                 ctxMenu.appendChild(btnLock);
+                } // end if (!(activeTask && allLocked))
             }
             // Gruppen-Verwaltung (Einzelobjekt)
             if (obj.groupId && (!selectedElements.includes(obj) || selectedElements.length === 1)) {
@@ -11601,8 +11751,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let icon = (v.meta && v.meta.icon) || '⚙️';
                     return { key: k, label, icon };
                 });
-            const allComponents = [...builtins, ...registryComponents]
+            let allComponents = [...builtins, ...registryComponents]
                 .sort((a, b) => a.label.localeCompare(b.label));
+            // Aufgaben-Objektbeschränkung: nur erlaubte Typen anzeigen
+            if (activeTask && activeTask.restrictObjects) {
+                const allowed = (activeTask.conditions || [])
+                    .filter(c => c.type === 'factory_object' && c.objectType)
+                    .map(c => c.objectType);
+                allComponents = allComponents.filter(c => allowed.includes(c.key));
+            }
             const renderSuggestions = (filter) => {
                 suggestList.innerHTML = '';
                 const matches = filter.trim() === '' ? allComponents : allComponents.filter(c =>

@@ -6384,6 +6384,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             localStorage.setItem('valisTaskPackages', JSON.stringify(packs));
         }
         function _deleteLocalPackage(packId) {
+            const pack = _getLocalPackages().find(p => p.id === packId);
+            if (pack && (pack.taskIds || []).length > 0)
+                localStorage.setItem('valisTasks', JSON.stringify(_getLocalTasks().filter(t => !pack.taskIds.includes(t.id))));
             localStorage.setItem('valisTaskPackages', JSON.stringify(_getLocalPackages().filter(p => p.id !== packId)));
         }
         function _exportPackage(pack) {
@@ -11445,6 +11448,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                             else valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
                         }
                         saveFactoryState();
+                        // Code-First: Variable in Code eintragen wenn noch nicht vorhanden
+                        const _assignedVar = (sel.value && sel.value !== '__new__') ? sel.value : null;
+                        if (_assignedVar) {
+                            const _ta = document.getElementById('code');
+                            const _code = _ta.value;
+                            const _inCode  = new RegExp(`^INPUT\\s+${_assignedVar}\\s*$`, 'mi').test(_code);
+                            const _outCode = new RegExp(`^\\b${_assignedVar}\\s*:=`, 'mi').test(_code);
+                            if (!_inCode && !_outCode) {
+                                _ta.value = _code.trimEnd() + '\n' + (listType === 'in' ? `INPUT ${_assignedVar}` : `${_assignedVar} := False`) + '\n';
+                                _ta.dispatchEvent(new Event('input'));
+                            }
+                        }
                         if (activeTask && !taskSolved) window._taskCheckConditions();
                     };
                     wrapper.appendChild(sel); ctxMenu.appendChild(wrapper);

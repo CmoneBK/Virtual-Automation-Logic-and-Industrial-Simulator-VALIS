@@ -7050,6 +7050,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // Bearbeitungsbereich-Sperren anwenden
             if (taskObj.blockAreas) _taskApplyBlockAreas(taskObj.blockAreas);
+            if (taskObj.hideAreas)  _taskApplyHideAreas(taskObj.hideAreas);
             // Musterlösung-Button initialisieren
             _taskUpdateSolutionBtn();
         };
@@ -7170,6 +7171,97 @@ You must output exactly this JSON format. The logic code goes as a single string
                 el.classList.remove('task-device-hidden');
                 delete el.dataset.taskBlockHidden;
             });
+        }
+
+        let _taskHideAreaFallback = null; // workspace-panel forced visible as fallback
+        let _taskSavedLayout = null;     // grid-layout vor hideAreas gespeichert
+
+        function _taskApplyHideAreas(areas) {
+            if (!areas) return;
+            _taskHideAreaFallback = null;
+            const hideEl = (el) => { if (!el) return; el.dataset.taskHidden = el.style.display; el.style.display = 'none'; };
+
+            // Linke Seite: section-header UND Container ausblenden
+            const hideSection = (containerId) => {
+                const el = document.getElementById(containerId);
+                if (!el) return;
+                // section-header ist das direkt vorherige Geschwisterelement
+                const hdr = el.previousElementSibling;
+                if (hdr && hdr.classList.contains('section-header')) hideEl(hdr);
+                hideEl(el); // speichert original display VOR dem Setzen auf none
+            };
+            if (areas.codeEditor) hideSection('editor-container');
+            if (areas.ioPanel)    hideSection('simulator-container');
+
+            // Panel-Resizer aktualisieren
+            const ecVis = document.getElementById('editor-container')?.style.display !== 'none';
+            const scVis = document.getElementById('simulator-container')?.style.display !== 'none';
+            const res = document.getElementById('panel-resizer');
+            if (res) res.style.display = (ecVis && scVis) ? 'block' : 'none';
+
+            // In Grid-Layout erzwingt CSS "display:flex !important" auf allen Panels →
+            // erst in flex-row wechseln damit display:none greift
+            _taskSavedLayout = null;
+            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.factory2d;
+            if (_wsAnyHide && typeof currentLayout !== 'undefined' && currentLayout.startsWith('grid-')) {
+                _taskSavedLayout = currentLayout;
+                window.changeWorkspaceLayout('flex-row');
+            }
+
+            // Workspace-Panels: Tab-Button UND Panel ausblenden
+            const wsPanels = [
+                { key:'logikplan',  btn:'btn-view-fbs', pid:'fbs-wrapper'    },
+                { key:'schaltplan', btn:'btn-view-iec', pid:'circuit-wrapper' },
+                { key:'factory2d',  btn:'btn-view-fac', pid:'factory-wrapper' },
+            ];
+            for (let {key, btn, pid} of wsPanels) {
+                if (!areas[key]) continue;
+                const b = document.getElementById(btn);
+                if (b) { b.classList.remove('active'); hideEl(b); }
+                // Panel auf jeden Fall auf none setzen (egal ob inline oder CSS-default)
+                const p = document.getElementById(pid);
+                if (p) { p.dataset.taskHidden = p.style.display; p.style.display = 'none'; }
+            }
+
+            // Sicherstellen dass mind. ein Workspace-Panel sichtbar bleibt
+            const anyVisible = wsPanels.some(({key, pid}) => {
+                if (areas[key]) return false;
+                const p = document.getElementById(pid);
+                return p && p.style.display !== 'none';
+            });
+            if (!anyVisible) {
+                const fb = wsPanels.find(({key}) => !areas[key]);
+                if (fb) {
+                    _taskHideAreaFallback = fb.pid;
+                    const p = document.getElementById(fb.pid), b = document.getElementById(fb.btn);
+                    if (p) p.style.display = '';
+                    if (b) { b.style.display = ''; b.classList.add('active'); }
+                }
+            }
+        }
+
+        function _taskRestoreHideAreas() {
+            // Alle mit data-taskHidden markierten Elemente wiederherstellen
+            document.querySelectorAll('[data-task-hidden]').forEach(el => {
+                el.style.display = el.dataset.taskHidden;
+                delete el.dataset.taskHidden;
+            });
+            // Fallback-Panel (war ursprünglich ausgeblendet) wieder ausblenden
+            if (_taskHideAreaFallback) {
+                const p = document.getElementById(_taskHideAreaFallback);
+                if (p) p.style.display = 'none';
+                _taskHideAreaFallback = null;
+            }
+            // Grid-Layout wiederherstellen falls es vor der Aufgabe aktiv war
+            if (_taskSavedLayout && typeof window.changeWorkspaceLayout === 'function') {
+                window.changeWorkspaceLayout(_taskSavedLayout);
+                _taskSavedLayout = null;
+            }
+            // Panel-Resizer aktualisieren
+            const ecVis = document.getElementById('editor-container')?.style.display !== 'none';
+            const scVis = document.getElementById('simulator-container')?.style.display !== 'none';
+            const res = document.getElementById('panel-resizer');
+            if (res) res.style.display = (ecVis && scVis) ? 'block' : 'none';
         }
 
         // ── Musterlösung ────────────────────────────────────────────────────────
@@ -7368,6 +7460,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         window._taskAbandon = function() {
             _taskRestoreObjectRestrictions();
             _taskRestoreBlockAreas();
+            _taskRestoreHideAreas();
             activeTask = null;
             taskSolved = false;
             if (_taskTimerInterval) { clearInterval(_taskTimerInterval); _taskTimerInterval = null; }
@@ -7626,6 +7719,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 factory2d:      !!(document.getElementById('ted-block-2d') || {}).checked,
                 factoryNewVars: !!(document.getElementById('ted-block-newvar') || {}).checked,
             };
+            task.hideAreas = {
+                codeEditor: !!(document.getElementById('ted-hide-code') || {}).checked,
+                ioPanel:    !!(document.getElementById('ted-hide-io') || {}).checked,
+                logikplan:  !!(document.getElementById('ted-hide-fbs') || {}).checked,
+                schaltplan: !!(document.getElementById('ted-hide-iec') || {}).checked,
+                factory2d:  !!(document.getElementById('ted-hide-2d') || {}).checked,
+            };
             return task;
         }
 
@@ -7742,19 +7842,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                     </div>
                 </div>
                 <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
-                    <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">🔒 Bearbeitungsbereiche sperren</div>
-                    ${[
-                        ['ted-block-code', 'Code-Editor (Texteingabe direkt)', '', (task.blockAreas||{}).codeEditor],
-                        ['ted-block-io',   'Ein-/Ausgänge', '', (task.blockAreas||{}).ioPanel],
-                        ['ted-block-fbs',  'Logikplan', '(Code bleibt über Logikplan bearbeitbar, wenn nicht gesperrt)', (task.blockAreas||{}).logikplan],
-                        ['ted-block-iec',  'Schaltplan', '(Code bleibt über Schaltplan bearbeitbar, wenn nicht gesperrt)', (task.blockAreas||{}).schaltplan],
-                        ['ted-block-2d',   '2D Anlage (komplett)', '', (task.blockAreas||{}).factory2d],
-                        ['ted-block-newvar','Neue Objekte zur Anlage hinzufügen sperren', '(nur wirksam wenn 2D Anlage nicht vollständig gesperrt)', (task.blockAreas||{}).factoryNewVars],
-                    ].map(([id,label,hint,checked]) => `
-                        <label style="display:flex;align-items:flex-start;gap:7px;margin-bottom:5px;cursor:pointer;color:#b0bec5;font-size:11px;">
-                            <input type="checkbox" id="${id}" ${checked?'checked':''} style="margin-top:2px;">
-                            <span>${label}${hint?` <span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}
-                        </label>`).join('')}
+                    <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">🔒 Bearbeitungsbereiche</div>
+                    <table style="width:100%;border-collapse:collapse;font-size:11px;color:#b0bec5;">
+                        <thead><tr>
+                            <th style="text-align:left;color:#607d8b;font-weight:normal;padding-bottom:5px;width:55%;">Bereich</th>
+                            <th style="text-align:center;color:#ef9a9a;font-weight:normal;padding-bottom:5px;width:23%;" title="Interaktion sperren, aber Bereich bleibt sichtbar">🔒 Sperren</th>
+                            <th style="text-align:center;color:#90a4ae;font-weight:normal;padding-bottom:5px;width:22%;" title="Bereich vollständig ausblenden">🙈 Ausblenden</th>
+                        </tr></thead>
+                        <tbody>
+                        ${[
+                            ['code',   'Code-Editor',        'ted-block-code',   'ted-hide-code',   (task.blockAreas||{}).codeEditor,  (task.hideAreas||{}).codeEditor,  ''],
+                            ['io',     'Ein-/Ausgänge',      'ted-block-io',     'ted-hide-io',     (task.blockAreas||{}).ioPanel,     (task.hideAreas||{}).ioPanel,     ''],
+                            ['fbs',    'Logikplan',          'ted-block-fbs',    'ted-hide-fbs',    (task.blockAreas||{}).logikplan,   (task.hideAreas||{}).logikplan,   '(Sperren lässt Code-Bearbeitung über FBS zu, wenn nicht gesperrt)'],
+                            ['iec',    'Schaltplan',         'ted-block-iec',    'ted-hide-iec',    (task.blockAreas||{}).schaltplan,  (task.hideAreas||{}).schaltplan,  '(Sperren lässt Code-Bearbeitung über Schaltplan zu, wenn nicht gesperrt)'],
+                            ['2d',     '2D Anlage',          'ted-block-2d',     'ted-hide-2d',     (task.blockAreas||{}).factory2d,   (task.hideAreas||{}).factory2d,   ''],
+                        ].map(([key,label,blockId,hideId,blockChk,hideChk,hint]) => `
+                            <tr style="border-top:1px solid #2a2a2a;">
+                                <td style="padding:4px 0;">${label}${hint?`<br><span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}</td>
+                                <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${blockId}" ${blockChk?'checked':''}></td>
+                                <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${hideId}" ${hideChk?'checked':''}></td>
+                            </tr>`).join('')}
+                        <tr style="border-top:1px solid #333;">
+                            <td colspan="3" style="padding-top:6px;">
+                                <label style="display:flex;align-items:flex-start;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                                    <input type="checkbox" id="ted-block-newvar" ${(task.blockAreas||{}).factoryNewVars?'checked':''} style="margin-top:2px;">
+                                    <span>Neue Objekte zur Anlage hinzufügen sperren <span style="color:#607d8b;font-size:10px;">(nur wirksam wenn 2D Anlage nicht vollständig gesperrt)</span></span>
+                                </label>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #444;padding-top:12px;">
                     <button onclick="window._taskEditorSave()" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:bold;">💾 Lokal speichern</button>

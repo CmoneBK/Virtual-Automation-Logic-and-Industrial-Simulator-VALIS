@@ -936,7 +936,7 @@
                 <button class="btn-export" onclick="openHelpModal()" style="background: #17a2b8; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_help">ℹ️ Hilfe / Tipps</button>
                 <button class="btn-export" onclick="openSaveLoadModal()" style="background: #2196f3; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_save_load">💾 Speichern / Laden</button>
                 <button class="btn-export" onclick="openExamplesModal()" style="background: #6a1b9a; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_examples">📋 Beispiele</button>
-                <button class="btn-export" onclick="if(confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" style="background: #555; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Code-Editor leeren">🗑️ Leeren</button>
+                <button class="btn-export" onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" style="background: #555; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Code-Editor leeren">🗑️ Leeren</button>
             </div>
         </div>
         <div class="section-header" onclick="toggleSection('editor-container', this)">
@@ -1058,6 +1058,7 @@
 			<div id="fbs-toolbar" style="position: absolute; top: 10px; left: 10px; right: 10px; z-index: 50; display: flex; gap: 5px; align-items: center; pointer-events: none;">
                     <button id="btn-fbs-toggle" class="tool-btn" style="background: #37474f; padding: 0; font-size: 16px; pointer-events: auto; border-radius: 50%; width: 34px; height: 34px; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.4);" onclick="toggleFbsToolbar()">➕</button>
                     <div id="fbs-button-group">
+                        <button class="tool-btn" style="background: #607d8b;" onclick="openFbsAddModal('DIRECT')" draggable="true" ondragstart="startFbsDrag(event, 'DIRECT')" ontouchstart="startFbsTouchDrag(event, 'DIRECT')">A:=B</button>
                         <button class="tool-btn" style="background: #e6194B;" onclick="openFbsAddModal('AND')" draggable="true" ondragstart="startFbsDrag(event, 'AND')" ontouchstart="startFbsTouchDrag(event, 'AND')" data-i18n="fbs_btn_and">UND (&amp;&amp;)</button>
                         <button class="tool-btn" style="background: #3cb44b;" onclick="openFbsAddModal('OR')" draggable="true" ondragstart="startFbsDrag(event, 'OR')" ontouchstart="startFbsTouchDrag(event, 'OR')" data-i18n="fbs_btn_or">ODER (||)</button>
                         <button class="tool-btn" style="background: #4363d8;" onclick="openFbsAddModal('RS')" draggable="true" ondragstart="startFbsDrag(event, 'RS')" ontouchstart="startFbsTouchDrag(event, 'RS')" data-i18n="fbs_btn_ff">Speicher (RS/SR)</button>
@@ -1466,6 +1467,7 @@
             <div id="fbs-add-out-grp" style="margin-bottom: 10px;">
                 <label id="fbs-add-out-lbl" style="color: #9CDCFE; font-size: 11px; display: block; margin-bottom: 3px; font-weight: bold;" data-i18n="fbs_add_lbl_out">Ziel-Variable (Ausgang / Ergebnis)</label>
                 <input type="text" id="fbs-add-out" list="fbs-var-list" placeholder="z.B. MOTOR_1 oder Q1" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 12px; box-sizing: border-box;">
+                <span style="color: #6a9955; font-size: 10px; margin-top: 3px; display: block;">Mehrere Ausgänge mit Komma trennen: <code style="color:#ce9178;">A, B</code></span>
             </div>
             <div id="fbs-add-in1-grp" style="margin-bottom: 10px;">
                 <label id="fbs-add-in1-lbl" style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;" data-i18n="fbs_add_lbl_in1">Eingang 1</label>
@@ -1474,6 +1476,12 @@
             <div id="fbs-add-in2-grp" style="margin-bottom: 10px;">
                 <label id="fbs-add-in2-lbl" style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;" data-i18n="fbs_add_lbl_in2">Eingang 2</label>
                 <input type="text" id="fbs-add-in2" list="fbs-var-list" placeholder="(Optional)" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 12px; box-sizing: border-box;">
+            </div>
+            <div id="fbs-add-negate-grp" style="margin-bottom: 12px; display: none;">
+                <label style="color: #CE9178; font-size: 11px; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="fbs-add-negate" style="cursor: pointer; width: 13px; height: 13px; accent-color: #8b5cf6;">
+                    Ergebnis negieren (NAND / NOR)&nbsp;&nbsp;<code style="background:#1e1e1e; padding:1px 5px; border-radius:3px; color:#569CD6;">¬(...)</code>
+                </label>
             </div>
             <div id="fbs-add-param-grp" style="margin-bottom: 15px; display: none;">
                 <label id="fbs-add-param-lbl" style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;" data-i18n="fbs_add_lbl_param">Parameter</label>
@@ -4480,6 +4488,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         }
 		// Funktion zum Einfügen von Symbolen an der aktuellen Cursor-Position
         window.insertSymbol = function(symbol) {
+            if (textarea.readOnly) return;
             const startPos = textarea.selectionStart;
             const endPos = textarea.selectionEnd;
             const textBefore = textarea.value.substring(0, startPos);
@@ -6436,7 +6445,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 types:{}, layout:'grid-sim-top',
                 factory:{
                     globalViewMode:'top', items:[],
-                    pins:[{id:'pin_anleitung',x:155,y:155,text:'① Taster/Not-Halt/LED platzieren\n② Variablen zuweisen\n③ Code schreiben',color:'#ffd54f',minimized:false}],
+                    pins:[{id:'pin_anleitung',x:68,y:49,text:'① Taster/Not-Halt/LED platzieren\n② Variablen zuweisen\n③ Code schreiben',color:'#ffd54f',minimized:false}],
                     objects:[
                         {id:'obj_band_haupt',  type:'conveyor',          x:200,y:262,width:510,height:40, rotation:0,   linkedVar:'', startupTime:1.5, locked:true},
                         {id:'obj_band_sort',   type:'conveyor',          x:600,y:302,width:200,height:40, rotation:90,  linkedVar:'', startupTime:1.0, locked:true},
@@ -6456,7 +6465,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 factory:{
                     globalViewMode:'top',
                     items:[],
-                    pins:[{id:'pin_anleitung',x:142,y:47,text:'① Objekte verknüpfen\n② Code schreiben\n③ Start-Taster drücken',color:'#ffd54f',minimized:false}],
+                    pins:[{id:'pin_anleitung',x:68,y:49,text:'① Objekte verknüpfen\n② Code schreiben\n③ Start-Taster drücken',color:'#ffd54f',minimized:false}],
                     objects:[
                         {id:'obj_band_haupt',  type:'conveyor',          x:200,y:262,width:510,height:40, rotation:0,   linkedVar:'A_BAND_HAUPT',  startupTime:1.5, locked:true},
                         {id:'obj_band_sort',   type:'conveyor',          x:600,y:302,width:200,height:40, rotation:90,  linkedVar:'A_BAND_SORT',   startupTime:1.0, locked:true},
@@ -6491,9 +6500,9 @@ You must output exactly this JSON format. The logic code goes as a single string
               {
                 version:'1.0', type:'valitask',
                 id:'task-t1-not-halt-2026',
-                name:'① Förderband – Not-Halt-Logik ergänzen [Beta: Nicht fertig erstellt!]',
-                description:'Eine Förderanlage ist bereits fertig aufgebaut und verdrahtet. Fast das gesamte SPS-Programm ist schon geschrieben – es fehlt nur eine einzige Zeile!\n\n🎯 AUFGABE:\nDas Förderband (A_BAND) soll laufen, solange der Not-Halt nicht ausgelöst ist.\n\n• E_NOTHALT = TRUE  → Not-Halt nicht gedrückt → Anlage darf laufen\n• E_NOTHALT = FALSE → Not-Halt ausgelöst     → Anlage stoppt\n\nDie Betriebslampe ist bereits fertig programmiert:\n  A_LAMPE := A_BAND\n\n❓ Was fehlt:\nEine Zuweisungszeile für A_BAND unter dem TODO-Kommentar.\n\n✅ TIPP: Die Syntax lautet:\n  AUSGANGSVARIABLE := EINGANGSVARIABLE\n\n⚙ BESCHRÄNKUNGEN:\nNur der Code-Editor ist verfügbar.\nLogikplan und Schaltplan sind für diese Aufgabe gesperrt.',
-                hint:'Die fehlende Zeile lautet:\n  A_BAND := E_NOTHALT\n\nDas bedeutet: Weise dem Förderband-Ausgang den Wert des Not-Halt-Eingangs zu. Solange E_NOTHALT = TRUE (nicht gedrückt), läuft das Band.',
+                name:'① Förderband – Not-Halt-Logik ergänzen',
+                description:'Eine Förderanlage ist bereits fertig aufgebaut und verdrahtet. Fast das gesamte SPS-Programm ist schon geschrieben – es fehlt nur eine einzige Zeile!\n\n🎯 AUFGABE:\nDas Förderband (A_BAND) soll laufen, wenn der Schalter eingeschaltet ist UND der Not-Halt nicht ausgelöst ist.\n\n• E_SCHALTER = TRUE  → Schalter eingeschaltet\n• E_NOTHALT  = TRUE  → Not-Halt nicht gedrückt → Anlage darf laufen\n• E_NOTHALT  = FALSE → Not-Halt ausgelöst     → Anlage stoppt sofort\n\nDie Betriebslampe ist bereits fertig programmiert:\n  A_LAMPE := E_SCHALTER\n\n❓ Was fehlt:\nEine Zeile für A_BAND, die beide Eingänge mit UND verknüpft.\n\n✅ TIPP: Die Syntax lautet:\n  AUSGANG := EINGANG1 && EINGANG2\n\n⚙ BESCHRÄNKUNGEN:\nNur der Code-Editor ist verfügbar.\nLogikplan und Schaltplan sind für diese Aufgabe gesperrt.',
+                hint:'Die fehlende Zeile lautet:\n  A_BAND := E_SCHALTER && E_NOTHALT\n\nDas bedeutet: Das Band läuft nur wenn der Schalter eingeschaltet (TRUE) UND der Not-Halt nicht ausgelöst (TRUE) ist.',
                 category:'Grundlagen', difficulty:'leicht',
                 timeLimit:300, solutionMode:'after_time', solutionMinTime:60, solutionMinDone:2,
                 restrictObjects:'none', allowedObjectTypes:[],
@@ -6505,38 +6514,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                   {type:'sim_running', minSeconds:20}
                 ],
                 preset:{
-                  code:'INPUT E_NOTHALT\n\n// ╔═══════════════════════════════════════════════════╗\n// ║  AUFGABE: Förderband-Steuerung vervollständigen   ║\n// ╚═══════════════════════════════════════════════════╝\n//\n// Die Anlage ist bereits komplett verdrahtet:\n//   • Förderband    → A_BAND\n//   • Betriebslampe → A_LAMPE\n//   • Not-Halt      → E_NOTHALT (TRUE = nicht ausgelöst)\n//\n// ✅ Bereits gelöst – Lampe leuchtet wenn Band läuft:\nA_LAMPE := A_BAND\n//\n// ❓ AUFGABE: Ergänze hier die fehlende Zeile!\n//   Das Band soll laufen solange E_NOTHALT = TRUE ist.\n// ─────────────────────────────────────────────────────\n',
-                  types:{}, layout:'grid-sim-top',
+                  code:'INPUT E_SCHALTER\nINPUT E_NOTHALT\n\n// ╔═══════════════════════════════════════════════════╗\n// ║  AUFGABE: Förderband-Steuerung vervollständigen   ║\n// ╚═══════════════════════════════════════════════════╝\n//\n// Die Anlage ist bereits komplett verdrahtet:\n//   • Förderband    → A_BAND\n//   • Betriebslampe → A_LAMPE\n//   • Schalter      → E_SCHALTER  (TRUE = eingeschaltet)\n//   • Not-Halt      → E_NOTHALT   (TRUE = nicht ausgelöst)\n//\n// ✅ Bereits gelöst – Lampe leuchtet wenn Schalter EIN:\nA_LAMPE := E_SCHALTER\n//\n// ❓ AUFGABE: Ergänze hier die fehlende Zeile!\n//   Das Band soll laufen wenn Schalter EIN und Not-Halt OK.\n// ─────────────────────────────────────────────────────\n',
+                  types:{E_SCHALTER:'schalter', E_NOTHALT:'nothalt'}, layout:'grid-sim-top',
                   factory:{
                     globalViewMode:'top', items:[],
-                    pins:[{id:'p1',x:148,y:155,text:'① Eine Codezeile ergänzen\n② Simulation beobachten',color:'#ffd54f',minimized:false}],
+                    pins:[{id:'p1',x:68,y:49,text:'① Eine Codezeile ergänzen\n② Simulation beobachten',color:'#ffd54f',minimized:false}],
                     objects:[
-                      {id:'t1_band',   type:'conveyor',      x:155,y:262,width:490,height:38,rotation:0,  linkedVar:'A_BAND',    startupTime:null, locked:false},
-                      {id:'t1_spawn',  type:'spawner_metall', x:113,y:264,width:34, height:34,rotation:0,  linkedVar:'',          interval:3, spawnSolid:true, locked:false},
-                      {id:'t1_desp',   type:'despawner',      x:647,y:264,width:34, height:34,rotation:0,  linkedVar:'',          locked:false},
-                      {id:'t1_led',    type:'led',            x:282,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE',   color:'#4caf50', locked:false},
-                      {id:'t1_nh',     type:'nothalt',        x:378,y:161,width:42, height:42,rotation:0,  linkedVar:'E_NOTHALT', locked:false},
-                      {id:'t1_frame',  type:'frame',          x:268,y:154,width:168,height:65, rotation:0,  linkedVar:'',          normLabel:'Bedienpult', locked:true},
-                      {id:'t1_wl',     type:'wall',           x:149,y:262,width:7,  height:38, rotation:0,  linkedVar:'',          locked:true},
-                      {id:'t1_wr',     type:'wall',           x:645,y:262,width:7,  height:38, rotation:0,  linkedVar:'',          locked:true}
+                      {id:'t1_band',      type:'conveyor',       x:155,y:262,width:490,height:38,rotation:0,   linkedVar:'A_BAND',      startupTime:null, locked:false},
+                      {id:'t1_spawn',     type:'spawner_metall', x:123,y:256,width:34, height:34,rotation:270, linkedVar:'',            interval:3, spawnSolid:true, locked:false},
+                      {id:'t1_desp',      type:'despawner',      x:647,y:264,width:34, height:34,rotation:0,   linkedVar:'',            locked:false},
+                      {id:'t1_led',       type:'led',            x:282,y:168,width:34, height:34,rotation:0,   linkedVar:'A_LAMPE',     color:'#4caf50', locked:false},
+                      {id:'t1_schalter',  type:'schalter',       x:330,y:161,width:38, height:38,rotation:0,   linkedVar:'E_SCHALTER',  locked:false},
+                      {id:'t1_nh',        type:'nothalt',        x:390,y:158,width:42, height:42,rotation:0,   linkedVar:'E_NOTHALT',   locked:false},
+                      {id:'t1_frame',     type:'frame',          x:262,y:152,width:188,height:68, rotation:0,  linkedVar:'',            normLabel:'Bedienpult', locked:true}
                     ]
                   }
                 },
                 solution:{
-                  code:'INPUT E_NOTHALT\n\nA_BAND := E_NOTHALT\nA_LAMPE := A_BAND\n',
-                  types:{}, layout:'grid-sim-top',
+                  code:'INPUT E_SCHALTER\nINPUT E_NOTHALT\n\nA_BAND := E_SCHALTER && E_NOTHALT\nA_LAMPE := E_SCHALTER\n',
+                  types:{E_SCHALTER:'schalter', E_NOTHALT:'nothalt'}, layout:'grid-sim-top',
                   factory:{
                     globalViewMode:'top', items:[],
-                    pins:[{id:'p1',x:148,y:155,text:'① Eine Codezeile ergänzen\n② Simulation beobachten',color:'#ffd54f',minimized:false}],
+                    pins:[{id:'p1',x:68,y:49,text:'① Eine Codezeile ergänzen\n② Simulation beobachten',color:'#ffd54f',minimized:false}],
                     objects:[
-                      {id:'t1_band',   type:'conveyor',      x:155,y:262,width:490,height:38,rotation:0,  linkedVar:'A_BAND',    startupTime:null, locked:false},
-                      {id:'t1_spawn',  type:'spawner_metall', x:113,y:264,width:34, height:34,rotation:0,  linkedVar:'',          interval:3, spawnSolid:true, locked:false},
-                      {id:'t1_desp',   type:'despawner',      x:647,y:264,width:34, height:34,rotation:0,  linkedVar:'',          locked:false},
-                      {id:'t1_led',    type:'led',            x:282,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE',   color:'#4caf50', locked:false},
-                      {id:'t1_nh',     type:'nothalt',        x:378,y:161,width:42, height:42,rotation:0,  linkedVar:'E_NOTHALT', locked:false},
-                      {id:'t1_frame',  type:'frame',          x:268,y:154,width:168,height:65, rotation:0,  linkedVar:'',          normLabel:'Bedienpult', locked:true},
-                      {id:'t1_wl',     type:'wall',           x:149,y:262,width:7,  height:38, rotation:0,  linkedVar:'',          locked:true},
-                      {id:'t1_wr',     type:'wall',           x:645,y:262,width:7,  height:38, rotation:0,  linkedVar:'',          locked:true}
+                      {id:'t1_band',      type:'conveyor',       x:155,y:262,width:490,height:38,rotation:0,   linkedVar:'A_BAND',      startupTime:null, locked:false},
+                      {id:'t1_spawn',     type:'spawner_metall', x:123,y:256,width:34, height:34,rotation:270, linkedVar:'',            interval:3, spawnSolid:true, locked:false},
+                      {id:'t1_desp',      type:'despawner',      x:647,y:264,width:34, height:34,rotation:0,   linkedVar:'',            locked:false},
+                      {id:'t1_led',       type:'led',            x:282,y:168,width:34, height:34,rotation:0,   linkedVar:'A_LAMPE',     color:'#4caf50', locked:false},
+                      {id:'t1_schalter',  type:'schalter',       x:330,y:161,width:38, height:38,rotation:0,   linkedVar:'E_SCHALTER',  locked:false},
+                      {id:'t1_nh',        type:'nothalt',        x:390,y:158,width:42, height:42,rotation:0,   linkedVar:'E_NOTHALT',   locked:false},
+                      {id:'t1_frame',     type:'frame',          x:262,y:152,width:188,height:68, rotation:0,  linkedVar:'',            normLabel:'Bedienpult', locked:true}
                     ]
                   }
                 }
@@ -6579,11 +6586,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                       {id:'t2_zyl', type:'zylinder_double',   x:556,y:241,width:58, height:26,rotation:90, linkedVar:'A_ZYL_VOR',   linkedVarRet:'A_ZYL_ZUR', isDouble:true, locked:false},
                       {id:'t2_dm',  type:'despawner',         x:539,y:487,width:34, height:34,rotation:0,  linkedVar:'',            locked:false},
                       {id:'t2_dk',  type:'despawner',         x:663,y:250,width:34, height:34,rotation:0,  linkedVar:'',            locked:false},
-                      {id:'t2_led', type:'led',               x:240,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE_IND', color:'#ffc107', locked:false},
-                      {id:'t2_f1',  type:'frame',             x:228,y:155,width:62, height:62, rotation:0,  linkedVar:'',            normLabel:'Metall-Ind.', locked:true},
-                      {id:'t2_f2',  type:'frame',             x:376,y:230,width:148,height:100,rotation:0, linkedVar:'',            normLabel:'Sortierpunkt', locked:true},
-                      {id:'t2_wl',  type:'wall',              x:169,y:265,width:7,  height:38, rotation:0,  linkedVar:'',            locked:true},
-                      {id:'t2_wr',  type:'wall',              x:661,y:265,width:7,  height:38, rotation:0,  linkedVar:'',            locked:true}
+                      {id:'t2_led', type:'led',               x:240,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE_IND', color:'#ffc107', locked:false}
                     ]
                   }
                 },
@@ -6603,11 +6606,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                       {id:'t2_zyl', type:'zylinder_double',   x:556,y:241,width:58, height:26,rotation:90, linkedVar:'A_ZYL_VOR',   linkedVarRet:'A_ZYL_ZUR', isDouble:true, locked:false},
                       {id:'t2_dm',  type:'despawner',         x:539,y:487,width:34, height:34,rotation:0,  linkedVar:'',            locked:false},
                       {id:'t2_dk',  type:'despawner',         x:663,y:250,width:34, height:34,rotation:0,  linkedVar:'',            locked:false},
-                      {id:'t2_led', type:'led',               x:240,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE_IND', color:'#ffc107', locked:false},
-                      {id:'t2_f1',  type:'frame',             x:228,y:155,width:62, height:62, rotation:0,  linkedVar:'',            normLabel:'Metall-Ind.', locked:true},
-                      {id:'t2_f2',  type:'frame',             x:376,y:230,width:148,height:100,rotation:0, linkedVar:'',            normLabel:'Sortierpunkt', locked:true},
-                      {id:'t2_wl',  type:'wall',              x:169,y:265,width:7,  height:38, rotation:0,  linkedVar:'',            locked:true},
-                      {id:'t2_wr',  type:'wall',              x:661,y:265,width:7,  height:38, rotation:0,  linkedVar:'',            locked:true}
+                      {id:'t2_led', type:'led',               x:240,y:168,width:34, height:34,rotation:0,  linkedVar:'A_LAMPE_IND', color:'#ffc107', locked:false}
                     ]
                   }
                 }
@@ -15121,9 +15120,26 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (node.type === 'GATE') {
                 let inEdges = currentGraph.edges.filter(e => e.targetId === node.id);
                 inEdges.forEach(edge => {
-                    let row = document.createElement('div'); row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.marginBottom = '4px';
-                    let lbl = document.createElement('span'); lbl.style.fontSize = '11px'; lbl.style.color = '#fff'; lbl.style.maxWidth = '150px'; lbl.style.overflow = 'hidden'; lbl.style.textOverflow = 'ellipsis';
+                    let row = document.createElement('div'); row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between'; row.style.marginBottom = '4px'; row.style.gap = '4px';
+                    let lbl = document.createElement('span'); lbl.style.fontSize = '11px'; lbl.style.color = '#fff'; lbl.style.overflow = 'hidden'; lbl.style.textOverflow = 'ellipsis'; lbl.style.flexGrow = '1'; lbl.style.minWidth = '0';
                     lbl.textContent = (edge.inverted?'¬':'') + getDisp(edge.sourceId);
+                    let btnWrap = document.createElement('div'); btnWrap.style.display = 'flex'; btnWrap.style.gap = '3px'; btnWrap.style.flexShrink = '0';
+                    let btnNeg = document.createElement('button');
+                    btnNeg.textContent = '¬'; btnNeg.title = 'Eingang negieren';
+                    btnNeg.style.cssText = `background: ${edge.inverted ? '#7c3aed' : '#555'}; border: none; border-radius: 3px; cursor: pointer; color: white; padding: 2px 6px; font-size: 11px; font-weight: bold;`;
+                    btnNeg.onclick = () => {
+                        edge.inverted = !edge.inverted;
+                        lbl.textContent = (edge.inverted?'¬':'') + getDisp(edge.sourceId);
+                        btnNeg.style.background = edge.inverted ? '#7c3aed' : '#555';
+                        let rootCtx = window.getRootContextGlobal(edge);
+                        if (rootCtx) {
+                            let rootInEdges = currentGraph.edges.filter(e => e.targetId === rootCtx.targetNode.id && e.targetPin === rootCtx.targetPin);
+                            let newRHS = rootInEdges.length > 0 ? rebuildGraphExpr(rootInEdges[0]) : 'FALSE';
+                            let newCode = updateRHS(textarea.value, rootCtx.targetNode, rootCtx.targetPin, newRHS);
+                            textarea.value = cleanRedundantInputs(newCode);
+                            updateHighlighting(); updateEditor(); saveToStorage();
+                        }
+                    };
                     let btn = document.createElement('button'); btn.textContent = '❌'; btn.title = 'Entfernen';
                     btn.style.cssText = "background: #e6194B; border: none; border-radius: 3px; cursor: pointer; color: white; padding: 2px 5px; font-size: 9px;";
                     btn.onclick = () => {
@@ -15135,11 +15151,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                             // FIX: Code direkt übergeben und neu zuweisen
                             let newCode = updateRHS(textarea.value, rootCtx.targetNode, rootCtx.targetPin, newRHS);
                             newCode = checkOrphan(edge.sourceId, newCode);
-                            textarea.value = cleanRedundantInputs(newCode); 
+                            textarea.value = cleanRedundantInputs(newCode);
                             updateHighlighting(); updateEditor(); saveToStorage(); menu.style.display = 'none';
                         }
                     };
-                    row.appendChild(lbl); row.appendChild(btn); ioWrap.appendChild(row);
+                    btnWrap.appendChild(btnNeg); btnWrap.appendChild(btn);
+                    row.appendChild(lbl); row.appendChild(btnWrap); ioWrap.appendChild(row);
                 });
                 let addRow = document.createElement('div'); addRow.style.display = 'flex'; addRow.style.gap = '5px'; addRow.style.marginTop = '8px';
                 let addInp = document.createElement('input'); addInp.type = 'text'; addInp.placeholder = 'Neue Variable...'; 
@@ -15168,21 +15185,34 @@ You must output exactly this JSON format. The logic code goes as a single string
             else if (node.type === 'OUTPUT' || node.type === 'PURE_INPUT') {
                 let edge = currentGraph.edges.find(e => e.targetId === node.id);
                 let curVal = edge ? (edge.inverted?'¬':'') + getDisp(edge.sourceId) : 'FALSE';
-                let addRow = document.createElement('div'); addRow.style.display = 'flex'; addRow.style.gap = '5px';
-                let addInp = document.createElement('input'); addInp.type = 'text'; addInp.value = curVal !== 'FALSE' ? curVal : ''; addInp.placeholder = 'Formel / Variable...'; 
+                let addRow = document.createElement('div'); addRow.style.display = 'flex'; addRow.style.gap = '5px'; addRow.style.alignItems = 'center';
+                let addInp = document.createElement('input'); addInp.type = 'text'; addInp.value = curVal !== 'FALSE' ? curVal : ''; addInp.placeholder = 'Formel / Variable...';
                 addInp.setAttribute('list', 'fbs-var-list');
                 addInp.style.cssText = "flex-grow: 1; padding: 2px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 10px;";
+                let btnNeg = document.createElement('button');
+                btnNeg.textContent = '¬'; btnNeg.title = 'Ausgang negieren';
+                btnNeg.style.cssText = `background: ${(edge && edge.inverted) ? '#7c3aed' : '#555'}; border: none; border-radius: 3px; cursor: pointer; color: white; padding: 2px 6px; font-size: 11px; font-weight: bold; flex-shrink: 0;`;
+                btnNeg.onclick = () => {
+                    if (!edge) return;
+                    edge.inverted = !edge.inverted;
+                    let newRHS = rebuildGraphExpr(edge);
+                    addInp.value = newRHS;
+                    btnNeg.style.background = edge.inverted ? '#7c3aed' : '#555';
+                    let newCode = updateRHS(textarea.value, node, '', newRHS);
+                    textarea.value = cleanRedundantInputs(newCode);
+                    updateHighlighting(); updateEditor(); saveToStorage();
+                };
                 let addBtn = document.createElement('button'); addBtn.textContent = '💾'; addBtn.title = 'Speichern';
-                addBtn.style.cssText = "background: #007acc; border: none; border-radius: 3px; cursor: pointer; color: white; padding: 2px 8px;";
+                addBtn.style.cssText = "background: #007acc; border: none; border-radius: 3px; cursor: pointer; color: white; padding: 2px 8px; flex-shrink: 0;";
                 let doSave = () => {
                     let nV = addInp.value.trim() || 'FALSE';
                     let newCode = updateRHS(textarea.value, node, '', nV);
                     if(edge) newCode = checkOrphan(edge.sourceId, newCode);
-                    textarea.value = cleanRedundantInputs(newCode); 
+                    textarea.value = cleanRedundantInputs(newCode);
                     updateHighlighting(); updateEditor(); saveToStorage(); menu.style.display = 'none';
                 };
                 addBtn.onclick = doSave; addInp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } };
-                addRow.appendChild(addInp); addRow.appendChild(addBtn); ioWrap.appendChild(addRow);
+                addRow.appendChild(addInp); addRow.appendChild(btnNeg); addRow.appendChild(addBtn); ioWrap.appendChild(addRow);
             } 
             else if (['RS', 'SR', 'TON', 'TOF', 'TP', 'CTU'].includes(node.type)) {
                 let pins = [];
@@ -15610,17 +15640,30 @@ You must output exactly this JSON format. The logic code goes as a single string
             document.getElementById('fbs-add-modal').style.display = 'block';
             document.getElementById('fbs-add-type').value = type;
             document.getElementById('custom-svg').style.cursor = 'crosshair';
-            // 🌟 FIX: Hier setzen wir die Platzhalter und dynamischen Texte via i18n
+            // Felder zurücksetzen
             document.getElementById('fbs-add-out').placeholder = window.t('dyn_ph_out');
             document.getElementById('fbs-add-in2').placeholder = window.t('dyn_ph_opt');
+            document.getElementById('fbs-add-in2').value = '';
+            document.getElementById('fbs-add-in2-grp').style.display = '';
             const title = document.getElementById('fbs-add-title');
             const lbl1 = document.getElementById('fbs-add-in1-lbl');
             const lbl2 = document.getElementById('fbs-add-in2-lbl');
             const lblParam = document.getElementById('fbs-add-param-lbl');
-            if (type === 'AND' || type === 'OR') {
+            const negGrp = document.getElementById('fbs-add-negate-grp');
+            const negChk = document.getElementById('fbs-add-negate');
+            negGrp.style.display = 'none';
+            negChk.checked = false;
+            if (type === 'DIRECT') {
+                title.textContent = 'Direktverbindung (A := B)';
+                lbl1.textContent = 'Eingang / Quelle (B)';
+                document.getElementById('fbs-add-out-lbl').textContent = window.t('fbs_add_lbl_out');
+                document.getElementById('fbs-add-in2-grp').style.display = 'none';
+            } else if (type === 'AND' || type === 'OR') {
                 title.textContent = `${window.t('dyn_add_gate')} (${type})`;
                 lbl1.textContent = window.t('fbs_add_lbl_in1');
                 lbl2.textContent = window.t('fbs_add_lbl_in2');
+                negGrp.style.display = 'block';
+                negChk.checked = false;
             } else if (type === 'RS') {
                 title.textContent = window.t('dyn_add_ff');
                 lbl1.textContent = window.t('dyn_ff_s');
@@ -15643,6 +15686,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let in1 = document.getElementById('fbs-add-in1').value.trim().toUpperCase();
             let in2 = document.getElementById('fbs-add-in2').value.trim().toUpperCase();
             let param = document.getElementById('fbs-add-param').value;
+            let negate = (['AND','OR'].includes(type)) && !!(document.getElementById('fbs-add-negate') || {}).checked;
             if (!outRaw || !in1) { alert("Bitte mindestens Ziel und Eingang 1 ausfüllen!"); return; }
             let code = textarea.value;
             let lines = code.split('\n');
@@ -15657,6 +15701,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let allPossibleVars = [out, `S${out}`, `R${out}`, `S${out}_SR`, `R${out}_SR`];
                 let targetLines = [];
                 for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].trimStart().startsWith('//')) continue;
                     let cl = lines[i].split('//')[0].trim().replace(/(:=|=|<-|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
                     if (cl.includes(':=')) {
                         let leftSide = cl.split(':=')[0].trim().toUpperCase();
@@ -15672,7 +15717,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (outMatch) rsNum = outMatch[1]; 
                     else {
                         rsNum = 1;
-                        while (new RegExp(`\\b[SRQ]${rsNum}(?:_SR)?\\b`, 'i').test(lines.join('\n'))) { rsNum++; }
+                        let nonCommentCode = lines.filter(l => !l.trimStart().startsWith('//')).join('\n');
+                        while (new RegExp(`\\b[SRQ]${rsNum}(?:_SR)?\\b`, 'i').test(nonCommentCode)) { rsNum++; }
                     }
                 }
                 if (matchLine) {
@@ -15680,10 +15726,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let cleanRHS = matchLine.rhs.replace(/[()]/g, '').trim();
                     let cleanIn1 = in1.replace(/[()]/g, '').trim();
                     let isExactMatch = cleanRHS === cleanIn1;
-                    if (['AND', 'OR'].includes(type)) {
+                    if (type === 'DIRECT') {
+                        lines[matchLine.idx] = `${matchLine.left} := ${in1}`;
+                    } else if (['AND', 'OR'].includes(type)) {
                         let op = type === 'AND' ? '&&' : '||';
                         // 🌟 FIX: Immer exakt denselben String mit festen Klammern erzeugen!
-                        let replacement = `(${in1} ${op} ${in2 || 'FALSE'})`;
+                        let replacement = negate ? `¬(${in1} ${op} ${in2 || 'FALSE'})` : `(${in1} ${op} ${in2 || 'FALSE'})`;
                         if (isExactMatch) {
                             // Stamm ist identisch -> Wir ersetzen ihn komplett durch den perfekten String
                             lines[matchLine.idx] = `${matchLine.left} := ${replacement}`;
@@ -15736,8 +15784,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     lines = lines.filter((_, i) => !targetIndices.includes(i));
                     let newCodeLine = "";
                     // 🌟 FIX: Auch neue Kabel bekommen den identischen Klammer-String!
-                    if (type === 'AND') newCodeLine = `${out} := (${in1} && ${in2 || 'FALSE'})`;
-                    else if (type === 'OR') newCodeLine = `${out} := (${in1} || ${in2 || 'FALSE'})`;
+                    if (type === 'DIRECT') newCodeLine = `${out} := ${in1}`;
+                    else if (type === 'AND') newCodeLine = negate ? `${out} := ¬(${in1} && ${in2 || 'FALSE'})` : `${out} := (${in1} && ${in2 || 'FALSE'})`;
+                    else if (type === 'OR') newCodeLine = negate ? `${out} := ¬(${in1} || ${in2 || 'FALSE'})` : `${out} := (${in1} || ${in2 || 'FALSE'})`;
                     else if (type === 'RS') {
                         if (out.match(/^Q?\d+$/)) newCodeLine = `S${rsNum} := ${in1}\nR${rsNum} := ${in2 || 'FALSE'}`;
                         else newCodeLine = `${out} := Q${rsNum}\nS${rsNum} := ${in1}\nR${rsNum} := ${in2 || 'FALSE'}`;
@@ -16530,7 +16579,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             window.updateFbsHighlight(null);
             if (window.draggedFbsButton) { window.draggedFbsButton.classList.remove('drag-active-target'); window.draggedFbsButton = null; }
             const type = e.dataTransfer.getData('text/plain');
-            if (!type || !['AND','OR','RS','TON','CTU'].includes(type)) return;
+            if (!type || !['AND','OR','RS','TON','CTU','DIRECT'].includes(type)) return;
             if (hoveredEdge === 'INVALID') {
                 alert("Bitte ziehe den Baustein auf eine konkrete Abzweigung (nach der Verzweigung), nicht auf den Hauptstrang!");
                 return;

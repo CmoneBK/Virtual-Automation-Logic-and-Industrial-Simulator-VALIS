@@ -6449,20 +6449,23 @@ You must output exactly this JSON format. The logic code goes as a single string
             restrictObjects:'manual', allowedObjectTypes:['taster','nothalt','led'],
             blockAreas:{codeEditor:false,ioPanel:false,logikplan:false,schaltplan:false,factory2d:false,factoryNewVars:false},
             conditions:[
-                {type:'factory_object', objectType:'conveyor',        linkedVar:'A_BAND_HAUPT'},
-                {type:'factory_object', objectType:'conveyor',        linkedVar:'A_BAND_SORT'},
-                {type:'factory_object', objectType:'sensor_ind',      linkedVar:'E_SENSOR_IND'},
-                {type:'factory_object', objectType:'zylinder_double', linkedVar:'A_ZYL_VOR'},
-                {type:'factory_object', objectType:'led',             linkedVar:'A_LAMPE_GRUEN'},
-                {type:'factory_object', objectType:'taster',          linkedVar:'E_TASTER_START'},
-                {type:'factory_object', objectType:'nothalt',         linkedVar:'E_NOTHALT'},
-                {type:'variable_exists', variable:'A_BAND_HAUPT'},
-                {type:'variable_exists', variable:'E_SENSOR_IND'},
-                {type:'code_contains',  pattern:'A_ZYL_VOR'},
-                {type:'code_contains',  pattern:'E_NOTHALT'},
-                {type:'sps_output',     variable:'A_BAND_HAUPT', value:true},
-                {type:'despawner_count', count:8},
-                {type:'sim_running',    minSeconds:60}
+                {type:'factory_object', objectType:'conveyor',        linkedVar:'A_BAND_HAUPT', label:'Hauptband mit A_BAND_HAUPT verknüpft'},
+                {type:'factory_object', objectType:'conveyor',        linkedVar:'A_BAND_SORT', label:'Sortierband mit A_BAND_SORT verknüpft'},
+                {type:'factory_object', objectType:'sensor_ind',      linkedVar:'E_SENSOR_IND', label:'Induktiv-Sensor mit E_SENSOR_IND verknüpft'},
+                {type:'factory_object', objectType:'zylinder_double', linkedVar:'A_ZYL_VOR', label:'Zylinder mit A_ZYL_VOR verknüpft'},
+                {type:'factory_object', objectType:'led',             linkedVar:'A_LAMPE_GRUEN', label:'Grüne Lampe mit A_LAMPE_GRUEN verknüpft'},
+                {type:'factory_object', objectType:'taster',          linkedVar:'E_TASTER_START', label:'Start-Taster mit E_TASTER_START verknüpft'},
+                {type:'factory_object', objectType:'nothalt',         linkedVar:'E_NOTHALT', label:'Not-Halt mit E_NOTHALT verknüpft'},
+                {type:'variable_exists', variable:'A_BAND_HAUPT', label:'Variable für Hauptband existiert'},
+                {type:'variable_exists', variable:'E_SENSOR_IND', label:'Variable für Induktiv-Sensor existiert'},
+                {type:'logic_equivalent', refCode:'A_ZYL_VOR := Q1 AND E_SENSOR_IND\nA_ZYL_ZUR := NOT Q1 OR NOT E_SENSOR_IND\nA_BAND_HAUPT := Q1\nA_LAMPE_GRUEN := Q1', label:'Korrekte Steuerungslogik'},
+                {type:'component_type', variable:'A_BAND_HAUPT', compType:'motor', label:'Hauptband als Motor definiert'},
+                {type:'component_type', variable:'A_BAND_SORT',  compType:'motor', label:'Sortierband als Motor definiert'},
+                {type:'component_type', variable:'A_ZYL_VOR',    compType:'valve', label:'Zylinder als Ventil (MB) definiert'},
+                {type:'component_type', variable:'E_NOTHALT',    compType:'nothalt', label:'Not-Halt als Notaus definiert'},
+                {type:'sps_output',     variable:'A_BAND_HAUPT', value:true, label:'Hauptband läuft bei Start'},
+                {type:'despawner_count', count:8, label:'Mindestens 8 Werkstücke von der Anlage despawnen'},
+                {type:'sim_running',    minSeconds:60, label:'Simulation muss mindestens 60 Sekunden laufen'}
             ],
             preset:{
                 code:'// ╔══════════════════════════════════════════════════════════╗\n// ║   SORTIERANLAGE – Metall und Kunststoff trennen          ║\n// ╚══════════════════════════════════════════════════════════╝\n//\n// SCHRITT 1: Start-Taster, Not-Halt und Leuchte platzieren\n//            (Seitenleiste → auf die Anlage ziehen)\n//\n// SCHRITT 2: Alle Bauteile verknüpfen\n//            Rechtsklick auf jedes Objekt → Variable zuweisen\n//\n// SCHRITT 3: Steuerungsprogramm hier schreiben\n//\n// Verfügbare Variablen:\n//   Eingänge:  E_TASTER_START, E_NOTHALT, E_SENSOR_IND\n//   Ausgänge:  A_BAND_HAUPT, A_BAND_SORT, A_ZYL_VOR, A_ZYL_ZUR, A_LAMPE_GRUEN\n//\n// ── Programm ab hier schreiben ──────────────────────────────\n',
@@ -6532,10 +6535,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 restrictObjects:'none', allowedObjectTypes:[],
                 blockAreas:{codeEditor:false, ioPanel:false, logikplan:true, schaltplan:true, factory2d:true, factoryNewVars:true},
                 conditions:[
-                  {type:'sps_output', variable:'A_BAND',  value:true},
-                  {type:'sps_output', variable:'A_LAMPE', value:true},
-                  {type:'despawner_count', count:4},
-                  {type:'sim_running', minSeconds:20}
+                  {type:'logic_equivalent', refCode:'A_BAND := E_SCHALTER AND E_NOTHALT\nA_LAMPE := E_SCHALTER', label:'Korrekte Logik für Band und Lampe'},
+                  {type:'component_type', variable:'A_BAND',   compType:'motor',   label:'Förderband als Motor definiert'},
+                  {type:'component_type', variable:'E_NOTHALT',compType:'nothalt', label:'Not-Halt als Notaus definiert'},
+                  {type:'despawner_count', count:4, label:'Mindestens 4 Werkstücke müssen transportiert werden'},
+                  {type:'sim_running', minSeconds:20, label:'Simulation muss mindestens 20 Sekunden laufen'}
                 ],
                 preset:{
                   code:'INPUT E_SCHALTER\nINPUT E_NOTHALT\n\n// ╔═══════════════════════════════════════════════════╗\n// ║  AUFGABE: Förderband-Steuerung vervollständigen   ║\n// ╚═══════════════════════════════════════════════════╝\n//\n// Die Anlage ist bereits komplett verdrahtet:\n//   • Förderband    → A_BAND\n//   • Betriebslampe → A_LAMPE\n//   • Schalter      → E_SCHALTER  (TRUE = eingeschaltet)\n//   • Not-Halt      → E_NOTHALT   (TRUE = nicht ausgelöst)\n//\n// ✅ Bereits gelöst – Lampe leuchtet wenn Schalter EIN:\nA_LAMPE := E_SCHALTER\n//\n// ❓ AUFGABE: Ergänze hier die fehlende Zeile!\n//   Das Band soll laufen wenn Schalter EIN und Not-Halt OK.\n// ─────────────────────────────────────────────────────\n',
@@ -6587,12 +6591,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 restrictObjects:'none', allowedObjectTypes:[],
                 blockAreas:{codeEditor:true, ioPanel:false, logikplan:false, schaltplan:true, factory2d:true, factoryNewVars:true},
                 conditions:[
-                  {type:'variable_exists', variable:'A_ZYL_VOR'},
-                  {type:'variable_exists', variable:'A_LAMPE_IND'},
-                  {type:'sps_output', variable:'A_BAND', value:true},
-                  {type:'sps_output', variable:'A_BAND_SORT', value:true},
-                  {type:'despawner_count', count:6},
-                  {type:'sim_running', minSeconds:40}
+                  {type:'variable_exists', variable:'A_ZYL_VOR', label:'Variable für Zylinder ausfahren existiert'},
+                  {type:'variable_exists', variable:'A_LAMPE_IND',label:'Variable für Indikatorlampe existiert'},
+                  {type:'logic_equivalent', refCode:'A_ZYL_VOR := E_SENSOR_OPT AND E_SENSOR_IND\nA_ZYL_ZUR := NOT (E_SENSOR_OPT AND E_SENSOR_IND)\nA_LAMPE_IND := E_SENSOR_IND', label:'Korrekte Sortierlogik'},
+                  {type:'component_type', variable:'A_BAND',      compType:'motor', label:'Hauptband als Motor definiert'},
+                  {type:'component_type', variable:'A_BAND_SORT',  compType:'motor', label:'Sortierband als Motor definiert'},
+                  {type:'component_type', variable:'A_ZYL_VOR',    compType:'valve', label:'Zylinder als Ventil (MB) definiert'},
+                  {type:'despawner_count', count:6, label:'Mindestens 6 Werkstücke müssen sortiert werden'},
+                  {type:'sim_running', minSeconds:40, label:'Simulation muss mindestens 40 Sekunden laufen'}
                 ],
                 preset:{
                   code:'INPUT E_SENSOR_OPT\nINPUT E_SENSOR_IND\n\n// ╔══════════════════════════════════════════════════════╗\n// ║  AUFGABE: Sortierlogik im LOGIKPLAN aufbauen         ║\n// ╚══════════════════════════════════════════════════════╝\n//\n// Der Code-Editor ist GESPERRT – arbeite mit dem Logikplan!\n// Öffne das Logikplan-Panel und füge die fehlenden\n// Ausgänge über den Baustein-hinzufügen-Dialog ein.\n//\n// Bereits vorhanden: Beide Bänder laufen immer.\nA_BAND := TRUE\nA_BAND_SORT := TRUE\n//\n// Noch fehlende Ausgänge (im Logikplan ergänzen):\n//   A_ZYL_VOR   := E_SENSOR_OPT AND E_SENSOR_IND\n//   A_ZYL_ZUR   := NOT (E_SENSOR_OPT AND E_SENSOR_IND)\n//   A_LAMPE_IND := E_SENSOR_IND\n',
@@ -6650,11 +6656,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 restrictObjects:'none', allowedObjectTypes:[],
                 blockAreas:{codeEditor:true, ioPanel:false, logikplan:true, schaltplan:false, factory2d:true, factoryNewVars:true},
                 conditions:[
-                  {type:'variable_exists', variable:'A_ZYLINDER'},
-                  {type:'variable_exists', variable:'A_LAMPE_GRUEN'},
-                  {type:'variable_exists', variable:'A_LAMPE_ROT'},
-                  {type:'sps_output', variable:'A_LAMPE_GRUEN', value:true},
-                  {type:'sim_running', minSeconds:30}
+                  {type:'variable_exists', variable:'A_ZYLINDER', label:'Variable für Zylinder existiert'},
+                  {type:'variable_exists', variable:'A_LAMPE_GRUEN', label:'Variable für Grüne Lampe existiert'},
+                  {type:'variable_exists', variable:'A_LAMPE_ROT', label:'Variable für Rote Lampe existiert'},
+                  {type:'logic_equivalent', refCode:'A_ZYLINDER := E_TASTE_L AND E_TASTE_R AND E_NOTHALT\nA_LAMPE_GRUEN := E_NOTHALT\nA_LAMPE_ROT := NOT E_NOTHALT', label:'Korrekte Zweihand-Sicherheitslogik'},
+                  {type:'component_type', variable:'A_ZYLINDER',    compType:'valve', label:'Zylinder als Ventil (MB) definiert'},
+                  {type:'component_type', variable:'A_LAMPE_GRUEN', compType:'led',   label:'Grüne Lampe als LED definiert'},
+                  {type:'component_type', variable:'A_LAMPE_ROT',   compType:'led',   label:'Rote Lampe als LED definiert'},
+                  {type:'component_type', variable:'E_NOTHALT',    compType:'nothalt', label:'Not-Halt als Notaus definiert'},
+                  {type:'sim_running', minSeconds:30, label:'Simulation muss mindestens 30 Sekunden laufen'}
                 ],
                 preset:{
                   code:'INPUT E_TASTE_L\nINPUT E_TASTE_R\nINPUT E_NOTHALT\n\n// ╔══════════════════════════════════════════════════════╗\n// ║  AUFGABE: Schaltplan (IEC 61131) vervollständigen    ║\n// ╚══════════════════════════════════════════════════════╝\n//\n// Code-Editor und Logikplan sind GESPERRT.\n// Arbeite ausschließlich im SCHALTPLAN-EDITOR!\n//\n// Fehlende Ausgänge (im Schaltplan als neue Reihen):\n//\n//   A_ZYLINDER   = E_TASTE_L AND E_TASTE_R AND E_NOTHALT\n//   A_LAMPE_GRUEN = E_NOTHALT\n//   A_LAMPE_ROT  = NOT E_NOTHALT\n',

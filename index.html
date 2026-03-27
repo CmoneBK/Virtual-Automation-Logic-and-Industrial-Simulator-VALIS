@@ -10889,6 +10889,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         pointer-events: none;
                     }
                     .f2d-sorter-flap.active .f2d-flap-blade { transform: translateY(-50%) rotate(var(--flap-angle, -40deg)); }
+                    .f2d-flap-blade.anchor-right { transform-origin: right center; }
+                    .f2d-flap-blade.anchor-left  { transform-origin: left center; }
                     .f2d-sorter-flap .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.2); z-index: 10; }
                 `,
                 build: function(obj, el, var1) {
@@ -10897,11 +10899,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (obj.flapAnchor === undefined) obj.flapAnchor = 'center';
                     el.className = 'f2d-obj f2d-sorter-flap';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
-                    el.style.setProperty('--flap-angle', `-${obj.flapAngle}deg`);
+                    el.style.setProperty('--flap-angle', `${-obj.flapAngle}deg`);
                     obj.useGravity = false;
                     let base = document.createElement('div'); base.className = 'f2d-flap-base'; el.appendChild(base);
                     let blade = document.createElement('div'); blade.className = 'f2d-flap-blade';
-                    blade.style.transformOrigin = obj.flapAnchor === 'edge' ? 'left center' : 'center center';
+                    if (obj.flapAnchor === 'edge')  blade.classList.add('anchor-left');
+                    else if (obj.flapAnchor === 'right') blade.classList.add('anchor-right');
                     el.appendChild(blade);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                 },
@@ -10909,37 +10912,50 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let isActive = !!spsState[obj.linkedVar];
                     if (isActive !== obj.isActive) { obj.isActive = isActive; obj.el.classList.toggle('active', isActive); }
                 },
-                // Wenn inaktiv: kein Hindernis (Werkstücke passieren). Wenn aktiv: Klappe als Wand.
+                // Klappe ist immer ein Hindernis; Winkel = 0 wenn inaktiv, flapAngle wenn aktiv.
                 physics: function(obj, item, isActive, rad) {
-                    if (!isActive) return;
-                    let flapDeg = (obj.rotation || 0) - (obj.flapAngle || 40);
-                    let flapRad = flapDeg * Math.PI / 180;
+                    const angle = isActive ? (obj.flapAngle || 40) : 0;
+                    const flapDeg = (obj.rotation || 0) - angle;
+                    const flapRad = flapDeg * Math.PI / 180;
+                    const objRad = (obj.rotation || 0) * Math.PI / 180;
+                    // Elementmitte in Weltkoordinaten (unveränderlich durch Rotation)
+                    const cx = obj.x + obj.width / 2;
+                    const cy = obj.y + obj.height / 2;
                     let ocx, ocy;
                     if (obj.flapAnchor === 'edge') {
-                        let pivX = obj.x, pivY = obj.y + obj.height / 2;
+                        // Drehpunkt: linke Kante — muss Elementrotation berücksichtigen
+                        const pivX = cx - (obj.width / 2) * Math.cos(objRad);
+                        const pivY = cy - (obj.width / 2) * Math.sin(objRad);
                         ocx = pivX + (obj.width / 2) * Math.cos(flapRad);
                         ocy = pivY + (obj.width / 2) * Math.sin(flapRad);
+                    } else if (obj.flapAnchor === 'right') {
+                        // Drehpunkt: rechte Kante — muss Elementrotation berücksichtigen
+                        const pivX = cx + (obj.width / 2) * Math.cos(objRad);
+                        const pivY = cy + (obj.width / 2) * Math.sin(objRad);
+                        ocx = pivX - (obj.width / 2) * Math.cos(flapRad);
+                        ocy = pivY - (obj.width / 2) * Math.sin(flapRad);
                     } else {
-                        ocx = obj.x + obj.width / 2;
-                        ocy = obj.y + obj.height / 2;
+                        // Drehpunkt: Mitte — Zentrum ändert sich nie
+                        ocx = cx;
+                        ocy = cy;
                     }
                     resolveOBBCollision(item, ocx, ocy, obj.width / 2, 5, flapDeg, 'wall', false);
                 },
                 contextMenu: function(obj, ctxMenu, saveCallback) {
                     let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
-                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">↔ Klappenwinkel (5°–85°)</div>`;
-                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '5'; inp.max = '85'; inp.step = '5'; inp.value = obj.flapAngle !== undefined ? obj.flapAngle : 40;
+                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">↔ Klappenwinkel (-90° bis 90°)</div>`;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '-90'; inp.max = '90'; inp.step = '5'; inp.value = obj.flapAngle !== undefined ? obj.flapAngle : 40;
                     inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
                     inp.onchange = e => {
-                        obj.flapAngle = Math.min(85, Math.max(5, parseFloat(e.target.value) || 40));
-                        obj.el.style.setProperty('--flap-angle', `-${obj.flapAngle}deg`);
+                        obj.flapAngle = Math.min(90, Math.max(-90, parseFloat(e.target.value) || 0));
+                        obj.el.style.setProperty('--flap-angle', `${-obj.flapAngle}deg`);
                         saveCallback();
                     };
                     wrap.appendChild(inp); ctxMenu.appendChild(wrap);
                     let wrapA = document.createElement('div'); wrapA.style.padding = '5px 15px'; wrapA.onclick = e => e.stopPropagation();
                     wrapA.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚓ Drehpunkt</div>`;
                     let selA = document.createElement('select'); selA.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
-                    [['center','↔ Mitte'],['edge','◀ Linker Rand']].forEach(([v,t]) => {
+                    [['center','↔ Mitte'],['edge','◀ Linker Rand'],['right','▶ Rechter Rand']].forEach(([v,t]) => {
                         let o = document.createElement('option'); o.value = v; o.textContent = t;
                         if ((obj.flapAnchor || 'center') === v) o.selected = true;
                         selA.appendChild(o);
@@ -10947,7 +10963,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     selA.onchange = e => {
                         obj.flapAnchor = e.target.value;
                         let blade = obj.el.querySelector('.f2d-flap-blade');
-                        if (blade) blade.style.transformOrigin = obj.flapAnchor === 'edge' ? 'left center' : 'center center';
+                        if (blade) {
+                            blade.classList.remove('anchor-left', 'anchor-right');
+                            if (obj.flapAnchor === 'edge') blade.classList.add('anchor-left');
+                            else if (obj.flapAnchor === 'right') blade.classList.add('anchor-right');
+                        }
                         saveCallback();
                     };
                     wrapA.appendChild(selA); ctxMenu.appendChild(wrapA);
@@ -13351,7 +13371,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     groupId: o.groupId || null,
                     localZ: o.localZ || 0, layerId: o.layerId || null, despawnFilter: o.despawnFilter || null,
                     hideValve: o.hideValve || false, spawnZOffset: o.spawnZOffset || 0, spawnXOffset: o.spawnXOffset || 0, spawnYOffset: o.spawnYOffset || 0,
-                    liftSpeed: o.liftSpeed, liftDir: o.liftDir || null, liftHeight: o.liftHeight
+                    liftSpeed: o.liftSpeed, liftDir: o.liftDir || null, liftHeight: o.liftHeight,
+                    flapAngle: o.flapAngle, flapAnchor: o.flapAnchor || null,
+                    rollerSpeed: o.rollerSpeed,
+                    curveAngle: o.curveAngle,
+                    pressure: o.pressure, maxFlow: o.maxFlow,
+                    pistonD: o.pistonD, rodD: o.rodD, stroke: o.stroke
                 }))
             };
         }
@@ -13502,6 +13527,38 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let valveEl = newObj.el.querySelector('.f2d-valve');
                         if (valveEl) valveEl.style.display = 'none';
                     }
+                    // sorter_flap: Klappenwinkel und Drehpunkt
+                    if (o.flapAngle !== undefined) {
+                        newObj.flapAngle = o.flapAngle;
+                        newObj.el.style.setProperty('--flap-angle', `${-o.flapAngle}deg`);
+                    }
+                    if (o.flapAnchor) {
+                        newObj.flapAnchor = o.flapAnchor;
+                        let blade = newObj.el.querySelector('.f2d-flap-blade');
+                        if (blade) {
+                            blade.classList.remove('anchor-left', 'anchor-right');
+                            if (o.flapAnchor === 'edge') blade.classList.add('anchor-left');
+                            else if (o.flapAnchor === 'right') blade.classList.add('anchor-right');
+                        }
+                    }
+                    // conveyor_roller: Rollgeschwindigkeit
+                    if (o.rollerSpeed !== undefined) newObj.rollerSpeed = o.rollerSpeed;
+                    // conveyor_curve: Kurvenwinkel + SVG neu zeichnen
+                    if (o.curveAngle !== undefined) {
+                        newObj.curveAngle = o.curveAngle;
+                        if (ComponentRegistry['conveyor_curve'] && ComponentRegistry['conveyor_curve']._draw) ComponentRegistry['conveyor_curve']._draw(newObj);
+                    }
+                    // compressor: Druck und Fördervolumen
+                    if (o.pressure !== undefined) {
+                        newObj.pressure = o.pressure;
+                        let sp = newObj.el.querySelector('span');
+                        if (sp) sp.textContent = o.pressure + ' bar';
+                    }
+                    if (o.maxFlow !== undefined) newObj.maxFlow = o.maxFlow;
+                    // zylinder (Pneumatik): Kolbengeometrie
+                    if (o.pistonD !== undefined) newObj.pistonD = o.pistonD;
+                    if (o.rodD !== undefined) newObj.rodD = o.rodD;
+                    if (o.stroke !== undefined) newObj.stroke = o.stroke;
                     _applyObjZIndex(newObj);
                     if (newObj.type === 'hmi_panel' && o.frameVisible !== undefined) {
                         newObj.frameVisible = o.frameVisible;

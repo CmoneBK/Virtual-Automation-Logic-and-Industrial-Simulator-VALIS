@@ -472,6 +472,7 @@
         .tb-dropdown-content > .tb-col-wrap, .tb-dropdown-content > .dd-col { padding: 0; border-bottom: none; cursor: default; background: none !important; }
         .tb-dropdown-content > div:last-child, .tb-dropdown-content .dd-col > div:last-child, .tb-submenu-content > div:last-child { border-bottom: none; }
         .tb-menu-cat { padding: 5px 12px 3px !important; color: #888 !important; font-size: 10px !important; text-transform: uppercase !important; letter-spacing: 0.8px !important; cursor: default !important; background: #252526 !important; font-weight: bold !important; pointer-events: none !important; border-top: 1px solid #3a3a3a !important; }
+        .f2d-view-badge { display: inline-block; font-size: 11px; margin-left: 4px; vertical-align: middle; line-height: 1; opacity: 0.75; }
         .tb-menu-cat:hover { background: #252526 !important; }
         .tb-dropdown:hover .tb-dropdown-content { display: block; }
         .tb-dropdown:hover .tb-dropdown-content.multi-col { display: flex !important; flex-direction: row; align-items: flex-start; }
@@ -572,6 +573,42 @@
         .f2d-conveyor.active .f2d-motor-shaft { animation: f2d-spin 0.3s linear infinite; }
         @keyframes f2d-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .f2d-belt-clip { position: absolute; width: 100%; height: 100%; left: 0; top: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+        /* ── Ansichtsabhängige Darstellung: Förderband & Rollenbahn ── */
+        /* Förderband Seitenansicht – Oberfläche oben (Schwerkraft: Kisten landen oben) */
+        .view-side .f2d-conveyor {
+            background-color: #2a2a2a;
+            background-image: repeating-linear-gradient(90deg, transparent 0px, transparent 17px, #1e1e1e 17px, #1e1e1e 20px);
+            border-top: 2px solid #555; border-left: 4px solid #383838; border-right: 4px solid #303030; border-bottom: 3px solid #222; border-radius: 2px;
+        }
+        .view-side .f2d-conveyor .f2d-belt-clip {
+            top: 0; bottom: auto; height: 8px; border-radius: 0; border-bottom: 1px solid #444;
+        }
+        /* Motor aufrecht – linke Antriebstrommel */
+        .view-side .f2d-motor-block { left: -22px; top: 0; width: 22px; height: 100%; border-radius: 4px 0 0 4px; }
+        .view-side .f2d-motor-shaft { left: 4px; top: calc(50% - 7px); }
+        /* Rechte Umlenkrolle */
+        .f2d-right-drum {
+            display: none; position: absolute; right: -12px; top: calc(50% - 12px);
+            width: 24px; height: 24px; border-radius: 50%; border: 2px solid #263238;
+            background: #455a64;
+            background-image:
+                linear-gradient(to right,  transparent 43%, #263238 43%, #263238 57%, transparent 57%),
+                linear-gradient(to bottom, transparent 43%, #263238 43%, #263238 57%, transparent 57%);
+            z-index: 2; box-sizing: border-box;
+        }
+        .f2d-return-clip { display: none; position: absolute; left: 0; bottom: 0; width: 100%; height: 6px; overflow: hidden; pointer-events: none; }
+        .f2d-return-belt { position: absolute; left: 0; width: 4000px; height: 100%; background: repeating-linear-gradient(90deg, #444, #444 10px, #555 10px, #555 20px); }
+        .view-side .f2d-conveyor .f2d-resize-handle { display: none !important; }
+        .view-side .f2d-right-drum { display: block; cursor: ew-resize; }
+        .view-side .f2d-return-clip { display: block; }
+        .view-side .f2d-conveyor.active .f2d-right-drum { animation: f2d-spin 0.5s linear infinite; }
+        /* Rollenbahn Seitenansicht – Rollen bilden die Oberfläche */
+        .view-side .f2d-conveyor-roller {
+            border: 2px solid #455a64; background-color: #1a2428;
+            background-image: none;
+            overflow: visible;
+        }
+        .view-side .f2d-roller-view-svg { display: block !important; }
         .f2d-rotate-handle {
             position: absolute; left: 50%; top: -25px; width: 16px; height: 16px; margin-left: -8px;
             background: #fff; border: 2px solid #ff9800; border-radius: 50%; cursor: grab; z-index: 20; display: none;
@@ -1303,9 +1340,36 @@
                             <option value="white">Weiß / Grau</option>
                         </select>
                     </div>
-                    <div id="fm-group-interval" style="margin-bottom: 15px; display: none;">
+                    <div id="fm-group-interval" style="margin-bottom: 10px; display: none;">
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Spawn-Intervall (in Sekunden)</label>
                         <input type="number" id="fm-input-interval" value="3" min="0.5" step="0.5" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box;">
+                    </div>
+                    <div id="fm-group-spawner-props" style="display: none; margin-bottom: 10px;">
+                        <div style="border-top: 1px solid #444; margin: 4px 0 8px;"></div>
+                        <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Qualitätsmodus</label>
+                        <select id="fm-spawner-quality" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; margin-bottom: 8px;">
+                            <option value="always_ok">Immer OK</option>
+                            <option value="always_nok">Immer NOK</option>
+                            <option value="random">Zufällig (80% OK)</option>
+                            <option value="every_n">Jedes 3. NOK</option>
+                        </select>
+                        <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Schmelzpunkt (°C)</label>
+                        <input type="number" id="fm-spawner-melt" min="50" step="50" placeholder="Standard (Metall: 1200°C, Kunststoff: 150°C)" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px; margin-bottom: 8px;">
+                        <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 5px;">Block-Spawn-Versatz — wo erscheint der Block relativ zum Spawner?</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 4px;">
+                            <div>
+                                <label style="color: #607d8b; font-size: 10px; display: block; margin-bottom: 2px;" title="Links/Rechts vom Spawner-Mittelpunkt">X — seitlich</label>
+                                <input type="number" id="fm-spawner-ox" value="0" style="width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px;">
+                            </div>
+                            <div>
+                                <label style="color: #607d8b; font-size: 10px; display: block; margin-bottom: 2px;" title="Oben/Unten vom Spawner-Mittelpunkt">Y — vertikal</label>
+                                <input type="number" id="fm-spawner-oy" value="0" style="width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px;">
+                            </div>
+                            <div>
+                                <label style="color: #607d8b; font-size: 10px; display: block; margin-bottom: 2px;" title="Ebene / Tiefe im 3D-Raum (Z-Index)">Z — Ebene</label>
+                                <input type="number" id="fm-spawner-oz" value="0" style="width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px;">
+                            </div>
+                        </div>
                     </div>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
                         <button onclick="closeFactoryModal()" style="background: #555; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer;">Abbrechen</button>
@@ -3395,12 +3459,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let dh = -dxScreen * Math.sin(pRad) + dyScreen * Math.cos(pRad);
                 let newWidth = Math.max(20, startWidth + dw); let newHeight = Math.max(20, startHeight + dh); 
                 let totalDw = newWidth - startWidth; let totalDh = newHeight - startHeight;
-                resizingElementXY.data.width = newWidth; resizingElementXY.data.height = newHeight; 
-                resizingElementXY.el.style.width = newWidth + 'px'; resizingElementXY.el.style.height = newHeight + 'px'; 
+                resizingElementXY.data.width = newWidth; resizingElementXY.data.height = newHeight;
+                resizingElementXY.el.style.width = newWidth + 'px'; resizingElementXY.el.style.height = newHeight + 'px';
                 resizingElementXY.data.x = startX + (totalDw / 2) * (Math.cos(pRad) - 1) - (totalDh / 2) * Math.sin(pRad);
                 resizingElementXY.data.y = startY + (totalDw / 2) * Math.sin(pRad) + (totalDh / 2) * (Math.cos(pRad) - 1);
                 updateObjTransform(resizingElementXY.data);
-                return; 
+                // Plugin-Resize-Hook: Hubpalette passt liftHeight proportional zur neuen Höhe an
+                if (resizingElementXY.data.type === 'lift_palette') {
+                    resizingElementXY.data.liftHeight = Math.max(10, newHeight - 14);
+                }
+                // Rollenbahn: SVG-Rollen neu berechnen
+                if (resizingElementXY.data.type === 'conveyor_roller') {
+                    _rebuildRollerSvg(resizingElementXY.data);
+                }
+                return;
             }
             // 5b. Pin-Drag
             if (_pinDragActive) {
@@ -8435,6 +8507,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         // Ersetze diese beiden Zeilen...
         const factoryScrollArea = document.getElementById('factory-canvas-area'); // NEU: Das äußere Fenster
         const factoryCanvas = document.getElementById('factory-content'); // NEU: Die gigantische innere Leinwand
+        factoryCanvas.classList.add('view-side'); // Standard: Seitenansicht
 		// --- 2D KAMERA PANNING ---
         let isPanActive = false;
         let panStartX = 0, panStartY = 0, panScrollLeft = 0, panScrollTop = 0;
@@ -8652,18 +8725,73 @@ You must output exactly this JSON format. The logic code goes as a single string
         let factoryLayers = []; // { id, name, zOffset }
         const _TYPE_Z_BASE = {
             'conveyor': 10,
-            'sensor_ind': 20, 'sensor_kap': 20, 'sensor_opt': 20, 'sensor_mag': 20,
-            'taster': 20, 'schalter': 20, 'nothalt': 20, 'led': 20,
-            'display': 20, 'stacklight': 20,
-            'zylinder_single': 30, 'zylinder_double': 30,
+            'sensor_ind': 10, 'sensor_kap': 10, 'sensor_opt': 10, 'sensor_mag': 10,
+            'taster': 10, 'schalter': 10, 'nothalt': 10, 'led': 10,
+            'display': 10, 'stacklight': 10,
+            'zylinder_single': 10, 'zylinder_double': 10,
         };
         function _typeZBase(type) {
             if (_TYPE_Z_BASE[type] !== undefined) return _TYPE_Z_BASE[type];
-            if (type && type.startsWith('sensor_')) return 20;
-            if (type && type.startsWith('spawner_')) return 12;
-            if (type && type.startsWith('zylinder')) return 30;
+            if (type && type.startsWith('sensor_')) return 10;
+            if (type && type.startsWith('spawner_')) return 10;
+            if (type && type.startsWith('zylinder')) return 10;
             if (type && type.startsWith('zone_')) return 1;
-            return 15;
+            return 10;
+        }
+        // Ansichts-Eignung: 'side' = nur Seitenansicht, 'top' = nur Draufsicht, 'both' = beides
+        const _TYPE_VIEW = {
+            'conveyor': 'both', 'conveyor_roller': 'both', 'conveyor_curve': 'top',
+            'conveyor_lift': 'side', 'lift_palette': 'side', 'sorter_flap': 'both',
+            'press': 'side', 'pusher': 'side',
+            'zylinder_single': 'both', 'zylinder_double': 'both',
+            'heater': 'side', 'wall': 'both', 'frame': 'both',
+            'portal_crane': 'side', 'turntable': 'top', 'robot_arm_2d': 'top',
+        };
+        function _typeView(type) {
+            if (_TYPE_VIEW[type] !== undefined) return _TYPE_VIEW[type];
+            if (ComponentRegistry[type] && ComponentRegistry[type].view) return ComponentRegistry[type].view;
+            return 'both';
+        }
+        function _rebuildRollerSvg(obj) {
+            const svg = obj._rollerSvg;
+            if (!svg) return;
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+            const w = obj.width, h = obj.height;
+            const r = Math.max(5, (h - 6) / 2);
+            const gap = Math.max(3, Math.round(r * 0.4));
+            const spacing = r * 2 + gap;
+            let n = Math.max(1, Math.floor((w + gap) / spacing));
+            const totalW = n * spacing - gap;
+            let startX = Math.max(r, (w - totalW) / 2 + r);
+            // ensure last roller fits fully
+            while (n > 0 && startX + (n - 1) * spacing + r > w) n--;
+            const cy = r - 2; // 2px protrusion above top edge
+            svg.setAttribute('width', w);
+            svg.setAttribute('height', h);
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            for (let i = 0; i < n; i++) {
+                const cx = startX + i * spacing;
+                const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
+                c.setAttribute('fill', '#546e7a'); c.setAttribute('stroke', '#263238'); c.setAttribute('stroke-width', '1.5');
+                svg.appendChild(c);
+                const lv = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                lv.setAttribute('x1', cx); lv.setAttribute('y1', cy - r + 2);
+                lv.setAttribute('x2', cx); lv.setAttribute('y2', cy + r - 2);
+                lv.setAttribute('stroke', '#263238'); lv.setAttribute('stroke-width', '1.5');
+                svg.appendChild(lv);
+                const lh = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                lh.setAttribute('x1', cx - r + 2); lh.setAttribute('y1', cy);
+                lh.setAttribute('x2', cx + r - 2); lh.setAttribute('y2', cy);
+                lh.setAttribute('stroke', '#263238'); lh.setAttribute('stroke-width', '1.5');
+                svg.appendChild(lh);
+            }
+            // bottom frame bar
+            const fr = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            fr.setAttribute('x', 0); fr.setAttribute('y', h - 5);
+            fr.setAttribute('width', w); fr.setAttribute('height', 5);
+            fr.setAttribute('fill', '#263238'); fr.setAttribute('opacity', '0.7');
+            svg.appendChild(fr);
         }
         function _applyObjZIndex(obj) {
             const base = _typeZBase(obj.type);
@@ -10395,14 +10523,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                     if (obj.rollerSpeed === undefined) obj.rollerSpeed = 1.0;
                     obj.useGravity = false;
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.className.baseVal = 'f2d-roller-view-svg';
+                    svg.style.cssText = 'display:none;position:absolute;top:0;left:0;overflow:visible;pointer-events:none;';
+                    obj._rollerSvg = svg; el.appendChild(svg);
+                    _rebuildRollerSvg(obj);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                 },
                 physics: function(obj, item, isActive, rad) {
                     let ocx = obj.x + obj.width / 2, ocy = obj.y + obj.height / 2;
-                    if (item.activeMode === 'side') {
-                        resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, 'conveyor_roller', false);
-                        return;
-                    }
                     resolveOBBCollision(item, ocx, ocy, obj.width / 2, obj.height / 2, obj.rotation, 'conveyor_roller', false);
                     if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
                         let spd = (obj.rollerSpeed || 1.0) * window.simSpeed * timeScale;
@@ -10575,17 +10704,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 directSpawn: false, hasHeight: true, noRodAttach: true,
                 role: 'output', color: '#5d4037',
                 i18n: {
-                    de: { name: 'Hubstation', desc: 'Transportiert Werkstücke in Drehrichtung des Elements wenn aktiv. Rotieren zum Ausrichten.' },
-                    en: { name: 'Lift Station', desc: 'Transports items in element rotation direction when active. Rotate to align.' }
+                    de: { name: 'Kettenlift', desc: 'Vertikalförderer: Werkstücke werden durch den Schacht nach oben oder unten befördert wenn aktiv. Keine eigene Kollisionsfläche – Werkstücke treten von der Seite ein.' },
+                    en: { name: 'Chain Lift', desc: 'Vertical conveyor: items are transported up or down through the shaft when active. No collision surface – items enter from the side.' }
                 },
                 meta: { icon: '⬆️' },
-                modalConfig: { t: 'Hubstation anlegen:', l1: 'Hub aktiv (Motor AN)', out: true },
+                modalConfig: { t: 'Kettenlift anlegen:', l1: 'Fördermotor AN', out: true },
                 menuTarget: '#menu-aktoren',
                 insertBefore: '#menu-act-cat-pneu',
-                menuHtml: `<div onclick="addFactoryDevice('conveyor_lift')">⬆️ <span data-i18n="plug_conveyor_lift_name">Hubstation</span></div>`,
+                menuHtml: `<div onclick="addFactoryDevice('conveyor_lift')">⬆️ <span data-i18n="plug_conveyor_lift_name">Kettenlift</span></div>`,
                 css: `
                     .f2d-conveyor-lift {
-                        position: absolute; box-sizing: border-box; z-index: 2; overflow: hidden;
+                        position: absolute; box-sizing: border-box; overflow: hidden;
                         background: #4e342e; border: 2px solid #3e2723;
                     }
                     .f2d-lift-chain {
@@ -10593,13 +10722,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                         width: 6px; height: 100%;
                         background: repeating-linear-gradient(180deg, #795548 0px, #795548 5px, #3e2723 5px, #3e2723 10px);
                     }
-                    .f2d-lift-platform {
-                        position: absolute; left: 2px; right: 2px; height: 8px;
-                        background: #ff9800; border: 1px solid #e65100; border-radius: 1px;
-                        transition: top 0.4s ease-in-out;
-                    }
-                    .f2d-conveyor-lift.active .f2d-lift-chain { animation: liftChain 0.4s linear infinite; }
-                    @keyframes liftChain { from { background-position-y: 0px; } to { background-position-y: 10px; } }
+                    .f2d-conveyor-lift.active-up .f2d-lift-chain { animation: liftChainUp 0.4s linear infinite; }
+                    .f2d-conveyor-lift.active-down .f2d-lift-chain { animation: liftChainDown 0.4s linear infinite; }
+                    @keyframes liftChainUp { from { background-position-y: 0px; } to { background-position-y: -10px; } }
+                    @keyframes liftChainDown { from { background-position-y: 0px; } to { background-position-y: 10px; } }
+                    .f2d-conveyor-lift .f2d-lift-dir-badge { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font-size: 10px; pointer-events: none; }
                     .f2d-conveyor-lift .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.25); z-index: 10; }
                 `,
                 build: function(obj, el, var1) {
@@ -10607,49 +10734,128 @@ You must output exactly this JSON format. The logic code goes as a single string
                     el.className = 'f2d-obj f2d-conveyor-lift';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                     if (obj.liftSpeed === undefined) obj.liftSpeed = 2;
+                    if (obj.liftDir === undefined) obj.liftDir = 'up';
                     obj.useGravity = false;
                     let chain = document.createElement('div'); chain.className = 'f2d-lift-chain'; el.appendChild(chain);
-                    let platform = document.createElement('div'); platform.className = 'f2d-lift-platform';
-                    platform.style.top = (obj.height - 10) + 'px'; obj.platformEl = platform; el.appendChild(platform);
+                    let badge = document.createElement('div'); badge.className = 'f2d-lift-dir-badge';
+                    badge.textContent = obj.liftDir === 'down' ? '⬇️' : '⬆️'; obj.dirBadgeEl = badge; el.appendChild(badge);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                 },
                 animate: function(obj, spsState) {
                     let isActive = !!spsState[obj.linkedVar];
                     if (isActive !== obj.isActive) {
                         obj.isActive = isActive;
-                        obj.el.classList.toggle('active', isActive);
-                        if (obj.platformEl) obj.platformEl.style.top = isActive ? '2px' : (obj.height - 10) + 'px';
+                        obj.el.classList.remove('active-up', 'active-down');
+                        if (isActive) obj.el.classList.add(obj.liftDir === 'down' ? 'active-down' : 'active-up');
                     }
                 },
-                // Keine seitlichen Wände – Werkstücke treten frei von der Seite ein.
-                // Wenn inaktiv: Bodenplatte hält Werkstücke auf der Plattform.
-                // Wenn aktiv: immer nach oben heben (unabhängig von Rotation).
                 physics: function(obj, item, isActive, rad) {
-                    let ih = item.height || item.width;
-                    if (isActive) {
-                        if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
-                            let spd = (obj.liftSpeed || 2) * window.simSpeed * timeScale;
-                            item.y -= spd;
-                            item.vy = -(obj.liftSpeed || 2);
-                            item.vx *= Math.pow(0.85, window.simSpeed * timeScale);
-                        }
-                    } else {
-                        // Nur Bodenplatte – Werkstücke können seitlich eintreten
-                        if (!isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) return;
-                        let platformTop = obj.y + obj.height - 10;
-                        if (item.y + ih > platformTop - 2 && item.vy >= 0) {
-                            item.y = platformTop - ih;
-                            item.vy = 0;
-                        }
+                    if (!isActive) return;
+                    if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
+                        let spd = (obj.liftSpeed || 2) * window.simSpeed * timeScale;
+                        if (obj.liftDir === 'down') { item.y += spd; item.vy = (obj.liftSpeed || 2); }
+                        else { item.y -= spd; item.vy = -(obj.liftSpeed || 2); }
+                        item.vx *= Math.pow(0.85, window.simSpeed * timeScale);
                     }
                 },
                 contextMenu: function(obj, ctxMenu, saveCallback) {
-                    let wrap = document.createElement('div'); wrap.style.padding = '5px 15px'; wrap.onclick = e => e.stopPropagation();
-                    wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Transportgeschwindigkeit (px/s)</div>`;
-                    let inp = document.createElement('input'); inp.type = 'number'; inp.min = '0.5'; inp.max = '20'; inp.step = '0.5'; inp.value = obj.liftSpeed !== undefined ? obj.liftSpeed : 2;
-                    inp.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
-                    inp.onchange = e => { obj.liftSpeed = parseFloat(e.target.value); saveCallback(); };
-                    wrap.appendChild(inp); ctxMenu.appendChild(wrap);
+                    let wrapS = document.createElement('div'); wrapS.style.padding = '5px 15px'; wrapS.onclick = e => e.stopPropagation();
+                    wrapS.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Fördergeschwindigkeit (px/s)</div>`;
+                    let inpS = document.createElement('input'); inpS.type = 'number'; inpS.min = '0.5'; inpS.max = '20'; inpS.step = '0.5'; inpS.value = obj.liftSpeed !== undefined ? obj.liftSpeed : 2;
+                    inpS.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inpS.onchange = e => { obj.liftSpeed = parseFloat(e.target.value); saveCallback(); };
+                    wrapS.appendChild(inpS); ctxMenu.appendChild(wrapS);
+                    let wrapD = document.createElement('div'); wrapD.style.padding = '5px 15px'; wrapD.onclick = e => e.stopPropagation();
+                    wrapD.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">↕ Förderrichtung</div>`;
+                    let selD = document.createElement('select'); selD.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    [['up','⬆ Nach oben'],['down','⬇ Nach unten']].forEach(([v,t]) => {
+                        let o2 = document.createElement('option'); o2.value = v; o2.textContent = t;
+                        if ((obj.liftDir || 'up') === v) o2.selected = true;
+                        selD.appendChild(o2);
+                    });
+                    selD.onchange = e => {
+                        obj.liftDir = e.target.value;
+                        if (obj.dirBadgeEl) obj.dirBadgeEl.textContent = obj.liftDir === 'down' ? '⬇️' : '⬆️';
+                        saveCallback();
+                    };
+                    wrapD.appendChild(selD); ctxMenu.appendChild(wrapD);
+                }
+            },
+            // =========================================================
+            // 🔼 HUBPALETTE (Gabelpalette / Hubtisch)
+            // =========================================================
+            'lift_palette': {
+                directSpawn: true, noRodAttach: true,
+                role: 'output', color: '#37474f',
+                i18n: {
+                    de: { name: 'Hubpalette', desc: 'Physisch bewegliche Gabelpalette: Werkstücke die auf der Plattform liegen werden mitgehoben – wie die Gabel eines Hubstaplers. Eigene Hubhöhe und Geschwindigkeit, unabhängig vom Kettenlift.' },
+                    en: { name: 'Lift Palette', desc: 'Physically moving fork/pallet: items resting on the platform are carried upward – like a forklift fork. Independent lift height and speed from the chain lift.' }
+                },
+                meta: { icon: '🔼' },
+                modalConfig: { t: 'Hubpalette anlegen:', l1: 'Ausfahren (Heben)', out: true },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-cat-pneu',
+                menuHtml: `<div onclick="addFactoryDevice('lift_palette')">🔼 <span data-i18n="plug_lift_palette_name">Hubpalette</span></div>`,
+                css: `
+                    .f2d-lift-palette { position: absolute; box-sizing: border-box; background: transparent; overflow: visible; }
+                    .f2d-lp-guide { position: absolute; top: 0; bottom: 0; width: 8px; background: #546e7a; border: 1px solid #37474f; border-radius: 2px; box-sizing: border-box; }
+                    .f2d-lp-guide-left { left: 0; }
+                    .f2d-lp-guide-right { right: 0; }
+                    .f2d-lp-ticks { position: absolute; top: 0; bottom: 0; left: 4px; right: 4px; background: repeating-linear-gradient(180deg, transparent 0px, transparent 8px, rgba(255,255,255,0.06) 8px, rgba(255,255,255,0.06) 10px); pointer-events: none; }
+                    .f2d-lp-platform { position: absolute; left: 10px; right: 10px; height: 10px; background: #ff9800; border: 2px solid #e65100; border-radius: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); box-sizing: border-box; }
+                    .f2d-lift-palette .f2d-resize-handle-xy { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; background: rgba(255,255,255,0.2); z-index: 10; }
+                `,
+                build: function(obj, el, var1) {
+                    obj.linkedVar = var1; obj.width = 60; obj.height = 100;
+                    el.className = 'f2d-obj f2d-lift-palette';
+                    el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    if (obj.liftSpeed === undefined) obj.liftSpeed = 1.5;
+                    if (obj.liftHeight === undefined) obj.liftHeight = obj.height - 14;
+                    if (obj.palettePos === undefined) obj.palettePos = 0;
+                    obj.useGravity = false;
+                    let guideL = document.createElement('div'); guideL.className = 'f2d-lp-guide f2d-lp-guide-left'; el.appendChild(guideL);
+                    let guideR = document.createElement('div'); guideR.className = 'f2d-lp-guide f2d-lp-guide-right'; el.appendChild(guideR);
+                    let ticks = document.createElement('div'); ticks.className = 'f2d-lp-ticks'; el.appendChild(ticks);
+                    let platform = document.createElement('div'); platform.className = 'f2d-lp-platform';
+                    platform.style.bottom = (obj.palettePos || 0) + 'px'; obj.platformEl = platform; el.appendChild(platform);
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                },
+                animate: function(obj, spsState) {
+                    let isActive = !!spsState[obj.linkedVar];
+                    obj.isActive = isActive;
+                    let maxH = obj.liftHeight !== undefined ? obj.liftHeight : (obj.height - 14);
+                    let spd = (obj.liftSpeed || 1.5) * window.simSpeed * timeScale;
+                    obj.palettePos = Math.max(0, Math.min(maxH, (obj.palettePos || 0) + (isActive ? spd : -spd)));
+                    if (obj.platformEl) obj.platformEl.style.bottom = obj.palettePos + 'px';
+                },
+                physics: function(obj, item, isActive, rad) {
+                    let ih = item.height || item.width;
+                    // Plattform-Oberfläche in Weltkoordinaten (von oben gemessen)
+                    let platformTop = obj.y + obj.height - 10 - (obj.palettePos || 0);
+                    // Horizontale Überlappung (innerhalb der Führungsschienen)
+                    if (item.x + item.width <= obj.x + 8 || item.x >= obj.x + obj.width - 8) return;
+                    // Block liegt auf der Plattform-Oberfläche
+                    let itemBottom = item.y + ih;
+                    if (itemBottom >= platformTop - 2 && itemBottom <= platformTop + 12 && item.vy >= 0) {
+                        item.y = platformTop - ih;
+                        // Mitbewegung: Geschwindigkeit der Plattform übernehmen
+                        item.vy = isActive ? -(obj.liftSpeed || 1.5) : (obj.palettePos > 0 ? (obj.liftSpeed || 1.5) : 0);
+                        item.vx *= Math.pow(0.9, window.simSpeed * timeScale);
+                    }
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let wrapS = document.createElement('div'); wrapS.style.padding = '5px 15px'; wrapS.onclick = e => e.stopPropagation();
+                    wrapS.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Hubgeschwindigkeit (px/s)</div>`;
+                    let inpS = document.createElement('input'); inpS.type = 'number'; inpS.min = '0.2'; inpS.max = '10'; inpS.step = '0.1'; inpS.value = obj.liftSpeed !== undefined ? obj.liftSpeed : 1.5;
+                    inpS.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inpS.onchange = e => { obj.liftSpeed = parseFloat(e.target.value); saveCallback(); };
+                    wrapS.appendChild(inpS); ctxMenu.appendChild(wrapS);
+                    let wrapH = document.createElement('div'); wrapH.style.padding = '5px 15px'; wrapH.onclick = e => e.stopPropagation();
+                    wrapH.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">📏 Maximaler Hub (px)</div>`;
+                    let inpH = document.createElement('input'); inpH.type = 'number'; inpH.min = '10'; inpH.max = '500'; inpH.step = '5'; inpH.value = obj.liftHeight !== undefined ? obj.liftHeight : (obj.height - 14);
+                    inpH.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;";
+                    inpH.onchange = e => { obj.liftHeight = parseFloat(e.target.value); saveCallback(); };
+                    wrapH.appendChild(inpH); ctxMenu.appendChild(wrapH);
                 }
             },
             'sorter_flap': {
@@ -11052,8 +11258,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 btn.style.backgroundColor = '#4caf50'; 
                 btn.setAttribute('data-i18n', 'fac_btn_view_side');
                 btn.textContent = t('fac_btn_view_side');
-                factoryItems.forEach(i => i.vy += 1); 
+                factoryItems.forEach(i => i.vy += 1);
             }
+            factoryCanvas.classList.toggle('view-side', globalViewMode === 'side');
+            factoryObjects.forEach(o => { if (o.type === 'conveyor_roller') _rebuildRollerSvg(o); });
         };
         window.updateSimSpeed = function(val) {
             window.simSpeed = parseFloat(val);
@@ -11132,10 +11340,22 @@ You must output exactly this JSON format. The logic code goes as a single string
             if(!isLoadingFactory) saveFactoryState(); 
         };
         window.addFactoryDevice = function(type) {
+            // Ansichts-Kompatibilitäts-Warnung
+            if (!type.startsWith('zone_')) {
+                const _rv = _typeView(type);
+                if (_rv !== 'both') {
+                    const _hasZone = factoryObjects.some(o => o.type === 'zone_' + _rv);
+                    if (globalViewMode !== _rv && !_hasZone) {
+                        const _vName = _rv === 'side' ? 'Seitenansicht' : 'Draufsicht';
+                        const _curName = globalViewMode === 'side' ? 'Seitenansicht' : 'Draufsicht';
+                        if (!confirm(`Dieses Bauteil ist für die ${_vName} ausgelegt.\nAktive Ansicht: ${_curName}\n\nOhne passende Zone funktioniert das Bauteil möglicherweise nicht korrekt.\nTrotzdem platzieren?`)) return;
+                    }
+                }
+            }
             // 1. Logiklose Objekte direkt erstellen & sofort abbrechen
             const directTypes = ['despawner', 'wall', 'frame', 'zone_top', 'zone_side']; // Die restlichen alten bleiben vorerst hier
-            if (directTypes.includes(type) || (ComponentRegistry[type] && ComponentRegistry[type].directSpawn)) { 
-                createFactoryObject(type, ''); return; 
+            if (directTypes.includes(type) || (ComponentRegistry[type] && ComponentRegistry[type].directSpawn)) {
+                createFactoryObject(type, ''); return;
             }
             pendingFactoryType = type;
             const modal = document.getElementById('factory-modal'); // WICHTIG: Das Modal-Element!
@@ -11147,6 +11367,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             sel1.innerHTML = ''; sel2.innerHTML = ''; if(sel3) sel3.innerHTML = '';
             grp1.style.display = 'block'; grp2.style.display = 'none'; if(grp3) grp3.style.display = 'none';
             colorGrp.style.display = 'none'; intervalGrp.style.display = 'none';
+            const spawnerPropsGrp = document.getElementById('fm-group-spawner-props'); if (spawnerPropsGrp) spawnerPropsGrp.style.display = 'none';
             let fillOptions = (selectElem, isOutput, targetType) => {
                 let list = isOutput ? globalOutputs : globalInputs;
                 let groupMatch = document.createElement('optgroup'); groupMatch.label = "Passende Komponenten";
@@ -11192,7 +11413,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 lbl2.textContent = "Block-Eigenschaft";
                 sel2.innerHTML = '<option value="normal">Normal (Überlappen)</option><option value="solid">Massiv (Kollision untereinander)</option>';
                 grp2.style.display = 'block';
-                intervalGrp.style.display = 'block'; // <--- NEU: Blendet das Intervall-Feld ein!
+                intervalGrp.style.display = 'block';
+                if (spawnerPropsGrp) { spawnerPropsGrp.style.display = 'block'; document.getElementById('fm-spawner-quality').value = 'always_ok'; document.getElementById('fm-spawner-melt').value = ''; document.getElementById('fm-spawner-ox').value = '0'; document.getElementById('fm-spawner-oy').value = '0'; document.getElementById('fm-spawner-oz').value = '0'; }
             }
             // NEU: Filter für die Live-Timer/Zähler
             if (c.customList === 'timers') {
@@ -11323,6 +11545,14 @@ You must output exactly this JSON format. The logic code goes as a single string
             const interval = parseFloat(document.getElementById('fm-input-interval').value) || 3;
             const newObj = createFactoryObject(pendingFactoryType, var1, e2.val, null, color, interval, e3.val);
             if (newObj && linkedFormula) newObj.linkedFormula = linkedFormula;
+            if (newObj && pendingFactoryType && pendingFactoryType.startsWith('spawner_')) {
+                const _sqEl = document.getElementById('fm-spawner-quality'); if (_sqEl && _sqEl.value !== 'always_ok') newObj.qualityMode = _sqEl.value;
+                const _smEl = document.getElementById('fm-spawner-melt'); if (_smEl && _smEl.value) { const _v = parseFloat(_smEl.value); if (_v > 0) newObj.meltTemp = _v; }
+                const _soxEl = document.getElementById('fm-spawner-ox'); if (_soxEl) { const _v = parseInt(_soxEl.value) || 0; if (_v) newObj.spawnXOffset = _v; }
+                const _soyEl = document.getElementById('fm-spawner-oy'); if (_soyEl) { const _v = parseInt(_soyEl.value) || 0; if (_v) newObj.spawnYOffset = _v; }
+                const _sozEl = document.getElementById('fm-spawner-oz'); if (_sozEl) { const _v = parseInt(_sozEl.value) || 0; if (_v) newObj.spawnZOffset = _v; }
+                saveFactoryState();
+            }
             // --- In den Logik-Editor einfügen ---
             if (e1.formula && !pendingFactoryType.startsWith('spawner_')) {
                 const _isVarName = (s) => s && /^[A-Za-z_][A-Za-z0-9_]*$/.test(s);
@@ -11409,14 +11639,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 el.className = 'f2d-obj f2d-conveyor'; el.style.width = obj.width + 'px';
                 el.innerHTML = `
                     <div class="f2d-motor-block"><div class="f2d-motor-shaft"></div></div>
-                    <div class="f2d-belt-clip"><div class="f2d-conveyor-belt"></div></div>
+                    <div class="f2d-right-drum"></div>
                     <div class="f2d-resize-handle"></div>
                     <div class="f2d-label">Band (${var1})</div>
                 `;
-                obj.beltEl = el.querySelector('.f2d-conveyor-belt');
                 let clip = document.createElement('div'); clip.className = 'f2d-belt-clip';
                 let belt = document.createElement('div'); belt.className = 'f2d-conveyor-belt'; obj.beltEl = belt;
                 clip.appendChild(belt); el.appendChild(clip);
+                let returnClip = document.createElement('div'); returnClip.className = 'f2d-return-clip';
+                let returnBelt = document.createElement('div'); returnBelt.className = 'f2d-return-belt'; obj.returnBeltEl = returnBelt;
+                returnClip.appendChild(returnBelt); el.appendChild(returnClip);
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer; el.appendChild(resizer);
                 let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Band (${var1})`; el.appendChild(label);
             } else if (type === 'wall') {
@@ -11493,8 +11725,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     } 
                     return;
                 }
-                // 2. 1D-Skalierungs-Anfasser (Zylinder, Förderband)
-                if (e.target.classList.contains('f2d-resize-handle')) { 
+                // 2. 1D-Skalierungs-Anfasser (Zylinder, Förderband; in Seitenansicht auch rechte Trommel)
+                if (e.target.classList.contains('f2d-resize-handle') || e.target.classList.contains('f2d-right-drum')) {
                     resizingElement = { el: el, data: dataObj }; 
                     startWidth = dataObj.width; startX = dataObj.x; startY = dataObj.y;
                     // FIX: Maus-Offset an Zoom anpassen
@@ -11704,8 +11936,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ctxMenu.innerHTML = '';
                 let infoBox = document.createElement('div');
                 infoBox.style.cssText = 'padding:6px 15px;color:#ffeb3b;font-size:10px;border-bottom:1px solid #555;cursor:default;font-family:monospace;';
-                infoBox.innerHTML = `📦 ${obj.material === 'metall' ? 'Metall (FE)' : 'Kunststoff (KU)'}<br>📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}`;
+                const _itemZ = parseInt(obj.el.style.zIndex) || 0;
+                infoBox.innerHTML = `📦 ${obj.material === 'metall' ? 'Metall (FE)' : 'Kunststoff (KU)'}<br>📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}<br>🗂 Z: ${_itemZ}`;
                 ctxMenu.appendChild(infoBox);
+                // Z-Index für Block
+                let zItemWrap = document.createElement('div'); zItemWrap.style.cssText = 'padding:2px 15px 6px;'; zItemWrap.onclick = e => e.stopPropagation();
+                zItemWrap.innerHTML = '<div style="color:#aaa;font-size:10px;margin-bottom:3px;margin-top:4px;">⬡ Z-Index</div>';
+                let zItemInp = document.createElement('input'); zItemInp.type = 'number'; zItemInp.value = _itemZ;
+                zItemInp.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                zItemInp.onchange = () => { const _v = parseInt(zItemInp.value); if (!isNaN(_v)) obj.el.style.zIndex = _v; };
+                zItemWrap.appendChild(zItemInp); ctxMenu.appendChild(zItemWrap);
                 let delItem = document.createElement('div'); delItem.className = 'ctx-item'; delItem.style.color = '#ef5350'; delItem.textContent = '🗑 Block löschen';
                 delItem.onclick = () => { const idx = factoryItems.indexOf(obj); if (idx !== -1) { factoryItems.splice(idx, 1); obj.el.remove(); saveFactoryState(); } ctxMenu.style.display = 'none'; };
                 ctxMenu.appendChild(delItem);
@@ -11716,7 +11956,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             let infoBox = document.createElement('div'); infoBox.style.padding = '6px 15px'; infoBox.style.color = '#ffeb3b'; infoBox.style.fontSize = '10px'; infoBox.style.borderBottom = '1px solid #555'; infoBox.style.cursor = 'default'; infoBox.style.fontFamily = 'monospace';
             const _ctxLayer = obj.layerId ? factoryLayers.find(l => l.id === obj.layerId) : null;
             const _ctxZ = parseInt(obj.el.style.zIndex) || 0;
-            infoBox.innerHTML = `📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}<br>📏 W: ${Math.round(obj.width)} | H: ${Math.round(obj.height || obj.width)} | R: ${Math.round(obj.rotation)}°<br>🗂 Ebene: ${_ctxLayer ? _ctxLayer.name : '–'} | Z: ${_ctxZ}`;
+            const _ctxName = _getObjectTypeLabel(obj.type);
+            infoBox.innerHTML = `🏷 <b>${_ctxName}</b><br>📍 X: ${Math.round(obj.x)} | Y: ${Math.round(obj.y)}<br>📏 W: ${Math.round(obj.width)} | H: ${Math.round(obj.height || obj.width)} | R: ${Math.round(obj.rotation)}°<br>🗂 Ebene: ${_ctxLayer ? _ctxLayer.name : '–'} | Z: ${_ctxZ}`;
             if (selectedElements.includes(obj) && selectedElements.length > 1) {
                 infoBox.innerHTML += `<br><br><span style="color:#007acc;font-weight:bold;">📦 ${window.t('ctx_fac_group')} (${selectedElements.length} ${window.t('ctx_fac_objects')})</span>`;
             }
@@ -11911,6 +12152,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 ctxMenu.appendChild(filterWrap);
             }
+            // --- Spawner: Block-Spawn Offsets ---
+            if (obj.type.startsWith('spawner_')) {
+                let sepSp = document.createElement('div'); sepSp.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepSp);
+                let lblSp = document.createElement('div'); lblSp.style.cssText = 'padding:3px 15px 2px;color:#aaa;font-size:10px;'; lblSp.textContent = '📦 Block-Versatz (wo erscheint der Block?)'; ctxMenu.appendChild(lblSp);
+                let spWrap = document.createElement('div'); spWrap.style.cssText = 'padding:2px 15px 6px;'; spWrap.onclick = e => e.stopPropagation();
+                const _mkOffInp = (label, title, prop, val) => {
+                    let row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px;';
+                    let lbl = document.createElement('span'); lbl.style.cssText = 'color:#607d8b;font-size:9px;flex-shrink:0;'; lbl.textContent = label; lbl.title = title;
+                    let inp = document.createElement('input'); inp.type = 'number'; inp.value = val;
+                    inp.style.cssText = 'flex:1;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                    inp.onchange = () => { obj[prop] = parseInt(inp.value) || 0; saveFactoryState(); };
+                    row.appendChild(lbl); row.appendChild(inp); spWrap.appendChild(row);
+                };
+                _mkOffInp('X — seitlich:', 'Links/Rechts vom Spawner', 'spawnXOffset', obj.spawnXOffset || 0);
+                _mkOffInp('Y — vertikal:', 'Oben/Unten vom Spawner', 'spawnYOffset', obj.spawnYOffset || 0);
+                _mkOffInp('Z — Ebene:', 'Z-Index relativ zum Spawner', 'spawnZOffset', obj.spawnZOffset || 0);
+                ctxMenu.appendChild(spWrap);
+            }
             // --- Z-Reihenfolge ---
             {
                 let sepZ = document.createElement('div'); sepZ.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepZ);
@@ -11929,6 +12188,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                     zGrid.appendChild(b);
                 });
                 ctxMenu.appendChild(zGrid);
+                // Z-Index direkt eingeben
+                let zDirWrap = document.createElement('div'); zDirWrap.style.cssText = 'padding:2px 15px 6px;'; zDirWrap.onclick = e => e.stopPropagation();
+                zDirWrap.innerHTML = '<div style="color:#aaa;font-size:10px;margin-bottom:3px;">Z-Index (direkt)</div>';
+                let zDirInp = document.createElement('input'); zDirInp.type = 'number'; zDirInp.value = _ctxZ;
+                zDirInp.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                zDirInp.onchange = () => {
+                    const _tZ = parseInt(zDirInp.value);
+                    if (!isNaN(_tZ)) {
+                        const _base = _typeZBase(obj.type); let _lOff = 0;
+                        if (obj.layerId) { const _l = factoryLayers.find(l => l.id === obj.layerId); if (_l) _lOff = _l.zOffset || 0; }
+                        obj.localZ = _tZ - _base - _lOff; _applyObjZIndex(obj); saveFactoryState();
+                    }
+                };
+                zDirWrap.appendChild(zDirInp); ctxMenu.appendChild(zDirWrap);
                 // Ebene zuweisen
                 if (factoryLayers.length > 0) {
                     let layerWrap = document.createElement('div'); layerWrap.style.cssText = 'padding:2px 15px 6px;'; layerWrap.onclick = e => e.stopPropagation();
@@ -12489,7 +12762,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 if (obj.qualityMode === 'always_nok') _spQuality = 'NOK';
                                 else if (obj.qualityMode === 'random') _spQuality = Math.random() < (obj.qualityChance ?? 0.8) ? 'OK' : 'NOK';
                                 else if (obj.qualityMode === 'every_n') _spQuality = (obj._spawnCount % (obj.qualityNth || 3) === 0) ? 'NOK' : 'OK';
-                                spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5, obj.y + 5, obj.spawnSolid, obj.meltTemp, parseInt(obj.el.style.zIndex) || 12);
+                                spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5 + (obj.spawnXOffset || 0), obj.y + 5 + (obj.spawnYOffset || 0), obj.spawnSolid, obj.meltTemp, (parseInt(obj.el.style.zIndex) || 10) + (obj.spawnZOffset || 0));
                                 if (factoryItems.length > 0) factoryItems[factoryItems.length - 1].quality = _spQuality;
                             }
                         } else { 
@@ -12632,9 +12905,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                             obj.beltOffset += (2 * obj._speedFactor * window.simSpeed * timeScale);
                             if (obj.beltOffset >= 20) obj.beltOffset -= 20;
                             if (obj.beltEl) obj.beltEl.style.transform = `translateX(${obj.beltOffset}px)`;
+                            if (obj.returnBeltEl) obj.returnBeltEl.style.transform = `translateX(${-obj.beltOffset}px)`;
                         } else {
                             obj._speedFactor = 0;
                         }
+                        obj.el.classList.toggle('active', obj._speedFactor > 0);
                     }
                 });
                 factoryItems.forEach(item => {
@@ -12806,7 +13081,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 if (obj.type === 'sensor_kap') isTriggered = true;
                             }
                         });
-                        if (!isTriggered && obj.type !== 'sensor_mag') {
+                        if (!isTriggered && obj.type !== 'sensor_mag' && obj.type !== 'sensor_kap') {
                             let sRad = (obj.rotation || 0) * Math.PI / 180;
                             let steps = obj.type === 'sensor_opt' ? 5 : 2;
                             let testPoints = [];
@@ -12822,6 +13097,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             }
                             factoryObjects.forEach(targetObj => {
                                 if (targetObj === obj || targetObj.type.startsWith('zone_') || targetObj.type === 'despawner' || targetObj.type.startsWith('spawner_') || targetObj.type === 'led') return;
+                                if (['taster','schalter','nothalt'].includes(targetObj.type) || targetObj.type.startsWith('sensor_') || (ComponentRegistry[targetObj.type] && ComponentRegistry[targetObj.type].role === 'input')) return;
                                 if (obj.type === 'sensor_opt' && targetObj.type === 'conveyor') return;
                                 if (ComponentRegistry[targetObj.type] && ComponentRegistry[targetObj.type].customSensorHit) {
                                     if (ComponentRegistry[targetObj.type].customSensorHit(targetObj, obj, lx, ly, lw, lh)) {
@@ -13074,7 +13350,8 @@ You must output exactly this JSON format. The logic code goes as a single string
 					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, posX: o.posX, posY: o.posY,
                     groupId: o.groupId || null,
                     localZ: o.localZ || 0, layerId: o.layerId || null, despawnFilter: o.despawnFilter || null,
-                    hideValve: o.hideValve || false
+                    hideValve: o.hideValve || false, spawnZOffset: o.spawnZOffset || 0, spawnXOffset: o.spawnXOffset || 0, spawnYOffset: o.spawnYOffset || 0,
+                    liftSpeed: o.liftSpeed, liftDir: o.liftDir || null, liftHeight: o.liftHeight
                 }))
             };
         }
@@ -13121,6 +13398,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     } else {
                         btn.style.backgroundColor = '#4caf50'; btn.textContent = '🌍 Global: Seitenansicht';
                     }
+                    factoryCanvas.classList.toggle('view-side', globalViewMode === 'side');
                 }
                 state.items.forEach(i => {
                     spawnFactoryItem(i.material, i.x, i.y, i.isSolid, i.meltTemp);
@@ -13213,6 +13491,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.localZ) newObj.localZ = o.localZ;
                     if (o.layerId) newObj.layerId = o.layerId;
                     if (o.despawnFilter) newObj.despawnFilter = o.despawnFilter;
+                    if (o.spawnZOffset) newObj.spawnZOffset = o.spawnZOffset;
+                    if (o.spawnXOffset) newObj.spawnXOffset = o.spawnXOffset;
+                    if (o.spawnYOffset) newObj.spawnYOffset = o.spawnYOffset;
+                    if (o.liftSpeed !== undefined) newObj.liftSpeed = o.liftSpeed;
+                    if (o.liftDir) { newObj.liftDir = o.liftDir; if (newObj.dirBadgeEl) newObj.dirBadgeEl.textContent = o.liftDir === 'down' ? '⬇️' : '⬆️'; }
+                    if (o.liftHeight !== undefined) newObj.liftHeight = o.liftHeight;
                     if (o.hideValve) {
                         newObj.hideValve = true;
                         let valveEl = newObj.el.querySelector('.f2d-valve');
@@ -15047,6 +15331,25 @@ You must output exactly this JSON format. The logic code goes as a single string
             document.head.appendChild(styleSheet);
         }
         updateMenuVisibility();
+        // Ansichts-Badges in Menü-Einträge injizieren
+        (function() {
+            const _vbLabel = { side: '🌍', top: '🛸', both: '🌍🛸' };
+            const _vbTitle = { side: 'Seitenansicht', top: 'Draufsicht', both: 'Draufsicht + Seitenansicht' };
+            const _noBadge = new Set(['taster','schalter','nothalt','led','despawner']);
+            document.querySelectorAll('[onclick*="addFactoryDevice("]').forEach(el => {
+                const m = el.getAttribute('onclick').match(/addFactoryDevice\('([^']+)'\)/);
+                if (!m) return;
+                const tp = m[1];
+                if (tp.startsWith('zone_') || tp.startsWith('sensor_') || tp.startsWith('spawner_') || _noBadge.has(tp)) return;
+                if (ComponentRegistry[tp] && ComponentRegistry[tp].role === 'input') return;
+                const vw = _typeView(tp);
+                const badge = document.createElement('span');
+                badge.className = 'f2d-view-badge';
+                badge.textContent = _vbLabel[vw];
+                badge.title = _vbTitle[vw];
+                el.appendChild(badge);
+            });
+        })();
         // Mehrspaltige Dropdowns: dynamische Spaltenanzahl + Höhenbegrenzung
         function adjustDropdownLayout(dd) {
             const content = dd.querySelector('.tb-dropdown-content');

@@ -5342,7 +5342,10 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.toggleSimulation = function() {
             isSimulationActive = !isSimulationActive;
             const btn = document.getElementById('btn-toggle-sim');
-            const fw = document.getElementById('factory-wrapper'); // Die 2D-Anlage greifen
+            // factory-wrapper kann im Hauptfenster ODER im abgekoppelten Fenster liegen
+            const _fwWin = (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)
+                ? window.popOutWindows['factory-wrapper'] : window;
+            const fw = _fwWin.document.getElementById('factory-wrapper');
             if (isSimulationActive) {
                 // FIX 1: Verhindert, dass alte Zeitdifferenzen den Timer beim Start sofort beenden
                 lastSimulationTime = performance.now(); 
@@ -16125,13 +16128,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (panelId === 'analyzer-modal') drawAnalyzer(); // Oszilloskop an neue Größe anpassen
             }, 100);
             // 🌟 MOUSE-EVENT-ROUTING: Klicks im 2. Fenster werden zurück an die Engine im 1. Fenster gesendet!
+            // WICHTIG: instanceof-Checks über Fenster-Grenzen schlagen fehl (jedes Fenster hat eigene Konstruktoren)!
+            // Deshalb: Prüfung über e.type statt instanceof.
             const relayEvent = (e) => {
                 let init = { bubbles: true, cancelable: true, view: window };
-                if (e instanceof MouseEvent) {
+                const mouseTypes = ['mousemove', 'mouseup', 'mousedown', 'click'];
+                const keyTypes   = ['keydown', 'keyup', 'keypress'];
+                if (mouseTypes.includes(e.type)) {
                     ['screenX', 'screenY', 'clientX', 'clientY', 'ctrlKey', 'shiftKey', 'altKey', 'metaKey', 'button', 'buttons'].forEach(k => init[k] = e[k]);
                     let ev = new MouseEvent(e.type, init);
                     document.dispatchEvent(ev); window.dispatchEvent(ev);
-                } else if (e instanceof KeyboardEvent) {
+                } else if (keyTypes.includes(e.type)) {
                     ['key', 'code', 'ctrlKey', 'shiftKey', 'altKey', 'metaKey'].forEach(k => init[k] = e[k]);
                     let ev = new KeyboardEvent(e.type, init);
                     document.dispatchEvent(ev); window.dispatchEvent(ev);
@@ -18947,11 +18954,15 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
         // 🌟 DIE MAGISCHE SCHLAUCH-ENGINE (Wird jeden Frame gezeichnet!)
         window.drawPneumaticHoses = function() {
-            let layer = document.getElementById('pneu-hose-layer');
+            const _facDoc = (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)
+                ? window.popOutWindows['factory-wrapper'].document : document;
+            let layer = _facDoc.getElementById('pneu-hose-layer');
             if (!layer) {
-                layer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                layer = _facDoc.createElementNS("http://www.w3.org/2000/svg", "svg");
                 layer.id = "pneu-hose-layer";
-                document.getElementById('factory-content').prepend(layer);
+                const _fc = _facDoc.getElementById('factory-content');
+                if (!_fc) return;
+                _fc.prepend(layer);
             }
             let svgHtml = '';
             // Helfer für rotierte Anschlüsse am Zylinder

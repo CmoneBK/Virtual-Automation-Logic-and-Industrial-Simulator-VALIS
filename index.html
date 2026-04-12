@@ -1024,6 +1024,7 @@
         .ac-item.ac-sel .ac-type { color: #aaa; }
     </style>
 </head>
+<script src="./splash/dist/splash.iife.js"></script>
 <body>
     <div id="left-panel">
         <div class="header-area">
@@ -1499,7 +1500,7 @@
                     &nbsp;<button onclick="if(window.pathEditingObj){window.pathEditingObj.waypoints=[];window._renderPathOverlay();}" style="background:#c62828;color:#fff;border:none;border-radius:10px;padding:3px 10px;cursor:pointer;">🗑 Alle Punkte</button>
                 </div>
                 <div id="factory-canvas-area">
-                    <div id="factory-content"><canvas id="fluid-canvas" width="4000" height="3000" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;"></canvas><svg id="factory-path-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:98;overflow:visible;"></svg></div>
+                    <div id="factory-content"><canvas id="fluid-canvas" width="4000" height="3000" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;"></canvas><canvas id="splash-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;display:none;width:4000px;height:3000px;"></canvas><svg id="factory-path-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:98;overflow:visible;"></svg></div>
                 </div>
                 <!-- Minimap (innerhalb factory-wrapper, nicht canvas-area, damit kein Mitscrollen) -->
                 <div id="factory-minimap" style="display:none;">
@@ -1531,6 +1532,11 @@
                                 <input type="checkbox" id="cb-show-fluid-menu" onchange="updateFluidMenuVisibility()">
                                 Flüssigkeits-Menü anzeigen
                             </label>
+                            <!-- Splash WebGPU Engine — only shown when splash.iife.js is present -->
+                            <div id="div-splash-sidebar" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #333;">
+                                <div style="color:#78909c;font-size:10px;margin-bottom:5px;">⚡ WebGPU Engine</div>
+                                <button id="btn-fluid-engine" onclick="toggleFluidEngine()" title="Fluid-Engine wechseln (Klassisch ↔ Splash WebGPU)" style="width:100%;background:#37474f;color:#ccc;border:1px solid #555;border-radius:3px;padding:4px 8px;cursor:pointer;font-size:11px;text-align:left;">💧 Klassisch</button>
+                            </div>
                         </div>
                         <!-- Spacer pushes bottom sections down -->
                         <div style="flex:1;"></div>
@@ -5415,6 +5421,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
                 }
             }
+            // Sync Splash engine pause state
+            if (_splashEngine) _splashEngine.setPaused(!isSimulationActive);
         };
 		// --- BUNTE PFADE LOGIK ---
         window.toggleCircuitColors = function() {
@@ -13672,6 +13680,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (solidGrid.has(k) && !v._dragging) fluidGrid.delete(k);
                 }
             }
+            _pushSolidGridToSplash();
         }
 
         function _rasterizeToSolidGrid(obj) {
@@ -13820,6 +13829,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (!noSave) {
                 saveFactoryState();
                 updateFluidMenuVisibility();
+            }
+            // Forward to Splash engine if active
+            if (_splashActive && _splashEngine) {
+                const splashR = Math.max((radius || 1) * FLUID_CELL, 40);
+                const splashCount = Math.max(20, Math.min(80, Math.round(splashR * splashR / 80)));
+                _splashEngine.addFluid(x, y, splashR, splashCount);
             }
         }
 
@@ -14044,8 +14059,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                             return true;
                         });
                         // Also despawn fluid cells in the despawner area
+                        let _despawnSizeBefore = fluidGrid.size;
                         if (fluidGrid.size > 0) {
-                            let sizeBefore = fluidGrid.size;
                             for (let k of [...fluidGrid.keys()]) {
                                 let p = k.split(',');
                                 let px = parseInt(p[0]) * FLUID_CELL + FLUID_CELL / 2;
@@ -14054,7 +14069,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                                     fluidGrid.delete(k);
                                 }
                             }
-                            if (fluidGrid.size === 0 && sizeBefore > 0) updateFluidMenuVisibility();
+                            if (fluidGrid.size === 0 && _despawnSizeBefore > 0) updateFluidMenuVisibility();
+                        }
+                        // Drain Splash particles: density-based drain proportional to despawner area
+                        if (_splashActive && _splashEngine) {
+                            _splashEngine.drainZone(obj.x, obj.y, obj.width, obj.height);
                         }
                     }
                 });
@@ -14707,6 +14726,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 factoryCanvas.innerHTML = ''; factoryObjects = []; factoryItems = []; factoryPins = []; clearSelection(); _ensurePathSvg();
                 // Re-insert fluid canvas (removed by innerHTML reset)
                 let _fc = document.createElement('canvas'); _fc.id = 'fluid-canvas'; _fc.width = 4000; _fc.height = 3000; _fc.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;'; factoryCanvas.prepend(_fc); initFluidCanvas();
+                // Re-insert splash canvas (also removed by innerHTML reset)
+                let _sc = document.createElement('canvas'); _sc.id = 'splash-canvas'; _sc.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;display:none;width:4000px;height:3000px;'; factoryCanvas.insertBefore(_sc, _fc.nextSibling);
+                if (_splashEngine) { _splashEngine.destroy(); _splashEngine = null; _splashActive = false; const _sfb = document.getElementById('btn-fluid-engine'); if (_sfb) _sfb.textContent = '💧 Klassisch'; }
                 factoryLayers = state.layers || [];
                 if (state.pins) state.pins.forEach(p => { factoryPins.push(p); createPinEl(p); });
                 if (state.globalViewMode) {
@@ -16801,6 +16823,83 @@ You must output exactly this JSON format. The logic code goes as a single string
             dd.addEventListener('mouseenter', () => adjustDropdownLayout(dd));
             window.addEventListener('resize', () => { if (dd.matches(':hover')) adjustDropdownLayout(dd); }, { passive: true });
         });
+        // ==================== SPLASH ENGINE BRIDGE ====================
+        let _splashEngine = null;
+        let _splashActive = false;
+        let _splashLoading = false;
+
+        // Show the Splash sidebar section only when the library is present
+        if (window.SplashValis) {
+            const el = document.getElementById('div-splash-sidebar');
+            if (el) el.style.display = '';
+        }
+
+        function _getFactoryDoc() {
+            return (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)
+                ? window.popOutWindows['factory-wrapper'].document : document;
+        }
+
+        async function toggleFluidEngine() {
+            const btn = document.getElementById('btn-fluid-engine');
+            const fDoc = _getFactoryDoc();
+            if (_splashActive) {
+                _splashActive = false;
+                fDoc.getElementById('fluid-canvas').style.display = '';
+                fDoc.getElementById('splash-canvas').style.display = 'none';
+                btn.textContent = '💧 Klassisch';
+                if (_splashEngine) { _splashEngine.setPaused(true); }
+                return;
+            }
+            if (_splashLoading) return;
+            if (!navigator.gpu) { alert('WebGPU wird von diesem Browser nicht unterstützt.\n(Chrome 113+ oder Edge 113+ erforderlich)'); return; }
+            _splashLoading = true; btn.textContent = '⏳ Lade…';
+            const fluidCanvas = fDoc.getElementById('fluid-canvas');
+            const splashCanvas = fDoc.getElementById('splash-canvas');
+            try {
+                if (!window.SplashValis) throw new Error('Splash-Bibliothek nicht verfügbar (splash.iife.js nicht geladen)');
+                if (!splashCanvas) throw new Error('splash-canvas Element nicht gefunden');
+                // WebGPU requires the canvas to be visible when acquiring context
+                fluidCanvas.style.display = 'none';
+                splashCanvas.style.display = '';
+                _splashEngine = await window.SplashValis.createSplashEngine(splashCanvas, 4000, 3000);
+                _splashActive = true;
+                btn.textContent = '⚡ Splash WebGPU';
+                _pushSolidGridToSplash();
+            } catch(e) {
+                // Restore fluid canvas on failure
+                if (fluidCanvas) fluidCanvas.style.display = '';
+                if (splashCanvas) splashCanvas.style.display = 'none';
+                alert('Splash konnte nicht geladen werden:\n' + e.message);
+                btn.textContent = '💧 Klassisch';
+            }
+            _splashLoading = false;
+        }
+
+        function _pushSolidGridToSplash() {
+            if (!_splashEngine || !_splashActive) return;
+            // Build 204×154 solid texture matching Splash grid exactly.
+            // Splash grid: 204×154 (active 200×150, 2-unit margin each side).
+            // 1 Splash world unit = 20 CSS px (4000px / 200 active units).
+            // VALIS solid grid: 500×375 cells at 8px each (FLUID_CELL=8).
+            // X: Math.floor avoids a 1-cell (20px) phantom overhang past the right edge of objects.
+            // Y: Math.round — top face aligns within ~1 cell; particles sit on the correct surface.
+            const SW = 204, SH = 154, MARGIN = 2;
+            const AW = SW - 2 * MARGIN; // 200
+            const AH = SH - 2 * MARGIN; // 150
+            const cells = new Uint8Array(SW * SH);
+            for (const key of solidGrid) {
+                const sep = key.indexOf(',');
+                const gx = parseInt(key, 10);
+                const gy = parseInt(key.slice(sep + 1), 10);
+                if (gx < 0 || gx >= 500 || gy < 0 || gy >= 375) continue;
+                const sx = Math.floor(MARGIN + gx * AW / 500); // floor: no right-edge overhang
+                const sy = Math.round(MARGIN + (374 - gy) * AH / 375); // Y-flip
+                if (sx >= 0 && sx < SW && sy >= 0 && sy < SH) cells[sy * SW + sx] = 1;
+            }
+            _splashEngine.updateSolidGrid(cells);
+        }
+        // ================================================================
+
         // INITIALISIERUNG
         // 1. Zuerst prüfen, ob wir von einem Link kommen
         if (!checkUrlForState()) {
@@ -19129,8 +19228,8 @@ You must output exactly this JSON format. The logic code goes as a single string
         // ==========================================
         // 🎬 AUFZEICHNUNG / PLAYBACK
         // ==========================================
-        let _recActive = false, _recFrames = [], _recStart = 0;
-        let _pbActive = false, _pbIdx = 0, _pbTimer = null, _pbSpeed = 1.0, _pbPlaying = false;
+        var _recActive = false, _recFrames = [], _recStart = 0;
+        var _pbActive = false, _pbIdx = 0, _pbTimer = null, _pbSpeed = 1.0, _pbPlaying = false;
 
         function _recFmtTime(ms) {
             const s = Math.floor(ms / 1000);

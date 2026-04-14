@@ -12343,6 +12343,311 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ctxMenu.appendChild(wrap);
             },
         },
+        // =========================================================
+        // 🚧 ROLLTOR (Sektionaltor)
+        // =========================================================
+        'rolltor': {
+            directSpawn: false, hasHeight: true, noRodAttach: true,
+            role: 'output', color: '#546e7a', view: 'side',
+            i18n: {
+                de: { name: 'Rolltor', desc: 'Motorisches Rolltor mit Auf/Ab-Steuerung. Blockt Werkstücke und Flüssigkeiten wenn geschlossen. Darstellung umschaltbar: Frontalansicht oder Schnittansicht (Barriere zwischen Förderbändern).' },
+                en: { name: 'Roller Door', desc: 'Motorized roller shutter with Open/Close control. Blocks items and fluids when closed. View modes: frontal or cross-section barrier.' }
+            },
+            meta: { icon: '🚧' },
+            modalConfig: { t: '🚧 Rolltor anlegen:', l1: 'Auf (Öffnen)', l2: 'Ab (Schließen)', out: true },
+            menuTarget: '#menu-aktoren',
+            insertBefore: '#menu-act-sep',
+            menuHtml: `<div onclick="addFactoryDevice('rolltor')">🚧 <span data-i18n="plug_rolltor_name">Rolltor</span></div>`,
+            getVar2ForRestore: function(o) { return o.linkedVarRet; },
+            css: `
+                .f2d-rolltor { position:absolute; box-sizing:border-box; overflow:hidden; background:transparent; }
+                /* ─── Frontalansicht ──────────────────────────────────── */
+                .f2d-rt-frame {
+                    position:absolute; inset:0;
+                    border:5px solid #455a64; background:#1c2a30;
+                    box-sizing:border-box; overflow:hidden;
+                }
+                .f2d-rt-drum {
+                    position:absolute; top:0; left:0; right:0; height:10px;
+                    background:linear-gradient(180deg,#78909c 0%,#455a64 100%);
+                    z-index:2;
+                }
+                .f2d-rt-curtain-wrap {
+                    position:absolute; top:10px; bottom:0; left:0; right:0; overflow:hidden;
+                }
+                .f2d-rt-curtain {
+                    position:absolute; top:0; left:0; right:0;
+                    background:repeating-linear-gradient(180deg,
+                        #78909c 0px,#78909c 5px,
+                        #546e7a 5px,#546e7a 7px
+                    );
+                }
+                .f2d-rt-led {
+                    position:absolute; bottom:3px; left:50%; transform:translateX(-50%);
+                    width:7px; height:7px; border-radius:50%;
+                    background:#f44336; z-index:3; box-shadow:0 0 4px #f44336;
+                }
+                .f2d-rolltor.rt-open .f2d-rt-led    { background:#4caf50; box-shadow:0 0 5px #4caf50; }
+                .f2d-rolltor.rt-moving .f2d-rt-led  { background:#ff9800; box-shadow:0 0 5px #ff9800; }
+                /* ─── Schnittansicht (Wandschnitt, Seitenansicht) ────── */
+                .f2d-rt-section-view { display:none; position:absolute; inset:0; overflow:hidden; }
+                .f2d-rolltor.rt-section .f2d-rt-frame        { display:none; }
+                .f2d-rolltor.rt-section .f2d-rt-section-view { display:block; }
+                /* Wandblöcke links und rechts */
+                .f2d-rt-sv-wall-l {
+                    position:absolute; top:0; bottom:0; left:0; width:25%;
+                    background:repeating-linear-gradient(90deg,#37474f 0px,#37474f 4px,#455a64 4px,#455a64 8px);
+                    border-right:2px solid #607d8b; box-sizing:border-box;
+                }
+                .f2d-rt-sv-wall-r {
+                    position:absolute; top:0; bottom:0; right:0; width:25%;
+                    background:repeating-linear-gradient(90deg,#37474f 0px,#37474f 4px,#455a64 4px,#455a64 8px);
+                    border-left:2px solid #607d8b; box-sizing:border-box;
+                }
+                /* Gehäuse / Trommelbox im Wandspalt oben */
+                .f2d-rt-sv-housing {
+                    position:absolute; top:0; left:25%; right:25%; height:20%;
+                    background:linear-gradient(180deg,#546e7a 0%,#37474f 100%);
+                    border-left:1px solid #78909c; border-right:1px solid #78909c;
+                    border-bottom:2px solid #78909c; box-sizing:border-box; z-index:2;
+                }
+                /* Torblatt – fährt von unten hoch in das Gehäuse */
+                .f2d-rt-barrier {
+                    position:absolute; top:0; left:25%; right:25%;
+                    background:repeating-linear-gradient(0deg,
+                        #90a4ae 0px,#90a4ae 3px,
+                        #607d8b 3px,#607d8b 5px
+                    );
+                    border-bottom:2px solid #b0bec5; box-sizing:border-box; z-index:1;
+                }
+                .f2d-rt-sect-led {
+                    position:absolute; top:3px; left:50%; transform:translateX(-50%);
+                    width:5px; height:5px; border-radius:50%; background:#f44336; z-index:3;
+                }
+                .f2d-rolltor.rt-open   .f2d-rt-sect-led { background:#4caf50; }
+                .f2d-rolltor.rt-moving .f2d-rt-sect-led { background:#ff9800; }
+                /* ─── Gemeinsame Elemente ────────────────────────────── */
+                .f2d-rolltor .f2d-resize-handle-xy { position:absolute; bottom:0; right:0; width:10px; height:10px; cursor:se-resize; background:rgba(255,255,255,0.2); z-index:10; }
+                /* ─── Kein-Endschalter-Overdrive ─────────────────────── */
+                @keyframes f2d-rt-jitter {
+                    0%,100% { transform:translate(0,0) rotate(0deg); }
+                    20%  { transform:translate(-2px, 1px) rotate(-0.4deg); }
+                    40%  { transform:translate(2px,-2px) rotate( 0.4deg); }
+                    60%  { transform:translate(-1px, 2px) rotate(-0.3deg); }
+                    80%  { transform:translate(2px,-1px) rotate( 0.3deg); }
+                }
+                .f2d-rolltor.rt-overdrive .f2d-rt-frame,
+                .f2d-rolltor.rt-overdrive .f2d-rt-section-view { animation:f2d-rt-jitter 0.07s infinite; }
+                .f2d-rt-spark {
+                    position:absolute; width:3px; height:3px; border-radius:50%;
+                    background:#fff176; pointer-events:none; z-index:200;
+                    box-shadow:0 0 4px #ff9800;
+                }
+            `,
+            build: function(obj, el, var1, var2) {
+                obj.linkedVarExt = var1 || null;
+                obj.linkedVarRet = var2 || null;
+                obj.linkedVarSensorAuf = null;
+                obj.linkedVarSensorZu  = null;
+                obj.torNoEndstop = false;
+                obj.torSpeed = 35;
+                obj.width = 80; obj.height = 80;
+                obj.torPos = 0;
+                if (!obj.torView) obj.torView = 'frontal';
+                obj.useGravity = false;
+                el.className = 'f2d-obj f2d-rolltor';
+                el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                el.innerHTML = `
+                    <div class="f2d-rt-frame">
+                        <div class="f2d-rt-drum"></div>
+                        <div class="f2d-rt-curtain-wrap"><div class="f2d-rt-curtain"></div></div>
+                        <div class="f2d-rt-led"></div>
+                    </div>
+                    <div class="f2d-rt-section-view">
+                        <div class="f2d-rt-sv-wall-l"></div>
+                        <div class="f2d-rt-sv-wall-r"></div>
+                        <div class="f2d-rt-sv-housing"></div>
+                        <div class="f2d-rt-barrier"></div>
+                        <div class="f2d-rt-sect-led"></div>
+                    </div>
+                `;
+                if (obj.torView === 'section') el.classList.add('rt-section');
+                obj._curtainEl = el.querySelector('.f2d-rt-curtain');
+                obj._barrierEl  = el.querySelector('.f2d-rt-barrier');
+                ComponentRegistry['rolltor']._apply(obj);
+                let label = document.createElement('div');
+                label.className = 'f2d-label';
+                label.textContent = var1 ? `🚧 ${var1}` : '🚧 Rolltor';
+                el.appendChild(label);
+                let resizer = document.createElement('div');
+                resizer.className = 'f2d-resize-handle-xy';
+                obj.resizerEl = resizer;
+                el.appendChild(resizer);
+            },
+            _sparks: function(obj, atTop) {
+                let canvas = document.getElementById('factory-canvas');
+                if (!canvas) return;
+                let n = 2 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < n; i++) {
+                    let s = document.createElement('div'); s.className = 'f2d-rt-spark';
+                    let sx = obj.x + 4 + Math.random() * Math.max(1, obj.width - 8);
+                    let sy = atTop ? obj.y + 3 : obj.y + obj.height - 3;
+                    s.style.left = sx + 'px'; s.style.top = sy + 'px';
+                    canvas.appendChild(s);
+                    let vx = (Math.random() - 0.5) * 90;
+                    let vy = atTop ? (-25 - Math.random() * 55) : (25 + Math.random() * 55);
+                    let t0 = performance.now(), life = 200 + Math.random() * 200;
+                    const colors = ['#fff9c4','#ffee58','#ff9800','#f44336'];
+                    (function step(now) {
+                        let dt = (now - t0) / 1000;
+                        if (dt * 1000 >= life) { s.remove(); return; }
+                        s.style.left = (sx + vx * dt) + 'px';
+                        s.style.top  = (sy + vy * dt + 250 * dt * dt) + 'px';
+                        s.style.opacity = String(1 - (dt * 1000) / life);
+                        s.style.background = colors[Math.min(colors.length - 1, Math.floor((dt * 1000 / life) * colors.length))];
+                        requestAnimationFrame(step);
+                    })(t0);
+                }
+            },
+            _apply: function(obj) {
+                let pos = obj.torPos || 0;
+                let h = obj.height || 80;
+                // Frontalansicht: Vorhang füllt von oben; 0=zu, 100=auf
+                let cWrapH = Math.max(0, h - 10);
+                let curtainH = Math.round((1 - pos / 100) * cWrapH);
+                if (obj._curtainEl) obj._curtainEl.style.height = curtainH + 'px';
+                // Schnittansicht: Torblatt fährt von oben hoch (Gehäuse liegt mit z-index darüber)
+                let barrierH = Math.round((1 - pos / 100) * h);
+                if (obj._barrierEl) obj._barrierEl.style.height = barrierH + 'px';
+            },
+            animate: function(obj, spsState) {
+                let auf = obj.linkedVarExt ? !!spsState[obj.linkedVarExt] : false;
+                let ab  = obj.linkedVarRet ? !!spsState[obj.linkedVarRet] : false;
+                let spd = (obj.torSpeed !== undefined ? obj.torSpeed : 35) * window.simSpeed * timeScale / 60;
+                let prev = obj.torPos || 0;
+                if (auf && !ab) obj.torPos = Math.min(100, prev + spd);
+                else if (ab && !auf) obj.torPos = Math.max(0, prev - spd);
+                let pos = obj.torPos;
+                let changed = Math.abs(pos - prev) > 0.05;
+                if (changed) {
+                    ComponentRegistry['rolltor']._apply(obj);
+                    if ((prev < 50) !== (pos < 50)) fluidGridDirty = true;
+                }
+                // Kein-Endschalter-Modus
+                let overAuf = !!(obj.torNoEndstop && auf && !ab && pos >= 100);
+                let overAb  = !!(obj.torNoEndstop && ab && !auf && pos <= 0);
+                let over = overAuf || overAb;
+                if (over !== !!obj._rtOverdrive) {
+                    obj._rtOverdrive = over;
+                    obj.el.classList.toggle('rt-overdrive', over);
+                }
+                if (over && Math.random() < 0.3) ComponentRegistry['rolltor']._sparks(obj, overAuf);
+                let isOpen = pos >= 98, isMoving = (changed && pos > 2 && pos < 98) || over;
+                if (obj._rtOpen !== isOpen || obj._rtMoving !== isMoving) {
+                    obj._rtOpen = isOpen; obj._rtMoving = isMoving;
+                    obj.el.classList.toggle('rt-open', isOpen);
+                    obj.el.classList.toggle('rt-moving', isMoving);
+                    // Motor-Sound: starten wenn Bewegung beginnt, stoppen wenn sie endet
+                    if (typeof SoundEngine !== 'undefined' && SoundEngine.ctx && (window.soundMode === 2 || window.soundMode === 3) && !obj.muteSound) {
+                        if (isMoving && !obj._rtAudioGain) {
+                            let ctx = SoundEngine.ctx;
+                            // Tiefer Motorbrumm: Sinus ~90Hz + leichtes Rauschen
+                            let osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 90;
+                            let osc2 = ctx.createOscillator(); osc2.type = 'sawtooth'; osc2.frequency.value = 45;
+                            let gain = ctx.createGain(); gain.gain.setValueAtTime(0, ctx.currentTime);
+                            gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.25);
+                            let gain2 = ctx.createGain(); gain2.gain.value = 0.03;
+                            osc.connect(gain); osc2.connect(gain2); gain2.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.start(); osc2.start();
+                            obj._rtAudioOsc = osc; obj._rtAudioOsc2 = osc2; obj._rtAudioGain = gain;
+                        } else if (!isMoving && obj._rtAudioGain) {
+                            obj._rtAudioGain.gain.linearRampToValueAtTime(0.001, SoundEngine.ctx.currentTime + 0.2);
+                            let g = obj._rtAudioGain, o1 = obj._rtAudioOsc, o2 = obj._rtAudioOsc2;
+                            setTimeout(() => { try { o1.stop(); o2.stop(); g.disconnect(); } catch(e){} }, 250);
+                            obj._rtAudioGain = null; obj._rtAudioOsc = null; obj._rtAudioOsc2 = null;
+                        }
+                    }
+                }
+                // Endlagensensoren rückmelden
+                if (obj.linkedVarSensorAuf) spsState[obj.linkedVarSensorAuf] = (pos >= 98);
+                if (obj.linkedVarSensorZu)  spsState[obj.linkedVarSensorZu]  = (pos <= 2);
+            },
+            getFluidSolidCells: function(obj) {
+                if ((obj.torPos || 0) >= 50) return [];
+                let cells = [], C = 8;
+                let x0 = Math.floor(obj.x / C), x1 = Math.floor((obj.x + obj.width - 1) / C);
+                let y0 = Math.floor(obj.y / C), y1 = Math.floor((obj.y + obj.height - 1) / C);
+                for (let gx = x0; gx <= x1; gx++)
+                    for (let gy = y0; gy <= y1; gy++) cells.push([gx, gy]);
+                return cells;
+            },
+            physics: function(obj, item) {
+                if ((obj.torPos || 0) >= 90) return;
+                resolveOBBCollision(item, obj.x + obj.width / 2, obj.y + obj.height / 2, obj.width / 2, obj.height / 2, 0);
+            },
+            contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                helpers.addVarSelect('🔓 Auf (Öffnen)', obj.linkedVarExt, 'out', 'linkedVarExt');
+                helpers.addVarSelect('🔒 Ab (Schließen)', obj.linkedVarRet, 'out', 'linkedVarRet');
+                helpers.addVarSelect('🟢 Endlage offen (Sensor)', obj.linkedVarSensorAuf, 'in', 'linkedVarSensorAuf');
+                helpers.addVarSelect('🔴 Endlage geschlossen (Sensor)', obj.linkedVarSensorZu, 'in', 'linkedVarSensorZu');
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                let sep = document.createElement('div');
+                sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;';
+                ctxMenu.appendChild(sep);
+                // Darstellungsmodus
+                let wrapV = document.createElement('div'); wrapV.style.padding = '5px 15px'; wrapV.onclick = e => e.stopPropagation();
+                wrapV.innerHTML = `<div style="color:#90caf9;font-size:10px;font-weight:bold;margin-bottom:4px;">🎨 Darstellung</div>`;
+                let selV = document.createElement('select');
+                selV.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                [['frontal','🚧 Frontalansicht (Vollansicht)'],['section','📐 Wandschnitt (Seitenansicht)']].forEach(([v,t]) => {
+                    let o2 = document.createElement('option'); o2.value = v; o2.textContent = t;
+                    if ((obj.torView || 'frontal') === v) o2.selected = true;
+                    selV.appendChild(o2);
+                });
+                selV.onchange = e => {
+                    obj.torView = e.target.value;
+                    obj.el.classList.toggle('rt-section', obj.torView === 'section');
+                    ComponentRegistry['rolltor']._apply(obj);
+                    saveCallback();
+                };
+                wrapV.appendChild(selV); ctxMenu.appendChild(wrapV);
+                // Torgeschwindigkeit
+                let wrapS = document.createElement('div'); wrapS.style.padding = '5px 15px'; wrapS.onclick = e => e.stopPropagation();
+                wrapS.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Torgeschwindigkeit (%/s)</div>`;
+                let inpS = document.createElement('input'); inpS.type = 'number'; inpS.min = '5'; inpS.max = '200'; inpS.step = '5';
+                inpS.value = obj.torSpeed != null ? obj.torSpeed : 35;
+                inpS.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                inpS.onchange = e => { obj.torSpeed = parseFloat(e.target.value); saveCallback(); };
+                wrapS.appendChild(inpS); ctxMenu.appendChild(wrapS);
+                // Kein interner Endschalter
+                let wrapE = document.createElement('div'); wrapE.style.padding = '4px 15px 6px'; wrapE.onclick = e => e.stopPropagation();
+                let lblE = document.createElement('label');
+                lblE.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;color:#ccc;user-select:none;';
+                let chkE = document.createElement('input'); chkE.type = 'checkbox'; chkE.checked = !!obj.torNoEndstop;
+                chkE.onchange = () => { obj.torNoEndstop = chkE.checked; saveCallback(); };
+                lblE.appendChild(chkE); lblE.appendChild(document.createTextNode('⚠️ Kein interner Endschalter'));
+                wrapE.appendChild(lblE); ctxMenu.appendChild(wrapE);
+            },
+            onLoadState: function(obj, savedData) {
+                obj.torView          = savedData.torView  || 'frontal';
+                obj.torSpeed         = savedData.torSpeed != null ? savedData.torSpeed : 35;
+                obj.linkedVarSensorAuf = savedData.linkedVarSensorAuf || null;
+                obj.linkedVarSensorZu  = savedData.linkedVarSensorZu  || null;
+                obj.torNoEndstop = savedData.torNoEndstop || false;
+                obj.torPos   = 0;
+                if (obj.el) {
+                    obj.el.classList.toggle('rt-section', obj.torView === 'section');
+                    obj._curtainEl = obj.el.querySelector('.f2d-rt-curtain');
+                    obj._barrierEl  = obj.el.querySelector('.f2d-rt-barrier');
+                    ComponentRegistry['rolltor']._apply(obj);
+                }
+            },
+            onResize: function(obj) {
+                ComponentRegistry['rolltor']._apply(obj);
+            }
+        },
         // ====================================================
         }; //Ende von Component Registry
         // Einmalig berechnet: Typen die keine Rotation brauchen (Built-ins + ComponentRegistry-Plugins mit noRotate:true)
@@ -13212,6 +13517,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
                             else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
                             else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
+                            else if (obj.type === 'rolltor') lbl.textContent = v1 ? `🚧 ${v1}` : '🚧 Rolltor';
                         }
                         let valve = obj.el.querySelector('.f2d-valve');
                         if (valve) {
@@ -14951,7 +15257,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     rangeW: o.rangeW || null, rangeH: o.rangeH || null,
                     fluidMat: o.fluidMat || null,
                     flowRate: o.flowRate !== undefined ? o.flowRate : null,
-                    backpressureStop: o.backpressureStop || false
+                    backpressureStop: o.backpressureStop || false,
+                    torView: o.torView || null, torSpeed: o.torSpeed !== undefined ? o.torSpeed : null,
+                    linkedVarSensorAuf: o.linkedVarSensorAuf || null, linkedVarSensorZu: o.linkedVarSensorZu || null,
+                    torNoEndstop: o.torNoEndstop || false
                 })),
                 fluid: Array.from(fluidGrid.entries()).map(function(e) { return { k: e[0], m: e[1].mat }; })
             };

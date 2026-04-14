@@ -501,7 +501,12 @@
         .task-ed-label { color:#aaa; font-size:10px; margin-bottom:3px; margin-top:10px; display:block; }
         .task-ed-input { width:100%; padding:5px; background:#1e1e1e; color:#fff; border:1px solid #555; border-radius:3px; font-size:11px; box-sizing:border-box; }
         .task-ed-input:focus { outline:none; border-color:#1565c0; }
-        .task-cond-row { background:#1e1e1e; border:1px solid #444; border-radius:4px; padding:8px; margin-bottom:6px; }
+        .task-cond-row { background:#1e1e1e; border:1px solid #444; border-radius:4px; padding:8px; margin-bottom:6px; transition: border-color 0.1s; }
+        .task-cond-row.drag-over-top    { border-top:2px solid #42a5f5 !important; }
+        .task-cond-row.drag-over-bottom { border-bottom:2px solid #42a5f5 !important; }
+        .task-cond-row.dragging         { opacity:0.4; }
+        .cond-drag-handle { cursor:grab; color:#546e7a; font-size:15px; line-height:1; padding:0 4px 0 0; user-select:none; flex-shrink:0; }
+        .cond-drag-handle:active { cursor:grabbing; }
         .task-mgr-card { background:#1e2a3a; border:1px solid #1565c0; border-radius:6px; padding:10px 12px; margin-bottom:8px; }
         .task-mgr-card-name { font-weight:bold; font-size:13px; color:#fff; margin-bottom:2px; }
         .task-mgr-card-meta { font-size:10px; color:#78909c; margin-bottom:8px; }
@@ -1457,6 +1462,13 @@
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Spawn-Intervall (in Sekunden)</label>
                         <input type="number" id="fm-input-interval" value="3" min="0.5" step="0.5" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box;">
                     </div>
+                    <div id="fm-group-flowrate" style="margin-bottom: 10px; display: none;">
+                        <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">💧 Durchfluss (Zellen/s)</label>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="range" id="fm-input-flowrate" min="1" max="50" step="1" value="5" style="flex:1; accent-color:#42a5f5;" oninput="document.getElementById('fm-flowrate-val').textContent=this.value">
+                            <span id="fm-flowrate-val" style="color:#fff; font-size:11px; min-width:22px; text-align:right;">5</span>
+                        </div>
+                    </div>
                     <div id="fm-group-spawner-props" style="display: none; margin-bottom: 10px;">
                         <div style="border-top: 1px solid #444; margin: 4px 0 8px;"></div>
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Qualitätsmodus</label>
@@ -1469,7 +1481,7 @@
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">Schmelzpunkt (°C)</label>
                         <input type="number" id="fm-spawner-melt" min="50" step="50" placeholder="Standard (Metall: 1200°C, Kunststoff: 150°C)" style="width: 100%; padding: 6px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px; margin-bottom: 8px;">
                         <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 5px;">Block-Spawn-Versatz — wo erscheint der Block relativ zum Spawner?</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 4px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
                             <div>
                                 <label style="color: #607d8b; font-size: 10px; display: block; margin-bottom: 2px;" title="Links/Rechts vom Spawner-Mittelpunkt">X — seitlich</label>
                                 <input type="number" id="fm-spawner-ox" value="0" style="width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px;">
@@ -1483,6 +1495,10 @@
                                 <input type="number" id="fm-spawner-oz" value="0" style="width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; box-sizing: border-box; font-size: 11px;">
                             </div>
                         </div>
+                        <label style="display:flex; align-items:center; gap:7px; cursor:pointer; color:#b0bec5; font-size:11px;">
+                            <input type="checkbox" id="fm-spawner-backpressure">
+                            Bei Rückstau pausieren (stoppt, wenn Spawn-Position belegt ist)
+                        </label>
                     </div>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
                         <button onclick="closeFactoryModal()" style="background: #555; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer;">Abbrechen</button>
@@ -1532,6 +1548,7 @@
                                 <input type="checkbox" id="cb-show-fluid-menu" onchange="updateFluidMenuVisibility()">
                                 Flüssigkeits-Menü anzeigen
                             </label>
+                            <button onclick="clearAllFluids()" style="width:100%;margin-top:7px;background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:5px 8px;cursor:pointer;font-size:11px;text-align:left;" title="Alle Flüssigkeiten entfernen (CA + Splash)">🗑 Alle Flüssigkeiten löschen</button>
                             <!-- Splash WebGPU Engine — only shown when splash.iife.js is present -->
                             <div id="div-splash-sidebar" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #333;">
                                 <div style="color:#78909c;font-size:10px;margin-bottom:5px;">⚡ WebGPU Engine</div>
@@ -1608,6 +1625,16 @@
             <button onclick="window._taskAbandon()" style="background:#4caf50; color:#fff; border:none; border-radius:6px; padding:8px 20px; cursor:pointer; font-size:13px;">✔ Fertig</button>
         </div>
         <div id="valis-toast"></div>
+        <!-- Hinweis-Modal -->
+        <div id="task-hint-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:4100; align-items:center; justify-content:center;">
+            <div style="background:#1e2a1e; border:1px solid #388e3c; border-radius:8px; padding:20px; max-width:520px; width:95%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.7);">
+                <div style="color:#81c784; font-weight:bold; margin-bottom:12px; font-size:14px;">💡 Hinweis</div>
+                <div id="task-hint-content" style="color:#b0bec5; font-size:12px; line-height:1.6;"></div>
+                <div style="margin-top:16px; text-align:right;">
+                    <button onclick="document.getElementById('task-hint-modal').style.display='none'" style="background:#37474f; color:#fff; border:none; border-radius:4px; padding:6px 16px; cursor:pointer; font-size:12px;">✖ Schließen</button>
+                </div>
+            </div>
+        </div>
         <!-- Musterlösung-Modal -->
         <div id="task-solution-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:4000; align-items:center; justify-content:center;">
             <div style="background:#1e1e1e; border-radius:8px; padding:20px; max-width:680px; width:95%; max-height:85vh; overflow-y:auto; border:1px solid #555;">
@@ -7075,6 +7102,67 @@ You must output exactly this JSON format. The logic code goes as a single string
         function _getDiffColor(d) {
             return { 'leicht':'#4caf50', 'mittel':'#ff9800', 'schwer':'#f44336' }[d] || '#607d8b';
         }
+        // Minimal Markdown → HTML für Aufgabenbeschreibungen
+        // Unterstützt: **fett**, *kursiv*, `code`, ## Überschrift, - /* Aufzählung, > Blockquote, Zeilenumbruch
+        function _taskMarkdownToHtml(text) {
+            if (!text) return '';
+            // HTML-Zeichen escapen (> wird zu &gt; — wichtig für Blockquote-Regex weiter unten)
+            let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // Fett: **text** (vor Kursiv verarbeiten, damit ** nicht als zwei * gilt)
+            s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Inline-Code: `code`
+            s = s.replace(/`([^`\n]+)`/g, '<code style="background:#1a1a2e;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:10px;color:#80cbc4;">$1</code>');
+            // Blockquote: > text  (nach HTML-Escape ist > = &gt;)
+            s = s.replace(/^&gt; (.+)$/gm, '<div style="border-left:3px solid #546e7a;padding:3px 0 3px 10px;color:#90a4ae;margin:3px 0;font-style:italic;">$1</div>');
+            // Überschrift: ## text
+            s = s.replace(/^## (.+)$/gm, '<div style="font-weight:bold;color:#90caf9;margin:7px 0 2px;font-size:12px;border-bottom:1px solid #1a3a5a;padding-bottom:2px;">$1</div>');
+            // Aufzählung: - item  oder  * item  (VOR Kursiv, damit Zeilenanfangs-* nicht kollidiert)
+            // [-*] statt [*-] um Range-Interpretation zu vermeiden
+            s = s.replace(/^[-*] (.+)$/gm, '<div style="padding-left:14px;color:#cfd8dc;">&#x2022;&nbsp;$1</div>');
+            // Kursiv: *text*  (jetzt sicher, da Zeilenanfangs-* bereits durch Bullet-Regel ersetzt)
+            s = s.replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+            // Zeilenumbrüche
+            s = s.replace(/\n/g, '<br>');
+            // Keine doppelten Abstände rund um Block-Elemente (div erzeugt bereits Zeilenbruch)
+            s = s.replace(/<\/div><br>/g, '</div>');
+            s = s.replace(/<br><div/g, '<div');
+            return s;
+        }
+        // Formatierungs-Helfer für den Aufgaben-Editor (feldunabhängig)
+        function _taskEdWrapField(fieldId, before, after) {
+            const ta = document.getElementById(fieldId);
+            if (!ta) return;
+            const start = ta.selectionStart, end = ta.selectionEnd;
+            const sel = ta.value.substring(start, end) || 'Text';
+            const rep = before + sel + after;
+            ta.setRangeText(rep, start, end, 'select');
+            ta.focus();
+            ta.setSelectionRange(start + before.length, start + before.length + sel.length);
+            _taskEdUpdatePreviewField(fieldId, fieldId + '-preview');
+        }
+        function _taskEdLinePrefixField(fieldId, prefix) {
+            const ta = document.getElementById(fieldId);
+            if (!ta) return;
+            const start = ta.selectionStart, end = ta.selectionEnd;
+            const before = ta.value.substring(0, start);
+            const lineStart = before.lastIndexOf('\n') + 1;
+            const lines = ta.value.substring(lineStart, end).split('\n');
+            const toggled = lines.map(l => l.startsWith(prefix) ? l.slice(prefix.length) : prefix + l);
+            ta.value = ta.value.substring(0, lineStart) + toggled.join('\n') + ta.value.substring(end);
+            ta.focus();
+            _taskEdUpdatePreviewField(fieldId, fieldId + '-preview');
+        }
+        function _taskEdUpdatePreviewField(fieldId, previewId) {
+            const ta = document.getElementById(fieldId);
+            const prev = document.getElementById(previewId);
+            if (!ta || !prev) return;
+            prev.innerHTML = _taskMarkdownToHtml(ta.value);
+            prev.style.display = ta.value ? '' : 'none';
+        }
+        // Kurzformen für das Beschreibungsfeld (Abwärtskompatibilität mit bestehenden onclick-Attributen)
+        function _taskEdWrap(b, a)      { _taskEdWrapField('ted-desc', b, a); }
+        function _taskEdLinePrefix(p)   { _taskEdLinePrefixField('ted-desc', p); }
+        function _taskEdUpdatePreview() { _taskEdUpdatePreviewField('ted-desc', 'ted-desc-preview'); }
         function _getLocalTasks() {
             try { return JSON.parse(localStorage.getItem('valisTasks') || '[]'); } catch(e) { return []; }
         }
@@ -7735,7 +7823,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let diffEl = document.getElementById('task-panel-diff');
             diffEl.textContent = taskObj.difficulty || '';
             diffEl.style.color = _getDiffColor(taskObj.difficulty);
-            document.getElementById('task-panel-desc').textContent = taskObj.description || '';
+            document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(taskObj.description || '');
             document.getElementById('task-hint-btn').style.display = taskObj.hint ? 'inline-block' : 'none';
             _taskRenderConditions();
 
@@ -8228,7 +8316,9 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
 
         window._taskShowHint = function() {
-            if (activeTask && activeTask.hint) alert('💡 Hinweis:\n\n' + activeTask.hint);
+            if (!activeTask || !activeTask.hint) return;
+            document.getElementById('task-hint-content').innerHTML = _taskMarkdownToHtml(activeTask.hint);
+            document.getElementById('task-hint-modal').style.display = 'flex';
         };
 
         function _checkCondition(cond) {
@@ -8432,6 +8522,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let typeOpts = _COND_TYPES.map(t => `<option value="${t.value}" ${cond.type===t.value?'selected':''}>${_escHtml(t.label)}</option>`).join('');
             row.innerHTML = `
                 <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                    <span class="cond-drag-handle" title="Ziehen zum Sortieren">⠿</span>
                     <select class="task-ed-input cond-type-sel" style="flex:1;">${typeOpts}</select>
                     <button style="background:#c62828;color:#fff;border:none;border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;" title="Löschen">🗑</button>
                 </div>
@@ -8441,6 +8532,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 row.querySelector('.cond-extra').innerHTML = _buildCondExtra({ type: this.value });
             });
             row.querySelector('button').addEventListener('click', () => { row.remove(); });
+            // Draggable nur aktiv wenn Handle angeklickt wird
+            const handle = row.querySelector('.cond-drag-handle');
+            handle.addEventListener('mousedown', () => { row.draggable = true; });
+            handle.addEventListener('mouseup',   () => { row.draggable = false; });
             list.appendChild(row);
         }
 
@@ -8448,6 +8543,54 @@ You must output exactly this JSON format. The logic code goes as a single string
             let list = document.getElementById('ted-cond-list');
             _taskRenderCondRow({ type:'sps_output', variable:'', value:true, label:'' }, list.children.length);
         };
+
+        function _taskInitCondDrag(list) {
+            if (!list || list._dndInit) return;
+            list._dndInit = true;
+            let dragSrc = null;
+
+            list.addEventListener('dragstart', e => {
+                dragSrc = e.target.closest('.task-cond-row');
+                if (!dragSrc) return;
+                e.dataTransfer.effectAllowed = 'move';
+                // opacity via class, delayed so browser snapshot includes the row
+                requestAnimationFrame(() => dragSrc.classList.add('dragging'));
+            });
+
+            list.addEventListener('dragend', () => {
+                if (dragSrc) { dragSrc.classList.remove('dragging'); dragSrc.draggable = false; }
+                list.querySelectorAll('.task-cond-row').forEach(r =>
+                    r.classList.remove('drag-over-top', 'drag-over-bottom'));
+                dragSrc = null;
+            });
+
+            list.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const target = e.target.closest('.task-cond-row');
+                list.querySelectorAll('.task-cond-row').forEach(r =>
+                    r.classList.remove('drag-over-top', 'drag-over-bottom'));
+                if (target && target !== dragSrc) {
+                    const rect = target.getBoundingClientRect();
+                    target.classList.add(e.clientY < rect.top + rect.height / 2
+                        ? 'drag-over-top' : 'drag-over-bottom');
+                }
+            });
+
+            list.addEventListener('drop', e => {
+                e.preventDefault();
+                const target = e.target.closest('.task-cond-row');
+                if (!target || !dragSrc || target === dragSrc) return;
+                const rect = target.getBoundingClientRect();
+                if (e.clientY < rect.top + rect.height / 2) {
+                    list.insertBefore(dragSrc, target);
+                } else {
+                    list.insertBefore(dragSrc, target.nextSibling);
+                }
+                list.querySelectorAll('.task-cond-row').forEach(r =>
+                    r.classList.remove('drag-over-top', 'drag-over-bottom'));
+            });
+        }
 
         function _taskCollectConditions() {
             let conds = [];
@@ -8586,9 +8729,28 @@ You must output exactly this JSON format. The logic code goes as a single string
                 <label class="task-ed-label">Name *</label>
                 <input id="ted-name" class="task-ed-input" type="text" value="${_escHtml(task.name)}" placeholder="Aufgabentitel">
                 <label class="task-ed-label">Beschreibung</label>
-                <textarea id="ted-desc" class="task-ed-input" rows="3" style="resize:vertical;" placeholder="Was soll der Nutzer tun?">${_escHtml(task.description||'')}</textarea>
+                <div style="display:flex;gap:3px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">
+                    <button type="button" onclick="_taskEdWrap('**','**')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:bold;line-height:1.4;" title="Fett: **Text**"><b>B</b></button>
+                    <button type="button" onclick="_taskEdWrap('*','*')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-style:italic;line-height:1.4;" title="Kursiv: *Text*"><i>I</i></button>
+                    <button type="button" onclick="_taskEdWrap('\`','\`')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-family:monospace;line-height:1.4;" title="Inline-Code: \`code\`">⌨</button>
+                    <button type="button" onclick="_taskEdLinePrefix('## ')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;line-height:1.4;" title="Überschrift: ## Text">H2</button>
+                    <button type="button" onclick="_taskEdLinePrefix('- ')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;line-height:1.4;" title="Aufzählung: - Item">• Liste</button>
+                    <span style="color:#546e7a;font-size:10px;margin-left:4px;">Markdown</span>
+                </div>
+                <textarea id="ted-desc" class="task-ed-input" rows="4" style="resize:vertical;font-family:monospace;font-size:11px;" placeholder="Was soll der Nutzer tun? Unterstützt **fett**, *kursiv*, \`code\`, ## Überschrift, - Liste" oninput="_taskEdUpdatePreview()">${_escHtml(task.description||'')}</textarea>
+                <div style="margin-top:4px;margin-bottom:2px;color:#546e7a;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">Vorschau</div>
+                <div id="ted-desc-preview" style="min-height:28px;background:#111;border:1px solid #333;border-radius:3px;padding:6px 8px;font-size:11px;color:#b0bec5;line-height:1.5;">${_taskMarkdownToHtml(task.description||'')}</div>
                 <label class="task-ed-label">Hinweis (optional, wird auf Knopfdruck angezeigt)</label>
-                <input id="ted-hint" class="task-ed-input" type="text" value="${_escHtml(task.hint||'')}" placeholder="Tipp für den Lernenden">
+                <div style="display:flex;gap:3px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">
+                    <button type="button" onclick="_taskEdWrapField('ted-hint','**','**')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:bold;line-height:1.4;" title="Fett"><b>B</b></button>
+                    <button type="button" onclick="_taskEdWrapField('ted-hint','*','*')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-style:italic;line-height:1.4;" title="Kursiv"><i>I</i></button>
+                    <button type="button" onclick="_taskEdWrapField('ted-hint','\`','\`')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-family:monospace;line-height:1.4;" title="Code">⌨</button>
+                    <button type="button" onclick="_taskEdLinePrefixField('ted-hint','## ')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;line-height:1.4;" title="Überschrift">H2</button>
+                    <button type="button" onclick="_taskEdLinePrefixField('ted-hint','- ')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;line-height:1.4;" title="Aufzählung">• Liste</button>
+                    <span style="color:#546e7a;font-size:10px;margin-left:4px;">Markdown</span>
+                </div>
+                <textarea id="ted-hint" class="task-ed-input" rows="2" style="resize:vertical;font-family:monospace;font-size:11px;" placeholder="Tipp für den Lernenden – unterstützt **fett**, *kursiv*, \`code\`, ## Überschrift, - Liste" oninput="_taskEdUpdatePreviewField('ted-hint','ted-hint-preview')">${_escHtml(task.hint||'')}</textarea>
+                <div id="ted-hint-preview" style="min-height:20px;background:#111;border:1px solid #333;border-radius:3px;padding:5px 8px;font-size:11px;color:#b0bec5;line-height:1.5;margin-top:3px;${task.hint ? '' : 'display:none;'}">${_taskMarkdownToHtml(task.hint||'')}</div>
                 <div style="display:flex;gap:10px;">
                     <div style="flex:1;"><label class="task-ed-label">Kategorie</label><input id="ted-cat" class="task-ed-input" type="text" value="${_escHtml(task.category||'')}" placeholder="z.B. Grundlagen"></div>
                     <div style="flex:1;"><label class="task-ed-label">Schwierigkeit</label>
@@ -8735,6 +8897,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     <button onclick="window._taskEditorClose()" style="background:#555;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">✖ Schließen</button>
                 </div>`;
             (task.conditions || []).forEach((cond, i) => _taskRenderCondRow(cond, i));
+            _taskInitCondDrag(document.getElementById('ted-cond-list'));
             modal._savedSnapshot = JSON.stringify(_taskCollectFromEditor()); // Nach DOM-Aufbau normalisieren
             modal.style.display = 'flex';
         };
@@ -12128,10 +12291,14 @@ You must output exactly this JSON format. The logic code goes as a single string
             },
             meta: { icon: '🔩' },
             menuTarget: '#menu-fluessigkeiten',
+            modalConfig: { t: '🔩 Auslass konfigurieren:', l1: 'Steuervariable (Ausgang)', out: true, flowRateOpt: true },
             build: function(obj, el, var1) {
                 obj.width = 16; obj.height = 16;
                 obj.linkedVar = var1;
                 obj._isOpen = false;
+                obj.flowRate = 5; // fluid cells per second (CA) / drain calls per second (Splash)
+                obj._drainAccum = 0;
+                obj._splashAccum = 0;
                 el.className = 'f2d-obj f2d-fluid-outlet';
                 el.title = 'Flüssigkeits-Auslass';
                 el.innerHTML = '▼';
@@ -12142,11 +12309,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     obj._isOpen = open;
                     obj.el.style.borderColor = open ? '#ff5252' : '#42a5f5';
                     obj.el.textContent = open ? '💧' : '▼';
+                    if (!open) { obj._drainAccum = 0; obj._splashAccum = 0; }
                     fluidGridDirty = true;
                 }
             },
             getFluidSolidCells: function(obj) {
-                if (obj._isOpen) return [];
+                // Always solid — transfer through the wall is handled actively in factoryLoop.
                 let cells = [];
                 let gx0 = Math.floor(obj.x / FLUID_CELL);
                 let gx1 = Math.floor((obj.x + obj.width - 1) / FLUID_CELL);
@@ -12159,6 +12327,18 @@ You must output exactly this JSON format. The logic code goes as a single string
             },
             contextMenuVarSection: function(obj, ctxMenu, helpers) {
                 helpers.addVarSelect('🔩 Auslass-Variable', obj.linkedVar, 'out', 'linkedVar');
+                // Flow rate control
+                let sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep);
+                let wrap = document.createElement('div'); wrap.style.cssText = 'padding:4px 15px 6px;'; wrap.onclick = e => e.stopPropagation();
+                wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:4px;">💧 Durchfluss (Zellen/s)</div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="range" min="1" max="50" step="1" value="${obj.flowRate||5}"
+                            style="flex:1;accent-color:#42a5f5;"
+                            oninput="this.nextElementSibling.textContent=this.value">
+                        <span style="color:#fff;font-size:11px;min-width:22px;text-align:right;">${obj.flowRate||5}</span>
+                    </div>`;
+                wrap.querySelector('input').addEventListener('change', e => { obj.flowRate = parseInt(e.target.value); saveFactoryState(); });
+                ctxMenu.appendChild(wrap);
             },
         },
         // ====================================================
@@ -12297,6 +12477,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             const sel1 = document.getElementById('fm-select-1'); const sel2 = document.getElementById('fm-select-2'); const sel3 = document.getElementById('fm-select-3');
             const grp1 = document.getElementById('fm-group-1'); const grp2 = document.getElementById('fm-group-2'); const grp3 = document.getElementById('fm-group-3');
             const colorGrp = document.getElementById('fm-group-color'); const intervalGrp = document.getElementById('fm-group-interval');
+            const flowRateGrp = document.getElementById('fm-group-flowrate'); if (flowRateGrp) flowRateGrp.style.display = 'none';
             const lbl1 = document.getElementById('fm-label-1'); const lbl2 = document.getElementById('fm-label-2'); const lbl3 = document.getElementById('fm-label-3');
             const title = document.getElementById('fm-title');
             sel1.innerHTML = ''; sel2.innerHTML = ''; if(sel3) sel3.innerHTML = '';
@@ -12334,7 +12515,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 'led': { t: 'LED Leuchte (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true, col: true },
                 'zylinder_single': { t: 'Einfachwirkender Zylinder (Ausgang):', l1: 'Magnetventil ansteuern (Ausfahren)', out: true },
                 'zylinder_double': { t: 'Doppelwirkender Zylinder (Ausgänge):', l1: 'Kolben AUSfahren (z.B. PZ_V1_AUS)', l2: 'Kolben EINfahren (z.B. PZ_V1_EIN)', out: true },
-                'conveyor': { t: 'Förderband (Ausgang) zuweisen:', l1: 'Motor AN (z.B. MOTOR_1)', out: true },
+                'conveyor': { t: 'Förderband (Ausgang) zuweisen:', l1: 'Motor AN (z.B. MOTOR_1)', out: true, alwaysOn: true },
             //
             };
             if (ComponentRegistry[type]) config[type] = ComponentRegistry[type].modalConfig; // Lade Config aus Registry
@@ -12349,7 +12530,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 sel2.innerHTML = '<option value="normal">Normal (Überlappen)</option><option value="solid">Massiv (Kollision untereinander)</option>';
                 grp2.style.display = 'block';
                 intervalGrp.style.display = 'block';
-                if (spawnerPropsGrp) { spawnerPropsGrp.style.display = 'block'; document.getElementById('fm-spawner-quality').value = 'always_ok'; document.getElementById('fm-spawner-melt').value = ''; document.getElementById('fm-spawner-ox').value = '0'; document.getElementById('fm-spawner-oy').value = '0'; document.getElementById('fm-spawner-oz').value = '0'; }
+                if (spawnerPropsGrp) { spawnerPropsGrp.style.display = 'block'; document.getElementById('fm-spawner-quality').value = 'always_ok'; document.getElementById('fm-spawner-melt').value = ''; document.getElementById('fm-spawner-ox').value = '0'; document.getElementById('fm-spawner-oy').value = '0'; document.getElementById('fm-spawner-oz').value = '0'; document.getElementById('fm-spawner-backpressure').checked = false; }
             }
             // NEU: Filter für die Live-Timer/Zähler
             if (c.customList === 'timers') {
@@ -12362,6 +12543,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (sel1.options.length === 0) { alert("Keine Timer oder Zähler im Logikplan gefunden!"); pendingFactoryType = null; return; }
             } else {
                 fillOptions(sel1, c.out, type);
+            }
+            // "Immer AN" Option für Komponenten die ohne Variable laufen können (z.B. Förderband)
+            if (c.alwaysOn) {
+                let noneOpt = document.createElement('option'); noneOpt.value = ''; noneOpt.textContent = '— Immer AN (keine Variable) —';
+                sel1.insertBefore(noneOpt, sel1.firstChild);
+            }
+            // Durchfluss-Slider (z.B. Auslass)
+            if (c.flowRateOpt && flowRateGrp) {
+                flowRateGrp.style.display = 'block';
+                const frInp = document.getElementById('fm-input-flowrate');
+                const frVal = document.getElementById('fm-flowrate-val');
+                if (frInp) { frInp.value = 5; if (frVal) frVal.textContent = '5'; }
             }
             if (c.col) colorGrp.style.display = 'block';
             if (c.l2) { lbl2.textContent = c.l2; fillOptions(sel2, true, type); grp2.style.display = 'block'; }
@@ -12480,12 +12673,18 @@ You must output exactly this JSON format. The logic code goes as a single string
             const interval = parseFloat(document.getElementById('fm-input-interval').value) || 3;
             const newObj = createFactoryObject(pendingFactoryType, var1, e2.val, null, color, interval, e3.val);
             if (newObj && linkedFormula) newObj.linkedFormula = linkedFormula;
+            // Durchfluss für Auslass aus dem Modal übernehmen
+            if (newObj && pendingFactoryType === 'fluid_outlet') {
+                const frEl = document.getElementById('fm-input-flowrate');
+                if (frEl) { newObj.flowRate = parseInt(frEl.value) || 5; saveFactoryState(); }
+            }
             if (newObj && pendingFactoryType && pendingFactoryType.startsWith('spawner_')) {
                 const _sqEl = document.getElementById('fm-spawner-quality'); if (_sqEl && _sqEl.value !== 'always_ok') newObj.qualityMode = _sqEl.value;
                 const _smEl = document.getElementById('fm-spawner-melt'); if (_smEl && _smEl.value) { const _v = parseFloat(_smEl.value); if (_v > 0) newObj.meltTemp = _v; }
                 const _soxEl = document.getElementById('fm-spawner-ox'); if (_soxEl) { const _v = parseInt(_soxEl.value) || 0; if (_v) newObj.spawnXOffset = _v; }
                 const _soyEl = document.getElementById('fm-spawner-oy'); if (_soyEl) { const _v = parseInt(_soyEl.value) || 0; if (_v) newObj.spawnYOffset = _v; }
                 const _sozEl = document.getElementById('fm-spawner-oz'); if (_sozEl) { const _v = parseInt(_sozEl.value) || 0; if (_v) newObj.spawnZOffset = _v; }
+                const _sbpEl = document.getElementById('fm-spawner-backpressure'); if (_sbpEl && _sbpEl.checked) newObj.backpressureStop = true;
                 saveFactoryState();
             }
             // --- In den Logik-Editor einfügen ---
@@ -12576,7 +12775,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     <div class="f2d-motor-block"><div class="f2d-motor-shaft"></div></div>
                     <div class="f2d-right-drum"></div>
                     <div class="f2d-resize-handle"></div>
-                    <div class="f2d-label">Band (${var1})</div>
+                    <div class="f2d-label">${var1 ? 'Band (' + var1 + ')' : 'Band (Immer AN)'}</div>
                 `;
                 let clip = document.createElement('div'); clip.className = 'f2d-belt-clip';
                 let belt = document.createElement('div'); belt.className = 'f2d-conveyor-belt'; obj.beltEl = belt;
@@ -12585,7 +12784,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let returnBelt = document.createElement('div'); returnBelt.className = 'f2d-return-belt'; obj.returnBeltEl = returnBelt;
                 returnClip.appendChild(returnBelt); el.appendChild(returnClip);
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer; el.appendChild(resizer);
-                let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Band (${var1})`; el.appendChild(label);
+                let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = var1 ? `Band (${var1})` : 'Band (Immer AN)'; el.appendChild(label);
             } else if (type === 'wall') {
                 obj.width = 100; obj.height = 20; el.className = 'f2d-obj f2d-wall'; el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
@@ -13009,7 +13208,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (lbl) {
                             if (obj.type.startsWith('sensor_')) lbl.textContent = v1 || '---';
                             else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
-                            else if (obj.type === 'conveyor') lbl.textContent = `Band (${v1})`;
+                            else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
                             else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
                         }
                         let valve = obj.el.querySelector('.f2d-valve');
@@ -13135,6 +13334,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _mkOffInp('Y — vertikal:', 'Oben/Unten vom Spawner', 'spawnYOffset', obj.spawnYOffset || 0);
                 _mkOffInp('Z — Ebene:', 'Z-Index relativ zum Spawner', 'spawnZOffset', obj.spawnZOffset || 0);
                 ctxMenu.appendChild(spWrap);
+                // Rückstau-Option
+                let bpWrap = document.createElement('div'); bpWrap.style.cssText = 'padding:4px 15px 6px;'; bpWrap.onclick = e => e.stopPropagation();
+                let bpLbl = document.createElement('label'); bpLbl.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;';
+                let bpCb = document.createElement('input'); bpCb.type = 'checkbox'; bpCb.checked = !!obj.backpressureStop;
+                bpCb.onchange = () => { obj.backpressureStop = bpCb.checked; if (!bpCb.checked) obj.el.style.outline = ''; saveFactoryState(); };
+                bpLbl.appendChild(bpCb); bpLbl.appendChild(document.createTextNode('Bei Rückstau pausieren'));
+                bpWrap.appendChild(bpLbl); ctxMenu.appendChild(bpWrap);
             }
             // --- Z-Reihenfolge ---
             {
@@ -13660,18 +13866,6 @@ You must output exactly this JSON format. The logic code goes as a single string
                     _rasterizeToSolidGrid(obj);
                 }
             });
-            // Open fluid outlets punch holes through any overlapping solid cells (e.g. U-container walls)
-            factoryObjects.forEach(obj => {
-                if (obj.type === 'fluid_outlet' && obj._isOpen) {
-                    let gx0 = Math.floor(obj.x / FLUID_CELL);
-                    let gx1 = Math.floor((obj.x + obj.width - 1) / FLUID_CELL);
-                    let gy0 = Math.floor(obj.y / FLUID_CELL);
-                    let gy1 = Math.floor((obj.y + obj.height - 1) / FLUID_CELL);
-                    for (let gx = gx0; gx <= gx1; gx++)
-                        for (let gy = gy0; gy <= gy1; gy++)
-                            solidGrid.delete(gx + ',' + gy);
-                }
-            });
             fluidGridDirty = false;
             // Evict fluid cells inside solid areas — but NOT during drag/resize/rotate
             // (sub-cell quantization would otherwise delete cells that belong to the interior)
@@ -13838,6 +14032,18 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
         }
 
+        function clearAllFluids() {
+            // CA-Fluid leeren
+            if (fluidGrid && fluidGrid.size > 0) {
+                fluidGrid.clear();
+                renderFluid();
+                updateFluidMenuVisibility();
+            }
+            // Splash: alle Partikel über drainZone auf der gesamten Canvas-Fläche entfernen
+            if (typeof _splashActive !== 'undefined' && _splashActive && _splashEngine) {
+                _splashEngine.drainZone(0, 0, 4000, 3000);
+            }
+        }
         function updateFluidMenuVisibility() {
             let cb = document.getElementById('cb-show-fluid-menu');
             let cbChecked = cb ? cb.checked : false;
@@ -14033,19 +14239,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                     } else if (obj.type.startsWith('spawner_')) {
                         let isActive = obj.linkedVar ? resolveLinked(obj, spsState) : true;
                         if (isActive) {
-                            obj.timeAccum = (obj.timeAccum || 0) + deltaMs;
-                            if (obj.timeAccum >= obj.interval * 1000) {
-                                obj.timeAccum -= obj.interval * 1000;
-                                obj._spawnCount = (obj._spawnCount || 0) + 1;
-                                let _spQuality = 'OK';
-                                if (obj.qualityMode === 'always_nok') _spQuality = 'NOK';
-                                else if (obj.qualityMode === 'random') _spQuality = Math.random() < (obj.qualityChance ?? 0.8) ? 'OK' : 'NOK';
-                                else if (obj.qualityMode === 'every_n') _spQuality = (obj._spawnCount % (obj.qualityNth || 3) === 0) ? 'NOK' : 'OK';
-                                spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5 + (obj.spawnXOffset || 0), obj.y + 5 + (obj.spawnYOffset || 0), obj.spawnSolid, obj.meltTemp, (parseInt(obj.el.style.zIndex) || 10) + (obj.spawnZOffset || 0));
-                                if (factoryItems.length > 0) factoryItems[factoryItems.length - 1].quality = _spQuality;
+                            // Rückstau: Timer pausieren wenn Spawn-Position durch ein Teil blockiert ist
+                            let _spawnX = obj.x + 5 + (obj.spawnXOffset || 0);
+                            let _spawnY = obj.y + 5 + (obj.spawnYOffset || 0);
+                            let _backpressureBlocked = obj.backpressureStop && factoryItems.some(it =>
+                                it.x < _spawnX + 40 && it.x + (it.width || 40) > _spawnX &&
+                                it.y < _spawnY + 40 && it.y + (it.height || 40) > _spawnY
+                            );
+                            obj.el.style.outline = _backpressureBlocked ? '2px solid #ff9800' : '';
+                            if (!_backpressureBlocked) {
+                                obj.timeAccum = (obj.timeAccum || 0) + deltaMs;
+                                if (obj.timeAccum >= obj.interval * 1000) {
+                                    obj.timeAccum -= obj.interval * 1000;
+                                    obj._spawnCount = (obj._spawnCount || 0) + 1;
+                                    let _spQuality = 'OK';
+                                    if (obj.qualityMode === 'always_nok') _spQuality = 'NOK';
+                                    else if (obj.qualityMode === 'random') _spQuality = Math.random() < (obj.qualityChance ?? 0.8) ? 'OK' : 'NOK';
+                                    else if (obj.qualityMode === 'every_n') _spQuality = (obj._spawnCount % (obj.qualityNth || 3) === 0) ? 'NOK' : 'OK';
+                                    spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5 + (obj.spawnXOffset || 0), obj.y + 5 + (obj.spawnYOffset || 0), obj.spawnSolid, obj.meltTemp, (parseInt(obj.el.style.zIndex) || 10) + (obj.spawnZOffset || 0));
+                                    if (factoryItems.length > 0) factoryItems[factoryItems.length - 1].quality = _spQuality;
+                                }
                             }
-                        } else { 
-                            obj.timeAccum = 0; 
+                        } else {
+                            obj.timeAccum = 0;
                         }
                     } else if (obj.type === 'despawner') {
                         factoryItems = factoryItems.filter(item => {
@@ -14074,6 +14290,50 @@ You must output exactly this JSON format. The logic code goes as a single string
                         // Drain Splash particles: density-based drain proportional to despawner area
                         if (_splashActive && _splashEngine) {
                             _splashEngine.drainZone(obj.x, obj.y, obj.width, obj.height);
+                        }
+                    } else if (obj.type === 'fluid_outlet' && obj._isOpen) {
+                        // Transfer: pick cells pressing against the outlet from above,
+                        // remove them there and re-spawn them just below — they then
+                        // fall freely by gravity. Nothing is permanently destroyed.
+                        let rate = obj.flowRate || 5;
+                        obj._drainAccum = (obj._drainAccum || 0) + rate * deltaTime * window.simSpeed;
+                        let toMove = Math.floor(obj._drainAccum);
+                        if (toMove > 0 && fluidGrid.size > 0) {
+                            obj._drainAccum -= toMove;
+                            let gx0 = Math.floor(obj.x / FLUID_CELL);
+                            let gx1 = Math.floor((obj.x + obj.width - 1) / FLUID_CELL);
+                            let gy0 = Math.floor(obj.y / FLUID_CELL);
+                            let gy1 = Math.floor((obj.y + obj.height - 1) / FLUID_CELL);
+                            let moved = 0;
+                            // Scan rows directly above the outlet (up to 3 rows)
+                            outer: for (let scanGy = gy0 - 1; scanGy >= Math.max(0, gy0 - 3); scanGy--) {
+                                for (let scanGx = gx0; scanGx <= gx1; scanGx++) {
+                                    if (moved >= toMove) break outer;
+                                    let sk = scanGx + ',' + scanGy;
+                                    if (!fluidGrid.has(sk)) continue;
+                                    // Place the cell just below the outlet wall
+                                    let placed = false;
+                                    for (let tGy = gy1 + 1; tGy <= gy1 + 3 && !placed; tGy++) {
+                                        let tk = scanGx + ',' + tGy;
+                                        if (!solidGrid.has(tk) && !fluidGrid.has(tk)) {
+                                            fluidGrid.set(tk, fluidGrid.get(sk));
+                                            fluidGrid.delete(sk);
+                                            placed = true; moved++;
+                                        }
+                                    }
+                                }
+                            }
+                            if (fluidGrid.size === 0 && moved > 0) updateFluidMenuVisibility();
+                        }
+                        // Splash: drain thin zone above outlet + spawn equivalent blob below
+                        if (_splashActive && _splashEngine) {
+                            obj._splashAccum = (obj._splashAccum || 0) + rate * deltaTime * window.simSpeed;
+                            if (obj._splashAccum >= 1) {
+                                obj._splashAccum -= 1;
+                                let aboveH = FLUID_CELL * 2;
+                                _splashEngine.drainZone(obj.x, obj.y - aboveH, obj.width, aboveH);
+                                _splashEngine.addFluid(obj.x + obj.width / 2, obj.y + obj.height + 4, obj.width / 2, 25);
+                            }
                         }
                     }
                 });
@@ -14202,7 +14462,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                     }
                     if (obj.type === 'conveyor') {
-                        obj.isRunning = resolveLinked(obj, spsState);
+                        obj.isRunning = obj.linkedVar ? resolveLinked(obj, spsState) : true;
                         let _st = obj.startupTime || 0;
                         if (obj._speedFactor === undefined) obj._speedFactor = 0;
                         if (obj.isRunning) {
@@ -14386,6 +14646,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 if (obj.type === 'sensor_kap') isTriggered = true;
                             }
                         });
+                        // Kapazitiver Sensor: auch Flüssigkeit erkennen (CA-Fluid)
+                        if (!isTriggered && obj.type === 'sensor_kap' && fluidGrid.size > 0) {
+                            let sRad = (obj.rotation || 0) * Math.PI / 180;
+                            let cos = Math.cos(sRad), sin = Math.sin(sRad);
+                            let oCx = obj.x + obj.width / 2, oCy = obj.y + (obj.height || obj.width) / 2;
+                            for (let [k] of fluidGrid) {
+                                if (isTriggered) break;
+                                let p = k.split(',');
+                                let fx = +p[0] * FLUID_CELL + FLUID_CELL / 2;
+                                let fy = +p[1] * FLUID_CELL + FLUID_CELL / 2;
+                                // Transform fluid cell center into sensor local space
+                                let dx = fx - oCx, dy = fy - oCy;
+                                let localX = dx * cos + dy * sin + obj.width / 2;
+                                let localY = -dx * sin + dy * cos + (obj.height || obj.width) / 2;
+                                if (localX >= lx && localX <= lx + lw && localY >= ly && localY <= ly + lh) isTriggered = true;
+                            }
+                        }
                         if (!isTriggered && obj.type !== 'sensor_mag' && obj.type !== 'sensor_kap') {
                             let sRad = (obj.rotation || 0) * Math.PI / 180;
                             let steps = obj.type === 'sensor_opt' ? 5 : 2;
@@ -14670,7 +14947,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     pressure: o.pressure, maxFlow: o.maxFlow,
                     pistonD: o.pistonD, rodD: o.rodD, stroke: o.stroke,
                     rangeW: o.rangeW || null, rangeH: o.rangeH || null,
-                    fluidMat: o.fluidMat || null
+                    fluidMat: o.fluidMat || null,
+                    flowRate: o.flowRate !== undefined ? o.flowRate : null,
+                    backpressureStop: o.backpressureStop || false
                 })),
                 fluid: Array.from(fluidGrid.entries()).map(function(e) { return { k: e[0], m: e[1].mat }; })
             };
@@ -14770,6 +15049,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.height) newObj.height = o.height; 
                     if (o.useCollision !== undefined) newObj.useCollision = o.useCollision;
                     if (o.rangeW) { newObj.rangeW = o.rangeW; if (o.rangeH) newObj.rangeH = o.rangeH; _applySensorRange(newObj); }
+                    if (o.flowRate != null) newObj.flowRate = o.flowRate;
 					if (o.muteSound !== undefined) newObj.muteSound = o.muteSound;
 					if (o.thickness) { 
                         newObj.thickness = o.thickness; 
@@ -14809,6 +15089,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.arm1Len) { newObj.arm1Len = o.arm1Len; newObj.arm2Len = o.arm2Len; newObj.targetX = o.targetX || 0; newObj.targetY = o.targetY !== undefined ? o.targetY : (newObj.arm1Len + newObj.arm2Len); }
                     if (o.linkedVarEnable) newObj.linkedVarEnable = o.linkedVarEnable;
                     if (o.startupTime) newObj.startupTime = o.startupTime;
+                    if (o.backpressureStop) newObj.backpressureStop = true;
                     if (o.pathSpeed) newObj.pathSpeed = o.pathSpeed;
                     if (o.labelPinned) {
                         newObj.labelPinned = true;

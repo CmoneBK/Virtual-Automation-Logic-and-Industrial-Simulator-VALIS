@@ -103,47 +103,18 @@ fn updateGrid(@builtin(global_invocation_id) id: vec3<u32>) {
             if (y < 2 || y > i32(ceil(realBoxSize.y) - 3)) { cells[id.x].vy = 0; }
             if (z < 2 || z > i32(ceil(realBoxSize.z) - 3)) { cells[id.x].vz = 0; }
 
-            // VALIS solid grid — free-slip boundary: cancel only the velocity component
-            // that points INTO the solid, keep tangential flow (same as canvas walls).
+            // VALIS solid grid — no-slip boundary: zero all velocity in solid cells.
+            // Free-slip (normal-only cancellation) fails for thin (1-cell) walls because
+            // both sides are air → computed normal in X/Y is zero → horizontal velocity
+            // passes straight through. No-slip is simpler and reliable for all wall widths.
             let isSolid = textureLoad(solidTex, vec2u(u32(x), u32(y)), 0).r;
             if (isSolid != 0u) {
-                // Sample 4-connected neighbours; treat out-of-bounds as solid (1).
-                let sl = select(1u, textureLoad(solidTex, vec2u(u32(x - 1), u32(y)), 0).r, x > 0);
-                let sr = select(1u, textureLoad(solidTex, vec2u(u32(x + 1), u32(y)), 0).r, x < 203);
-                let sd = select(1u, textureLoad(solidTex, vec2u(u32(x), u32(y - 1)), 0).r, y > 0);
-                let su = select(1u, textureLoad(solidTex, vec2u(u32(x), u32(y + 1)), 0).r, y < 153);
-
-                // Normal points from solid toward the nearest fluid neighbour(s).
-                // select(val_if_false, val_if_true, condition)
-                let nx = select(-1., 0., sl != 0u) + select(1., 0., sr != 0u);
-                let ny = select(-1., 0., sd != 0u) + select(1., 0., su != 0u);
-                let nLen = sqrt(nx * nx + ny * ny);
-
-                if (nLen > 0.001) {
-                    // Surface cell: separating condition — remove inward normal component only.
-                    let nxn = nx / nLen;
-                    let nyn = ny / nLen;
-                    let cvx = decodeFixedPoint(cells[id.x].vx);
-                    let cvy = decodeFixedPoint(cells[id.x].vy);
-                    let vn = cvx * nxn + cvy * nyn;
-                    if (vn < 0.) {
-                        cells[id.x].vx = encodeFixedPoint(cvx - vn * nxn);
-                        cells[id.x].vy = encodeFixedPoint(cvy - vn * nyn);
-                    }
-                    cells[id.x].vz = 0;
-                } else {
-                    // Interior solid cell (surrounded by other solids): zero everything.
-                    cells[id.x].vx = 0;
-                    cells[id.x].vy = 0;
-                    cells[id.x].vz = 0;
-                }
-            }
-
-            // Air cell directly above a solid surface: zero downward velocity.
-            // Without this, gravity keeps re-pulling particles back through the
-            // top face (the solid cell is zeroed but the air cell above it isn't).
-            // Horizontal velocity is fully preserved so water can flow off edges.
-            if (isSolid == 0u && y > 0) {
+                cells[id.x].vx = 0;
+                cells[id.x].vy = 0;
+                cells[id.x].vz = 0;
+            } else if (y > 0) {
+                // Air cell directly above a solid: zero downward velocity to prevent gravity
+                // from pulling particles back through the solid top face.
                 let solidBelow = textureLoad(solidTex, vec2u(u32(x), u32(y - 1)), 0).r;
                 if (solidBelow != 0u) {
                     let cvy = decodeFixedPoint(cells[id.x].vy);

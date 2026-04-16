@@ -283,45 +283,16 @@ fn updateGrid(@builtin(global_invocation_id) id: vec3<u32>) {\r
 
             
             
+            
+            
             let isSolid = textureLoad(solidTex, vec2u(u32(x), u32(y)), 0).r;\r
             if (isSolid != 0u) {\r
-                
-                let sl = select(1u, textureLoad(solidTex, vec2u(u32(x - 1), u32(y)), 0).r, x > 0);\r
-                let sr = select(1u, textureLoad(solidTex, vec2u(u32(x + 1), u32(y)), 0).r, x < 203);\r
-                let sd = select(1u, textureLoad(solidTex, vec2u(u32(x), u32(y - 1)), 0).r, y > 0);\r
-                let su = select(1u, textureLoad(solidTex, vec2u(u32(x), u32(y + 1)), 0).r, y < 153);
-
+                cells[id.x].vx = 0;\r
+                cells[id.x].vy = 0;\r
+                cells[id.x].vz = 0;\r
+            } else if (y > 0) {\r
                 
                 
-                let nx = select(-1., 0., sl != 0u) + select(1., 0., sr != 0u);\r
-                let ny = select(-1., 0., sd != 0u) + select(1., 0., su != 0u);\r
-                let nLen = sqrt(nx * nx + ny * ny);
-
-                if (nLen > 0.001) {\r
-                    
-                    let nxn = nx / nLen;\r
-                    let nyn = ny / nLen;\r
-                    let cvx = decodeFixedPoint(cells[id.x].vx);\r
-                    let cvy = decodeFixedPoint(cells[id.x].vy);\r
-                    let vn = cvx * nxn + cvy * nyn;\r
-                    if (vn < 0.) {\r
-                        cells[id.x].vx = encodeFixedPoint(cvx - vn * nxn);\r
-                        cells[id.x].vy = encodeFixedPoint(cvy - vn * nyn);\r
-                    }\r
-                    cells[id.x].vz = 0;\r
-                } else {\r
-                    
-                    cells[id.x].vx = 0;\r
-                    cells[id.x].vy = 0;\r
-                    cells[id.x].vz = 0;\r
-                }\r
-            }
-
-            
-            
-            
-            
-            if (isSolid == 0u && y > 0) {\r
                 let solidBelow = textureLoad(solidTex, vec2u(u32(x), u32(y - 1)), 0).r;\r
                 if (solidBelow != 0u) {\r
                     let cvy = decodeFixedPoint(cells[id.x].vy);\r

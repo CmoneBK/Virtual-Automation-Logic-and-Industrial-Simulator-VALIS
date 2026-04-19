@@ -655,6 +655,14 @@
             background: transparent; 
         }
         .f2d-rotate-handle:active { cursor: grabbing; }
+        #f2d-group-rotate-handle {
+            position: absolute; width: 22px; height: 22px; display: none;
+            background: #1a1a2e; border: 2px solid #2196f3; border-radius: 50%;
+            cursor: grab; z-index: 200; text-align: center; line-height: 18px;
+            font-size: 14px; color: #2196f3; user-select: none; pointer-events: auto;
+            box-shadow: 0 0 8px rgba(33,150,243,0.7);
+        }
+        #f2d-group-rotate-handle:active { cursor: grabbing; }
         .f2d-rotate-handle::after {
             content: '↻'; 
             position: absolute; 
@@ -753,6 +761,45 @@
         }
         .f2d-frame::after { content: "METALL"; display: block; color: #fff; font-size: 10px; font-weight: bold; text-align: center; margin-top: 5px; pointer-events: none; text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.4); padding: 1px;}
         .f2d-frame .f2d-resize-handle-xy { background: rgba(0,0,0,0.2); }
+        /* Textfeld / Notiz — reiner Text auf dem Canvas */
+        .f2d-text-note { background: transparent; border: none !important; box-shadow: none !important; color: #fff; font-family: sans-serif; font-size: 14px; padding: 4px; min-width: 40px; min-height: 1em; overflow: visible; cursor: move; }
+        .f2d-text-note.f2d-note-editing { outline: 1px dashed rgba(255,255,255,0.4); cursor: default; }
+        .f2d-text-note .f2d-note-content { outline: none; cursor: inherit; overflow-wrap: break-word; word-break: break-word; white-space: pre-wrap; min-height: 1em; }
+        .f2d-text-note .f2d-note-placeholder { color: rgba(255,255,255,0.35); font-style: italic; pointer-events: none; font-size: 11px; }
+        .f2d-note-toolbar { display: none; position: absolute; top: -26px; left: 0; background: #2d2d30; border: 1px solid #555; border-radius: 3px; padding: 2px 4px; gap: 3px; flex-direction: row; align-items: center; z-index: 9999; white-space: nowrap; box-shadow: 1px 2px 5px rgba(0,0,0,0.6); }
+        .f2d-text-note.f2d-note-editing .f2d-note-toolbar { display: flex; }
+        .f2d-note-toolbar button { background: transparent; border: 1px solid #666; color: #ddd; cursor: pointer; border-radius: 2px; padding: 0 5px; font-size: 11px; line-height: 16px; height: 16px; }
+        .f2d-note-toolbar button:hover { background: #444; }
+        .f2d-note-toolbar select { background: #1e1e1e; color: #ddd; border: 1px solid #666; font-size: 10px; height: 16px; border-radius: 2px; cursor: pointer; }
+        .f2d-note-toolbar input[type=color] { width: 20px; height: 16px; padding: 0; border: 1px solid #666; cursor: pointer; background: none; border-radius: 2px; }
+        .f2d-note-toolbar .note-sep { width: 1px; height: 12px; background: #555; margin: 0 1px; flex-shrink: 0; }
+        /* Holzoberfläche / Bodendielen */
+        .f2d-holzflaeche {
+            position: absolute;
+            background: repeating-linear-gradient(90deg,
+                #dba86a 0px, #c8945a 17px,
+                #7a4e1e 17px, #7a4e1e 19px
+            );
+            border: 2px solid #5c3a14; border-radius: 2px; z-index: 3; box-sizing: border-box;
+        }
+        .f2d-holzflaeche::after { content: "HOLZ"; display: block; color: rgba(60,20,0,0.8); font-size: 10px; font-weight: bold; text-align: center; margin-top: 5px; pointer-events: none; text-shadow: 1px 1px 0 rgba(255,200,100,0.6); }
+        .f2d-holzflaeche .f2d-resize-handle-xy { background: rgba(0,0,0,0.2); }
+        /* Zaun */
+        .f2d-zaun {
+            position: absolute;
+            background:
+                repeating-linear-gradient(90deg,
+                    #607d8b 0px, #607d8b 4px,
+                    transparent 4px, transparent 16px
+                ),
+                linear-gradient(180deg, #455a64 0%, #78909c 50%, #455a64 100%);
+            border: 2px solid #37474f; border-radius: 2px; z-index: 3; box-sizing: border-box;
+        }
+        .f2d-zaun::after { content: "ZAUN"; display: block; color: rgba(255,255,255,0.9); font-size: 10px; font-weight: bold; text-align: center; margin-top: 5px; pointer-events: none; text-shadow: 0 0 4px #000; }
+        .f2d-zaun .f2d-resize-handle-xy { background: rgba(255,255,255,0.2); }
+        /* Palette */
+        .f2d-palette { position: absolute; z-index: 3; box-sizing: border-box; overflow: visible; cursor: move; }
+        .f2d-palette svg { display: block; overflow: hidden; }
         /* NEU: Flyout-Submenü (für die Anbauteile) */
         .tb-submenu { position: relative; }
         /* FIX: Das Submenü so positionieren, dass es perfekt an der Seite andockt */
@@ -1631,12 +1678,12 @@
                 <div id="factory-context-menu"></div>
                 <div id="path-edit-banner" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1565c0;color:#fff;padding:8px 16px;border-radius:20px;z-index:9999;align-items:center;gap:10px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,0.6);white-space:nowrap;">
                     ✏️ Pfad-Editor: <b>Linksklick</b> = Punkt setzen &nbsp;|&nbsp; <b>Rechtsklick</b> auf Punkt = Löschen &nbsp;|&nbsp;
-                    Modus: <select id="path-mode-sel" style="background:#0d47a1;color:#fff;border:1px solid #64b5f6;border-radius:6px;padding:2px 6px;font-size:11px;" onchange="if(window.pathEditingObj){window.pathEditingObj.pathMode=this.value;window._renderPathOverlay();}">
+                    Modus: <select id="path-mode-sel" style="background:#0d47a1;color:#fff;border:1px solid #64b5f6;border-radius:6px;padding:2px 6px;font-size:11px;" onchange="var s=window._pathEditSrc();if(s){s.pathMode=this.value;window._renderPathOverlay();}">
                         <option value="linear">Linear</option><option value="spline">Spline (Catmull-Rom)</option>
                     </select>
-                    &nbsp;<label style="cursor:pointer;"><input type="checkbox" id="path-loop-chk" style="margin-right:3px;" onchange="if(window.pathEditingObj){window.pathEditingObj.pathLoop=this.checked;}"> Loop</label>
+                    &nbsp;<label style="cursor:pointer;"><input type="checkbox" id="path-loop-chk" style="margin-right:3px;" onchange="var s=window._pathEditSrc();if(s){s.pathLoop=this.checked;}"> Loop</label>
                     &nbsp;<button onclick="window._stopPathEdit()" style="background:#fff;color:#1565c0;border:none;border-radius:10px;padding:3px 12px;cursor:pointer;font-weight:bold;">✔ Fertig</button>
-                    &nbsp;<button onclick="if(window.pathEditingObj){window.pathEditingObj.waypoints=[];window._renderPathOverlay();}" style="background:#c62828;color:#fff;border:none;border-radius:10px;padding:3px 10px;cursor:pointer;">🗑 Alle Punkte</button>
+                    &nbsp;<button onclick="var s=window._pathEditSrc();if(s){s.waypoints=[];window._renderPathOverlay();}" style="background:#c62828;color:#fff;border:none;border-radius:10px;padding:3px 10px;cursor:pointer;">🗑 Alle Punkte</button>
                 </div>
                 <div id="factory-canvas-area">
                     <div id="factory-content"><canvas id="fluid-canvas" width="4000" height="3000" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;"></canvas><canvas id="sand-canvas" width="4000" height="3000" style="position:absolute;top:0;left:0;pointer-events:none;z-index:6;image-rendering:pixelated;opacity:0.93;"></canvas><canvas id="splash-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;display:none;width:4000px;height:3000px;"></canvas><svg id="factory-path-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:98;overflow:visible;"></svg></div>
@@ -3765,17 +3812,43 @@ You must output exactly this JSON format. The logic code goes as a single string
             // 3. Freies Rotieren
             if (rotatingElement) {
                 let canvasRect = factoryCanvas.getBoundingClientRect();
-                // FIX: Skalierung einrechnen
-                let screenCx = canvasRect.left + rotatingElement.cx * factoryScale; 
+                let screenCx = canvasRect.left + rotatingElement.cx * factoryScale;
                 let screenCy = canvasRect.top + rotatingElement.cy * factoryScale;
                 let currentMouseAngle = Math.atan2(e.clientY - screenCy, e.clientX - screenCx) * 180 / Math.PI;
                 let deltaAngle = currentMouseAngle - rotatingElement.startAngle;
-                let newRotation = (rotatingElement.startObjRotation + deltaAngle) % 360;
-                if (newRotation < 0) newRotation += 360;
-                let snapped = Math.round(newRotation / 45) * 45;
-                if (Math.abs(newRotation - snapped) < 10 || Math.abs(newRotation - snapped) > 350) { newRotation = snapped % 360; }
-                let deltaR = newRotation - (rotatingElement.data.rotation || 0);
-                if (deltaR !== 0) { rotateObjRecursive(rotatingElement.data, deltaR, rotatingElement.cx, rotatingElement.cy); fluidGridDirty = true; }
+                if (rotatingElement.isGroup) {
+                    let snap = Math.round(deltaAngle / 45) * 45;
+                    let total = Math.abs(deltaAngle - snap) < 10 ? snap : deltaAngle;
+                    let deltaR = total - rotatingElement.lastGroupAngle;
+                    if (Math.abs(deltaR) > 0.01) {
+                        let rad = deltaR * Math.PI / 180;
+                        let px = rotatingElement.cx, py = rotatingElement.cy;
+                        rotatingElement.groupObjs.forEach(o => {
+                            // Move the object's position around the group centroid
+                            let ocx = o.x + o.width/2, ocy = o.y + (o.height||o.width)/2;
+                            let nx = px + (ocx-px)*Math.cos(rad) - (ocy-py)*Math.sin(rad);
+                            let ny = py + (ocx-px)*Math.sin(rad) + (ocy-py)*Math.cos(rad);
+                            o.x = nx - o.width/2;
+                            o.y = ny - (o.height||o.width)/2;
+                            // Skip self-rotation for types that don't support it
+                            if (noRotateTypes.has(o.type) || o.type.startsWith('zone_')) {
+                                updateObjTransform(o);
+                            } else {
+                                rotateObjRecursive(o, deltaR, px, py);
+                            }
+                        });
+                        rotatingElement.lastGroupAngle = total;
+                        _updateGroupRotateHandle();
+                        fluidGridDirty = true;
+                    }
+                } else {
+                    let newRotation = (rotatingElement.startObjRotation + deltaAngle) % 360;
+                    if (newRotation < 0) newRotation += 360;
+                    let snapped = Math.round(newRotation / 45) * 45;
+                    if (Math.abs(newRotation - snapped) < 10 || Math.abs(newRotation - snapped) > 350) { newRotation = snapped % 360; }
+                    let deltaR = newRotation - (rotatingElement.data.rotation || 0);
+                    if (deltaR !== 0) { rotateObjRecursive(rotatingElement.data, deltaR, rotatingElement.cx, rotatingElement.cy); fluidGridDirty = true; }
+                }
                 return;
             }
             // 4. 1D Skalierung (Zylinder, Förderbänder)
@@ -3859,6 +3932,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let moveDy = (sel.dragStartY + dy) - sel.y;
                         moveObjRecursive(sel, moveDx, moveDy);
                     });
+                    if (window.activeGroupId) _updateGroupRotateHandle();
                 } else {
                     let moveDx = newX - draggedElement.data.x;
                     let moveDy = newY - draggedElement.data.y;
@@ -5462,6 +5536,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
         textarea.addEventListener('scroll', () => { highlighting.scrollTop = textarea.scrollTop; highlighting.scrollLeft = textarea.scrollLeft; });
         function buildSimulatorUI(inputs, outputs, graph) {
+            latchedTasters.clear(); // Ensure no latched tasters carry over to new simulation
             const oldState = { ...spsState };
             spsState = {}; 
             const usedAsSource = new Set(graph ? graph.edges.map(e => e.sourceId) : []);
@@ -5475,7 +5550,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 let cType = componentTypes[name];
                 let isNCContact = cType === 'nothalt' || cType === 'taster_nc' || cType === 'schalter_nc' || (ComponentRegistry[cType] && ComponentRegistry[cType].isNC);
-                if (oldState.hasOwnProperty(name)) {
+                let isMomentary = (cType === 'taster' || cType === 'taster_nc');
+                if (oldState.hasOwnProperty(name) && !isMomentary) {
+                    // Switches/sensors keep their state; tasters always reset to resting state
                     spsState[name] = oldState[name];
                 } else {
                     spsState[name] = isNCContact ? true : false;
@@ -8042,6 +8119,9 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
 
         window._startTask = function(taskObj) {
+            // Reset all input states so no stale taster/switch values survive into the new task
+            spsState = {};
+            latchedTasters.clear();
             if (taskObj.preset) {
                 let presetData = {
                     code: taskObj.preset.code || '',
@@ -8103,6 +8183,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Bearbeitungsbereich-Sperren anwenden
             if (taskObj.blockAreas) _taskApplyBlockAreas(taskObj.blockAreas);
             if (taskObj.hideAreas)  _taskApplyHideAreas(taskObj.hideAreas);
+            // Simulation automatisch starten falls gewünscht und noch nicht aktiv
+            if (taskObj.autoStartSim && !isSimulationActive) toggleSimulation();
             // Musterlösung-Button initialisieren
             _taskUpdateSolutionBtn();
         };
@@ -8934,7 +9016,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const v = parseInt(inp.value);
                 if (!isNaN(v) && v >= 0) task.objectMaxCounts[inp.dataset.type] = v;
             });
-            task.preventDelete = !!(document.getElementById('ted-prevent-delete') || {}).checked;
+            task.preventDelete  = !!(document.getElementById('ted-prevent-delete')   || {}).checked;
+            task.autoStartSim   = !!(document.getElementById('ted-auto-start-sim')   || {}).checked;
             // Musterlösung
             task.solution = (document.getElementById('task-editor-modal')._editTask || {}).solution || null;
             let solModeEl = document.getElementById('ted-sol-mode');
@@ -9062,6 +9145,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     </div>
                     <div style="flex:1;"><label class="task-ed-label">Zeitlimit (Sek., 0=keins)</label><input id="ted-time" class="task-ed-input" type="number" min="0" max="3600" value="${task.timeLimit||0}"></div>
                 </div>
+                <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                    <input type="checkbox" id="ted-auto-start-sim" ${task.autoStartSim ? 'checked' : ''}>
+                    <span>Simulation beim Start der Aufgabe automatisch starten</span>
+                </label>
                 <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">📸 Preset (Ausgangszustand der Aufgabe)</div>
                     <div id="ted-preset-info" style="color:#607d8b;font-size:11px;margin-bottom:8px;">${task.preset ? '✅ Preset gespeichert' : '⬜ Kein Preset – Aufgabe startet im aktuellen Zustand'}</div>
@@ -9891,6 +9978,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             'press': 'side', 'pusher': 'side',
             'zylinder_single': 'both', 'zylinder_double': 'both',
             'heater': 'side', 'wall': 'both', 'frame': 'both',
+            'holzflaeche': 'both', 'zaun': 'both', 'palette': 'top',
             'portal_crane': 'side', 'turntable': 'top', 'robot_arm_2d': 'top',
         };
         function _typeView(type) {
@@ -10051,6 +10139,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             cos2 = Math.max(-1, Math.min(1, cos2));
             let a2 = -Math.acos(cos2);
             let a1 = Math.atan2(ty, tx) - Math.atan2(l2 * Math.sin(a2), l1 + l2 * Math.cos(a2));
+            // Prevent elbow flip: if a1 jumps by more than π from last frame, wrap it
+            if (obj._ikA1 !== undefined) {
+                let diff = a1 - obj._ikA1;
+                if (diff >  Math.PI) a1 -= 2 * Math.PI;
+                if (diff < -Math.PI) a1 += 2 * Math.PI;
+            }
+            obj._ikA1 = a1;
             let j1x = l1 * Math.cos(a1), j1y = l1 * Math.sin(a1);
             let j2x = j1x + l2 * Math.cos(a1 + a2), j2y = j1y + l2 * Math.sin(a1 + a2);
             obj._gripperX = j2x; obj._gripperY = j2y;
@@ -10061,30 +10156,68 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
         // Wegpunkte sind LOKAL (relative Offsets vom Arm-Ursprung)
         // targetX/targetY entspricht direkt dem Greifer-Offset → einfach interpolieren
-        window._robotFollowPath = function(obj, speed) {
-            let pts = obj.waypoints;
+        window._robotFollowPath = function(obj, speed, pathSrc) {
+            let src = pathSrc || obj;
+            let pts = src.waypoints;
             if (!pts || pts.length < 2) return;
+            // Pause an Wegpunkt abwarten
+            if (src._pauseTimer > 0) {
+                src._pauseTimer -= (window.simSpeed || 1);
+                let pw = pts[src._pauseWpIdx];
+                if (pw) { obj.targetX = pw.x; obj.targetY = pw.y; }
+                return;
+            }
             // Loop: Startpunkt ans Ende hängen → schließendes Segment wird mitgefahren
-            let ePts = obj.pathLoop ? [...pts, pts[0]] : pts;
+            let ePts = src.pathLoop ? [...pts, pts[0]] : pts;
             let maxT = ePts.length - 1;
-            obj._pathT = obj._pathT || 0;
-            let seg = Math.floor(obj._pathT);
-            if (seg >= maxT) { seg = maxT - 1; obj._pathT = maxT - 0.0001; }
-            let t = obj._pathT - seg;
+            src._pathT = src._pathT || 0;
+            let prevFloor = Math.floor(src._pathT);
+            let seg = prevFloor;
+            if (seg >= maxT) { seg = maxT - 1; src._pathT = maxT - 0.0001; }
+            let t = src._pathT - seg;
             let p0 = ePts[seg], p1 = ePts[seg + 1];
             obj.targetX = p0.x + (p1.x - p0.x) * t;
             obj.targetY = p0.y + (p1.y - p0.y) * t;
             let segLen = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2) || 1;
-            obj._pathT += speed / segLen;
-            if (obj._pathT >= maxT) {
-                if (obj.pathLoop) obj._pathT = 0;
-                else obj._pathT = maxT - 0.0001;
+            src._pathT += speed / segLen;
+            let looped = false;
+            if (src._pathT >= maxT) {
+                if (src.pathLoop) { src._pathT = 0; looped = true; }
+                else { src._pathT = maxT - 0.0001; obj._pathGrip = undefined; }
+            }
+            // Greifer-Aktion und Pause beim Erreichen eines Wegpunkts auslösen
+            if (looped) { obj._pathGrip = undefined; obj._ikA1 = undefined; } // Latch + IK-Kontinuität bei Loop-Neustart zurücksetzen
+            let newFloor = looped ? 0 : Math.floor(src._pathT);
+            if (newFloor !== prevFloor) {
+                let wpIdx = newFloor < pts.length ? newFloor : pts.length - 1;
+                let wp = pts[wpIdx];
+                if (wp && wp.grip === 'grab') {
+                    obj._pathGrip = true;
+                    obj.targetX = wp.x; obj.targetY = wp.y; // Arm exakt auf Wegpunkt snappen
+                } else if (wp && wp.grip === 'release') {
+                    obj._pathGrip = false;
+                    obj.targetX = wp.x; obj.targetY = wp.y;
+                }
+                if (wp && wp.pause > 0) {
+                    src._pauseTimer = wp.pause * 60;
+                    src._pauseWpIdx = wpIdx;
+                    src._pathT = newFloor;
+                    obj.targetX = wp.x; obj.targetY = wp.y;
+                }
             }
         };
         // =========================================================
         // ✏️ PFAD-EDITOR
         // =========================================================
         window.pathEditingObj = null;
+        window.pathEditingPathIdx = null;
+        window._pathEditSrc = function() {
+            let obj = window.pathEditingObj;
+            if (!obj) return null;
+            let idx = window.pathEditingPathIdx;
+            if (idx !== null && idx !== undefined && obj.namedPaths && obj.namedPaths[idx]) return obj.namedPaths[idx];
+            return obj;
+        };
         // Koordinaten-Hilfsfunktion: Canvas-Klick → lokale Arm-Koordinaten
         function _canvasToLocal(obj, clientX, clientY) {
             let rect = factoryCanvas.getBoundingClientRect();
@@ -10097,9 +10230,11 @@ You must output exactly this JSON format. The logic code goes as a single string
         function _localToAbs(obj, p) {
             return { x: obj.x + p.x, y: obj.y + p.y };
         }
-        window._startPathEdit = function(obj) {
+        window._startPathEdit = function(obj, pathIdx) {
             window.pathEditingObj = obj;
-            if (!obj.waypoints) obj.waypoints = [];
+            window.pathEditingPathIdx = (pathIdx !== null && pathIdx !== undefined) ? pathIdx : null;
+            let src = window._pathEditSrc();
+            if (!src.waypoints) src.waypoints = [];
             // Pointer-Events aktivieren damit Wegpunkt-Kreise klickbar sind
             let pathSvg = document.getElementById('factory-path-svg');
             if (pathSvg) pathSvg.style.pointerEvents = 'all';
@@ -10113,15 +10248,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (banner) {
                 banner.style.display = 'flex';
                 let mSel = document.getElementById('path-mode-sel');
-                if (mSel) mSel.value = obj.pathMode || 'linear';
+                if (mSel) mSel.value = src.pathMode || 'linear';
                 let lChk = document.getElementById('path-loop-chk');
-                if (lChk) lChk.checked = !!obj.pathLoop;
+                if (lChk) lChk.checked = !!src.pathLoop;
             }
             window._renderPathOverlay();
         };
         window._stopPathEdit = function() {
             if (window.pathEditingObj) { try { saveFactoryState(); } catch(e){} }
             window.pathEditingObj = null;
+            window.pathEditingPathIdx = null;
             // Pointer-Events zurücksetzen
             let pathSvg = document.getElementById('factory-path-svg');
             if (pathSvg) pathSvg.style.pointerEvents = 'none';
@@ -10150,115 +10286,182 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (!svgEl) return;
             svgEl.innerHTML = '';
             let svgNS = 'http://www.w3.org/2000/svg';
-            factoryObjects.forEach(obj => {
-                if (!obj.waypoints || obj.waypoints.length < 1) return;
-                let isEd = (window.pathEditingObj === obj);
-                // Umrechnen: lokale Punkte → absolute SVG-Koordinaten
-                let absPts = obj.waypoints.map(p => _localToAbs(obj, p));
+            const PATH_COLORS = ['#2196f3','#4caf50','#ff9800','#e91e63','#9c27b0','#00bcd4'];
+            const _drawSinglePath = function(obj, pts, pathSrc, color, isEd) {
+                let absPts = pts.map(p => _localToAbs(obj, p));
                 if (absPts.length >= 2) {
-                    let loopPts = obj.pathLoop ? [...absPts, absPts[0]] : absPts;
-                    let d = (obj.pathMode === 'spline' && loopPts.length >= 3)
+                    let loopPts = pathSrc.pathLoop ? [...absPts, absPts[0]] : absPts;
+                    let d = (pathSrc.pathMode === 'spline' && loopPts.length >= 3)
                         ? window._catmullRomPath(loopPts)
                         : `M${loopPts[0].x},${loopPts[0].y}` + loopPts.slice(1).map(p => `L${p.x},${p.y}`).join('');
                     let pathEl = document.createElementNS(svgNS, 'path');
-                    pathEl.setAttribute('d', d);
-                    pathEl.setAttribute('fill', 'none');
-                    pathEl.setAttribute('stroke', isEd ? '#2196f3' : 'rgba(33,150,243,0.4)');
-                    pathEl.setAttribute('stroke-width', isEd ? '2' : '1.5');
-                    pathEl.setAttribute('stroke-dasharray', '7 4');
-                    pathEl.style.pointerEvents = 'none';
-                    svgEl.appendChild(pathEl);
-                    // Pfeilspitze am Ende
+                    pathEl.setAttribute('d', d); pathEl.setAttribute('fill', 'none');
+                    pathEl.setAttribute('stroke', color); pathEl.setAttribute('stroke-opacity', isEd ? '1' : '0.4');
+                    pathEl.setAttribute('stroke-width', isEd ? '2' : '1.5'); pathEl.setAttribute('stroke-dasharray', '7 4');
+                    pathEl.style.pointerEvents = 'none'; svgEl.appendChild(pathEl);
                     let lp = absPts[absPts.length-1], pp = absPts[absPts.length-2];
                     let ang = Math.atan2(lp.y-pp.y, lp.x-pp.x);
                     let ax = lp.x-Math.cos(ang)*10, ay = lp.y-Math.sin(ang)*10, r = 6;
                     let arrEl = document.createElementNS(svgNS,'polygon');
                     arrEl.setAttribute('points', [[lp.x,lp.y],[ax+Math.sin(ang)*r,ay-Math.cos(ang)*r],[ax-Math.sin(ang)*r,ay+Math.cos(ang)*r]].map(p=>p.join(',')).join(' '));
-                    arrEl.setAttribute('fill', isEd ? '#2196f3' : 'rgba(33,150,243,0.5)');
-                    arrEl.style.pointerEvents = 'none';
-                    svgEl.appendChild(arrEl);
+                    arrEl.setAttribute('fill', color); arrEl.setAttribute('fill-opacity', isEd ? '1' : '0.5');
+                    arrEl.style.pointerEvents = 'none'; svgEl.appendChild(arrEl);
                 }
-                // Snap-Ring um Startpunkt anzeigen (wenn ≥2 Punkte im Edit-Modus)
                 if (isEd && absPts.length >= 2) {
                     let snapR = document.createElementNS(svgNS, 'circle');
                     snapR.setAttribute('cx', absPts[0].x); snapR.setAttribute('cy', absPts[0].y);
                     snapR.setAttribute('r', '20'); snapR.setAttribute('fill', 'rgba(76,175,80,0.12)');
-                    snapR.setAttribute('stroke', '#4caf50'); snapR.setAttribute('stroke-width', '1.5');
-                    snapR.setAttribute('stroke-dasharray', '4 3');
-                    snapR.style.pointerEvents = 'none';
-                    svgEl.appendChild(snapR);
+                    snapR.setAttribute('stroke', '#4caf50'); snapR.setAttribute('stroke-width', '1.5'); snapR.setAttribute('stroke-dasharray', '4 3');
+                    snapR.style.pointerEvents = 'none'; svgEl.appendChild(snapR);
                 }
-                // Wegpunkt-Kreise
                 absPts.forEach((ap, i) => {
                     let c = document.createElementNS(svgNS, 'circle');
-                    c.setAttribute('cx', ap.x); c.setAttribute('cy', ap.y);
-                    c.setAttribute('r', isEd ? '8' : '4');
-                    c.setAttribute('fill', i===0 ? '#4caf50' : (i===absPts.length-1 ? '#ff5722' : (isEd ? '#2196f3' : 'rgba(33,150,243,0.55)')));
+                    c.setAttribute('cx', ap.x); c.setAttribute('cy', ap.y); c.setAttribute('r', isEd ? '8' : '4');
+                    c.setAttribute('fill', i===0 ? '#4caf50' : (i===absPts.length-1 ? '#ff5722' : color));
+                    c.setAttribute('fill-opacity', isEd ? '1' : '0.55');
                     c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '1.5');
-                    c.dataset.wpIndex = String(i); // Für Snap-Erkennung im Capture-Handler
+                    c.dataset.wpIndex = String(i);
                     if (isEd) {
-                        // Startpunkt: Cursor auf Crosshair (signalisiert "hier klicken zum Schließen")
-                        c.style.cursor = i === 0 && obj.waypoints.length >= 2 ? 'crosshair' : 'grab';
-                        // Rechtsklick → Punkt löschen
-                        c.addEventListener('contextmenu', ev => {
-                            ev.preventDefault(); ev.stopPropagation();
-                            obj.waypoints.splice(i, 1);
-                            window._renderPathOverlay();
-                        });
-                        if (i === 0 && obj.waypoints.length >= 2) {
-                            // Startpunkt: mousedown schließt Pfad und stoppt Bubbling
+                        c.style.cursor = i === 0 && pts.length >= 2 ? 'crosshair' : 'grab';
+                        c.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); pts.splice(i, 1); window._renderPathOverlay(); });
+                        if (i === 0 && pts.length >= 2) {
                             c.addEventListener('mousedown', ev => {
                                 if (ev.button !== 0) return;
                                 ev.stopPropagation(); ev.preventDefault();
-                                obj.pathLoop = true; obj.pathEnabled = true;
+                                pathSrc.pathLoop = true; pathSrc.pathEnabled = true;
                                 let lChk = document.getElementById('path-loop-chk');
                                 if (lChk) lChk.checked = true;
                                 window._stopPathEdit();
                             });
                         } else {
-                            // Andere Punkte: Drag zum Verschieben
                             c.addEventListener('mousedown', ev => {
                                 if (ev.button !== 0) return;
                                 ev.stopPropagation(); ev.preventDefault();
                                 c.style.cursor = 'grabbing';
-                                let onMove = mv => {
-                                    let loc = _canvasToLocal(obj, mv.clientX, mv.clientY);
-                                    obj.waypoints[i].x = loc.x; obj.waypoints[i].y = loc.y;
-                                    window._renderPathOverlay();
-                                };
+                                let onMove = mv => { let loc = _canvasToLocal(obj, mv.clientX, mv.clientY); pts[i].x = loc.x; pts[i].y = loc.y; window._renderPathOverlay(); };
                                 let onUp = () => { c.style.cursor='grab'; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-                                document.addEventListener('mousemove', onMove);
-                                document.addEventListener('mouseup', onUp);
+                                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
                             });
                         }
                     }
                     svgEl.appendChild(c);
+                    // Greifer-Aktion und Pause anzeigen (im Edit-Modus: klickbare Badges; sonst: kleine Icons)
+                    const PAUSE_PRESETS = [0, 0.5, 1, 2, 3, 5];
+                    let gripState = pts[i].grip || null;
+                    let pauseVal = pts[i].pause || 0;
+                    if (isEd) {
+                        // Greifer-Badge (links)
+                        let gColor = gripState === 'grab' ? '#4caf50' : (gripState === 'release' ? '#ff9800' : '#555');
+                        let gSymbol = gripState === 'grab' ? '✊' : (gripState === 'release' ? '🖐' : '○');
+                        let gBg = document.createElementNS(svgNS, 'rect');
+                        gBg.setAttribute('x', ap.x - 22); gBg.setAttribute('y', ap.y - 30);
+                        gBg.setAttribute('width', '20'); gBg.setAttribute('height', '16'); gBg.setAttribute('rx', '4');
+                        gBg.setAttribute('fill', gripState === 'grab' ? 'rgba(76,175,80,0.25)' : (gripState === 'release' ? 'rgba(255,152,0,0.25)' : '#2a2a2a'));
+                        gBg.setAttribute('stroke', gColor); gBg.setAttribute('stroke-width', '1'); gBg.style.cursor = 'pointer';
+                        let gTxt = document.createElementNS(svgNS, 'text');
+                        gTxt.setAttribute('x', ap.x - 12); gTxt.setAttribute('y', ap.y - 18);
+                        gTxt.setAttribute('text-anchor', 'middle'); gTxt.setAttribute('fill', gColor); gTxt.setAttribute('font-size', '11');
+                        gTxt.style.pointerEvents = 'none'; gTxt.textContent = gSymbol;
+                        let gGrp = document.createElementNS(svgNS, 'g'); gGrp.style.cursor = 'pointer';
+                        gGrp.appendChild(gBg); gGrp.appendChild(gTxt);
+                        gBg.addEventListener('mousedown', ev => {
+                            if (ev.button !== 0) return;
+                            ev.stopPropagation(); ev.preventDefault();
+                            const STATES = [null, 'grab', 'release'];
+                            let ci = STATES.indexOf(pts[i].grip || null);
+                            let next = STATES[(ci + 1) % 3];
+                            if (next) pts[i].grip = next; else delete pts[i].grip;
+                            window._renderPathOverlay();
+                        });
+                        svgEl.appendChild(gGrp);
+                        // Pause-Badge (rechts)
+                        let pColor = pauseVal > 0 ? '#00bcd4' : '#555';
+                        let pSymbol = pauseVal > 0 ? pauseVal + 's' : '⏸';
+                        let pBg = document.createElementNS(svgNS, 'rect');
+                        pBg.setAttribute('x', ap.x + 2); pBg.setAttribute('y', ap.y - 30);
+                        pBg.setAttribute('width', '24'); pBg.setAttribute('height', '16'); pBg.setAttribute('rx', '4');
+                        pBg.setAttribute('fill', pauseVal > 0 ? 'rgba(0,188,212,0.25)' : '#2a2a2a');
+                        pBg.setAttribute('stroke', pColor); pBg.setAttribute('stroke-width', '1'); pBg.style.cursor = 'pointer';
+                        let pTxt = document.createElementNS(svgNS, 'text');
+                        pTxt.setAttribute('x', ap.x + 14); pTxt.setAttribute('y', ap.y - 18);
+                        pTxt.setAttribute('text-anchor', 'middle'); pTxt.setAttribute('fill', pColor);
+                        pTxt.setAttribute('font-size', pauseVal > 0 ? '8' : '10');
+                        pTxt.style.pointerEvents = 'none'; pTxt.textContent = pSymbol;
+                        let pGrp = document.createElementNS(svgNS, 'g'); pGrp.style.cursor = 'pointer';
+                        pGrp.appendChild(pBg); pGrp.appendChild(pTxt);
+                        pBg.addEventListener('mousedown', ev => {
+                            if (ev.button !== 0) return;
+                            ev.stopPropagation(); ev.preventDefault();
+                            let ci = PAUSE_PRESETS.indexOf(pts[i].pause || 0);
+                            let next = PAUSE_PRESETS[(ci < 0 ? 1 : (ci + 1) % PAUSE_PRESETS.length)];
+                            if (next > 0) pts[i].pause = next; else delete pts[i].pause;
+                            window._renderPathOverlay();
+                        });
+                        svgEl.appendChild(pGrp);
+                    } else {
+                        // Kompakte Anzeige außerhalb Edit-Modus
+                        if (gripState) {
+                            let gColor = gripState === 'grab' ? '#4caf50' : '#ff9800';
+                            let gIco = document.createElementNS(svgNS, 'text');
+                            gIco.setAttribute('x', pauseVal > 0 ? ap.x - 5 : ap.x); gIco.setAttribute('y', ap.y - 8);
+                            gIco.setAttribute('text-anchor', 'middle'); gIco.setAttribute('fill', gColor);
+                            gIco.setAttribute('font-size', '9'); gIco.setAttribute('fill-opacity', '0.7');
+                            gIco.style.pointerEvents = 'none';
+                            gIco.textContent = gripState === 'grab' ? '✊' : '🖐';
+                            svgEl.appendChild(gIco);
+                        }
+                        if (pauseVal > 0) {
+                            let pIco = document.createElementNS(svgNS, 'text');
+                            pIco.setAttribute('x', gripState ? ap.x + 8 : ap.x); pIco.setAttribute('y', ap.y - 8);
+                            pIco.setAttribute('text-anchor', 'middle'); pIco.setAttribute('fill', '#00bcd4');
+                            pIco.setAttribute('font-size', '8'); pIco.setAttribute('fill-opacity', '0.7');
+                            pIco.style.pointerEvents = 'none'; pIco.textContent = pauseVal + 's';
+                            svgEl.appendChild(pIco);
+                        }
+                    }
                     if (isEd) {
                         let txt = document.createElementNS(svgNS,'text');
                         txt.setAttribute('x', ap.x+10); txt.setAttribute('y', ap.y+4);
                         txt.setAttribute('fill','#fff'); txt.setAttribute('font-size','9');
-                        txt.style.pointerEvents = 'none';
-                        txt.textContent = i+1;
+                        txt.style.pointerEvents = 'none'; txt.textContent = i+1;
                         svgEl.appendChild(txt);
                     }
                 });
+            };
+            factoryObjects.forEach(obj => {
+                if (obj.namedPaths && obj.namedPaths.length > 0) {
+                    obj.namedPaths.forEach((path, pathIdx) => {
+                        if (!path.waypoints || path.waypoints.length < 1) return;
+                        let color = PATH_COLORS[pathIdx % PATH_COLORS.length];
+                        let isEd = (window.pathEditingObj === obj && window.pathEditingPathIdx === pathIdx);
+                        _drawSinglePath(obj, path.waypoints, path, color, isEd);
+                    });
+                } else {
+                    if (!obj.waypoints || obj.waypoints.length < 1) return;
+                    let isEd = (window.pathEditingObj === obj && (window.pathEditingPathIdx === null || window.pathEditingPathIdx === undefined));
+                    _drawSinglePath(obj, obj.waypoints, obj, '#2196f3', isEd);
+                }
             });
         };
         // Pfad-Punkte setzen: capturing mousedown auf factoryScrollArea
         // → feuert VOR Drag/Selektion-Handlers; blockiert alles andere im Edit-Modus
         factoryScrollArea.addEventListener('mousedown', function(ev) {
             if (!window.pathEditingObj || ev.button !== 0) return;
-            // Alle SVG-Kreise des Pfad-SVGs bekommen ihren eigenen Handler → hier nicht eingreifen
-            if (ev.target && ev.target.tagName === 'circle' && ev.target.closest && ev.target.closest('#factory-path-svg')) return;
+            // SVG-Elemente mit eigenen Handlern auslassen (Kreise = Wegpunkte, Rects = Greifer-Badges)
+            if (ev.target && ev.target.closest && ev.target.closest('#factory-path-svg')) {
+                let tag = ev.target.tagName.toLowerCase();
+                if (tag === 'circle' || tag === 'rect') return;
+            }
             let obj = window.pathEditingObj;
+            let src = window._pathEditSrc();
             let loc = _canvasToLocal(obj, ev.clientX, ev.clientY);
             // Koordinaten-Snap: Klick nahe Startpunkt (aber nicht direkt auf den Kreis)
-            if (obj.waypoints.length >= 2) {
-                let p0 = obj.waypoints[0];
+            if (src.waypoints && src.waypoints.length >= 2) {
+                let p0 = src.waypoints[0];
                 let snapDist = 20 / (factoryScale || 1);
                 if (Math.sqrt((loc.x-p0.x)**2 + (loc.y-p0.y)**2) < snapDist) {
                     ev.stopPropagation(); ev.preventDefault();
-                    obj.pathLoop = true; obj.pathEnabled = true;
+                    src.pathLoop = true; src.pathEnabled = true;
                     let lChk = document.getElementById('path-loop-chk');
                     if (lChk) lChk.checked = true;
                     window._stopPathEdit();
@@ -10267,15 +10470,18 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             ev.stopPropagation();
             ev.preventDefault();
-            // Reichweite begrenzen: Punkt darf nicht außerhalb des Arm-Radius liegen
-            let maxR = (obj.arm1Len || 80) + (obj.arm2Len || 60) - 1;
-            let minR = Math.abs((obj.arm1Len || 80) - (obj.arm2Len || 60)) + 2;
-            let dist = Math.sqrt(loc.x * loc.x + loc.y * loc.y);
-            if (dist > 0.5) {
-                if (dist > maxR) { let f = maxR / dist; loc.x = Math.round(loc.x * f); loc.y = Math.round(loc.y * f); }
-                else if (dist < minR) { let f = minR / dist; loc.x = Math.round(loc.x * f); loc.y = Math.round(loc.y * f); }
+            // Reichweite begrenzen: Punkt darf nicht außerhalb des Arm-Radius liegen (nicht für worker_2d)
+            if (obj.type !== 'worker_2d') {
+                let maxR = (obj.arm1Len || 80) + (obj.arm2Len || 60) - 1;
+                let minR = Math.abs((obj.arm1Len || 80) - (obj.arm2Len || 60)) + 2;
+                let dist = Math.sqrt(loc.x * loc.x + loc.y * loc.y);
+                if (dist > 0.5) {
+                    if (dist > maxR) { let f = maxR / dist; loc.x = Math.round(loc.x * f); loc.y = Math.round(loc.y * f); }
+                    else if (dist < minR) { let f = minR / dist; loc.x = Math.round(loc.x * f); loc.y = Math.round(loc.y * f); }
+                }
             }
-            obj.waypoints.push(loc);
+            if (!src.waypoints) src.waypoints = [];
+            src.waypoints.push(loc);
             window._renderPathOverlay();
         }, true); // capture=true → feuert zuerst
         let _pinDragActive = null;
@@ -11728,22 +11934,49 @@ You must output exactly this JSON format. The logic code goes as a single string
                         transition: background 0.1s, border-color 0.1s;
                         display: flex; justify-content: center; align-items: center;
                     }
-                    /* Alarm-Flackern beim Durchbrechen */
                     .f2d-light-curtain.broken {
-                        background: rgba(255, 0, 0, 0.6); 
+                        background: rgba(255, 0, 0, 0.6);
                         border-left-color: #ff1744;
                         border-right-color: #ff1744;
+                        box-shadow: inset 0 0 15px rgba(255,0,0,0.8), 0 0 15px rgba(255,0,0,0.8);
+                    }
+                    /* Draufsicht: Sender/Empfänger oben/unten, Strahlen senkrecht */
+                    .f2d-light-curtain.f2d-lc-top {
+                        border-left: none; border-right: none;
+                        border-top: 8px solid #212121;
+                        border-bottom: 8px solid #212121;
+                        background: repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(255,0,0,0.3) 10px, rgba(255,0,0,0.3) 12px);
+                    }
+                    .f2d-light-curtain.f2d-lc-top.broken {
+                        background: rgba(255,0,0,0.6);
+                        border-top-color: #ff1744;
+                        border-bottom-color: #ff1744;
                         box-shadow: inset 0 0 15px rgba(255,0,0,0.8), 0 0 15px rgba(255,0,0,0.8);
                     }
                 `,
                 build: function(obj, el, var1) {
                     obj.linkedVar = var1; obj.width = 100; obj.height = 60;
-                    el.className = 'f2d-obj f2d-light-curtain';
+                    el.className = 'f2d-obj f2d-light-curtain' + (obj.topView ? ' f2d-lc-top' : '');
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                     let label = document.createElement('div'); label.className = 'f2d-label'; label.style.top = '-20px'; label.textContent = var1; el.appendChild(label);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                     let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
-                    obj.useCollision = false; // Licht ist physisch durchlässig!
+                    obj.useCollision = false;
+                },
+                contextMenu: function(obj, ctxMenu, saveCallback) {
+                    let sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #444;margin:4px 0;'; ctxMenu.appendChild(sep);
+                    let btn = document.createElement('div'); btn.className = 'ctx-item';
+                    btn.textContent = obj.topView ? '🔄 Zur Seitenansicht wechseln' : '🔄 Zur Draufsicht wechseln';
+                    btn.onclick = () => {
+                        obj.topView = !obj.topView;
+                        obj.el.classList.toggle('f2d-lc-top', obj.topView);
+                        saveCallback(); ctxMenu.style.display = 'none';
+                    };
+                    ctxMenu.appendChild(btn);
+                },
+                onLoadState: function(obj, savedData) {
+                    obj.topView = savedData.topView || false;
+                    if (obj.el) obj.el.classList.toggle('f2d-lc-top', obj.topView);
                 },
                 animate: function(obj, spsState) {
                     let isBroken = false;
@@ -11772,6 +12005,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 let cItem = { x: cyl.x, y: cyl.y, width: cyl.width, height: cyl.height, isMetallic: true };
                                 if (isBlockInLocalRect(cItem, obj, lx, ly, lw, lh)) isBroken = true;
                             }
+                        }
+                        // Humanoider Roboter (worker_2d) als Körper-Hitbox
+                        if (cyl.type === 'worker_2d') {
+                            let ax = cyl.x + (cyl.targetX || 0), ay = cyl.y + (cyl.targetY || 0);
+                            let workerBox = { x: ax - 15, y: ay - 15, width: 30, height: 30 };
+                            if (isBlockInLocalRect(workerBox, obj, lx, ly, lw, lh)) isBroken = true;
                         }
                     });
                     // DIE FAIL-SAFE LOGIK
@@ -12846,43 +13085,54 @@ You must output exactly this JSON format. The logic code goes as a single string
                 },
                 animate(obj, spsState) {
                     let speed = (obj.pathSpeed || 2.5) * (window.simSpeed || 1);
-                    if (obj.pathEnabled && obj.waypoints && obj.waypoints.length >= 2) {
+                    if (obj.namedPaths && obj.namedPaths.length > 0) {
+                        let activePath = null;
+                        for (let i = 0; i < obj.namedPaths.length; i++) {
+                            let p = obj.namedPaths[i];
+                            if (p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar])) { activePath = p; break; }
+                        }
+                        if (activePath) window._robotFollowPath(obj, speed, activePath);
+                        else if (obj._pathGrip !== true) obj._pathGrip = null;
+                    } else if (obj.pathEnabled && obj.waypoints && obj.waypoints.length >= 2) {
                         let pathActive = !obj.linkedVarEnable || !!spsState[obj.linkedVarEnable];
                         if (pathActive) window._robotFollowPath(obj, speed);
+                        else if (obj._pathGrip !== true) obj._pathGrip = null;
                     } else {
+                        obj._pathGrip = null;
                         if (spsState[obj.linkedVarX_Plus])  obj.targetX += speed;
                         if (spsState[obj.linkedVarX_Minus]) obj.targetX -= speed;
                         if (spsState[obj.linkedVarY_Plus])  obj.targetY += speed;
                         if (spsState[obj.linkedVarY_Minus]) obj.targetY -= speed;
                     }
                     window._robotUpdateIK(obj);
-                    let grabNow = !!spsState[obj.linkedVarGrab];
+                    let grabNow = obj._pathGrip === true ? true : (obj._pathGrip === false ? false : !!spsState[obj.linkedVarGrab]);
                     obj.isGrabbing = grabNow;
                     if (obj._svgGripG) obj._svgGripG.classList.toggle('closed', grabNow);
+                    let gx = obj.x + (obj._gripperX || 0), gy = obj.y + (obj._gripperY || 0);
                     if (obj.grabbedItem && (!grabNow || !factoryItems.includes(obj.grabbedItem))) {
-                        if (obj.grabbedItem) obj.grabbedItem.useGravity = true;
+                        obj.grabbedItem.useGravity = true;
                         obj.grabbedItem = null;
                     }
-                    if (obj.grabbedItem) {
-                        let gx = obj.x + (obj._gripperX || 0), gy = obj.y + (obj._gripperY || 0);
-                        obj.grabbedItem.x = gx - obj.grabbedItem.width / 2;
-                        obj.grabbedItem.y = gy - obj.grabbedItem.height / 2;
-                        updateObjTransform(obj.grabbedItem);
+                    if (grabNow && !obj.grabbedItem) {
+                        for (let i = 0; i < factoryItems.length; i++) {
+                            let it = factoryItems[i];
+                            let dx = (it.x + it.width / 2) - gx, dy = (it.y + (it.height || it.width) / 2) - gy;
+                            if (Math.sqrt(dx * dx + dy * dy) < 35) {
+                                obj.grabbedItem = it;
+                                it.useGravity = false;
+                                it.vx = 0; it.vy = 0;
+                                break;
+                            }
+                        }
                     }
-                },
-                physics(obj, item, isActive) {
-                    if (!obj.isGrabbing || obj.grabbedItem) return;
-                    let gx = obj.x + (obj._gripperX || 0), gy = obj.y + (obj._gripperY || 0);
-                    let dx = (item.x + item.width / 2) - gx, dy = (item.y + item.height / 2) - gy;
-                    if (Math.sqrt(dx * dx + dy * dy) < 22) {
-                        obj.grabbedItem = item;
-                        item.useGravity = false;
-                        item.vx = 0; item.vy = 0;
+                    if (obj.grabbedItem) {
+                        obj.grabbedItem.x = gx - obj.grabbedItem.width / 2;
+                        obj.grabbedItem.y = gy - (obj.grabbedItem.height || obj.grabbedItem.width) / 2;
+                        updateObjTransform(obj.grabbedItem);
                     }
                 },
                 contextMenu(obj, ctxMenu, saveCallback) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
-                    // Info-Box
                     let infoToggle = document.createElement('div'); infoToggle.style.padding = '4px 15px'; infoToggle.style.cursor = 'pointer'; infoToggle.onclick = e => { e.stopPropagation(); infoBox.style.display = infoBox.style.display === 'none' ? 'block' : 'none'; };
                     infoToggle.innerHTML = `<span style="color:#ffb300;font-size:10px;">ℹ️ Variablen-Hilfe anzeigen</span>`;
                     ctxMenu.appendChild(infoToggle);
@@ -12908,9 +13158,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     createVarSel('Y+ (Abwärts)', 'linkedVarY_Plus');
                     createVarSel('Y- (Aufwärts)', 'linkedVarY_Minus');
                     createVarSel('Greifer (Greifen/Halten)', 'linkedVarGrab');
-                    createVarSel('Aktivierung Pfadmodus (optional)', 'linkedVarEnable');
                     let sep2 = document.createElement('div'); sep2.style.borderTop = '1px solid #555'; sep2.style.margin = '5px 0'; ctxMenu.appendChild(sep2);
-                    // Path speed
                     let speedWrap = document.createElement('div'); speedWrap.style.padding = '3px 15px'; speedWrap.onclick = e => e.stopPropagation();
                     speedWrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Pfadgeschwindigkeit (px/Frame)</div>`;
                     let speedInp = document.createElement('input'); speedInp.type = 'number'; speedInp.min = '0.1'; speedInp.max = '20'; speedInp.step = '0.1'; speedInp.value = obj.pathSpeed || 2.5;
@@ -12927,17 +13175,377 @@ You must output exactly this JSON format. The logic code goes as a single string
                     inp1.onchange = e => { obj.arm1Len = +e.target.value || 80; if (obj._svgReach) obj._svgReach.setAttribute('r', String(obj.arm1Len + (obj.arm2Len||60))); saveCallback(); };
                     inp2.onchange = e => { obj.arm2Len = +e.target.value || 60; if (obj._svgReach) obj._svgReach.setAttribute('r', String((obj.arm1Len||80) + obj.arm2Len)); saveCallback(); };
                     lenWrap.appendChild(inp1); lenWrap.appendChild(inp2); ctxMenu.appendChild(lenWrap);
-                    let pathToggle = document.createElement('div'); pathToggle.className = 'ctx-item';
-                    pathToggle.textContent = obj.pathEnabled ? '⏹ Pfadverfolgung deaktivieren' : '▶ Pfadverfolgung aktivieren';
-                    pathToggle.onclick = () => { obj.pathEnabled = !obj.pathEnabled; saveCallback(); };
-                    ctxMenu.appendChild(pathToggle);
-                    let pathEdit = document.createElement('div'); pathEdit.className = 'ctx-item';
-                    pathEdit.textContent = '✏️ Pfad bearbeiten';
-                    pathEdit.onclick = () => {
-                        document.getElementById('factory-context-menu').style.display = 'none';
-                        window._startPathEdit(obj);
+                    let sep3 = document.createElement('div'); sep3.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep3);
+                    const PATH_COLORS_CTX = ['#2196f3','#4caf50','#ff9800','#e91e63','#9c27b0','#00bcd4'];
+                    if (!obj.namedPaths || obj.namedPaths.length === 0) {
+                        createVarSel('Aktivierung Pfadmodus (optional)', 'linkedVarEnable');
+                        let pathToggle = document.createElement('div'); pathToggle.className = 'ctx-item';
+                        pathToggle.textContent = obj.pathEnabled ? '⏹ Pfadverfolgung deaktivieren' : '▶ Pfadverfolgung aktivieren';
+                        pathToggle.onclick = () => { obj.pathEnabled = !obj.pathEnabled; saveCallback(); };
+                        ctxMenu.appendChild(pathToggle);
+                        let pathEdit = document.createElement('div'); pathEdit.className = 'ctx-item';
+                        pathEdit.textContent = '✏️ Pfad bearbeiten';
+                        pathEdit.onclick = () => { document.getElementById('factory-context-menu').style.display = 'none'; window._startPathEdit(obj, null); };
+                        ctxMenu.appendChild(pathEdit);
+                        let sep4 = document.createElement('div'); sep4.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep4);
+                        let activateBtn = document.createElement('div'); activateBtn.className = 'ctx-item'; activateBtn.style.color = '#81c784';
+                        activateBtn.textContent = '⬆ Mehrpfad-Modus aktivieren';
+                        activateBtn.onclick = () => {
+                            obj.namedPaths = [];
+                            if (obj.waypoints && obj.waypoints.length > 0) {
+                                obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad 1', waypoints: obj.waypoints, pathMode: obj.pathMode || 'linear', pathLoop: obj.pathLoop || false, enableVar: obj.linkedVarEnable || '', _pathT: 0 });
+                                obj.waypoints = null; obj.pathEnabled = false;
+                            } else {
+                                obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad 1', waypoints: [], pathMode: 'linear', pathLoop: false, enableVar: '', _pathT: 0 });
+                            }
+                            saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(activateBtn);
+                    } else {
+                        let pathsHeader = document.createElement('div'); pathsHeader.style.cssText = 'padding:0 10px 3px;color:#4caf50;font-size:10px;font-weight:bold;'; pathsHeader.textContent = '🗂 Pfade (Mehrpfad-Modus):'; ctxMenu.appendChild(pathsHeader);
+                        obj.namedPaths.forEach((path, idx) => {
+                            let color = PATH_COLORS_CTX[idx % PATH_COLORS_CTX.length];
+                            let pRow = document.createElement('div'); pRow.style.cssText = 'padding:3px 15px;display:flex;align-items:center;gap:3px;'; pRow.onclick = e => e.stopPropagation();
+                            let colorDot = document.createElement('span'); colorDot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;`;
+                            let nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.value = path.name || ('Pfad ' + (idx+1));
+                            nameInp.style.cssText = `width:68px;padding:2px 4px;background:#1e1e1e;color:${color};border:1px solid #555;border-radius:3px;font-size:10px;font-weight:bold;`;
+                            nameInp.onclick = e => e.stopPropagation(); nameInp.onchange = e => { path.name = e.target.value; saveCallback(); };
+                            let varSel = document.createElement('select');
+                            varSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                            let optImmer = document.createElement('option'); optImmer.value = ''; optImmer.textContent = '-- immer --'; varSel.appendChild(optImmer);
+                            globalOutputs.forEach(o => { let op = document.createElement('option'); op.value = o; op.textContent = o; if (o === path.enableVar) op.selected = true; varSel.appendChild(op); });
+                            varSel.onclick = e => e.stopPropagation(); varSel.onchange = e => { path.enableVar = e.target.value || ''; saveCallback(); };
+                            let editBtn = document.createElement('button'); editBtn.textContent = '✏️'; editBtn.title = 'Pfad bearbeiten';
+                            editBtn.style.cssText = 'background:#1565c0;color:#fff;border:none;border-radius:3px;padding:2px 4px;cursor:pointer;font-size:10px;';
+                            editBtn.onclick = e => { e.stopPropagation(); document.getElementById('factory-context-menu').style.display = 'none'; window._startPathEdit(obj, idx); };
+                            let delBtn = document.createElement('button'); delBtn.textContent = '🗑'; delBtn.title = 'Löschen';
+                            delBtn.style.cssText = 'background:#c62828;color:#fff;border:none;border-radius:3px;padding:2px 4px;cursor:pointer;font-size:10px;';
+                            delBtn.onclick = e => { e.stopPropagation(); obj.namedPaths.splice(idx, 1); saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                            pRow.appendChild(colorDot); pRow.appendChild(nameInp); pRow.appendChild(varSel); pRow.appendChild(editBtn); pRow.appendChild(delBtn);
+                            ctxMenu.appendChild(pRow);
+                        });
+                        let addBtn = document.createElement('div'); addBtn.className = 'ctx-item'; addBtn.style.color = '#81c784';
+                        addBtn.textContent = '➕ Pfad hinzufügen';
+                        addBtn.onclick = () => {
+                            let ni = obj.namedPaths.length + 1;
+                            obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad ' + ni, waypoints: [], pathMode: 'linear', pathLoop: false, enableVar: '', _pathT: 0 });
+                            saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(addBtn);
+                        let deactBtn = document.createElement('div'); deactBtn.className = 'ctx-item'; deactBtn.style.color = '#ff8a65';
+                        deactBtn.textContent = '⬇ Einpfad-Modus (zurück)';
+                        deactBtn.onclick = () => {
+                            if (obj.namedPaths.length > 0) {
+                                let first = obj.namedPaths[0];
+                                obj.waypoints = first.waypoints || []; obj.pathMode = first.pathMode || 'linear';
+                                obj.pathLoop = first.pathLoop || false; obj.linkedVarEnable = first.enableVar || null;
+                                obj.pathEnabled = obj.waypoints.length >= 2;
+                            }
+                            obj.namedPaths = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(deactBtn);
+                    }
+                }
+            },
+            // =========================================================
+            // 👷 ARBEITER (Draufsicht – Walk & Carry Aktor)
+            // =========================================================
+            'worker_2d': {
+                i18n: { de: { name: 'Humanoider Roboter', desc: 'Mensch (Draufsicht) – Pfadverfolgung und Greifen' }, en: { name: 'Humanoid Robot', desc: 'Human (top view) – path following and item picking' } },
+                meta: { icon: '👷' },
+                menuTarget: '#menu-aktoren',
+                insertBefore: '#menu-act-handling-anchor',
+                directSpawn: true,
+                noRotate: true,
+                menuHtml: `<div onclick="addFactoryDevice('worker_2d')">👷 <span data-i18n="plug_worker_2d_name">Humanoider Roboter</span></div>`,
+                css: `
+                    .f2d-worker { position:absolute; overflow:visible; z-index:15; cursor:move; }
+                    .f2d-worker > svg { overflow:visible; position:absolute; top:0; left:0; }
+                `,
+                build(obj, el) {
+                    obj.targetX = 0; obj.targetY = 0;
+                    obj._facingAngle = 0;
+                    obj.isGrabbing = false; obj.grabbedItem = null;
+                    obj.width = 1; obj.height = 1;
+                    obj.useCollision = false;
+                    el.className = 'f2d-obj f2d-worker';
+                    el.style.width = '1px'; el.style.height = '1px';
+
+                    let svgNS = 'http://www.w3.org/2000/svg';
+                    let svg = document.createElementNS(svgNS, 'svg');
+                    svg.setAttribute('width','1'); svg.setAttribute('height','1');
+                    svg.style.cssText = 'overflow:visible;position:absolute;top:0;left:0;';
+
+                    // Drop shadow
+                    let shadow = document.createElementNS(svgNS, 'ellipse');
+                    shadow.setAttribute('cx','2'); shadow.setAttribute('cy','6');
+                    shadow.setAttribute('rx','18'); shadow.setAttribute('ry','12');
+                    shadow.setAttribute('fill','rgba(0,0,0,0.22)');
+                    svg.appendChild(shadow);
+
+                    // Body group — rotates to face direction of travel
+                    let bodyG = document.createElementNS(svgNS, 'g');
+
+                    // Torso (dark work jacket)
+                    let torso = document.createElementNS(svgNS, 'ellipse');
+                    torso.setAttribute('cx','-3'); torso.setAttribute('cy','0');
+                    torso.setAttribute('rx','11'); torso.setAttribute('ry','13');
+                    torso.setAttribute('fill','#0d47a1'); torso.setAttribute('stroke','#1565c0'); torso.setAttribute('stroke-width','1');
+
+                    // Left arm
+                    let lArm = document.createElementNS(svgNS, 'ellipse');
+                    lArm.setAttribute('cx','-4'); lArm.setAttribute('cy','-17');
+                    lArm.setAttribute('rx','5'); lArm.setAttribute('ry','7');
+                    lArm.setAttribute('fill','#1565c0');
+
+                    // Right arm
+                    let rArm = document.createElementNS(svgNS, 'ellipse');
+                    rArm.setAttribute('cx','-4'); rArm.setAttribute('cy','17');
+                    rArm.setAttribute('rx','5'); rArm.setAttribute('ry','7');
+                    rArm.setAttribute('fill','#1565c0');
+
+                    // Neck/face skin
+                    let neck = document.createElementNS(svgNS, 'circle');
+                    neck.setAttribute('cx','5'); neck.setAttribute('cy','0');
+                    neck.setAttribute('r','5'); neck.setAttribute('fill','#ffcc80');
+
+                    // Hard-hat brim (slightly larger, translucent)
+                    let hatColor = obj.color || '#ffb300';
+                    let hatBrim = document.createElementNS(svgNS, 'circle');
+                    hatBrim.setAttribute('cx','8'); hatBrim.setAttribute('cy','0');
+                    hatBrim.setAttribute('r','11'); hatBrim.setAttribute('fill', hatColor);
+                    hatBrim.setAttribute('opacity','0.55');
+
+                    // Hard-hat dome
+                    let hat = document.createElementNS(svgNS, 'circle');
+                    hat.setAttribute('cx','8'); hat.setAttribute('cy','0');
+                    hat.setAttribute('r','9'); hat.setAttribute('fill', hatColor);
+                    hat.setAttribute('stroke','rgba(0,0,0,0.25)'); hat.setAttribute('stroke-width','1.2');
+
+                    // Hat centre ridge line
+                    let hatRidge = document.createElementNS(svgNS, 'line');
+                    hatRidge.setAttribute('x1','1'); hatRidge.setAttribute('y1','0');
+                    hatRidge.setAttribute('x2','15'); hatRidge.setAttribute('y2','0');
+                    hatRidge.setAttribute('stroke','rgba(0,0,0,0.2)'); hatRidge.setAttribute('stroke-width','1.5');
+
+                    // Carry indicator box (in front of hat, shown when holding item)
+                    let carryBox = document.createElementNS(svgNS, 'rect');
+                    carryBox.setAttribute('x','21'); carryBox.setAttribute('y','-6');
+                    carryBox.setAttribute('width','12'); carryBox.setAttribute('height','12');
+                    carryBox.setAttribute('rx','2'); carryBox.setAttribute('fill','#4caf50');
+                    carryBox.setAttribute('stroke','#2e7d32'); carryBox.setAttribute('stroke-width','1');
+                    carryBox.setAttribute('opacity','0');
+
+                    bodyG.appendChild(lArm); bodyG.appendChild(rArm);
+                    bodyG.appendChild(torso); bodyG.appendChild(neck);
+                    bodyG.appendChild(hatBrim); bodyG.appendChild(hat); bodyG.appendChild(hatRidge);
+                    bodyG.appendChild(carryBox);
+                    svg.appendChild(bodyG);
+                    el.appendChild(svg);
+
+                    let label = document.createElement('div');
+                    label.className = 'f2d-label';
+                    label.textContent = '👷 Hum. Roboter';
+                    el.appendChild(label);
+
+                    obj._svgBodyG = bodyG;
+                    obj._svgHat = hat;
+                    obj._svgHatBrim = hatBrim;
+                    obj._svgCarryBox = carryBox;
+                },
+                animate(obj, spsState) {
+                    let speed = (obj.pathSpeed || 2.5) * (window.simSpeed || 1);
+                    let prevAX = obj.x + (obj.targetX || 0);
+                    let prevAY = obj.y + (obj.targetY || 0);
+
+                    if (obj.namedPaths && obj.namedPaths.length > 0) {
+                        let activePath = null;
+                        for (let p of obj.namedPaths) {
+                            if (p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar])) { activePath = p; break; }
+                        }
+                        if (activePath) window._robotFollowPath(obj, speed, activePath);
+                        else if (obj._pathGrip !== true) obj._pathGrip = null;
+                    } else if (obj.pathEnabled && obj.waypoints && obj.waypoints.length >= 2) {
+                        if (!obj.linkedVarEnable || !!spsState[obj.linkedVarEnable]) window._robotFollowPath(obj, speed);
+                        else if (obj._pathGrip !== true) obj._pathGrip = null;
+                    } else {
+                        obj._pathGrip = null;
+                        if (spsState[obj.linkedVarX_Plus])  obj.targetX = (obj.targetX || 0) + speed;
+                        if (spsState[obj.linkedVarX_Minus]) obj.targetX = (obj.targetX || 0) - speed;
+                        if (spsState[obj.linkedVarY_Plus])  obj.targetY = (obj.targetY || 0) + speed;
+                        if (spsState[obj.linkedVarY_Minus]) obj.targetY = (obj.targetY || 0) - speed;
+                    }
+
+                    let ax = obj.x + (obj.targetX || 0);
+                    let ay = obj.y + (obj.targetY || 0);
+
+                    // Track facing direction from movement vector
+                    let dx = ax - prevAX, dy = ay - prevAY;
+                    if (dx * dx + dy * dy > 0.01) obj._facingAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    if (obj._svgBodyG) obj._svgBodyG.setAttribute('transform', `rotate(${(obj._facingAngle || 0).toFixed(1)})`);
+
+                    // Move DOM element to actual world position
+                    obj.el.style.transform = `translate(${ax}px, ${ay}px)`;
+
+                    // Grip state
+                    let grabNow = obj._pathGrip === true ? true : (obj._pathGrip === false ? false : !!spsState[obj.linkedVarGrab]);
+                    obj.isGrabbing = grabNow;
+                    if (obj._svgCarryBox) obj._svgCarryBox.setAttribute('opacity', grabNow ? '1' : '0');
+
+                    if (obj.grabbedItem && (!grabNow || !factoryItems.includes(obj.grabbedItem))) {
+                        obj.grabbedItem.useGravity = true; obj.grabbedItem = null;
+                    }
+                    if (grabNow && !obj.grabbedItem) {
+                        for (let it of factoryItems) {
+                            let ix = it.x + it.width / 2, iy = it.y + (it.height || it.width) / 2;
+                            if ((ix - ax) * (ix - ax) + (iy - ay) * (iy - ay) < 40 * 40) {
+                                obj.grabbedItem = it; it.useGravity = false; it.vx = 0; it.vy = 0; break;
+                            }
+                        }
+                    }
+                    if (obj.grabbedItem) {
+                        obj.grabbedItem.x = ax - obj.grabbedItem.width / 2;
+                        obj.grabbedItem.y = ay - (obj.grabbedItem.height || obj.grabbedItem.width) / 2;
+                        updateObjTransform(obj.grabbedItem);
+                    }
+                },
+                contextMenu(obj, ctxMenu, saveCallback) {
+                    let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
+                    // Info box
+                    let infoToggle = document.createElement('div'); infoToggle.style.padding = '4px 15px'; infoToggle.style.cursor = 'pointer';
+                    infoToggle.onclick = e => { e.stopPropagation(); infoBox.style.display = infoBox.style.display === 'none' ? 'block' : 'none'; };
+                    infoToggle.innerHTML = `<span style="color:#ffb300;font-size:10px;">ℹ️ Variablen-Hilfe anzeigen</span>`;
+                    ctxMenu.appendChild(infoToggle);
+                    let infoBox = document.createElement('div'); infoBox.style.cssText = 'display:none;padding:5px 15px;background:#1a2a3a;margin:0 0 4px;font-size:9.5px;line-height:1.5;'; infoBox.onclick = e => e.stopPropagation();
+                    infoBox.innerHTML = `<div style="color:#ffb300;font-weight:bold;margin-bottom:3px;">Modus 1 – Manuell (SPS-Jogging)</div>
+<div style="color:#aaa;"><b style="color:#fff">X+ / X−</b> → Arbeiter läuft horizontal<br><b style="color:#fff">Y+ / Y−</b> → Arbeiter läuft vertikal<br><b style="color:#fff">Greifen</b> → HIGH = Werkstück aufnehmen</div>
+<div style="color:#ffb300;font-weight:bold;margin:4px 0 2px;">Modus 2 – Pfadverfolgung</div>
+<div style="color:#aaa;">Pfad über Rechtsklick → <i>Pfad bearbeiten</i> festlegen.<br>Wegpunkte können überall gesetzt werden (kein Reichweitenlimit).<br><b style="color:#fff">✊ Greifer-Badge</b> am Wegpunkt → Werkstück aufnehmen/ablegen</div>`;
+                    ctxMenu.appendChild(infoBox);
+
+                    // Hat colour picker
+                    let hatWrap = document.createElement('div'); hatWrap.style.cssText = 'padding:4px 15px;'; hatWrap.onclick = e => e.stopPropagation();
+                    hatWrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:4px;">🪖 Helmfarbe:</div>`;
+                    const HAT_COLORS = ['#ffb300','#ff6f00','#e53935','#ffffff','#1e88e5','#43a047','#6a1b9a'];
+                    let hatPalette = document.createElement('div'); hatPalette.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;';
+                    HAT_COLORS.forEach(hc => {
+                        let btn = document.createElement('div');
+                        btn.style.cssText = `width:20px;height:20px;border-radius:50%;background:${hc};cursor:pointer;border:2px solid ${(obj.color||'#ffb300')===hc?'#fff':'transparent'};box-sizing:border-box;`;
+                        btn.title = hc;
+                        btn.onclick = e => {
+                            e.stopPropagation();
+                            obj.color = hc;
+                            if (obj._svgHat) obj._svgHat.setAttribute('fill', hc);
+                            if (obj._svgHatBrim) obj._svgHatBrim.setAttribute('fill', hc);
+                            hatPalette.querySelectorAll('div').forEach((b,i) => b.style.borderColor = HAT_COLORS[i] === hc ? '#fff' : 'transparent');
+                            saveCallback();
+                        };
+                        hatPalette.appendChild(btn);
+                    });
+                    hatWrap.appendChild(hatPalette); ctxMenu.appendChild(hatWrap);
+
+                    let sep2 = document.createElement('div'); sep2.style.borderTop = '1px solid #555'; sep2.style.margin = '5px 0'; ctxMenu.appendChild(sep2);
+
+                    // Variable selectors
+                    let title = document.createElement('div'); title.style.cssText = 'padding:0 10px 3px;color:#03a9f4;font-size:10px;font-weight:bold;'; title.textContent = '👷 Hum. Roboter – Steuerung (SPS-Ausgänge):'; ctxMenu.appendChild(title);
+                    const createVarSel = (label, propName) => {
+                        let wrap = document.createElement('div'); wrap.style.padding = '2px 15px'; wrap.onclick = e => e.stopPropagation();
+                        wrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:1px;">🔌 ${label}</div>`;
+                        let sel = document.createElement('select');
+                        sel.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;outline:none;cursor:pointer;';
+                        let optN = document.createElement('option'); optN.value = ''; optN.textContent = '-- Keine --'; sel.appendChild(optN);
+                        globalOutputs.forEach(o => { let op = document.createElement('option'); op.value = o; op.textContent = o; if (o === obj[propName]) op.selected = true; sel.appendChild(op); });
+                        sel.onchange = e => { obj[propName] = e.target.value || null; saveCallback(); };
+                        wrap.appendChild(sel); ctxMenu.appendChild(wrap);
                     };
-                    ctxMenu.appendChild(pathEdit);
+                    createVarSel('X+ (Laufen rechts)', 'linkedVarX_Plus');
+                    createVarSel('X- (Laufen links)', 'linkedVarX_Minus');
+                    createVarSel('Y+ (Laufen nach unten)', 'linkedVarY_Plus');
+                    createVarSel('Y- (Laufen nach oben)', 'linkedVarY_Minus');
+                    createVarSel('Greifen / Halten', 'linkedVarGrab');
+
+                    let sep3 = document.createElement('div'); sep3.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep3);
+
+                    // Speed
+                    let speedWrap = document.createElement('div'); speedWrap.style.padding = '3px 15px'; speedWrap.onclick = e => e.stopPropagation();
+                    speedWrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Laufgeschwindigkeit (px/Frame)</div>`;
+                    let speedInp = document.createElement('input'); speedInp.type = 'number'; speedInp.min = '0.1'; speedInp.max = '20'; speedInp.step = '0.1'; speedInp.value = obj.pathSpeed || 2.5;
+                    speedInp.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;box-sizing:border-box;';
+                    speedInp.onclick = e => e.stopPropagation();
+                    speedInp.onchange = e => { obj.pathSpeed = Math.max(0.1, +e.target.value || 2.5); saveCallback(); };
+                    speedWrap.appendChild(speedInp); ctxMenu.appendChild(speedWrap);
+
+                    let sep4 = document.createElement('div'); sep4.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep4);
+                    const PATH_COLORS_CTX = ['#2196f3','#4caf50','#ff9800','#e91e63','#9c27b0','#00bcd4'];
+
+                    if (!obj.namedPaths || obj.namedPaths.length === 0) {
+                        createVarSel('Aktivierung Pfadmodus (optional)', 'linkedVarEnable');
+                        let pathToggle = document.createElement('div'); pathToggle.className = 'ctx-item';
+                        pathToggle.textContent = obj.pathEnabled ? '⏹ Pfadverfolgung deaktivieren' : '▶ Pfadverfolgung aktivieren';
+                        pathToggle.onclick = () => { obj.pathEnabled = !obj.pathEnabled; saveCallback(); };
+                        ctxMenu.appendChild(pathToggle);
+                        let pathEdit = document.createElement('div'); pathEdit.className = 'ctx-item';
+                        pathEdit.textContent = '✏️ Pfad bearbeiten';
+                        pathEdit.onclick = () => { document.getElementById('factory-context-menu').style.display = 'none'; window._startPathEdit(obj, null); };
+                        ctxMenu.appendChild(pathEdit);
+                        let sep5 = document.createElement('div'); sep5.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep5);
+                        let activateBtn = document.createElement('div'); activateBtn.className = 'ctx-item'; activateBtn.style.color = '#81c784';
+                        activateBtn.textContent = '⬆ Mehrpfad-Modus aktivieren';
+                        activateBtn.onclick = () => {
+                            obj.namedPaths = [];
+                            if (obj.waypoints && obj.waypoints.length > 0) {
+                                obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad 1', waypoints: obj.waypoints, pathMode: obj.pathMode || 'linear', pathLoop: obj.pathLoop || false, enableVar: obj.linkedVarEnable || '', _pathT: 0 });
+                                obj.waypoints = null; obj.pathEnabled = false;
+                            } else {
+                                obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad 1', waypoints: [], pathMode: 'linear', pathLoop: false, enableVar: '', _pathT: 0 });
+                            }
+                            saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(activateBtn);
+                    } else {
+                        let pathsHeader = document.createElement('div'); pathsHeader.style.cssText = 'padding:0 10px 3px;color:#4caf50;font-size:10px;font-weight:bold;'; pathsHeader.textContent = '🗂 Pfade (Mehrpfad-Modus):'; ctxMenu.appendChild(pathsHeader);
+                        obj.namedPaths.forEach((path, idx) => {
+                            let color = PATH_COLORS_CTX[idx % PATH_COLORS_CTX.length];
+                            let pRow = document.createElement('div'); pRow.style.cssText = 'padding:3px 15px;display:flex;align-items:center;gap:3px;'; pRow.onclick = e => e.stopPropagation();
+                            let colorDot = document.createElement('span'); colorDot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;`;
+                            let nameInp = document.createElement('input'); nameInp.type = 'text'; nameInp.value = path.name || ('Pfad ' + (idx+1));
+                            nameInp.style.cssText = `width:68px;padding:2px 4px;background:#1e1e1e;color:${color};border:1px solid #555;border-radius:3px;font-size:10px;font-weight:bold;`;
+                            nameInp.onclick = e => e.stopPropagation(); nameInp.onchange = e => { path.name = e.target.value; saveCallback(); };
+                            let varSel = document.createElement('select');
+                            varSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                            let optImmer = document.createElement('option'); optImmer.value = ''; optImmer.textContent = '-- immer --'; varSel.appendChild(optImmer);
+                            globalOutputs.forEach(o => { let op = document.createElement('option'); op.value = o; op.textContent = o; if (o === path.enableVar) op.selected = true; varSel.appendChild(op); });
+                            varSel.onclick = e => e.stopPropagation(); varSel.onchange = e => { path.enableVar = e.target.value || ''; saveCallback(); };
+                            let editBtn = document.createElement('button'); editBtn.textContent = '✏️'; editBtn.title = 'Pfad bearbeiten';
+                            editBtn.style.cssText = 'background:#1565c0;color:#fff;border:none;border-radius:3px;padding:2px 4px;cursor:pointer;font-size:10px;';
+                            editBtn.onclick = e => { e.stopPropagation(); document.getElementById('factory-context-menu').style.display = 'none'; window._startPathEdit(obj, idx); };
+                            let delBtn = document.createElement('button'); delBtn.textContent = '🗑'; delBtn.title = 'Löschen';
+                            delBtn.style.cssText = 'background:#c62828;color:#fff;border:none;border-radius:3px;padding:2px 4px;cursor:pointer;font-size:10px;';
+                            delBtn.onclick = e => { e.stopPropagation(); obj.namedPaths.splice(idx, 1); saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                            pRow.appendChild(colorDot); pRow.appendChild(nameInp); pRow.appendChild(varSel); pRow.appendChild(editBtn); pRow.appendChild(delBtn);
+                            ctxMenu.appendChild(pRow);
+                        });
+                        let addBtn = document.createElement('div'); addBtn.className = 'ctx-item'; addBtn.style.color = '#81c784';
+                        addBtn.textContent = '➕ Pfad hinzufügen';
+                        addBtn.onclick = () => {
+                            let ni = obj.namedPaths.length + 1;
+                            obj.namedPaths.push({ id: 'path-' + Date.now(), name: 'Pfad ' + ni, waypoints: [], pathMode: 'linear', pathLoop: false, enableVar: '', _pathT: 0 });
+                            saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(addBtn);
+                        let deactBtn = document.createElement('div'); deactBtn.className = 'ctx-item'; deactBtn.style.color = '#ff8a65';
+                        deactBtn.textContent = '⬇ Einpfad-Modus (zurück)';
+                        deactBtn.onclick = () => {
+                            if (obj.namedPaths.length > 0) {
+                                let first = obj.namedPaths[0];
+                                obj.waypoints = first.waypoints || []; obj.pathMode = first.pathMode || 'linear';
+                                obj.pathLoop = first.pathLoop || false; obj.linkedVarEnable = first.enableVar || null;
+                                obj.pathEnabled = obj.waypoints.length >= 2;
+                            }
+                            obj.namedPaths = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
+                        };
+                        ctxMenu.appendChild(deactBtn);
+                    }
                 }
             },
 			'hmi_panel': {
@@ -13341,6 +13949,99 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Bottom wall (closes the neck)
                 addRect(0, h/2 - wt/2, neckW, wt);
                 return cells;
+            },
+        },
+        // =========================================================
+        // 🪵 HOLZOBERFLÄCHE (Bodendielen / Holzwand)
+        // =========================================================
+        'holzflaeche': {
+            i18n: {
+                de: { name: 'Holzoberfläche', desc: 'Holzboden oder Holzwand (Dielen-Optik), resizebar' },
+                en: { name: 'Wood Surface',   desc: 'Wooden floor or wall (plank look), resizable' }
+            },
+            meta: { icon: '🪵' },
+            menuTarget: '#menu-struktur',
+            menuHtml: `<div onclick="addFactoryDevice('holzflaeche')">🪵 Holzoberfläche / Dielen</div>`,
+            insertBefore: '#menu-struct-cat-behaelter',
+            directSpawn: true,
+            build(obj, el) {
+                obj.width = obj.width || 150; obj.height = obj.height || 20;
+                el.className = 'f2d-obj f2d-holzflaeche';
+                el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+            },
+        },
+        // =========================================================
+        // 🚧 ZAUN
+        // =========================================================
+        'zaun': {
+            i18n: {
+                de: { name: 'Zaun', desc: 'Metallzaun mit Pfosten (Kollisionselement), resizebar' },
+                en: { name: 'Fence', desc: 'Metal fence with posts (collision element), resizable' }
+            },
+            meta: { icon: '🚧' },
+            menuTarget: '#menu-struktur',
+            menuHtml: `<div onclick="addFactoryDevice('zaun')">🚧 Zaun</div>`,
+            insertBefore: '#menu-struct-cat-behaelter',
+            directSpawn: true,
+            build(obj, el) {
+                obj.width = obj.width || 150; obj.height = obj.height || 20;
+                el.className = 'f2d-obj f2d-zaun';
+                el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+            },
+        },
+        // =========================================================
+        // 📦 PALETTE (Draufsicht)
+        // =========================================================
+        'palette': {
+            i18n: {
+                de: { name: 'Palette', desc: 'Holzpalette (Draufsicht), resizebar, als Ablage oder Transportfläche' },
+                en: { name: 'Pallet',  desc: 'Wooden pallet (top view), resizable, for storage or transport' }
+            },
+            meta: { icon: '📦' },
+            menuTarget: '#menu-struktur',
+            menuHtml: `<div onclick="addFactoryDevice('palette')">📦 Palette (Holz)</div>`,
+            insertBefore: '#menu-struct-cat-behaelter',
+            directSpawn: true,
+            _buildSvg(w, h) {
+                let s1w = Math.round(w * 0.18), s2x = Math.round(w * 0.41), s3x = Math.round(w * 0.82);
+                let nPlanks = 7;
+                let lines = '';
+                for (let i = 1; i < nPlanks; i++) {
+                    let y = Math.round(h * i / nPlanks);
+                    lines += `<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#6b3c10" stroke-width="1.5"/>`;
+                }
+                return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" style="display:block;overflow:hidden;">
+  <rect width="${w}" height="${h}" fill="#d4a56a"/>
+  <rect x="0"    y="0" width="${s1w}" height="${h}" fill="#9b6830" opacity="0.75"/>
+  <rect x="${s2x}" y="0" width="${s1w}" height="${h}" fill="#9b6830" opacity="0.75"/>
+  <rect x="${s3x}" y="0" width="${s1w}" height="${h}" fill="#9b6830" opacity="0.75"/>
+  ${lines}
+  <rect x="0" y="0" width="${w}" height="${h}" fill="none" stroke="#5c3010" stroke-width="2"/>
+</svg>`;
+            },
+            build(obj, el) {
+                obj.width = obj.width || 120; obj.height = obj.height || 80;
+                el.className = 'f2d-obj f2d-palette';
+                el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                el.innerHTML = ComponentRegistry['palette']._buildSvg(obj.width, obj.height);
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
+                let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = 'Palette'; el.appendChild(label);
+            },
+            onResize(obj) {
+                let svg = obj.el.querySelector('svg');
+                if (!svg) return;
+                let tmp = document.createElement('div');
+                tmp.innerHTML = ComponentRegistry['palette']._buildSvg(obj.width, obj.height);
+                svg.replaceWith(tmp.firstElementChild);
+                if (!obj.el.querySelector('.f2d-rotate-handle')) {
+                    let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; obj.el.appendChild(rotator);
+                }
+            },
+            onLoadState(obj) {
+                ComponentRegistry['palette'].onResize(obj);
             },
         },
         // =========================================================
@@ -14150,7 +14851,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         }; //Ende von Component Registry
         // Einmalig berechnet: Typen die keine Rotation brauchen (Built-ins + ComponentRegistry-Plugins mit noRotate:true)
         const noRotateTypes = new Set([
-            'taster', 'schalter', 'nothalt', 'led', 'despawner',
+            'taster', 'schalter', 'nothalt', 'led', 'despawner', 'text_note',
             ...Object.keys(ComponentRegistry).filter(k => ComponentRegistry[k].noRotate)
         ]);
         window.toggleGlobalViewMode = function() {
@@ -14189,6 +14890,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             selectedElements.forEach(obj => { if(obj.el) obj.el.classList.remove('f2d-selected'); });
             selectedElements = [];
             window.activeGroupId = null;
+            _updateGroupRotateHandle();
         };
         // ==========================================
         // GRUPPEN-FUNKTIONEN
@@ -14196,11 +14898,14 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.createGroup = function(objs) {
             let newId = Math.random().toString(36).substr(2, 7);
             objs.forEach(o => { o.groupId = newId; o.el.classList.add('f2d-grouped'); });
+            window.activeGroupId = newId;
+            _updateGroupRotateHandle();
             saveFactoryState();
         };
         window.dissolveGroup = function(groupId) {
             factoryObjects.forEach(o => { if (o.groupId === groupId) { o.groupId = null; o.el.classList.remove('f2d-grouped'); } });
             window.activeGroupId = null;
+            _updateGroupRotateHandle();
             saveFactoryState();
         };
         window.removeFromGroup = function(obj) {
@@ -14208,6 +14913,42 @@ You must output exactly this JSON format. The logic code goes as a single string
             obj.el.classList.remove('f2d-grouped');
             saveFactoryState();
         };
+        // ── Gruppen-Dreh-Handle ──────────────────────────────────────
+        let _groupRotateHandle = null;
+        function _groupBBox(objs) {
+            let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+            objs.forEach(o => {
+                x1=Math.min(x1,o.x); y1=Math.min(y1,o.y);
+                x2=Math.max(x2,o.x+o.width); y2=Math.max(y2,o.y+(o.height||o.width));
+            });
+            return {x1,y1,x2,y2,cx:(x1+x2)/2,cy:(y1+y2)/2};
+        }
+        function _updateGroupRotateHandle() {
+            if (!_groupRotateHandle) {
+                let h = document.createElement('div');
+                h.id = 'f2d-group-rotate-handle'; h.textContent = '↻';
+                factoryCanvas.appendChild(h);
+                _groupRotateHandle = h;
+                h.addEventListener('mousedown', e => {
+                    e.stopPropagation(); e.preventDefault();
+                    let gObjs = factoryObjects.filter(o => o.groupId === window.activeGroupId);
+                    if (!gObjs.length) return;
+                    let bbox = _groupBBox(gObjs);
+                    let cx = bbox.cx, cy = bbox.cy;
+                    rotatingElement = { el: null, data: {rotation:0}, isGroup: true, groupObjs: gObjs, cx, cy, lastGroupAngle: 0 };
+                    let cr = factoryCanvas.getBoundingClientRect();
+                    rotatingElement.startAngle = Math.atan2(e.clientY - (cr.top + cy*factoryScale), e.clientX - (cr.left + cx*factoryScale)) * 180 / Math.PI;
+                    rotatingElement.startObjRotation = 0;
+                });
+            }
+            if (!window.activeGroupId) { _groupRotateHandle.style.display='none'; return; }
+            let gObjs = factoryObjects.filter(o => o.groupId === window.activeGroupId);
+            if (!gObjs.length) { _groupRotateHandle.style.display='none'; return; }
+            let bb = _groupBBox(gObjs);
+            _groupRotateHandle.style.left = ((bb.x1+bb.x2)/2 - 11) + 'px';
+            _groupRotateHandle.style.top  = (bb.y1 - 38) + 'px';
+            _groupRotateHandle.style.display = 'block';
+        }
         // Gruppen-CSS injizieren
         (function() {
             let s = document.createElement('style');
@@ -14276,7 +15017,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             // 1. Logiklose Objekte direkt erstellen & sofort abbrechen
-            const directTypes = ['despawner', 'wall', 'frame', 'zone_top', 'zone_side']; // Die restlichen alten bleiben vorerst hier
+            const directTypes = ['despawner', 'wall', 'frame', 'zone_top', 'zone_side', 'text_note'];
             if (directTypes.includes(type) || (ComponentRegistry[type] && ComponentRegistry[type].directSpawn)) {
                 createFactoryObject(type, ''); return;
             }
@@ -14618,11 +15359,64 @@ You must output exactly this JSON format. The logic code goes as a single string
                 label.textContent = var1 ? `${var1} (${interval}s)` : `Immer an (${interval}s)`; el.appendChild(label);
             } else if (type === 'despawner') {
                 obj.width = 50; obj.height = 50; el.className = 'f2d-obj f2d-despawner'; el.innerHTML = `<span>DESPAWN</span><div style="font-size:16px;">❌</div>`;
+            } else if (type === 'text_note') {
+                obj.width = 160; obj.height = 24; obj.noteHTML = ''; obj.noteTextColor = '#ffffff'; obj.noteBgColor = 'transparent'; obj.noteFontSize = 14;
+                el.className = 'f2d-obj f2d-text-note'; el.style.width = obj.width + 'px';
+                el.style.color = obj.noteTextColor; el.style.fontSize = obj.noteFontSize + 'px';
+                // Floating toolbar (shown only while editing)
+                let noteToolbar = document.createElement('div'); noteToolbar.className = 'f2d-note-toolbar';
+                noteToolbar.innerHTML = `<button class="nb" title="Fett"><b>B</b></button><button class="ni" title="Kursiv"><i>I</i></button><button class="nu" title="Unterstrichen"><u>U</u></button><span class="note-sep"></span><select class="ns">${[9,10,11,12,13,14,16,18,20,24,28,32,36,48].map(s=>`<option value="${s}" ${s===14?'selected':''}>${s}</option>`).join('')}</select><span class="note-sep"></span><input type="color" class="ntc" title="Textfarbe" value="#ffffff"><input type="color" class="nbc2" title="Hintergrundfarbe" value="#000000">`;
+                el.appendChild(noteToolbar); obj.noteToolbar = noteToolbar;
+                // Editable content
+                let noteContent = document.createElement('div'); noteContent.className = 'f2d-note-content';
+                noteContent.contentEditable = 'false'; noteContent.style.userSelect = 'none';
+                noteContent.innerHTML = '<span class="f2d-note-placeholder">Doppelklick…</span>';
+                el.appendChild(noteContent); obj.noteContent = noteContent;
+                // Resize handle
+                let noteResizer = document.createElement('div'); noteResizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = noteResizer; el.appendChild(noteResizer);
+                // Helpers
+                const _saveNote = () => { obj.noteHTML = noteContent.innerHTML; if (!isLoadingFactory) saveFactoryState(); };
+                const _exitNoteEdit = () => {
+                    el.classList.remove('f2d-note-editing');
+                    noteContent.contentEditable = 'false'; noteContent.style.userSelect = 'none';
+                    if (!noteContent.textContent.trim()) noteContent.innerHTML = '<span class="f2d-note-placeholder">Doppelklick…</span>';
+                    _saveNote();
+                };
+                const _enterNoteEdit = () => {
+                    el.classList.add('f2d-note-editing');
+                    noteContent.contentEditable = 'true'; noteContent.style.userSelect = 'text';
+                    let ph = noteContent.querySelector('.f2d-note-placeholder'); if (ph) noteContent.innerHTML = '';
+                    // Force focus (needed because parent has user-select:none)
+                    noteContent.focus();
+                    try { let r = document.createRange(); r.selectNodeContents(noteContent); r.collapse(false); let s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch(e2) {}
+                };
+                // Dblclick enters edit mode
+                el.addEventListener('dblclick', e => { if (isSimulationActive) return; e.stopPropagation(); e.preventDefault(); _enterNoteEdit(); });
+                // While editing: clicks inside content don't start drag
+                noteContent.addEventListener('mousedown', e => { if (el.classList.contains('f2d-note-editing')) { e.stopPropagation(); } });
+                // Toolbar: block drag + wire formatting
+                noteToolbar.addEventListener('mousedown', e => { e.stopPropagation(); });
+                noteToolbar.querySelector('.nb').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('bold'); noteContent.focus(); });
+                noteToolbar.querySelector('.ni').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('italic'); noteContent.focus(); });
+                noteToolbar.querySelector('.nu').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('underline'); noteContent.focus(); });
+                noteToolbar.querySelector('.ns').addEventListener('change', e => { obj.noteFontSize = parseInt(e.target.value); el.style.fontSize = obj.noteFontSize + 'px'; noteContent.focus(); _saveNote(); });
+                noteToolbar.querySelector('.ntc').addEventListener('input', e => { obj.noteTextColor = e.target.value; el.style.color = obj.noteTextColor; });
+                noteToolbar.querySelector('.ntc').addEventListener('change', () => _saveNote());
+                noteToolbar.querySelector('.nbc2').addEventListener('input', e => { obj.noteBgColor = e.target.value; el.style.background = obj.noteBgColor; });
+                noteToolbar.querySelector('.nbc2').addEventListener('change', () => _saveNote());
+                // Blur → exit only when focus truly leaves the whole note element
+                noteContent.addEventListener('blur', () => { setTimeout(() => { if (!el.classList.contains('f2d-note-editing')) return; if (el.contains(document.activeElement)) return; _exitNoteEdit(); }, 200); });
+                // Escape / Ctrl+Enter to finish
+                noteContent.addEventListener('keydown', e => {
+                    if (e.key === 'Escape') { e.preventDefault(); _exitNoteEdit(); }
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); _exitNoteEdit(); }
+                });
+                obj._exitNoteEdit = _exitNoteEdit;
             } else if (type.startsWith('zone_')) {
                 obj.width = 150; obj.height = 150; el.className = `f2d-obj f2d-zone ${type === 'zone_top' ? 'zone-top' : 'zone-side'}`;
                 el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
                 el.innerHTML = `<span>${type === 'zone_top' ? '🛸 DRAUFSICHT' : '🌍 SEITENANSICHT'}</span>`;
-                let resizerXY = document.createElement('div'); resizerXY.className = 'f2d-resize-handle-xy'; 
+                let resizerXY = document.createElement('div'); resizerXY.className = 'f2d-resize-handle-xy';
                 obj.resizerEl = resizerXY; el.appendChild(resizerXY);
             }
             // Bestimmte Bauteile benötigen keine Rotation (via noRotateTypes)
@@ -14749,12 +15543,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                         // Erster Klick auf eine Gruppe → alle Mitglieder auswählen
                         window.activeGroupId = dragTarget.groupId;
                         clearSelection();
+                        window.activeGroupId = dragTarget.groupId; // clearSelection resets it
                         factoryObjects.forEach(o => {
                             if (o.groupId === dragTarget.groupId) {
                                 selectedElements.push(o);
                                 o.el.classList.add('f2d-selected');
                             }
                         });
+                        _updateGroupRotateHandle();
                     }
                 } else {
                     // Normaler (ungrouped) Klick oder mit Shift/Ctrl
@@ -14849,6 +15645,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             if(draggedElement || resizingElement || resizingElementXY || rotatingElement) { fluidGridDirty = true; saveFactoryState(); }
+            // If a group member was rotated individually, restore the group selection
+            if (rotatingElement && !rotatingElement.isGroup && rotatingElement.data && rotatingElement.data.groupId) {
+                let gid = rotatingElement.data.groupId;
+                window.activeGroupId = gid;
+                clearSelection();
+                window.activeGroupId = gid;
+                factoryObjects.forEach(o => { if (o.groupId === gid) { selectedElements.push(o); o.el.classList.add('f2d-selected'); } });
+                _updateGroupRotateHandle();
+            }
             // Release fluid snapshots for any group-dragged objects
             selectedElements.forEach(o => _endFluidDragForObjRecursive(o));
             draggedElement = null; resizingElement = null; resizingElementXY = null; rotatingElement = null;
@@ -17763,7 +18568,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
         }
         window.clearFactory = function(force = false) {
-            factoryCanvas.innerHTML = ''; factoryObjects = []; factoryItems = []; factoryPins = []; fluidGrid.clear(); sandGrid.clear(); fluidGridDirty = true; draggedElement = null; resizingElement = null; resizingElementXY = null; rotatingElement = null; clearSelection(); ctxMenu.style.display = 'none'; _ensurePathSvg();
+            factoryCanvas.innerHTML = ''; factoryObjects = []; factoryItems = []; factoryPins = []; fluidGrid.clear(); sandGrid.clear(); fluidGridDirty = true; draggedElement = null; resizingElement = null; resizingElementXY = null; rotatingElement = null; _groupRotateHandle = null; clearSelection(); ctxMenu.style.display = 'none'; _ensurePathSvg();
             // Re-insert fluid + sand canvases (removed by innerHTML = '')
             let sc = document.createElement('canvas'); sc.id = 'sand-canvas';  sc.width = 4000; sc.height = 3000; sc.style.cssText  = 'position:absolute;top:0;left:0;pointer-events:none;z-index:6;image-rendering:pixelated;opacity:0.93;'; factoryCanvas.prepend(sc);
             let fc = document.createElement('canvas'); fc.id = 'fluid-canvas'; fc.width = 4000; fc.height = 3000; fc.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;'; factoryCanvas.prepend(fc); initFluidCanvas();
@@ -17886,14 +18691,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                     selectedElements.forEach(addWithChildren);
                     // Snapshot der Objekte (wie beim Speichern, aber nur für die Auswahl)
                     factoryClipboard = {
-                        items: factoryItems.filter(i => objectsToCopy.has(i)).map(i => ({ 
-                            x: i.x, y: i.y, vx: i.vx, vy: i.vy, material: i.material, useGravity: i.useGravity, useCollision: i.useCollision 
+                        items: factoryItems.filter(i => objectsToCopy.has(i)).map(i => ({
+                            x: i.x, y: i.y, vx: i.vx, vy: i.vy, material: i.material, useGravity: i.useGravity, useCollision: i.useCollision
                         })),
                         objects: factoryObjects.filter(o => objectsToCopy.has(o)).map(o => ({
                             oldId: o.id, type: o.type, x: o.x, y: o.y, width: o.width, height: o.height, rotation: o.rotation,
                             linkedVar: o.linkedVar, linkedVarExt: o.linkedVarExt, linkedVarRet: o.linkedVarRet,
                             oldParentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType,
-                            color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned
+                            color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned,
+                            groupId: o.groupId || null,
+                            localZ: o.localZ || 0, layerId: o.layerId || null,
+                            topView: o.topView || false,
+                            noteHTML: o.noteHTML || null, noteTextColor: o.noteTextColor || null, noteBgColor: o.noteBgColor || null, noteFontSize: o.noteFontSize || null
                         }))
                     };
                     // Kurzes visuelles Feedback oben links
@@ -17935,14 +18744,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                             if (newObj.labelEl) newObj.labelEl.classList.add('f2d-label-pinned');
                         }
                         if(newObj.resizerEl || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].build)) newObj.el.style.width = newObj.width + 'px';
-                        if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
+                        if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || newObj.type === 'text_note' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
                             newObj.el.style.height = newObj.height + 'px';
                         }
+                        // Plugins mit SVG-Inhalt (z.B. Palette) nach Größenänderung neu aufbauen
+                        if (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].onLoadState) {
+                            ComponentRegistry[newObj.type].onLoadState(newObj, data);
+                        } else if (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].onResize) {
+                            ComponentRegistry[newObj.type].onResize(newObj);
+                        }
                         newObj.attachmentType = data.attachmentType;
-                        newObj._tempOldParentId = data.oldParentId; // Temporär merken für Schritt 3
+                        newObj._tempOldParentId = data.oldParentId;
+                        newObj._tempOldGroupId  = data.groupId || null;
+                        if (data.localZ) { newObj.localZ = data.localZ; }
+                        if (data.layerId) { newObj.layerId = data.layerId; }
+                        if (newObj.type === 'text_note' && newObj.noteContent) {
+                            if (data.noteTextColor) { newObj.noteTextColor = data.noteTextColor; newObj.el.style.color = data.noteTextColor; let tc = newObj.noteToolbar.querySelector('.ntc'); if (tc) tc.value = data.noteTextColor; }
+                            if (data.noteBgColor) { newObj.noteBgColor = data.noteBgColor; newObj.el.style.background = data.noteBgColor; let bc = newObj.noteToolbar.querySelector('.nbc2'); if (bc) bc.value = data.noteBgColor; }
+                            if (data.noteFontSize) { newObj.noteFontSize = data.noteFontSize; newObj.el.style.fontSize = data.noteFontSize + 'px'; let ns = newObj.noteToolbar.querySelector('.ns'); if (ns) ns.value = data.noteFontSize; }
+                            if (data.noteHTML) { newObj.noteHTML = data.noteHTML; newObj.noteContent.innerHTML = data.noteHTML; }
+                        }
+                        _applyObjZIndex(newObj);
                         updateObjTransform(newObj);
                         newObjs.push(newObj);
-                        // Nur Top-Level Elemente markieren, damit man die Gruppe fehlerfrei ziehen kann
                         if (!data.oldParentId) newSelection.push(newObj);
                     });
                     // 3. Montage-Verbindungen (Eltern & Kinder) am Klon wiederherstellen
@@ -17958,12 +18782,28 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                         delete newObj._tempOldParentId;
                     });
-                    // 4. Die frischen Objekte direkt blau markieren
+                    // 4. Gruppen-Mitgliedschaft wiederherstellen (alte groupId → neue groupId)
+                    let groupIdMap = {};
+                    newObjs.forEach(newObj => {
+                        let oldGid = newObj._tempOldGroupId;
+                        delete newObj._tempOldGroupId;
+                        if (!oldGid) return;
+                        if (!groupIdMap[oldGid]) groupIdMap[oldGid] = Math.random().toString(36).substr(2, 7);
+                        newObj.groupId = groupIdMap[oldGid];
+                        newObj.el.classList.add('f2d-grouped');
+                    });
+                    // Letzte Gruppe als aktive Gruppe setzen und Handle zeigen
+                    let newGroupIds = Object.values(groupIdMap);
+                    if (newGroupIds.length > 0) {
+                        window.activeGroupId = newGroupIds[newGroupIds.length - 1];
+                        _updateGroupRotateHandle();
+                    }
+                    // 5. Die frischen Objekte direkt blau markieren
                     newSelection.forEach(obj => {
                         selectedElements.push(obj);
                         obj.el.classList.add('f2d-selected');
                     });
-                    pasteOffset += 20; // Beim nächsten Mal noch etwas weiter nach rechts/unten
+                    pasteOffset += 20;
                     saveFactoryState();
                 }
             }
@@ -17984,7 +18824,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     thickness: o.thickness, speed: o.speed, startupTime: o.startupTime || null, heatingPower: o.heatingPower, meltTemp: o.meltTemp, opening: o.opening, extension: (o.extension !== undefined ? Math.round(o.extension) : undefined),
                     linkedVar: o.linkedVar, linkedVarExt: o.linkedVarExt, linkedVarRet: o.linkedVarRet, linkedVar3: o.linkedVar3, spawnSolid: o.spawnSolid, linkedFormula: o.linkedFormula || null,
                     qualityMode: o.qualityMode, qualityChance: o.qualityChance, qualityNth: o.qualityNth,
-                    waypoints: o.waypoints || null, pathMode: o.pathMode || null, pathEnabled: o.pathEnabled || false, pathLoop: o.pathLoop || false, arm1Len: o.arm1Len, arm2Len: o.arm2Len, targetX: o.targetX, targetY: o.targetY,
+                    waypoints: o.waypoints || null, pathMode: o.pathMode || null, pathEnabled: o.pathEnabled || false, pathLoop: o.pathLoop || false, arm1Len: o.arm1Len, arm2Len: o.arm2Len, targetX: o.targetX, targetY: o.targetY, namedPaths: o.namedPaths || null,
                     hasPneumatics: o.hasPneumatics, hasHydraulics: o.hasHydraulics, targetCylinderId: o.targetCylinderId, role: o.role, isDouble: o.isDouble,
                     // 🌟 FIX: parentId und attachmentType MÜSSEN gespeichert werden, sonst fällt der Stempel ab!
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType, normLabel: o.normLabel, originalLabelText: o.originalLabelText,
@@ -18018,9 +18858,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     centerTolerance: o.centerTolerance !== undefined ? o.centerTolerance : null,
                     wallThickness: o.wallThickness || null,
                     backpressureStop: o.backpressureStop || false,
+                    topView: o.topView || false,
                     torView: o.torView || null, torSpeed: o.torSpeed !== undefined ? o.torSpeed : null,
                     linkedVarSensorAuf: o.linkedVarSensorAuf || null, linkedVarSensorZu: o.linkedVarSensorZu || null,
-                    torNoEndstop: o.torNoEndstop || false
+                    torNoEndstop: o.torNoEndstop || false,
+                    noteHTML: o.noteHTML || null, noteTextColor: o.noteTextColor || null, noteBgColor: o.noteBgColor || null, noteFontSize: o.noteFontSize || null
                 })),
                 pneuConnections:     window.pneuConnections     || [],
                 fluidPipeConnections: window.fluidPipeConnections || [],
@@ -18208,6 +19050,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.meltTemp) newObj.meltTemp = o.meltTemp;
                     if (o.qualityMode) { newObj.qualityMode = o.qualityMode; newObj.qualityChance = o.qualityChance; newObj.qualityNth = o.qualityNth; }
                     if (o.waypoints) { newObj.waypoints = o.waypoints; newObj.pathMode = o.pathMode || 'linear'; newObj.pathEnabled = o.pathEnabled || false; newObj.pathLoop = o.pathLoop || false; }
+                    if (o.namedPaths) newObj.namedPaths = o.namedPaths;
                     if (o.arm1Len) { newObj.arm1Len = o.arm1Len; newObj.arm2Len = o.arm2Len; newObj.targetX = o.targetX || 0; newObj.targetY = o.targetY !== undefined ? o.targetY : (newObj.arm1Len + newObj.arm2Len); }
                     if (o.linkedVarEnable) newObj.linkedVarEnable = o.linkedVarEnable;
                     if (o.startupTime) newObj.startupTime = o.startupTime;
@@ -18273,12 +19116,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.pistonD !== undefined) newObj.pistonD = o.pistonD;
                     if (o.rodD !== undefined) newObj.rodD = o.rodD;
                     if (o.stroke !== undefined) newObj.stroke = o.stroke;
+                    // text_note: Inhalt und Stil wiederherstellen
+                    if (newObj.type === 'text_note' && newObj.noteContent) {
+                        if (o.noteTextColor) { newObj.noteTextColor = o.noteTextColor; newObj.el.style.color = o.noteTextColor; let tc = newObj.noteToolbar.querySelector('.ntc'); if (tc) tc.value = o.noteTextColor; }
+                        if (o.noteBgColor) { newObj.noteBgColor = o.noteBgColor; newObj.el.style.background = o.noteBgColor; let bc = newObj.noteToolbar.querySelector('.nbc2'); if (bc) bc.value = o.noteBgColor; }
+                        if (o.noteFontSize) { newObj.noteFontSize = o.noteFontSize; newObj.el.style.fontSize = o.noteFontSize + 'px'; let ns = newObj.noteToolbar.querySelector('.ns'); if (ns) ns.value = o.noteFontSize; }
+                        if (o.noteHTML) { newObj.noteHTML = o.noteHTML; newObj.noteContent.innerHTML = o.noteHTML; }
+                    }
                     _applyObjZIndex(newObj);
                     if (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].onLoadState) {
                         ComponentRegistry[newObj.type].onLoadState(newObj, o);
                     }
                     if(newObj.resizerEl || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].build)) newObj.el.style.width = newObj.width + 'px';
-                    if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
+                    if(newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || newObj.type === 'text_note' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build))) {
                         newObj.el.style.height = newObj.height + 'px';
                     }
                     newObj.attachmentType = o.attachmentType; // WICHTIG FÜR DIE ZYLINDER-KOLBEN!
@@ -18496,6 +19346,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 { key: 'frame',             label: 'Metallrahmen / Boden',   icon: '⛓️' },
                 { key: 'zone_top',          label: 'Zone (Draufsicht)',      icon: '🛸' },
                 { key: 'zone_side',         label: 'Zone (Seitenansicht)',   icon: '🌍' },
+                { key: 'text_note',         label: 'Textfeld / Notiz',       icon: '📝' },
             ];
             const registryComponents = Object.entries(ComponentRegistry)
                 .filter(([k, v]) => !v.hideFromPluginManager && !builtins.find(b => b.key === k))
@@ -18551,6 +19402,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             btnPin.textContent = '📌 Kommentar-Pin einfügen';
             btnPin.onclick = () => { addPin(canvasX, canvasY); ctxMenu.style.display = 'none'; };
             ctxMenu.appendChild(btnPin);
+            const btnNote = document.createElement('div'); btnNote.className = 'ctx-item';
+            btnNote.textContent = '📝 Textfeld einfügen';
+            btnNote.onclick = () => { ctxMenu.style.display = 'none'; let n = createFactoryObject('text_note', ''); n.x = Math.round(canvasX - n.width/2); n.y = Math.round(canvasY - n.height/2); updateObjTransform(n); saveFactoryState(); };
+            ctxMenu.appendChild(btnNote);
             if (selectedElements.length > 0) {
                 const btnSnip = document.createElement('div'); btnSnip.className = 'ctx-item'; btnSnip.style.color = '#80cbc4';
                 btnSnip.textContent = `📚 Auswahl als Snippet speichern (${selectedElements.length})`;
@@ -18696,7 +19551,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (o.locked) { newObj.locked = true; newObj.el.classList.add('f2d-locked'); }
             if (o.labelPinned && newObj.labelEl) { newObj.labelPinned = true; newObj.labelEl.classList.add('f2d-label-pinned'); }
             if(newObj.resizerEl || (ComponentRegistry[newObj.type] && ComponentRegistry[newObj.type].build)) newObj.el.style.width = newObj.width + 'px';
-            if(newObj.type && (newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build)))) newObj.el.style.height = (newObj.height || 0) + 'px';
+            if(newObj.type && (newObj.type.startsWith('zone_') || newObj.type === 'wall' || newObj.type === 'frame' || newObj.type === 'text_note' || (ComponentRegistry[newObj.type] && (ComponentRegistry[newObj.type].hasHeight || ComponentRegistry[newObj.type].build)))) newObj.el.style.height = (newObj.height || 0) + 'px';
             newObj._srcId = o.id;
             idMap[o.id] = newObj;
             newObjs.push(newObj);

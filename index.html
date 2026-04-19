@@ -1690,6 +1690,7 @@
                         <option value="linear">Linear</option><option value="spline">Spline (Catmull-Rom)</option>
                     </select>
                     &nbsp;<label style="cursor:pointer;"><input type="checkbox" id="path-loop-chk" style="margin-right:3px;" onchange="var s=window._pathEditSrc();if(s){s.pathLoop=this.checked;}"> Loop</label>
+                    &nbsp;<button id="path-record-btn" onclick="window._togglePathRecording()" style="background:#c62828;color:#fff;border:none;border-radius:10px;padding:3px 12px;cursor:pointer;font-weight:bold;">🔴 Aufzeichnen</button>
                     &nbsp;<button onclick="window._stopPathEdit()" style="background:#fff;color:#1565c0;border:none;border-radius:10px;padding:3px 12px;cursor:pointer;font-weight:bold;">✔ Fertig</button>
                     &nbsp;<button onclick="var s=window._pathEditSrc();if(s){s.waypoints=[];window._renderPathOverlay();}" style="background:#c62828;color:#fff;border:none;border-radius:10px;padding:3px 10px;cursor:pointer;">🗑 Alle Punkte</button>
                 </div>
@@ -8718,11 +8719,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                         const _ins = _rp.inputs.filter(i => i !== 'TRUE' && i !== 'FALSE');
                         const _outs = _rp.outputs;
                         if (!_outs.length) return _cache(false);
+                        // Collect RS/SR flip-flop block IDs so we can pre-initialize their state
+                        const _ffIds = [];
+                        _rp.graph.nodes.forEach(n => { if (n.type === 'RS' || n.type === 'SR') _ffIds.push(n.id); });
                         const _N = _ins.length;
-                        const _combos = Math.min(1 << Math.min(_N, 16), 1024);
+                        const _NFF = _ffIds.length;
+                        const _combos = Math.min(1 << Math.min(_N + _NFF, 18), 4096);
                         for (let _m = 0; _m < _combos; _m++) {
                             const _rs = { TRUE:true, FALSE:false };
                             _ins.forEach((inp, i) => { _rs[inp] = !!(_m & (1 << i)); });
+                            _ffIds.forEach((ff, i) => { _rs[ff] = !!(_m & (1 << (_N + i))); });
                             const _ss = { TRUE:true, FALSE:false, ..._rs };
                             const _rt = {}, _st = {};
                             for (let _t = 0; _t < 3; _t++) { _rf(_rs, 0, _rt); _sf(_ss, 0, _st); }
@@ -10203,7 +10209,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (pw) { obj.targetX = pw.x; obj.targetY = pw.y; }
                 return;
             }
-            // Loop: Startpunkt ans Ende hängen → schließendes Segment wird mitgefahren
+            // Warten bis Variable aktiv (waitVar)
+            if (src._waitingAtWp !== null && src._waitingAtWp !== undefined) {
+                let wWp = pts[src._waitingAtWp];
+                if (wWp && wWp.waitVar && !(window.spsState && window.spsState[wWp.waitVar])) {
+                    obj.targetX = wWp.x; obj.targetY = wWp.y;
+                    return;
+                }
+                src._waitingAtWp = null;
+            }
             let ePts = src.pathLoop ? [...pts, pts[0]] : pts;
             let maxT = ePts.length - 1;
             src._pathT = src._pathT || 0;
@@ -10213,7 +10227,6 @@ You must output exactly this JSON format. The logic code goes as a single string
             let t = src._pathT - seg;
             let p0 = ePts[seg], p1 = ePts[seg + 1];
             if (src.pathMode === 'spline' && ePts.length >= 3) {
-                // Catmull-Rom Spline – identisch mit _renderPathOverlay
                 let pa = ePts[Math.max(0, seg - 1)], pb = p0, pc = p1, pd = ePts[Math.min(ePts.length - 1, seg + 2)];
                 let cr = (p, q, r, s, u) => 0.5 * ((2*q) + (-p+r)*u + (2*p-5*q+4*r-s)*u*u + (-p+3*q-3*r+s)*u*u*u);
                 obj.targetX = cr(pa.x, pb.x, pc.x, pd.x, t);
@@ -10223,27 +10236,41 @@ You must output exactly this JSON format. The logic code goes as a single string
                 obj.targetY = p0.y + (p1.y - p0.y) * t;
             }
             let segLen = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2) || 1;
-            src._pathT += speed / segLen;
+            let segSpeed = (p1 && p1.speedFactor) ? speed * p1.speedFactor : speed;
+            src._pathT += segSpeed / segLen;
             let looped = false;
             let _pathDone = false;
             if (src._pathT >= maxT) {
                 if (src.pathLoop) { src._pathT = 0; looped = true; _pathDone = true; }
                 else { if (!src._pathAtEnd) { src._pathAtEnd = true; _pathDone = true; } src._pathT = maxT - 0.0001; obj._pathGrip = undefined; }
             }
-            // Greifer-Aktion und Pause beim Erreichen eines Wegpunkts auslösen
-            if (looped) { obj._pathGrip = undefined; obj._ikA1 = undefined; } // Latch + IK-Kontinuität bei Loop-Neustart zurücksetzen
+            if (looped) { obj._pathGrip = undefined; obj._ikA1 = undefined; }
             let newFloor = looped ? 0 : Math.floor(src._pathT);
             if (newFloor !== prevFloor) {
                 let wpIdx = newFloor < pts.length ? newFloor : pts.length - 1;
                 let wp = pts[wpIdx];
                 if (wp && wp.grip === 'grab') {
                     obj._pathGrip = true;
-                    obj.targetX = wp.x; obj.targetY = wp.y; // Arm exakt auf Wegpunkt snappen
+                    obj.targetX = wp.x; obj.targetY = wp.y;
                 } else if (wp && wp.grip === 'release') {
                     obj._pathGrip = false;
                     obj.targetX = wp.x; obj.targetY = wp.y;
                 }
-                if (wp && wp.pause > 0) {
+                // Variable setzen
+                if (wp && wp.setVar && window.spsState) {
+                    window.spsState[wp.setVar] = (wp.setVal !== false);
+                }
+                // Wegpunkt überspringen?
+                if (wp && wp.skipVar && window.spsState && window.spsState[wp.skipVar]) {
+                    src._pathT = Math.min(newFloor + 1, maxT - 0.0001);
+                } else if (wp && wp.waitVar) {
+                    if (!(window.spsState && window.spsState[wp.waitVar])) {
+                        src._waitingAtWp = wpIdx;
+                        src._pathT = newFloor;
+                        obj.targetX = wp.x; obj.targetY = wp.y;
+                        return _pathDone ? 'done' : undefined;
+                    }
+                } else if (wp && wp.pause > 0) {
                     src._pauseTimer = wp.pause * 60;
                     src._pauseWpIdx = wpIdx;
                     src._pathT = newFloor;
@@ -10298,6 +10325,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _next = activePaths[Math.max(0, Math.min(activePaths.length - 1, ni))];
             } else { // random
                 _next = activePaths[Math.floor(Math.random() * activePaths.length)];
+            }
+            // Zykluszähler
+            if (obj.cycleCountVar && window.spsState) {
+                obj._cycleCount = (obj._cycleCount || 0) + 1;
+                window.spsState[obj.cycleCountVar] = obj._cycleCount;
             }
             // --- apply transition ---
             let tr = obj.pathTransition || 'instant';
@@ -10360,6 +10392,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._renderPathOverlay();
         };
         window._stopPathEdit = function() {
+            window._pathRecording = false; window._pathRecordLastPt = null;
+            let rBtn = document.getElementById('path-record-btn'); if (rBtn) { rBtn.textContent = '🔴 Aufzeichnen'; rBtn.style.background = '#c62828'; }
             if (window.pathEditingObj) { try { saveFactoryState(); } catch(e){} }
             window.pathEditingObj = null;
             window.pathEditingPathIdx = null;
@@ -10375,6 +10409,39 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (banner) banner.style.display = 'none';
             window._renderPathOverlay();
         };
+        window._pathRecording = false;
+        window._pathRecordLastPt = null;
+        window._togglePathRecording = function() {
+            window._pathRecording = !window._pathRecording;
+            let btn = document.getElementById('path-record-btn');
+            if (btn) { btn.textContent = window._pathRecording ? '⏹ Stop' : '🔴 Aufzeichnen'; btn.style.background = window._pathRecording ? '#555' : '#c62828'; }
+        };
+        document.addEventListener('mousemove', function(ev) {
+            if (!window._pathRecording || !window.pathEditingObj) return;
+            let obj = window.pathEditingObj;
+            let src = window._pathEditSrc();
+            if (!src) return;
+            let loc = window._canvasToLocalRec ? window._canvasToLocalRec(obj, ev.clientX, ev.clientY) : null;
+            if (!loc) {
+                let rect = document.getElementById('factory-canvas').getBoundingClientRect();
+                let scl = window.factoryScale || 1;
+                loc = { x: Math.round((ev.clientX - rect.left) / scl - obj.x), y: Math.round((ev.clientY - rect.top) / scl - obj.y) };
+            }
+            if (obj.type !== 'worker_2d') {
+                let maxR = (obj.arm1Len || 80) + (obj.arm2Len || 60) - 1;
+                let minR = Math.abs((obj.arm1Len || 80) - (obj.arm2Len || 60)) + 2;
+                let d2 = Math.sqrt(loc.x*loc.x + loc.y*loc.y);
+                if (d2 > 0.5) { if (d2 > maxR) { let f=maxR/d2; loc.x=Math.round(loc.x*f); loc.y=Math.round(loc.y*f); } else if (d2 < minR) { let f=minR/d2; loc.x=Math.round(loc.x*f); loc.y=Math.round(loc.y*f); } }
+            }
+            let last = window._pathRecordLastPt;
+            let THRESH = Math.max(8, 15 / (window.factoryScale || 1));
+            if (!last || Math.sqrt((loc.x-last.x)**2+(loc.y-last.y)**2) >= THRESH) {
+                if (!src.waypoints) src.waypoints = [];
+                src.waypoints.push({x: loc.x, y: loc.y});
+                window._pathRecordLastPt = {x: loc.x, y: loc.y};
+                window._renderPathOverlay();
+            }
+        });
         window._catmullRomPath = function(abspts) {
             if (abspts.length < 2) return '';
             let d = `M${abspts[0].x},${abspts[0].y}`;
@@ -10385,6 +10452,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                 d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x},${p2.y}`;
             }
             return d;
+        };
+        window._showWpActionPopup = function(anchorX, anchorY, pts, i) {
+            let ex = document.getElementById('_wp-action-popup'); if (ex) ex.remove();
+            let pop = document.createElement('div'); pop.id = '_wp-action-popup';
+            pop.style.cssText = `position:fixed;left:${anchorX}px;top:${anchorY}px;background:#1e1e1e;border:1px solid #555;border-radius:6px;padding:8px 10px;z-index:10000;min-width:220px;font-size:10px;color:#ccc;box-shadow:0 4px 14px rgba(0,0,0,0.7);`;
+            pop.onclick = e => e.stopPropagation();
+            const mkSel = (lbl, prop, vars, extra) => {
+                let d = document.createElement('div'); d.style.cssText = 'margin-bottom:6px;';
+                let l = document.createElement('div'); l.style.cssText = 'color:#90a4ae;margin-bottom:2px;'; l.textContent = lbl; d.appendChild(l);
+                let row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '4px';
+                let sel = document.createElement('select'); sel.style.cssText = 'flex:1;padding:2px;background:#111;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                let optN = document.createElement('option'); optN.value = ''; optN.textContent = '-- Keine --'; sel.appendChild(optN);
+                vars.forEach(v => { let o = document.createElement('option'); o.value = v; o.textContent = v; if (pts[i][prop] === v) o.selected = true; sel.appendChild(o); });
+                sel.onchange = () => { if (sel.value) pts[i][prop] = sel.value; else delete pts[i][prop]; saveFactoryState(); window._renderPathOverlay(); };
+                row.appendChild(sel);
+                if (extra) row.appendChild(extra);
+                d.appendChild(row); return d;
+            };
+            // setVar + setVal toggle
+            let setValBtn = document.createElement('button');
+            setValBtn.textContent = pts[i].setVal === false ? 'FALSE' : 'TRUE';
+            setValBtn.style.cssText = `background:${pts[i].setVal===false?'#c62828':'#1b5e20'};color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:10px;white-space:nowrap;`;
+            setValBtn.onclick = () => { pts[i].setVal = (pts[i].setVal === false ? true : false); setValBtn.textContent = pts[i].setVal===false?'FALSE':'TRUE'; setValBtn.style.background=pts[i].setVal===false?'#c62828':'#1b5e20'; saveFactoryState(); };
+            pop.appendChild(mkSel('📤 Variable setzen:', 'setVar', window.globalOutputs||[], setValBtn));
+            pop.appendChild(mkSel('⏳ Warten bis Variable:', 'waitVar', [...(window.globalOutputs||[]),...(window.globalInputs||[])]));
+            pop.appendChild(mkSel('⏭ Überspringen wenn:', 'skipVar', [...(window.globalOutputs||[]),...(window.globalInputs||[])]));
+            let cBtn = document.createElement('button'); cBtn.textContent = '✕ Schließen'; cBtn.style.cssText = 'float:right;background:#333;color:#fff;border:none;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:10px;';
+            cBtn.onclick = () => pop.remove(); pop.appendChild(cBtn);
+            document.body.appendChild(pop);
+            setTimeout(() => { const fn = e => { if (!pop.contains(e.target)) { pop.remove(); document.removeEventListener('mousedown',fn,true); } }; document.addEventListener('mousedown',fn,true); }, 80);
         };
         window._renderPathOverlay = function() {
             let svgEl = document.getElementById('factory-path-svg');
@@ -10510,6 +10607,52 @@ You must output exactly this JSON format. The logic code goes as a single string
                             window._renderPathOverlay();
                         });
                         svgEl.appendChild(pGrp);
+                        // Speed-Factor-Badge (links von Grip, x-44)
+                        const SF_PRESETS = [null, 0.25, 0.5, 2, 3, 5];
+                        let sfVal = pts[i].speedFactor !== undefined ? pts[i].speedFactor : null;
+                        let sfColor = sfVal !== null ? '#ff9800' : '#555';
+                        let sfTxt = sfVal !== null ? ('×'+sfVal) : '—';
+                        let sfBg = document.createElementNS(svgNS, 'rect');
+                        sfBg.setAttribute('x', ap.x - 44); sfBg.setAttribute('y', ap.y - 30);
+                        sfBg.setAttribute('width', '20'); sfBg.setAttribute('height', '16'); sfBg.setAttribute('rx', '4');
+                        sfBg.setAttribute('fill', sfVal !== null ? 'rgba(255,152,0,0.25)' : '#2a2a2a');
+                        sfBg.setAttribute('stroke', sfColor); sfBg.setAttribute('stroke-width', '1'); sfBg.style.cursor = 'pointer';
+                        let sfTxtEl = document.createElementNS(svgNS, 'text');
+                        sfTxtEl.setAttribute('x', ap.x - 34); sfTxtEl.setAttribute('y', ap.y - 18);
+                        sfTxtEl.setAttribute('text-anchor', 'middle'); sfTxtEl.setAttribute('fill', sfColor); sfTxtEl.setAttribute('font-size', '8');
+                        sfTxtEl.style.pointerEvents = 'none'; sfTxtEl.textContent = sfTxt;
+                        let sfGrp = document.createElementNS(svgNS, 'g'); sfGrp.style.cursor = 'pointer';
+                        sfGrp.appendChild(sfBg); sfGrp.appendChild(sfTxtEl);
+                        sfBg.addEventListener('mousedown', ev => {
+                            if (ev.button !== 0) return; ev.stopPropagation(); ev.preventDefault();
+                            let ci = SF_PRESETS.indexOf(pts[i].speedFactor !== undefined ? pts[i].speedFactor : null);
+                            let nv = SF_PRESETS[(ci < 0 ? 1 : (ci + 1) % SF_PRESETS.length)];
+                            if (nv !== null) pts[i].speedFactor = nv; else delete pts[i].speedFactor;
+                            saveFactoryState(); window._renderPathOverlay();
+                        });
+                        svgEl.appendChild(sfGrp);
+                        // Aktions-Badge (rechts von Pause, x+28): setVar / waitVar / skipVar
+                        let hasAction = !!(pts[i].setVar || pts[i].waitVar || pts[i].skipVar);
+                        let acColor = hasAction ? '#00bcd4' : '#555';
+                        let acTxt = pts[i].waitVar ? '⏳' : (pts[i].skipVar ? '⏭' : (pts[i].setVar ? '📤' : '⚙'));
+                        let acBg = document.createElementNS(svgNS, 'rect');
+                        acBg.setAttribute('x', ap.x + 28); acBg.setAttribute('y', ap.y - 30);
+                        acBg.setAttribute('width', '20'); acBg.setAttribute('height', '16'); acBg.setAttribute('rx', '4');
+                        acBg.setAttribute('fill', hasAction ? 'rgba(0,188,212,0.25)' : '#2a2a2a');
+                        acBg.setAttribute('stroke', acColor); acBg.setAttribute('stroke-width', '1'); acBg.style.cursor = 'pointer';
+                        let acTxtEl = document.createElementNS(svgNS, 'text');
+                        acTxtEl.setAttribute('x', ap.x + 38); acTxtEl.setAttribute('y', ap.y - 18);
+                        acTxtEl.setAttribute('text-anchor', 'middle'); acTxtEl.setAttribute('fill', acColor); acTxtEl.setAttribute('font-size', '10');
+                        acTxtEl.style.pointerEvents = 'none'; acTxtEl.textContent = acTxt;
+                        let acGrp = document.createElementNS(svgNS, 'g'); acGrp.style.cursor = 'pointer';
+                        acGrp.appendChild(acBg); acGrp.appendChild(acTxtEl);
+                        acBg.addEventListener('mousedown', ev => {
+                            if (ev.button !== 0) return; ev.stopPropagation(); ev.preventDefault();
+                            let svgRect = document.getElementById('factory-path-svg').getBoundingClientRect();
+                            let scl = window.factoryScale || 1;
+                            window._showWpActionPopup(svgRect.left + ap.x * scl + 28, svgRect.top + ap.y * scl - 50, pts, i);
+                        });
+                        svgEl.appendChild(acGrp);
                     } else {
                         // Kompakte Anzeige außerhalb Edit-Modus
                         if (gripState) {
@@ -10529,6 +10672,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                             pIco.setAttribute('font-size', '8'); pIco.setAttribute('fill-opacity', '0.7');
                             pIco.style.pointerEvents = 'none'; pIco.textContent = pauseVal + 's';
                             svgEl.appendChild(pIco);
+                        }
+                        if (pts[i].setVar || pts[i].waitVar || pts[i].skipVar) {
+                            let aIco = document.createElementNS(svgNS, 'text');
+                            aIco.setAttribute('x', ap.x); aIco.setAttribute('y', ap.y + 14);
+                            aIco.setAttribute('text-anchor', 'middle'); aIco.setAttribute('fill', '#00bcd4');
+                            aIco.setAttribute('font-size', '8'); aIco.setAttribute('fill-opacity', '0.7');
+                            aIco.style.pointerEvents = 'none';
+                            aIco.textContent = pts[i].waitVar ? '⏳' : (pts[i].skipVar ? '⏭' : '📤');
+                            svgEl.appendChild(aIco);
                         }
                     }
                     if (isEd) {
@@ -13228,6 +13380,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
                     let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = '🦾 Roboter'; el.appendChild(label);
                     obj._svgLink1 = link1; obj._svgLink2 = link2; obj._svgJoint2 = joint2; obj._svgGripG = gripG; obj._svgReach = reach;
+                    let _stBadge = document.createElement('div'); _stBadge.className = 'f2d-robot-status'; _stBadge.style.display = 'none'; el.appendChild(_stBadge); obj._statusBadge = _stBadge;
                 },
                 animate(obj, spsState) {
                     let speed = (obj.pathSpeed || 2.5) * (window.simSpeed || 1);
@@ -13246,6 +13399,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (spsState[obj.linkedVarY_Plus])  obj.targetY += speed;
                         if (spsState[obj.linkedVarY_Minus]) obj.targetY -= speed;
                     }
+                    if (obj._statusBadge) { let _st = obj._inTransition ? '→ Transit' : (obj._waitingAtWp!=null||obj._activePathRef&&obj._activePathRef._waitingAtWp!=null ? '⏳ Warte' : (obj._pathGrip===true ? '✊ Greift' : (obj._activePathRef||obj.pathEnabled ? '▶ Fährt' : ''))); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
                     window._robotUpdateIK(obj);
                     let grabNow = obj._pathGrip === true ? true : (obj._pathGrip === false ? false : !!spsState[obj.linkedVarGrab]);
                     obj.isGrabbing = grabNow;
@@ -13399,8 +13553,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                             obj.namedPaths = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
                         };
                         ctxMenu.appendChild(deactBtn);
+                        // Copy/Paste paths
+                        let cpRow = document.createElement('div'); cpRow.style.cssText = 'display:flex;gap:2px;padding:2px 8px 4px;';
+                        let cpCopyBtn = document.createElement('div'); cpCopyBtn.className = 'ctx-item'; cpCopyBtn.style.cssText = 'flex:1;text-align:center;font-size:10px;'; cpCopyBtn.textContent = '📋 Pfade kopieren';
+                        cpCopyBtn.onclick = () => { window._pathClipboard = JSON.parse(JSON.stringify(obj.namedPaths)); saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                        let cpPasteBtn = document.createElement('div'); cpPasteBtn.className = 'ctx-item'; cpPasteBtn.style.cssText = 'flex:1;text-align:center;font-size:10px;color:' + (window._pathClipboard ? '#81c784' : '#666') + ';';
+                        cpPasteBtn.textContent = '📋 Pfade einfügen'; cpPasteBtn.title = window._pathClipboard ? (window._pathClipboard.length + ' Pfade') : 'Kein Pfad in Zwischenablage';
+                        if (window._pathClipboard) cpPasteBtn.onclick = () => { obj.namedPaths = JSON.parse(JSON.stringify(window._pathClipboard)); obj._activePathRef = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                        cpRow.appendChild(cpCopyBtn); cpRow.appendChild(cpPasteBtn); ctxMenu.appendChild(cpRow);
                     }
-                }
+                    // Zykluszähler-Variable
+                    let _cycSep = document.createElement('div'); _cycSep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(_cycSep);
+                    let _cycWrap = document.createElement('div'); _cycWrap.style.cssText = 'padding:2px 15px 5px;'; _cycWrap.onclick = e => e.stopPropagation();
+                    _cycWrap.innerHTML = '<div style="color:#90a4ae;font-size:10px;margin-bottom:2px;">🔢 Zykluszähler → Variable:</div>';
+                    let _cycSel = document.createElement('select'); _cycSel.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                    let _cycOptN = document.createElement('option'); _cycOptN.value = ''; _cycOptN.textContent = '-- Keine --'; _cycSel.appendChild(_cycOptN);
+                    globalOutputs.forEach(v => { let o = document.createElement('option'); o.value = v; o.textContent = v; if (v === obj.cycleCountVar) o.selected = true; _cycSel.appendChild(o); });
+                    _cycSel.onchange = () => { obj.cycleCountVar = _cycSel.value || null; if (!obj.cycleCountVar) obj._cycleCount = 0; saveCallback(); };
+                    _cycWrap.appendChild(_cycSel); ctxMenu.appendChild(_cycWrap);
+                },
             },
             // =========================================================
             // 👷 ARBEITER (Draufsicht – Walk & Carry Aktor)
@@ -13416,6 +13587,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 css: `
                     .f2d-worker { position:absolute; overflow:visible; z-index:15; cursor:move; }
                     .f2d-worker > svg { overflow:visible; position:absolute; top:0; left:0; }
+                    .f2d-robot-status { position:absolute; bottom:-14px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:#fff; font-size:8px; padding:1px 4px; border-radius:3px; white-space:nowrap; pointer-events:none; z-index:20; }
                 `,
                 build(obj, el) {
                     obj.targetX = 0; obj.targetY = 0;
@@ -13507,6 +13679,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     obj._svgHat = hat;
                     obj._svgHatBrim = hatBrim;
                     obj._svgCarryBox = carryBox;
+                    let _stBadgeW = document.createElement('div'); _stBadgeW.className = 'f2d-robot-status'; _stBadgeW.style.display = 'none'; el.appendChild(_stBadgeW); obj._statusBadge = _stBadgeW;
                 },
                 animate(obj, spsState) {
                     let speed = (obj.pathSpeed || 2.5) * (window.simSpeed || 1);
@@ -13528,6 +13701,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (spsState[obj.linkedVarY_Minus]) obj.targetY = (obj.targetY || 0) - speed;
                     }
 
+                    if (obj._statusBadge) { let _st = obj._inTransition ? '→ Transit' : (obj._pathGrip===true ? '✊ Greift' : (obj._activePathRef||obj.pathEnabled ? '▶ Fährt' : '')); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
                     let ax = obj.x + (obj.targetX || 0);
                     let ay = obj.y + (obj.targetY || 0);
 
@@ -13710,8 +13884,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                             obj.namedPaths = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none';
                         };
                         ctxMenu.appendChild(deactBtn);
+                        let cpRowW = document.createElement('div'); cpRowW.style.cssText = 'display:flex;gap:2px;padding:2px 8px 4px;';
+                        let cpCopyBtnW = document.createElement('div'); cpCopyBtnW.className = 'ctx-item'; cpCopyBtnW.style.cssText = 'flex:1;text-align:center;font-size:10px;'; cpCopyBtnW.textContent = '📋 Pfade kopieren';
+                        cpCopyBtnW.onclick = () => { window._pathClipboard = JSON.parse(JSON.stringify(obj.namedPaths)); saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                        let cpPasteBtnW = document.createElement('div'); cpPasteBtnW.className = 'ctx-item'; cpPasteBtnW.style.cssText = 'flex:1;text-align:center;font-size:10px;color:' + (window._pathClipboard ? '#81c784' : '#666') + ';';
+                        cpPasteBtnW.textContent = '📋 Pfade einfügen';
+                        if (window._pathClipboard) cpPasteBtnW.onclick = () => { obj.namedPaths = JSON.parse(JSON.stringify(window._pathClipboard)); obj._activePathRef = null; saveCallback(); document.getElementById('factory-context-menu').style.display = 'none'; };
+                        cpRowW.appendChild(cpCopyBtnW); cpRowW.appendChild(cpPasteBtnW); ctxMenu.appendChild(cpRowW);
                     }
-                }
+                    // Zykluszähler-Variable
+                    let _cycSepW = document.createElement('div'); _cycSepW.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(_cycSepW);
+                    let _cycWrapW = document.createElement('div'); _cycWrapW.style.cssText = 'padding:2px 15px 5px;'; _cycWrapW.onclick = e => e.stopPropagation();
+                    _cycWrapW.innerHTML = '<div style="color:#90a4ae;font-size:10px;margin-bottom:2px;">🔢 Zykluszähler → Variable:</div>';
+                    let _cycSelW = document.createElement('select'); _cycSelW.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                    let _cycOptNW = document.createElement('option'); _cycOptNW.value = ''; _cycOptNW.textContent = '-- Keine --'; _cycSelW.appendChild(_cycOptNW);
+                    globalOutputs.forEach(v => { let o = document.createElement('option'); o.value = v; o.textContent = v; if (v === obj.cycleCountVar) o.selected = true; _cycSelW.appendChild(o); });
+                    _cycSelW.onchange = () => { obj.cycleCountVar = _cycSelW.value || null; if (!obj.cycleCountVar) obj._cycleCount = 0; saveCallback(); };
+                    _cycWrapW.appendChild(_cycSelW); ctxMenu.appendChild(_cycWrapW);
+                },
             },
 			'hmi_panel': {
                 directSpawn: true, hasHeight: true, noRotate: true, noRodAttach: true,
@@ -19024,7 +19214,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // 🌟 FIX: parentId und attachmentType MÜSSEN gespeichert werden, sonst fällt der Stempel ab!
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType, normLabel: o.normLabel, originalLabelText: o.originalLabelText,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound, locked: o.locked || false,
-					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, pathSequenceMode: o.pathSequenceMode || null, pathTransition: o.pathTransition || null, posX: o.posX, posY: o.posY,
+					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, pathSequenceMode: o.pathSequenceMode || null, pathTransition: o.pathTransition || null, cycleCountVar: o.cycleCountVar || null, posX: o.posX, posY: o.posY,
                     showKeyBadge: o.showKeyBadge || false,
                     linkedVarMotor: o.linkedVarMotor || null, linkedVarMotorFW: o.linkedVarMotorFW || null, linkedVarMotorHW: o.linkedVarMotorHW || null, linkedVarAutoMode: o.linkedVarAutoMode || null, linkedVarNormal: o.linkedVarNormal || null, linkedVarCreep: o.linkedVarCreep || null, linkedVarHubOben: o.linkedVarHubOben || null, speedCreep: o.speedCreep !== undefined ? o.speedCreep : null,
                     linkedVarWind: o.linkedVarWind || null, windForce: o.windForce !== undefined ? o.windForce : null, linkedVarWindSensor: o.linkedVarWindSensor || null, linkedVarPendel: o.linkedVarPendel || null, pendelThreshold: o.pendelThreshold || null,
@@ -19253,6 +19443,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.pathSpeed) newObj.pathSpeed = o.pathSpeed;
                     if (o.pathSequenceMode) newObj.pathSequenceMode = o.pathSequenceMode;
                     if (o.pathTransition) newObj.pathTransition = o.pathTransition;
+                    if (o.cycleCountVar) newObj.cycleCountVar = o.cycleCountVar;
                     if (o.labelPinned) {
                         newObj.labelPinned = true;
                         if (newObj.labelEl) newObj.labelEl.classList.add('f2d-label-pinned');

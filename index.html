@@ -1561,9 +1561,13 @@
                     <div class="tb-dropdown">
                         <button class="tb-drop-btn" data-i18n="fac_menu_structure">🏗️ Struktur ▼</button>
                         <div class="tb-dropdown-content" id="menu-struktur">
-                            <div class="tb-menu-cat">Wände / Böden</div>
+                            <div class="tb-menu-cat-toggle" id="menu-struct-cat-waende" onclick="(function(h){var c=document.getElementById('menu-struct-waende-extras');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'+ ':'− ')+'Wände / Böden';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">+ Wände / Böden</div>
                             <div onclick="addFactoryDevice('wall')" data-i18n="fac_struct_wall">🧱 Ziegelwand (Mauer)</div>
                             <div onclick="addFactoryDevice('frame')" data-i18n="fac_struct_frame">⛓️ Metallrahmen / Boden</div>
+                            <div id="menu-struct-waende-anchor" style="display:none;"></div>
+                            <div id="menu-struct-waende-extras" class="tb-inline-group" style="display:none;">
+                                <div id="menu-struct-waende-extras-inner" style="display:none;"></div>
+                            </div>
                             <div id="menu-struct-cat-behaelter" class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-struct-behaelter-content');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'🪣 Behälter';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ 🪣 Behälter</div>
                             <div id="menu-struct-behaelter-content" class="tb-inline-group" style="display:none;">
                                 <div id="menu-struct-behaelter-anchor" style="display:none;"></div>
@@ -10011,7 +10015,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             'zylinder_single': 'both', 'zylinder_double': 'both',
             'heater': 'side', 'wall': 'both', 'frame': 'both',
             'holzflaeche': 'both', 'zaun': 'both', 'palette': 'top',
-            'portal_crane': 'side', 'turntable': 'top', 'robot_arm_2d': 'top',
+            'portal_crane': 'side', 'turntable': 'top', 'robot_arm_2d': 'top', 'worker_2d': 'top',
         };
         function _typeView(type) {
             if (_TYPE_VIEW[type] !== undefined) return _TYPE_VIEW[type];
@@ -10221,9 +10225,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             let segLen = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2) || 1;
             src._pathT += speed / segLen;
             let looped = false;
+            let _pathDone = false;
             if (src._pathT >= maxT) {
-                if (src.pathLoop) { src._pathT = 0; looped = true; }
-                else { src._pathT = maxT - 0.0001; obj._pathGrip = undefined; }
+                if (src.pathLoop) { src._pathT = 0; looped = true; _pathDone = true; }
+                else { if (!src._pathAtEnd) { src._pathAtEnd = true; _pathDone = true; } src._pathT = maxT - 0.0001; obj._pathGrip = undefined; }
             }
             // Greifer-Aktion und Pause beim Erreichen eines Wegpunkts auslösen
             if (looped) { obj._pathGrip = undefined; obj._ikA1 = undefined; } // Latch + IK-Kontinuität bei Loop-Neustart zurücksetzen
@@ -10244,6 +10249,66 @@ You must output exactly this JSON format. The logic code goes as a single string
                     src._pathT = newFloor;
                     obj.targetX = wp.x; obj.targetY = wp.y;
                 }
+            }
+            return _pathDone ? 'done' : undefined;
+        };
+        // Shared multi-path sequencer + transition handler for robot_arm_2d / worker_2d
+        window._robotAdvancePath = function(obj, speed, activePaths) {
+            // --- linear transition between paths ---
+            if (obj._inTransition) {
+                let tx = obj._transitionTargetX, ty = obj._transitionTargetY;
+                let cx = obj.targetX || 0, cy = obj.targetY || 0;
+                let dx = tx - cx, dy = ty - cy;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= speed) {
+                    obj.targetX = tx; obj.targetY = ty;
+                    obj._inTransition = false;
+                    obj._activePathRef = obj._pendingPath;
+                    obj._pendingPath = null;
+                    if (obj._activePathRef) { obj._activePathRef._pathT = 0; obj._activePathRef._pathAtEnd = false; }
+                } else {
+                    obj.targetX = cx + (dx / dist) * speed;
+                    obj.targetY = cy + (dy / dist) * speed;
+                }
+                return;
+            }
+            // --- ensure a valid active path ---
+            if (!obj._activePathRef || !activePaths.includes(obj._activePathRef)) {
+                let m = obj.pathSequenceMode || 'sequential';
+                obj._activePathRef = (m === 'reverse' || m === 'pingpong') ? activePaths[activePaths.length - 1] : activePaths[0];
+                obj._pathSeqDir = (m === 'reverse' || m === 'pingpong') ? -1 : 1;
+                obj._activePathRef._pathT = 0; obj._activePathRef._pathAtEnd = false;
+            }
+            // --- follow current path ---
+            let _r = window._robotFollowPath(obj, speed, obj._activePathRef);
+            if (_r !== 'done' || activePaths.length < 2) return;
+            // --- pick next path ---
+            let m = obj.pathSequenceMode || 'sequential';
+            let _i = activePaths.indexOf(obj._activePathRef);
+            let _next;
+            if (m === 'sequential') {
+                _next = activePaths[(_i + 1) % activePaths.length];
+            } else if (m === 'reverse') {
+                _next = activePaths[(_i - 1 + activePaths.length) % activePaths.length];
+            } else if (m === 'pingpong') {
+                if (!obj._pathSeqDir) obj._pathSeqDir = 1;
+                let ni = _i + obj._pathSeqDir;
+                if (ni >= activePaths.length) { obj._pathSeqDir = -1; ni = _i - 1; }
+                else if (ni < 0)              { obj._pathSeqDir =  1; ni = _i + 1; }
+                _next = activePaths[Math.max(0, Math.min(activePaths.length - 1, ni))];
+            } else { // random
+                _next = activePaths[Math.floor(Math.random() * activePaths.length)];
+            }
+            // --- apply transition ---
+            let tr = obj.pathTransition || 'instant';
+            if (tr === 'linear' && _next !== obj._activePathRef && _next.waypoints && _next.waypoints.length > 0) {
+                obj._inTransition = true;
+                obj._transitionTargetX = _next.waypoints[0].x;
+                obj._transitionTargetY = _next.waypoints[0].y;
+                obj._pendingPath = _next;
+            } else {
+                if (_next !== obj._activePathRef) { _next._pathT = 0; _next._pathAtEnd = false; }
+                obj._activePathRef = _next;
             }
         };
         // =========================================================
@@ -13167,13 +13232,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 animate(obj, spsState) {
                     let speed = (obj.pathSpeed || 2.5) * (window.simSpeed || 1);
                     if (obj.namedPaths && obj.namedPaths.length > 0) {
-                        let activePath = null;
-                        for (let i = 0; i < obj.namedPaths.length; i++) {
-                            let p = obj.namedPaths[i];
-                            if (p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar])) { activePath = p; break; }
-                        }
-                        if (activePath) window._robotFollowPath(obj, speed, activePath);
-                        else if (obj._pathGrip !== true) obj._pathGrip = null;
+                        let activePaths = obj.namedPaths.filter(p => p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar]));
+                        if (activePaths.length > 0) { window._robotAdvancePath(obj, speed, activePaths); }
+                        else { obj._activePathRef = null; obj._inTransition = false; if (obj._pathGrip !== true) obj._pathGrip = null; }
                     } else if (obj.pathEnabled && obj.waypoints && obj.waypoints.length >= 2) {
                         let pathActive = !obj.linkedVarEnable || !!spsState[obj.linkedVarEnable];
                         if (pathActive) window._robotFollowPath(obj, speed);
@@ -13285,6 +13346,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                         ctxMenu.appendChild(activateBtn);
                     } else {
                         let pathsHeader = document.createElement('div'); pathsHeader.style.cssText = 'padding:0 10px 3px;color:#4caf50;font-size:10px;font-weight:bold;'; pathsHeader.textContent = '🗂 Pfade (Mehrpfad-Modus):'; ctxMenu.appendChild(pathsHeader);
+                        let _seqWrap = document.createElement('div'); _seqWrap.style.cssText = 'padding:2px 15px 4px;display:flex;align-items:center;gap:5px;'; _seqWrap.onclick = e => e.stopPropagation();
+                        let _seqLbl = document.createElement('span'); _seqLbl.style.cssText = 'color:#90a4ae;font-size:10px;flex-shrink:0;'; _seqLbl.textContent = '🔀 Reihenfolge:';
+                        let _seqSel = document.createElement('select'); _seqSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                        [['sequential','▶ Hintereinander'],['reverse','◀ Umgekehrt'],['pingpong','↔ Pendeln'],['random','🎲 Zufällig']].forEach(([v,l]) => { let _o = document.createElement('option'); _o.value = v; _o.textContent = l; if ((obj.pathSequenceMode||'sequential') === v) _o.selected = true; _seqSel.appendChild(_o); });
+                        _seqSel.onchange = () => { obj.pathSequenceMode = _seqSel.value; obj._activePathRef = null; saveCallback(); };
+                        _seqWrap.appendChild(_seqLbl); _seqWrap.appendChild(_seqSel); ctxMenu.appendChild(_seqWrap);
+                        let _trWrap = document.createElement('div'); _trWrap.style.cssText = 'padding:2px 15px 5px;display:flex;align-items:center;gap:5px;'; _trWrap.onclick = e => e.stopPropagation();
+                        let _trLbl = document.createElement('span'); _trLbl.style.cssText = 'color:#90a4ae;font-size:10px;flex-shrink:0;'; _trLbl.textContent = '🔗 Übergang:';
+                        let _trSel = document.createElement('select'); _trSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                        [['instant','⚡ Springen'],['linear','➡ Linear']].forEach(([v,l]) => { let _o = document.createElement('option'); _o.value = v; _o.textContent = l; if ((obj.pathTransition||'instant') === v) _o.selected = true; _trSel.appendChild(_o); });
+                        _trSel.onchange = () => { obj.pathTransition = _trSel.value; saveCallback(); };
+                        _trWrap.appendChild(_trLbl); _trWrap.appendChild(_trSel); ctxMenu.appendChild(_trWrap);
                         obj.namedPaths.forEach((path, idx) => {
                             let color = PATH_COLORS_CTX[idx % PATH_COLORS_CTX.length];
                             let pRow = document.createElement('div'); pRow.style.cssText = 'padding:3px 15px;display:flex;align-items:center;gap:3px;'; pRow.onclick = e => e.stopPropagation();
@@ -13441,12 +13514,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let prevAY = obj.y + (obj.targetY || 0);
 
                     if (obj.namedPaths && obj.namedPaths.length > 0) {
-                        let activePath = null;
-                        for (let p of obj.namedPaths) {
-                            if (p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar])) { activePath = p; break; }
-                        }
-                        if (activePath) window._robotFollowPath(obj, speed, activePath);
-                        else if (obj._pathGrip !== true) obj._pathGrip = null;
+                        let activePaths = obj.namedPaths.filter(p => p.waypoints && p.waypoints.length >= 2 && (!p.enableVar || !!spsState[p.enableVar]));
+                        if (activePaths.length > 0) { window._robotAdvancePath(obj, speed, activePaths); }
+                        else { obj._activePathRef = null; obj._inTransition = false; if (obj._pathGrip !== true) obj._pathGrip = null; }
                     } else if (obj.pathEnabled && obj.waypoints && obj.waypoints.length >= 2) {
                         if (!obj.linkedVarEnable || !!spsState[obj.linkedVarEnable]) window._robotFollowPath(obj, speed);
                         else if (obj._pathGrip !== true) obj._pathGrip = null;
@@ -13587,6 +13657,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                         ctxMenu.appendChild(activateBtn);
                     } else {
                         let pathsHeader = document.createElement('div'); pathsHeader.style.cssText = 'padding:0 10px 3px;color:#4caf50;font-size:10px;font-weight:bold;'; pathsHeader.textContent = '🗂 Pfade (Mehrpfad-Modus):'; ctxMenu.appendChild(pathsHeader);
+                        let _seqWrap = document.createElement('div'); _seqWrap.style.cssText = 'padding:2px 15px 4px;display:flex;align-items:center;gap:5px;'; _seqWrap.onclick = e => e.stopPropagation();
+                        let _seqLbl = document.createElement('span'); _seqLbl.style.cssText = 'color:#90a4ae;font-size:10px;flex-shrink:0;'; _seqLbl.textContent = '🔀 Reihenfolge:';
+                        let _seqSel = document.createElement('select'); _seqSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                        [['sequential','▶ Hintereinander'],['reverse','◀ Umgekehrt'],['pingpong','↔ Pendeln'],['random','🎲 Zufällig']].forEach(([v,l]) => { let _o = document.createElement('option'); _o.value = v; _o.textContent = l; if ((obj.pathSequenceMode||'sequential') === v) _o.selected = true; _seqSel.appendChild(_o); });
+                        _seqSel.onchange = () => { obj.pathSequenceMode = _seqSel.value; obj._activePathRef = null; saveCallback(); };
+                        _seqWrap.appendChild(_seqLbl); _seqWrap.appendChild(_seqSel); ctxMenu.appendChild(_seqWrap);
+                        let _trWrap = document.createElement('div'); _trWrap.style.cssText = 'padding:2px 15px 5px;display:flex;align-items:center;gap:5px;'; _trWrap.onclick = e => e.stopPropagation();
+                        let _trLbl = document.createElement('span'); _trLbl.style.cssText = 'color:#90a4ae;font-size:10px;flex-shrink:0;'; _trLbl.textContent = '🔗 Übergang:';
+                        let _trSel = document.createElement('select'); _trSel.style.cssText = 'flex:1;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;cursor:pointer;';
+                        [['instant','⚡ Springen'],['linear','➡ Linear']].forEach(([v,l]) => { let _o = document.createElement('option'); _o.value = v; _o.textContent = l; if ((obj.pathTransition||'instant') === v) _o.selected = true; _trSel.appendChild(_o); });
+                        _trSel.onchange = () => { obj.pathTransition = _trSel.value; saveCallback(); };
+                        _trWrap.appendChild(_trLbl); _trWrap.appendChild(_trSel); ctxMenu.appendChild(_trWrap);
                         obj.namedPaths.forEach((path, idx) => {
                             let color = PATH_COLORS_CTX[idx % PATH_COLORS_CTX.length];
                             let pRow = document.createElement('div'); pRow.style.cssText = 'padding:3px 15px;display:flex;align-items:center;gap:3px;'; pRow.onclick = e => e.stopPropagation();
@@ -14045,7 +14127,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             meta: { icon: '🪵' },
             menuTarget: '#menu-struktur',
             menuHtml: `<div onclick="addFactoryDevice('holzflaeche')">🪵 Holzoberfläche / Dielen</div>`,
-            insertBefore: '#menu-struct-cat-behaelter',
+            insertBefore: '#menu-struct-waende-extras-inner',
             directSpawn: true,
             build(obj, el) {
                 obj.width = obj.width || 150; obj.height = obj.height || 20;
@@ -14065,7 +14147,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             meta: { icon: '🚧' },
             menuTarget: '#menu-struktur',
             menuHtml: `<div onclick="addFactoryDevice('zaun')">🚧 Zaun</div>`,
-            insertBefore: '#menu-struct-cat-behaelter',
+            insertBefore: '#menu-struct-waende-extras-inner',
             directSpawn: true,
             build(obj, el) {
                 obj.width = obj.width || 150; obj.height = obj.height || 20;
@@ -14085,7 +14167,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             meta: { icon: '📦' },
             menuTarget: '#menu-struktur',
             menuHtml: `<div onclick="addFactoryDevice('palette')">📦 Palette (Holz)</div>`,
-            insertBefore: '#menu-struct-cat-behaelter',
+            insertBefore: '#menu-struct-waende-extras-inner',
             directSpawn: true,
             _buildSvg(w, h) {
                 let s1w = Math.round(w * 0.18), s2x = Math.round(w * 0.41), s3x = Math.round(w * 0.82);
@@ -18942,7 +19024,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // 🌟 FIX: parentId und attachmentType MÜSSEN gespeichert werden, sonst fällt der Stempel ab!
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType, normLabel: o.normLabel, originalLabelText: o.originalLabelText,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound, locked: o.locked || false,
-					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, posX: o.posX, posY: o.posY,
+					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, pathSequenceMode: o.pathSequenceMode || null, pathTransition: o.pathTransition || null, posX: o.posX, posY: o.posY,
                     showKeyBadge: o.showKeyBadge || false,
                     linkedVarMotor: o.linkedVarMotor || null, linkedVarMotorFW: o.linkedVarMotorFW || null, linkedVarMotorHW: o.linkedVarMotorHW || null, linkedVarAutoMode: o.linkedVarAutoMode || null, linkedVarNormal: o.linkedVarNormal || null, linkedVarCreep: o.linkedVarCreep || null, linkedVarHubOben: o.linkedVarHubOben || null, speedCreep: o.speedCreep !== undefined ? o.speedCreep : null,
                     linkedVarWind: o.linkedVarWind || null, windForce: o.windForce !== undefined ? o.windForce : null, linkedVarWindSensor: o.linkedVarWindSensor || null, linkedVarPendel: o.linkedVarPendel || null, pendelThreshold: o.pendelThreshold || null,
@@ -19169,6 +19251,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.startupTime) newObj.startupTime = o.startupTime;
                     if (o.backpressureStop) newObj.backpressureStop = true;
                     if (o.pathSpeed) newObj.pathSpeed = o.pathSpeed;
+                    if (o.pathSequenceMode) newObj.pathSequenceMode = o.pathSequenceMode;
+                    if (o.pathTransition) newObj.pathTransition = o.pathTransition;
                     if (o.labelPinned) {
                         newObj.labelPinned = true;
                         if (newObj.labelEl) newObj.labelEl.classList.add('f2d-label-pinned');

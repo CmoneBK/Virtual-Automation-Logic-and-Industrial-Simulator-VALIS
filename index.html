@@ -823,6 +823,10 @@
         .btn-gravity.active { background-color: #4caf50; box-shadow: 0 0 10px #4caf50; border-color: #fff; }
         /* NEU: Kontextmenü Styles */
         #factory-context-menu { display: none; position: absolute; background: #2d2d30; border: 1px solid #555; padding: 5px 0; border-radius: 3px; z-index: 200; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); font-family: sans-serif; }
+        .ctx-drag-handle { position: absolute; top: 2px; right: 4px; width: 18px; height: 14px; cursor: grab; display: flex; flex-direction: column; justify-content: space-between; padding: 2px 3px; box-sizing: border-box; opacity: 0.45; z-index: 1; border-radius: 2px; }
+        .ctx-drag-handle:hover { opacity: 0.9; background: rgba(255,255,255,0.08); }
+        .ctx-drag-handle:active { cursor: grabbing; opacity: 1; }
+        .ctx-drag-handle span { display: block; height: 1.5px; background: #aaa; border-radius: 1px; }
         #factory-context-menu.ctx-multicol { display: flex; flex-direction: row; align-items: flex-start; padding: 0; }
         #factory-context-menu.ctx-multicol .ctx-col { display: flex; flex-direction: column; min-width: 200px; padding: 5px 0; }
         #factory-context-menu.ctx-multicol .ctx-col + .ctx-col { border-left: 1px solid #444; }
@@ -9950,6 +9954,34 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const mr2 = ctxMenu.getBoundingClientRect();
                 if (mr2.right  > visRight)  ctxMenu.style.left = Math.max(0, parseFloat(ctxMenu.style.left) - (mr2.right  - visRight))  + 'px';
                 if (mr2.bottom > visBottom) ctxMenu.style.top  = Math.max(0, parseFloat(ctxMenu.style.top)  - (mr2.bottom - visBottom)) + 'px';
+                // Drag-Handle nach jedem Aufbau neu einfügen (ctxMenu.innerHTML='' löscht ihn)
+                if (!ctxMenu.querySelector('.ctx-drag-handle')) {
+                    let _dh = document.createElement('div');
+                    _dh.className = 'ctx-drag-handle';
+                    _dh.title = 'Menü verschieben';
+                    for (let i = 0; i < 3; i++) _dh.appendChild(document.createElement('span'));
+                    _dh.addEventListener('mousedown', function(e) {
+                        if (e.button !== 0) return;
+                        e.stopPropagation(); e.preventDefault();
+                        let sX = e.clientX, sY = e.clientY;
+                        let sL = parseFloat(ctxMenu.style.left)||0, sT = parseFloat(ctxMenu.style.top)||0;
+                        let moved = false;
+                        _dh.style.cursor = 'grabbing';
+                        let onMv = m => { moved = true; ctxMenu.style.left=(sL+m.clientX-sX)+'px'; ctxMenu.style.top=(sT+m.clientY-sY)+'px'; };
+                        let onUp = () => {
+                            _dh.style.cursor='';
+                            document.removeEventListener('mousemove',onMv);
+                            document.removeEventListener('mouseup',onUp);
+                            if (moved) {
+                                // nächsten click-Event abfangen, damit das Menü nicht geschlossen wird
+                                document.addEventListener('click', e2 => e2.stopImmediatePropagation(), { capture: true, once: true });
+                            }
+                        };
+                        document.addEventListener('mousemove', onMv);
+                        document.addEventListener('mouseup', onUp);
+                    });
+                    ctxMenu.appendChild(_dh);
+                }
             });
         }
         let factoryObjects = [];
@@ -10176,8 +10208,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (seg >= maxT) { seg = maxT - 1; src._pathT = maxT - 0.0001; }
             let t = src._pathT - seg;
             let p0 = ePts[seg], p1 = ePts[seg + 1];
-            obj.targetX = p0.x + (p1.x - p0.x) * t;
-            obj.targetY = p0.y + (p1.y - p0.y) * t;
+            if (src.pathMode === 'spline' && ePts.length >= 3) {
+                // Catmull-Rom Spline – identisch mit _renderPathOverlay
+                let pa = ePts[Math.max(0, seg - 1)], pb = p0, pc = p1, pd = ePts[Math.min(ePts.length - 1, seg + 2)];
+                let cr = (p, q, r, s, u) => 0.5 * ((2*q) + (-p+r)*u + (2*p-5*q+4*r-s)*u*u + (-p+3*q-3*r+s)*u*u*u);
+                obj.targetX = cr(pa.x, pb.x, pc.x, pd.x, t);
+                obj.targetY = cr(pa.y, pb.y, pc.y, pd.y, t);
+            } else {
+                obj.targetX = p0.x + (p1.x - p0.x) * t;
+                obj.targetY = p0.y + (p1.y - p0.y) * t;
+            }
             let segLen = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2) || 1;
             src._pathT += speed / segLen;
             let looped = false;
@@ -10324,25 +10364,32 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (isEd) {
                         c.style.cursor = i === 0 && pts.length >= 2 ? 'crosshair' : 'grab';
                         c.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); pts.splice(i, 1); window._renderPathOverlay(); });
-                        if (i === 0 && pts.length >= 2) {
-                            c.addEventListener('mousedown', ev => {
-                                if (ev.button !== 0) return;
-                                ev.stopPropagation(); ev.preventDefault();
-                                pathSrc.pathLoop = true; pathSrc.pathEnabled = true;
-                                let lChk = document.getElementById('path-loop-chk');
-                                if (lChk) lChk.checked = true;
-                                window._stopPathEdit();
-                            });
-                        } else {
-                            c.addEventListener('mousedown', ev => {
-                                if (ev.button !== 0) return;
-                                ev.stopPropagation(); ev.preventDefault();
-                                c.style.cursor = 'grabbing';
-                                let onMove = mv => { let loc = _canvasToLocal(obj, mv.clientX, mv.clientY); pts[i].x = loc.x; pts[i].y = loc.y; window._renderPathOverlay(); };
-                                let onUp = () => { c.style.cursor='grab'; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-                                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
-                            });
-                        }
+                        c.addEventListener('mousedown', ev => {
+                            if (ev.button !== 0) return;
+                            ev.stopPropagation(); ev.preventDefault();
+                            let dragged = false;
+                            c.style.cursor = 'grabbing';
+                            let onMove = mv => {
+                                dragged = true;
+                                let loc = _canvasToLocal(obj, mv.clientX, mv.clientY);
+                                pts[i].x = loc.x; pts[i].y = loc.y;
+                                window._renderPathOverlay();
+                            };
+                            let onUp = () => {
+                                c.style.cursor = i === 0 && pts.length >= 2 ? 'crosshair' : 'grab';
+                                document.removeEventListener('mousemove', onMove);
+                                document.removeEventListener('mouseup', onUp);
+                                // Kein Drag → Startpunkt-Klick = Loop schließen
+                                if (!dragged && i === 0 && pts.length >= 2) {
+                                    pathSrc.pathLoop = true; pathSrc.pathEnabled = true;
+                                    let lChk = document.getElementById('path-loop-chk');
+                                    if (lChk) lChk.checked = true;
+                                    window._stopPathEdit();
+                                }
+                            };
+                            document.addEventListener('mousemove', onMove);
+                            document.addEventListener('mouseup', onUp);
+                        });
                     }
                     svgEl.appendChild(c);
                     // Greifer-Aktion und Pause anzeigen (im Edit-Modus: klickbare Badges; sonst: kleine Icons)
@@ -10470,7 +10517,42 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             ev.stopPropagation();
             ev.preventDefault();
-            // Reichweite begrenzen: Punkt darf nicht außerhalb des Arm-Radius liegen (nicht für worker_2d)
+            if (!src.waypoints) src.waypoints = [];
+            // Zwischenpunkt: Klick nahe bestehendem Segment → zwischen die zwei Punkte einfügen
+            // Prüfung VOR der Reach-Clamping, damit loc noch unverändert ist
+            if (src.waypoints.length >= 2) {
+                let HIT = Math.max(10, 14 / (factoryScale || 1));
+                let ePts = src.pathLoop ? [...src.waypoints, src.waypoints[0]] : src.waypoints;
+                let n = ePts.length;
+                let bestDist = HIT, bestIdx = -1;
+                let crCoord = (p,q,r,s,u) => 0.5*((2*q)+(-p+r)*u+(2*p-5*q+4*r-s)*u*u+(-p+3*q-3*r+s)*u*u*u);
+                for (let i = 0; i < n - 1; i++) {
+                    let pb = ePts[i], pc = ePts[i+1];
+                    if (src.pathMode === 'spline' && n >= 3) {
+                        // Catmull-Rom abtasten — identisch zur visuellen Darstellung
+                        let pa = ePts[Math.max(0,i-1)], pd = ePts[Math.min(n-1,i+2)];
+                        for (let j = 0; j <= 20; j++) {
+                            let u = j / 20;
+                            let sx = crCoord(pa.x,pb.x,pc.x,pd.x,u), sy = crCoord(pa.y,pb.y,pc.y,pd.y,u);
+                            let d = Math.sqrt((loc.x-sx)**2 + (loc.y-sy)**2);
+                            if (d < bestDist) { bestDist = d; bestIdx = i; }
+                        }
+                    } else {
+                        let dx = pc.x-pb.x, dy = pc.y-pb.y, lenSq = dx*dx+dy*dy;
+                        if (lenSq < 1) continue;
+                        let tCl = Math.max(0, Math.min(1, ((loc.x-pb.x)*dx+(loc.y-pb.y)*dy)/lenSq));
+                        let d = Math.sqrt((loc.x-(pb.x+tCl*dx))**2+(loc.y-(pb.y+tCl*dy))**2);
+                        if (d < bestDist) { bestDist = d; bestIdx = i; }
+                    }
+                }
+                if (bestIdx >= 0) {
+                    let insertAt = Math.min(bestIdx + 1, src.waypoints.length);
+                    src.waypoints.splice(insertAt, 0, loc);
+                    window._renderPathOverlay();
+                    return;
+                }
+            }
+            // Kein Segment getroffen → ans Ende anhängen; jetzt Reichweite begrenzen
             if (obj.type !== 'worker_2d') {
                 let maxR = (obj.arm1Len || 80) + (obj.arm2Len || 60) - 1;
                 let minR = Math.abs((obj.arm1Len || 80) - (obj.arm2Len || 60)) + 2;
@@ -10480,7 +10562,6 @@ You must output exactly this JSON format. The logic code goes as a single string
                     else if (dist < minR) { let f = minR / dist; loc.x = Math.round(loc.x * f); loc.y = Math.round(loc.y * f); }
                 }
             }
-            if (!src.waypoints) src.waypoints = [];
             src.waypoints.push(loc);
             window._renderPathOverlay();
         }, true); // capture=true → feuert zuerst
@@ -13116,6 +13197,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (grabNow && !obj.grabbedItem) {
                         for (let i = 0; i < factoryItems.length; i++) {
                             let it = factoryItems[i];
+                            if (factoryObjects.some(o => o !== obj && o.grabbedItem === it)) continue;
                             let dx = (it.x + it.width / 2) - gx, dy = (it.y + (it.height || it.width) / 2) - gy;
                             if (Math.sqrt(dx * dx + dy * dy) < 35) {
                                 obj.grabbedItem = it;
@@ -13397,6 +13479,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
                     if (grabNow && !obj.grabbedItem) {
                         for (let it of factoryItems) {
+                            if (factoryObjects.some(o => o !== obj && o.grabbedItem === it)) continue;
                             let ix = it.x + it.width / 2, iy = it.y + (it.height || it.width) / 2;
                             if ((ix - ax) * (ix - ax) + (iy - ay) * (iy - ay) < 40 * 40) {
                                 obj.grabbedItem = it; it.useGravity = false; it.vx = 0; it.vy = 0; break;
@@ -15766,18 +15849,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                     inp.style.cssText = 'width:52px;background:#111;color:#ffeb3b;border:1px solid rgba(255,235,59,0.5);border-radius:2px;font-size:10px;font-family:monospace;padding:0 3px;outline:none;box-sizing:border-box;';
                     sp.replaceWith(inp); inp.focus(); inp.select();
                     inp.oninput = () => { let v = parseFloat(inp.value); if (!isNaN(v)) applyV(v); };
-                    const commit = () => { let v = parseFloat(inp.value); if (!isNaN(v)) { applyV(v); saveFactoryState(); } _ref(); inp.replaceWith(sp); };
+                    let _committed = false;
+                    const commit = () => {
+                        if (_committed) return; _committed = true;
+                        let v = parseFloat(inp.value); if (!isNaN(v)) { applyV(v); saveFactoryState(); } _ref();
+                        if (inp.parentNode) inp.replaceWith(sp);
+                    };
                     inp.onblur = commit;
                     inp.onkeydown = (ke) => {
                         if (ke.key === 'Tab') {
-                            ke.preventDefault();
-                            let v = parseFloat(inp.value); if (!isNaN(v)) { applyV(v); saveFactoryState(); } _ref(); inp.replaceWith(sp);
+                            ke.preventDefault(); _committed = true;
+                            let v = parseFloat(inp.value); if (!isNaN(v)) { applyV(v); saveFactoryState(); } _ref();
+                            if (inp.parentNode) inp.replaceWith(sp);
                             const _next = _edSpans[ke.shiftKey ? _idx - 1 : _idx + 1];
                             if (_next) _next.click();
                             return;
                         }
                         if (ke.key === 'Enter') { ke.preventDefault(); commit(); }
-                        if (ke.key === 'Escape') inp.replaceWith(sp);
+                        if (ke.key === 'Escape') { _committed = true; if (inp.parentNode) inp.replaceWith(sp); }
                         ke.stopPropagation();
                     };
                 };
@@ -15790,8 +15879,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             infoBox.appendChild(_ctxL1);
             // 📏 W | H | R
             let _ctxL2 = document.createElement('div');
-            _ctxL2.append('📏 W:\u00a0', _mkEd(() => obj.width || 0, v => { obj.width = Math.max(8, Math.round(v)); obj.el.style.width = obj.width + 'px'; }),
-                ' | H:\u00a0', _mkEd(() => obj.height || obj.width || 0, v => { obj.height = Math.max(8, Math.round(v)); obj.el.style.height = obj.height + 'px'; }),
+            const _applyResize = () => {
+                updateObjTransform(obj);
+                if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].onResize) ComponentRegistry[obj.type].onResize(obj);
+                fluidGridDirty = true;
+            };
+            _ctxL2.append('📏 W:\u00a0', _mkEd(() => obj.width || 0, v => { obj.width = Math.max(8, Math.round(v)); obj.el.style.width = obj.width + 'px'; _applyResize(); }),
+                ' | H:\u00a0', _mkEd(() => obj.height || obj.width || 0, v => { obj.height = Math.max(8, Math.round(v)); obj.el.style.height = obj.height + 'px'; _applyResize(); }),
                 ' | R:\u00a0', _mkEd(() => obj.rotation || 0, v => { obj.rotation = v; updateObjTransform(obj); }), '°');
             infoBox.appendChild(_ctxL2);
             // 🗂 Ebene | Z
@@ -16083,6 +16177,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                     filterWrap.appendChild(row);
                 });
                 ctxMenu.appendChild(filterWrap);
+            }
+            // --- Despawn bei Kontakt (Wände/Böden) ---
+            if (['wall','frame','holzflaeche','zaun','palette'].includes(obj.type)) {
+                let sepDoc = document.createElement('div'); sepDoc.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepDoc);
+                let docWrap = document.createElement('div'); docWrap.style.cssText = 'padding:4px 15px 6px;'; docWrap.onclick = e => e.stopPropagation();
+                let docLbl = document.createElement('label'); docLbl.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;color:#ef9a9a;font-size:11px;';
+                let docCb = document.createElement('input'); docCb.type = 'checkbox'; docCb.checked = !!obj.despawnOnContact;
+                docCb.onchange = () => { obj.despawnOnContact = docCb.checked; saveFactoryState(); };
+                docLbl.appendChild(docCb); docLbl.appendChild(document.createTextNode('💥 Despawnen bei Kontakt'));
+                docWrap.appendChild(docLbl); ctxMenu.appendChild(docWrap);
             }
             // --- Spawner: Block-Spawn Offsets ---
             if (obj.type.startsWith('spawner_')) {
@@ -17532,6 +17636,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (_splashActive && _splashEngine) {
                             _splashEngine.drainZone(obj.x, obj.y, obj.width, obj.height);
                         }
+                    } else if (obj.despawnOnContact && obj.useCollision !== false) {
+                        factoryItems = factoryItems.filter(item => {
+                            if (draggedElement && draggedElement.data === item) return true;
+                            if (isBlockInLocalRect(item, obj, 0, 0, obj.width, obj.height)) {
+                                item.el.remove();
+                                return false;
+                            }
+                            return true;
+                        });
                     } else if (obj.type === 'fluid_outlet' && obj._isOpen) {
                         // Skip normal drain when this outlet has a pipe connection on port A.
                         // Connection present → pipe transfer handles flow.

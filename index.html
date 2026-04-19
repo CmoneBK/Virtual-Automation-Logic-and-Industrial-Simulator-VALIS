@@ -693,6 +693,8 @@
         #factory-wrapper.sim-active .fac-pin { pointer-events:none; opacity:0.7; }
         /* Pins bleiben auch bei gesperrter 2D-Anlage verschiebbar */
         #factory-wrapper.task-area-blocked .fac-pin { pointer-events:all !important; opacity:1 !important; }
+        /* Overlay-Cursor-Override wenn Bedienelement darunter liegt */
+        .task-block-overlay.task-ctrl-hit { cursor:pointer !important; }
         /* --- Factory Sidebar --- */
         #factory-sidebar { position:absolute;top:50px;right:0;bottom:0;width:22px;display:flex;background:#252526;border-left:1px solid #444;z-index:100;overflow:hidden;transition:width 0.2s ease;box-shadow:-2px 0 6px rgba(0,0,0,0.3); }
         #factory-sidebar.open { width:230px; }
@@ -722,6 +724,7 @@
         /* Die weißen Namensschilder an Zylindern, Bändern und Sensoren */
         .f2d-label { position: absolute; top: -15px; left: 0; font-size: 10px; font-family: monospace; background: rgba(255,255,255,0.8); padding: 1px 3px; border: 1px solid #ccc; pointer-events: none; white-space: nowrap; z-index: 15; color: #000; transition: opacity 0.2s ease; opacity: 1; }
         .f2d-label-below { top: 100%; margin-top: 3px; left: 50%; }
+        .f2d-key-badge { position: absolute; bottom: -2px; right: -2px; background: rgba(0,0,0,0.78); color: #ffd740; font-family: monospace; font-size: 9px; font-weight: bold; padding: 0 3px; border-radius: 3px; border: 1px solid #555; pointer-events: none; z-index: 25; min-width: 12px; text-align: center; line-height: 14px; }
         /* NEU: Labels im Simulationsmodus ausblenden, bei Hover oder Pin wieder einblenden */
         #factory-wrapper.sim-active .f2d-obj .f2d-label { opacity: 0; }
         #factory-wrapper.sim-active .f2d-obj:hover .f2d-label { opacity: 1; }
@@ -5497,7 +5500,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let controlHTML = isSwitchUI 
                     ? `<label class="switch"><input type="checkbox" id="sim_in_${name}" ${isActuated ? 'checked' : ''} onchange="toggleInput('${name}')"><span class="slider"></span></label>`
                     : `<button class="taster-btn ${isActuated ? 'pressed' : ''}" id="sim_taster_${name}" onmousedown="setTaster('${name}', true, event)" onmouseup="setTaster('${name}', false, event)" onmouseleave="setTaster('${name}', false, event)" ontouchstart="setTaster('${name}', true, event)" ontouchend="setTaster('${name}', false, event)">${window.t('btn_pushbutton')}</button>`;
-                let boundKey = window.inputKeyBindings[name] ? `[${window.inputKeyBindings[name].toUpperCase()}]` : '⌨️';
+                let _bk = window.inputKeyBindings[name]; let boundKey = _bk ? `[${_bk === ' ' ? '␣' : _bk.toUpperCase()}]` : '⌨️';
                 let keyBtnHTML = `<button id="btn_key_${name}" class="key-bind-btn" onclick="assignKey('${name}')" title="Klicken, um Taste zuzuweisen (Entf zum Löschen)">${boundKey}</button>`;
                 simInputsContainer.innerHTML += `<div class="switch-row flex-col">
                     <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span style="text-overflow:ellipsis; overflow:hidden;">${name}</span></div>${selectHTML}</div>
@@ -8180,6 +8183,44 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (areas[key]) {
                     let el = document.getElementById(id);
                     if (el) { el.classList.add('task-area-blocked'); _taskAddBlockOverlay(el); }
+                    if (key === 'factory2d' && areas.excludeControls && el) {
+                        const CTRL_TYPES = ['taster','schalter','nothalt','taster_nc','schalter_nc','key_switch'];
+                        let ov = el.querySelector('.task-block-overlay[data-task-block="1"]');
+                        if (ov) {
+                            const _hitCtrl = (cx, cy) => {
+                                let fc = document.getElementById('factory-content');
+                                if (!fc || typeof factoryObjects === 'undefined') return null;
+                                let r = fc.getBoundingClientRect();
+                                let fx = (cx - r.left) / (factoryScale || 1);
+                                let fy = (cy - r.top)  / (factoryScale || 1);
+                                return factoryObjects.find(o =>
+                                    CTRL_TYPES.includes(o.type) &&
+                                    fx >= o.x && fx <= o.x + (o.width  || 40) &&
+                                    fy >= o.y && fy <= o.y + (o.height || 40)
+                                ) || null;
+                            };
+                            ov.addEventListener('mousemove', e => {
+                                ov.classList.toggle('task-ctrl-hit', !!_hitCtrl(e.clientX, e.clientY));
+                            });
+                            ov.addEventListener('mouseleave', () => ov.classList.remove('task-ctrl-hit'));
+                            ov.addEventListener('mousedown', e => {
+                                if (e.button !== 0 || !isSimulationActive) return;
+                                let o = _hitCtrl(e.clientX, e.clientY);
+                                if (!o) return;
+                                e.stopPropagation();
+                                if (o.type === 'taster' || o.type === 'taster_nc') {
+                                    setTaster(o.linkedVar, true, e);
+                                    let rel = ev => { setTaster(o.linkedVar, false, ev); document.removeEventListener('mouseup', rel); };
+                                    document.addEventListener('mouseup', rel);
+                                } else if (ComponentRegistry[o.type] && typeof ComponentRegistry[o.type].clickSimulate === 'function') {
+                                    ComponentRegistry[o.type].clickSimulate(o);
+                                } else {
+                                    let domBox = document.getElementById('sim_in_' + o.linkedVar);
+                                    if (domBox) { domBox.checked = !domBox.checked; toggleInput(o.linkedVar); }
+                                }
+                            });
+                        }
+                    }
                 }
             }
             if (areas.factoryNewVars && !areas.factory2d) {
@@ -8908,12 +8949,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // Bearbeitungsbereiche
             task.blockAreas = {
-                codeEditor:     !!(document.getElementById('ted-block-code') || {}).checked,
-                ioPanel:        !!(document.getElementById('ted-block-io') || {}).checked,
-                logikplan:      !!(document.getElementById('ted-block-fbs') || {}).checked,
-                schaltplan:     !!(document.getElementById('ted-block-iec') || {}).checked,
-                factory2d:      !!(document.getElementById('ted-block-2d') || {}).checked,
-                factoryNewVars: !!(document.getElementById('ted-block-newvar') || {}).checked,
+                codeEditor:      !!(document.getElementById('ted-block-code') || {}).checked,
+                ioPanel:         !!(document.getElementById('ted-block-io') || {}).checked,
+                logikplan:       !!(document.getElementById('ted-block-fbs') || {}).checked,
+                schaltplan:      !!(document.getElementById('ted-block-iec') || {}).checked,
+                factory2d:       !!(document.getElementById('ted-block-2d') || {}).checked,
+                factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
+                excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
             };
             task.hideAreas = {
                 codeEditor: !!(document.getElementById('ted-hide-code') || {}).checked,
@@ -9137,7 +9179,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 <td style="padding:4px 0;">${label}${hint?`<br><span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}</td>
                                 <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${blockId}" ${blockChk?'checked':''}></td>
                                 <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${hideId}" ${hideChk?'checked':''}></td>
-                            </tr>`).join('')}
+                            </tr>${key==='2d'?`
+                            <tr>
+                                <td colspan="3" style="padding:2px 0 5px 16px;">
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                                        <input type="checkbox" id="ted-block-2d-excl-ctrl" ${(task.blockAreas||{}).excludeControls?'checked':''}>
+                                        <span>Bedienelemente (Taster, Schalter, Not-Halt, Schlüsselschalter) von der Sperre ausschließen <span style="color:#607d8b;font-size:10px;">(bleiben klickbar wenn 2D-Anlage gesperrt)</span></span>
+                                    </label>
+                                </td>
+                            </tr>`:''}
+                        `).join('')}
                         <tr style="border-top:1px solid #333;">
                             <td colspan="3" style="padding-top:6px;">
                                 <label style="display:flex;align-items:flex-start;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
@@ -11628,9 +11679,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     .f2d-key-switch.active .f2d-key-cylinder { transform: rotate(90deg); }
                 `,
                 build: function(obj, el, var1) {
-                    obj.linkedVar = var1; obj.width = 40; obj.height = 40; 
+                    obj.linkedVar = var1; obj.width = 40; obj.height = 40;
                     el.className = 'f2d-obj f2d-key-switch';
-                    el.innerHTML = `<div class="f2d-key-cylinder"><div class="f2d-key"></div></div><div class="f2d-label" style="top:-18px;">${var1.length > 5 ? var1.substring(0,4)+'..' : var1}</div>`;
+                    el.innerHTML = `<div class="f2d-key-cylinder"><div class="f2d-key"></div></div>`;
+                    let _lbl = document.createElement('div'); _lbl.className = 'f2d-label f2d-label-below'; _lbl.textContent = var1 || '---'; el.appendChild(_lbl);
                 },
                 // Die reine Logik wird über 'makeDraggable' (Klick) verarbeitet, 
                 // das Plugin kümmert sich hier nur um die Darstellung des 90°-Dreh-Schlüssels!
@@ -11638,6 +11690,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let isActuated = !!spsState[obj.linkedVar];
                     if (isActuated) obj.el.classList.add('active');
                     else obj.el.classList.remove('active');
+                    let _badge = obj.el.querySelector('.f2d-key-badge');
+                    if (obj.showKeyBadge) {
+                        if (!_badge) { _badge = document.createElement('div'); _badge.className = 'f2d-key-badge'; obj.el.appendChild(_badge); }
+                        let _kbTxt = window.inputKeyBindings[obj.linkedVar]; _badge.textContent = _kbTxt ? (_kbTxt === ' ' ? '␣' : _kbTxt.toUpperCase()) : '–';
+                    } else if (_badge) { _badge.remove(); }
                 },
                 iecSymbol: function(g, x, y, isNC, fn) {
                     g.appendChild(fn('line', {x1: x - 18, y1: y - 2.5, x2: x - 18, y2: y + 7.5, stroke: '#000', 'stroke-width': 1.5}));
@@ -11916,6 +11973,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             },
 			'portal_crane': {
                 role: 'output', color: '#1565c0', noRodAttach: true,
+                contextMenuVarSection: function() {},
                 i18n: {
                     de: { name: 'Portalkran (Pick & Place)', desc: '3-Achsen Greifarm mit Vakuum-Sauger' },
                     en: { name: 'Gantry Crane (Pick & Place)', desc: '3-axis gripper arm with vacuum suction cup' }
@@ -11932,6 +11990,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     .f2d-crane-arm { position: absolute; top: 11px; width: 8px; height: 20px; background: #cfd8dc; border: 2px solid #546e7a; border-top: none; transform-origin: top center; z-index: 6; box-sizing: border-box; }
                     .f2d-crane-vacuum { position: absolute; bottom: -8px; left: -6px; width: 16px; height: 8px; background: #263238; border-radius: 0 0 4px 4px; border-bottom: 2px solid #00e5ff; transition: border-color 0.1s, box-shadow 0.1s; }
                     .f2d-crane-vacuum.active { border-bottom-color: #ff1744; box-shadow: 0 4px 10px rgba(255, 23, 68, 0.6); }
+                    .f2d-portal-crane.crane-mode-error { border-top-color: #f44336 !important; box-shadow: 0 0 14px rgba(244,67,54,0.75); }
+                    .f2d-portal-crane.crane-mode-error::after { content: "⚠ MOTORFEHLER!"; color: #f44336 !important; }
+                    .f2d-portal-crane.crane-err-mode::after { content: "⚠ FEHLER: Schleichgang + Normal aktiv!"; }
+                    .f2d-portal-crane.crane-err-x::after    { content: "⚠ FEHLER: FW X+ und X− gleichzeitig!"; }
+                    .f2d-portal-crane.crane-err-y::after    { content: "⚠ FEHLER: HW Y+ und Y− gleichzeitig!"; }
+                    .f2d-portal-crane.crane-err-xy::after   { content: "⚠ FEHLER: X+ X− und Y+ Y− gleichzeitig!"; }
                 `,
                 build: function(obj, el, var1, var2, var3) {
                     obj.width = 300; obj.height = 150;
@@ -11956,25 +12020,110 @@ You must output exactly this JSON format. The logic code goes as a single string
                 },
                 animate: function(obj, spsState) {
                     // 1. Echte Pixel-Bewegung pro Frame berechnen
-                    let speed = (obj.speed || 100) * 0.0166 * window.simSpeed * timeScale;
-                    if (obj.linkedVarX_Plus && spsState[obj.linkedVarX_Plus]) obj.posX += speed;
-                    if (obj.linkedVarX_Minus && spsState[obj.linkedVarX_Minus]) obj.posX -= speed;
-                    if (obj.linkedVarY_Plus && spsState[obj.linkedVarY_Plus]) obj.posY += speed;
-                    if (obj.linkedVarY_Minus && spsState[obj.linkedVarY_Minus]) obj.posY -= speed;
+                    // Keine Variable = Motor an; legacy linkedVarMotor gilt für beide Achsen
+                    let _motorFW = obj.linkedVarMotorFW ? !!spsState[obj.linkedVarMotorFW]
+                                 : obj.linkedVarMotor   ? !!spsState[obj.linkedVarMotor] : true;
+                    let _motorHW = obj.linkedVarMotorHW ? !!spsState[obj.linkedVarMotorHW]
+                                 : obj.linkedVarMotor   ? !!spsState[obj.linkedVarMotor] : true;
+                    let _creepOn  = !!(obj.linkedVarCreep  && spsState[obj.linkedVarCreep]);
+                    let _normalOn = !!(obj.linkedVarNormal && spsState[obj.linkedVarNormal]);
+                    let _xPlus  = !!(obj.linkedVarX_Plus  && spsState[obj.linkedVarX_Plus]);
+                    let _xMinus = !!(obj.linkedVarX_Minus && spsState[obj.linkedVarX_Minus]);
+                    let _yPlus  = !!(obj.linkedVarY_Plus  && spsState[obj.linkedVarY_Plus]);
+                    let _yMinus = !!(obj.linkedVarY_Minus && spsState[obj.linkedVarY_Minus]);
+                    let _errMode = _creepOn && _normalOn;
+                    let _errX    = _xPlus && _xMinus;
+                    let _errY    = _yPlus && _yMinus;
+                    let _modeErr = _errMode || _errX || _errY;
+                    obj.el.classList.toggle('crane-mode-error', _modeErr);
+                    obj.el.classList.toggle('crane-err-mode', _errMode && !_errX && !_errY);
+                    obj.el.classList.toggle('crane-err-x',    _errX    && !_errY && !_errMode);
+                    obj.el.classList.toggle('crane-err-y',    _errY    && !_errX && !_errMode);
+                    obj.el.classList.toggle('crane-err-xy',   _errX    && _errY);
+                    let _autoOn   = !!(obj.linkedVarAutoMode && spsState[obj.linkedVarAutoMode]);
+                    let _effSpeed = _creepOn ? (obj.speedCreep || 20) : (obj.speed || 100);
+                    let speed = _effSpeed * 0.0166 * window.simSpeed * timeScale;
+                    // Modus 1: Manuell — Normal/Schleichgang steuern nur Geschwindigkeit, nicht Freigabe
+                    let _baseOk = !_autoOn && !_modeErr;
+                    if (_baseOk && _motorFW) {
+                        if (_xPlus)  obj.posX += speed;
+                        if (_xMinus) obj.posX -= speed;
+                    }
+                    if (_baseOk && _motorHW) {
+                        if (_yPlus)  obj.posY += speed;
+                        if (_yMinus) obj.posY -= speed;
+                    }
+                    // Modus 2: Vollautomatik
+                    if (_autoOn && !_modeErr) {
+                        if (!obj._autoState) { obj._autoState = 'down'; obj._autoGrab = false; }
+                        let _bot = obj.posY >= obj.height - speed - 0.5;
+                        let _top = obj.posY <= 20 + speed + 0.5;
+                        let _rgt = obj.posX >= obj.width - 30 - speed - 0.5;
+                        let _lft = obj.posX <= speed + 0.5;
+                        if (_creepOn) {
+                            // Schleichgang-Ablauf: runter → greifen → rechts → loslassen → links → hoch
+                            switch (obj._autoState) {
+                                case 'down':    obj.posY += speed; if (_bot) { obj.posY = obj.height; obj._autoState = 'grab'; } break;
+                                case 'grab':    obj._autoGrab = true;  obj._autoState = 'right'; break;
+                                case 'right':   obj.posX += speed; if (_rgt) { obj.posX = obj.width - 30; obj._autoState = 'release'; } break;
+                                case 'release': obj._autoGrab = false; obj._autoState = 'left'; break;
+                                case 'left':    obj.posX -= speed; if (_lft) { obj.posX = 0; obj._autoState = 'up'; } break;
+                                case 'up':      obj.posY -= speed; if (_top) { obj.posY = 20; obj._autoState = 'down'; } break;
+                            }
+                        } else {
+                            // Normal-Ablauf: runter → greifen → hoch → rechts → runter → loslassen → hoch → links
+                            switch (obj._autoState) {
+                                case 'down':    obj.posY += speed; if (_bot) { obj.posY = obj.height; obj._autoState = 'grab'; } break;
+                                case 'grab':    obj._autoGrab = true;  obj._autoState = 'up'; break;
+                                case 'up':      obj.posY -= speed; if (_top) { obj.posY = 20; obj._autoState = 'right'; } break;
+                                case 'right':   obj.posX += speed; if (_rgt) { obj.posX = obj.width - 30; obj._autoState = 'down2'; } break;
+                                case 'down2':   obj.posY += speed; if (_bot) { obj.posY = obj.height; obj._autoState = 'release'; } break;
+                                case 'release': obj._autoGrab = false; obj._autoState = 'up2'; break;
+                                case 'up2':     obj.posY -= speed; if (_top) { obj.posY = 20; obj._autoState = 'left'; } break;
+                                case 'left':    obj.posX -= speed; if (_lft) { obj.posX = 0; obj._autoState = 'down'; } break;
+                            }
+                        }
+                    } else if (!_autoOn) {
+                        obj._autoState = null; obj._autoGrab = false;
+                    }
                     // 2. Hardware-Endlagen (Mechanische Anschläge)
                     obj.posX = Math.max(0, Math.min(obj.posX, obj.width - 30));
                     obj.posY = Math.max(20, Math.min(obj.posY, obj.height));
+                    // Hub-oben / Hub-unten Sensor
+                    if (obj.linkedVarHubOben)  spsState[obj.linkedVarHubOben]  = (obj.posY <= 20);
+                    if (obj.linkedVarHubUnten) spsState[obj.linkedVarHubUnten] = (obj.posY >= obj.height);
                     let carriage = obj.el.querySelector('.f2d-crane-carriage');
                     let arm = obj.el.querySelector('.f2d-crane-arm');
                     if (carriage) carriage.style.transform = `translateX(${obj.posX}px)`;
                     if (arm) arm.style.height = `${obj.posY}px`;
+                    // 2b. Pendel-Physik
+                    let _posXDelta = obj.posX - (obj._lastPosX !== undefined ? obj._lastPosX : obj.posX);
+                    obj._lastPosX = obj.posX;
+                    if (obj.pendAngle === undefined) { obj.pendAngle = 0; obj.pendOmega = 0; }
+                    let _pL = Math.max(30, obj.posY);
+                    obj.pendOmega = obj.pendOmega * 0.985                    // Dämpfung
+                        - (3.5 / _pL) * obj.pendAngle                        // Rückstellkraft (Gravitation)
+                        - _posXDelta * 0.003;                                 // Anregung durch Fahrwerk
+                    let _windActive = obj.linkedVarWind && !!spsState[obj.linkedVarWind];
+                    if (_windActive)
+                        obj.pendOmega += (obj.windForce !== undefined ? obj.windForce : 0.01);
+                    obj.pendAngle += obj.pendOmega;
+                    obj.pendAngle = Math.max(-0.7, Math.min(0.7, obj.pendAngle)); // ±40°
+                    if (arm) arm.style.transform = `rotate(${(obj.pendAngle * 180 / Math.PI).toFixed(2)}deg)`;
+                    // Wind-Sensor
+                    if (obj.linkedVarWindSensor) spsState[obj.linkedVarWindSensor] = _windActive;
+                    // Pendel-Sensor
+                    if (obj.linkedVarPendel) {
+                        let _thresh = ((obj.pendelThreshold || 15) * Math.PI / 180);
+                        spsState[obj.linkedVarPendel] = Math.abs(obj.pendAngle) > _thresh;
+                    }
                     // 3. Vakuum-Logik (Greifen)
-                    let grabActive = obj.linkedVarGrab ? !!spsState[obj.linkedVarGrab] : false;
+                    let grabActive = (obj.linkedVarGrab ? !!spsState[obj.linkedVarGrab] : false) || !!obj._autoGrab;
                     let vacuumEl = obj.el.querySelector('.f2d-crane-vacuum');
                     if (vacuumEl) vacuumEl.classList.toggle('active', grabActive);
-                    // Globale Ziel-Koordinaten des Saugnapfes
-                    let vacGlobalX = obj.x + obj.posX + 15; 
-                    let vacGlobalY = obj.y + obj.posY + 8; 
+                    // Globale Ziel-Koordinaten des Saugnapfes (mit Pendelwinkel)
+                    let vacGlobalX = obj.x + obj.posX + 15 + Math.sin(obj.pendAngle) * obj.posY;
+                    let vacGlobalY = obj.y + Math.cos(obj.pendAngle) * obj.posY + 8;
                     if (grabActive) {
                         if (!obj.grabbedItemObj) {
                             // Hitbox-Scan: Ist eine Box in Reichweite? (Toleranz: 25px)
@@ -12011,9 +12160,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 contextMenu: function(obj, ctxMenu, saveCallback) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
                     let title = document.createElement('div'); title.style.padding = '0 10px'; title.style.color = '#03a9f4'; title.style.fontSize = '10px'; title.style.fontWeight = 'bold'; title.textContent = 'Kransteuerung & Achsen:'; ctxMenu.appendChild(title);
-                    const createVarSelect = (label, propName) => {
+                    const createVarSelect = (label, propName, infoLines) => {
                         let wrap = document.createElement('div'); wrap.style.padding = '2px 15px'; wrap.onclick = e => e.stopPropagation();
-                        wrap.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 1px;">🔌 ${label}</div>`;
+                        let _labelRow = document.createElement('div'); _labelRow.style.cssText = 'display:flex;align-items:center;gap:4px;color:#aaa;font-size:10px;margin-bottom:1px;';
+                        _labelRow.innerHTML = `<span>🔌 ${label}</span>`;
+                        if (infoLines) {
+                            let _iBtn = document.createElement('span'); _iBtn.textContent = 'ℹ️'; _iBtn.style.cssText = 'cursor:pointer;font-size:10px;opacity:0.55;user-select:none;line-height:1;';
+                            let _iPanel = document.createElement('div'); _iPanel.style.cssText = 'display:none;background:#1a2a1a;border:1px solid #4a7a4a;border-radius:4px;padding:5px 8px;font-size:10px;color:#a5d6a7;line-height:1.6;margin:3px 0 2px;';
+                            _iPanel.innerHTML = infoLines.map(l => `• ${l}`).join('<br>');
+                            _iBtn.onclick = e => { e.stopPropagation(); _iPanel.style.display = _iPanel.style.display === 'none' ? 'block' : 'none'; };
+                            _labelRow.appendChild(_iBtn); wrap.appendChild(_labelRow); wrap.appendChild(_iPanel);
+                        } else { wrap.appendChild(_labelRow); }
                         let sel = document.createElement('select');
                         sel.style.cssText = "width: 100%; padding: 2px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 10px; outline: none; cursor: pointer;";
                         let optNone = document.createElement('option'); optNone.value = ""; optNone.textContent = "-- Keine --"; sel.appendChild(optNone);
@@ -12025,17 +12182,60 @@ You must output exactly this JSON format. The logic code goes as a single string
                         sel.onchange = e => { obj[propName] = e.target.value || null; saveCallback(); };
                         wrap.appendChild(sel); ctxMenu.appendChild(wrap);
                     };
+                    // Hilfsfunktionen
+                    const _sec = (icon, label, color) => {
+                        let s = document.createElement('div'); s.style.cssText = 'border-top:1px solid #444;margin:4px 0 2px;';  ctxMenu.appendChild(s);
+                        let h = document.createElement('div'); h.style.cssText = `padding:2px 15px;font-size:9px;font-weight:bold;color:${color||'#607d8b'};text-transform:uppercase;letter-spacing:.5px;`; h.textContent = `${icon} ${label}`; ctxMenu.appendChild(h);
+                    };
+                    const _numInp = (label, prop, min, max, step, def) => {
+                        let w = document.createElement('div'); w.style.cssText = 'padding:2px 15px 4px;'; w.onclick = e => e.stopPropagation();
+                        w.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:2px;">${label}</div>`;
+                        let i = document.createElement('input'); i.type = 'number'; i.min = min; i.max = max; if (step) i.step = step; i.value = obj[prop] !== undefined && obj[prop] !== null ? obj[prop] : def;
+                        i.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                        i.onchange = e => { obj[prop] = step && step < 1 ? parseFloat(e.target.value) : parseInt(e.target.value); saveCallback(); };
+                        w.appendChild(i); ctxMenu.appendChild(w);
+                    };
+                    const createInputVarSelect = (label, propName) => {
+                        let wrap = document.createElement('div'); wrap.style.padding = '2px 15px'; wrap.onclick = e => e.stopPropagation();
+                        wrap.innerHTML = `<div style="color:#a5d6a7;font-size:10px;margin-bottom:1px;">${label}</div>`;
+                        let sel = document.createElement('select');
+                        sel.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;outline:none;cursor:pointer;';
+                        let optNone = document.createElement('option'); optNone.value = ''; optNone.textContent = '-- Keine --'; sel.appendChild(optNone);
+                        [...(globalInputs||[]), ...(globalOutputs||[])].forEach(v => {
+                            let opt = document.createElement('option'); opt.value = v; opt.textContent = v;
+                            if (v === obj[propName]) opt.selected = true;
+                            sel.appendChild(opt);
+                        });
+                        sel.onchange = e => { obj[propName] = e.target.value || null; saveCallback(); };
+                        wrap.appendChild(sel); ctxMenu.appendChild(wrap);
+                    };
+                    // ── Steuerung ──────────────────────────────────────────
+                    _sec('⚡', 'Steuerung', '#03a9f4');
+                    createVarSelect('Motor Fahrwerk (X)', 'linkedVarMotorFW');
+                    createVarSelect('Motor Hubwerk (Y)', 'linkedVarMotorHW');
+                    createVarSelect('Modus 2: Automodus', 'linkedVarAutoMode', ['Wenn aktiv: Kran führt selbstständig den Pick&amp;Place-Zyklus aus', 'Manueller Betrieb (Achsvariablen) ist im Automodus deaktiviert', 'Normalmodus-Ablauf: runter → greifen → <b>hoch</b> → rechts → runter → loslassen → <b>hoch</b> → links', 'Schleichgang-Ablauf: runter → greifen → rechts → loslassen → links → hoch', 'Beide Modi gleichzeitig aktiv → Fehlerzustand (kein Fahrbetrieb)']);
+                    createVarSelect('Normalmodus aktivieren', 'linkedVarNormal', ['Manuell: Wählt Normalgeschwindigkeit (keine Freigabebedingung)', 'Automatik-Ablauf: runter → greifen → <b>hoch</b> → rechts → runter → loslassen → <b>hoch</b> → links', 'Sicherheitshub: Kran fährt immer hoch bevor er horizontal fährt', 'Keine Variable → Kran fährt immer mit Normalgeschwindigkeit']);
+                    createVarSelect('Schleichgang aktivieren', 'linkedVarCreep', ['Manuell: Wählt reduzierte Schleichgeschwindigkeit (keine Freigabebedingung)', 'Automatik-Ablauf: runter → greifen → rechts → loslassen → links → hoch', 'Kein Sicherheitshub: Kran bleibt auf Höhe und schiebt das Teil seitlich', 'Überschreibt den Normalmodus — beide aktiv → Fehlerzustand (kein Fahrbetrieb)']);
+                    createVarSelect('Wind (Kraft auf Last)', 'linkedVarWind', ['Solange aktiv: Winddruck wirkt seitlich auf die hängende Last', 'Stärke einstellbar über den "Windkraft"-Schieberegler', 'Erzeugt Pendelbewegung an der Last (physikalische Simulation)', 'Sensor "Wind aktiv" meldet zurück ob Wind gerade wirkt']);
+                    // ── Achsen & Greifer ────────────────────────────────────
+                    _sec('🔀', 'Achsen & Greifer', '#03a9f4');
                     createVarSelect('X+ (Rechts fahren)', 'linkedVarX_Plus');
                     createVarSelect('X- (Links fahren)', 'linkedVarX_Minus');
                     createVarSelect('Y+ (Abwärts fahren)', 'linkedVarY_Plus');
                     createVarSelect('Y- (Aufwärts fahren)', 'linkedVarY_Minus');
                     createVarSelect('Vakuum (Greifen)', 'linkedVarGrab');
-                    let speedWrap = document.createElement('div'); speedWrap.style.padding = '5px 15px'; speedWrap.onclick = e => e.stopPropagation();
-                    speedWrap.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">💨 Geschwindigkeit (px/s)</div>`;
-                    let speedInp = document.createElement('input'); speedInp.type = 'number'; speedInp.min = '10'; speedInp.max = '1000'; speedInp.value = obj.speed || 100;
-                    speedInp.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px;";
-                    speedInp.onchange = e => { obj.speed = parseInt(e.target.value); saveCallback(); };
-                    speedWrap.appendChild(speedInp); ctxMenu.appendChild(speedWrap);
+                    // ── Sensoren ────────────────────────────────────────────
+                    _sec('📡', 'Sensoren', '#a5d6a7');
+                    createInputVarSelect('Hub oben', 'linkedVarHubOben');
+                    createInputVarSelect('Hub unten', 'linkedVarHubUnten');
+                    createInputVarSelect('Wind aktiv', 'linkedVarWindSensor');
+                    createInputVarSelect('Last pendelt', 'linkedVarPendel');
+                    // ── Einstellungen ───────────────────────────────────────
+                    _sec('⚙️', 'Einstellungen', '#90a4ae');
+                    _numInp('Geschwindigkeit (px/s)', 'speed', 10, 1000, null, 100);
+                    _numInp('Schleichgang (px/s)', 'speedCreep', 1, 500, null, 20);
+                    _numInp('Windkraft (Stärke)', 'windForce', 0.001, 0.1, 0.001, 0.01);
+                    _numInp('Pendel-Schwelle (°)', 'pendelThreshold', 1, 40, null, 15);
                 }
             },
             // ── Fördertechnik-Plugins ──────────────────────────────────────────────
@@ -14898,7 +15098,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let v1 = obj.linkedVar || obj.linkedVarExt || ''; let v2 = obj.linkedVarRet || '';
                         let lbl = obj.el.querySelector('.f2d-label');
                         if (lbl) {
-                            if (['taster', 'schalter', 'nothalt', 'led'].includes(obj.type)) lbl.textContent = v1 || '---';
+                            if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(obj.type)) lbl.textContent = v1 || '---';
                             else if (obj.type.startsWith('sensor_')) lbl.textContent = v1 || '---';
                             else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
                             else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
@@ -14985,6 +15185,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 if (!isInput && !isOutput && ComponentRegistry[obj.type] && ComponentRegistry[obj.type].contextMenuVarSection) {
                     ComponentRegistry[obj.type].contextMenuVarSection(obj, ctxMenu, { addVarSelect });
+                }
+                if (['taster','schalter','nothalt','taster_nc','schalter_nc'].includes(obj.type) || obj.type === 'key_switch') {
+                    let _kb = window.inputKeyBindings[obj.linkedVar];
+                    let _sepKB = document.createElement('div'); _sepKB.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(_sepKB);
+                    let _btnKB = document.createElement('div'); _btnKB.className = 'ctx-item'; _btnKB.style.fontSize = '11px';
+                    _btnKB.innerHTML = obj.showKeyBadge
+                        ? '⌨️ Tastenkürzel ausblenden'
+                        : `⌨️ Tastenkürzel anzeigen${_kb ? ' <b style="color:#ffd740">[' + (_kb === ' ' ? '␣' : _kb.toUpperCase()) + ']</b>' : ' <span style="color:#666">(kein Kürzel)</span>'}`;
+                    _btnKB.onclick = () => {
+                        obj.showKeyBadge = !obj.showKeyBadge;
+                        let _b = obj.el.querySelector('.f2d-key-badge');
+                        if (obj.showKeyBadge) {
+                            if (!_b) { _b = document.createElement('div'); _b.className = 'f2d-key-badge'; obj.el.appendChild(_b); }
+                            let _kbTxt = window.inputKeyBindings[obj.linkedVar]; _b.textContent = _kbTxt ? (_kbTxt === ' ' ? '␣' : _kbTxt.toUpperCase()) : '–';
+                        } else if (_b) { _b.remove(); }
+                        saveFactoryState(); ctxMenu.style.display = 'none';
+                    };
+                    ctxMenu.appendChild(_btnKB);
                 }
                 if (obj.type === 'conveyor') {
                     let rampWrap = document.createElement('div'); rampWrap.style.padding = '5px 15px'; rampWrap.onclick = e => e.stopPropagation();
@@ -16879,6 +17097,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let isVisuallyPressed = (componentTypes[obj.linkedVar] === 'nothalt' || componentTypes[obj.linkedVar] === 'taster_nc' || componentTypes[obj.linkedVar] === 'schalter_nc') ? !spsState[obj.linkedVar] : spsState[obj.linkedVar];
                         if (isVisuallyPressed) { obj.el.classList.add('f2d-control-active'); obj.el.style.boxShadow = `0 0 15px ${obj.hexColor}, inset 0 0 10px rgba(0,0,0,0.5)`; }
                         else { obj.el.classList.remove('f2d-control-active'); obj.el.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.4)'; }
+                        let _badge = obj.el.querySelector('.f2d-key-badge');
+                        if (obj.showKeyBadge) {
+                            if (!_badge) { _badge = document.createElement('div'); _badge.className = 'f2d-key-badge'; obj.el.appendChild(_badge); }
+                            let _kbTxt = window.inputKeyBindings[obj.linkedVar]; _badge.textContent = _kbTxt ? (_kbTxt === ' ' ? '␣' : _kbTxt.toUpperCase()) : '–';
+                        } else if (_badge) { _badge.remove(); }
                     } else if (obj.type === 'led') {
                         if (resolveLinked(obj, spsState)) { obj.el.style.backgroundColor = obj.hexColor; obj.el.style.boxShadow = `0 0 20px ${obj.hexColor}, inset 0 0 10px rgba(255,255,255,0.6)`; obj.el.style.color = '#000'; obj.el.style.borderColor = '#fff'; }
                         else { obj.el.style.backgroundColor = '#222'; obj.el.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.4)'; obj.el.style.color = 'rgba(255,255,255,0.4)'; obj.el.style.borderColor = '#444'; }
@@ -17573,7 +17796,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let btn = document.getElementById(`btn_key_${window.isAssigningKey}`);
                 if (btn) {
                     btn.classList.remove('assigning');
-                    btn.textContent = window.inputKeyBindings[window.isAssigningKey] ? `[${window.inputKeyBindings[window.isAssigningKey].toUpperCase()}]` : '⌨️';
+                    let _ak = window.inputKeyBindings[window.isAssigningKey]; btn.textContent = _ak ? `[${_ak === ' ' ? '␣' : _ak.toUpperCase()}]` : '⌨️';
                 }
                 window.isAssigningKey = null;
                 return;
@@ -17767,6 +17990,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     parentId: o.parent ? o.parent.id : null, attachmentType: o.attachmentType, normLabel: o.normLabel, originalLabelText: o.originalLabelText,
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound, locked: o.locked || false,
 					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, posX: o.posX, posY: o.posY,
+                    showKeyBadge: o.showKeyBadge || false,
+                    linkedVarMotor: o.linkedVarMotor || null, linkedVarMotorFW: o.linkedVarMotorFW || null, linkedVarMotorHW: o.linkedVarMotorHW || null, linkedVarAutoMode: o.linkedVarAutoMode || null, linkedVarNormal: o.linkedVarNormal || null, linkedVarCreep: o.linkedVarCreep || null, linkedVarHubOben: o.linkedVarHubOben || null, speedCreep: o.speedCreep !== undefined ? o.speedCreep : null,
+                    linkedVarWind: o.linkedVarWind || null, windForce: o.windForce !== undefined ? o.windForce : null, linkedVarWindSensor: o.linkedVarWindSensor || null, linkedVarPendel: o.linkedVarPendel || null, pendelThreshold: o.pendelThreshold || null,
                     groupId: o.groupId || null,
                     localZ: o.localZ || 0, layerId: o.layerId || null, despawnFilter: o.despawnFilter || null,
                     hideValve: o.hideValve || false, spawnZOffset: o.spawnZOffset || 0, spawnXOffset: o.spawnXOffset || 0, spawnYOffset: o.spawnYOffset || 0,
@@ -17914,8 +18140,27 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.linkedVarY_Plus) newObj.linkedVarY_Plus = o.linkedVarY_Plus;
                     if (o.linkedVarY_Minus) newObj.linkedVarY_Minus = o.linkedVarY_Minus;
                     if (o.linkedVarGrab) newObj.linkedVarGrab = o.linkedVarGrab;
+                    if (o.linkedVarMotor)   newObj.linkedVarMotor   = o.linkedVarMotor;
+                    if (o.linkedVarMotorFW) newObj.linkedVarMotorFW = o.linkedVarMotorFW;
+                    if (o.linkedVarMotorHW) newObj.linkedVarMotorHW = o.linkedVarMotorHW;
+                    if (o.linkedVarAutoMode) newObj.linkedVarAutoMode = o.linkedVarAutoMode;
+                    if (o.linkedVarNormal) newObj.linkedVarNormal = o.linkedVarNormal;
+                    if (o.linkedVarCreep) newObj.linkedVarCreep = o.linkedVarCreep;
+                    if (o.linkedVarHubOben) newObj.linkedVarHubOben = o.linkedVarHubOben;
+                    if (o.speedCreep !== undefined) newObj.speedCreep = o.speedCreep;
+                    if (o.linkedVarWind) newObj.linkedVarWind = o.linkedVarWind;
+                    if (o.linkedVarWindSensor) newObj.linkedVarWindSensor = o.linkedVarWindSensor;
+                    if (o.windForce !== undefined && o.windForce !== null) newObj.windForce = o.windForce;
+                    if (o.linkedVarPendel) newObj.linkedVarPendel = o.linkedVarPendel;
+                    if (o.pendelThreshold) newObj.pendelThreshold = o.pendelThreshold;
                     if (o.linkedFormula) newObj.linkedFormula = o.linkedFormula;
                     if (o.posX !== undefined) { newObj.posX = o.posX; newObj.posY = o.posY; }
+                    if (o.showKeyBadge) {
+                        newObj.showKeyBadge = true;
+                        let _b = document.createElement('div'); _b.className = 'f2d-key-badge';
+                        let _kbTxt = window.inputKeyBindings && window.inputKeyBindings[newObj.linkedVar]; _b.textContent = _kbTxt ? (_kbTxt === ' ' ? '␣' : _kbTxt.toUpperCase()) : '–';
+                        newObj.el.appendChild(_b);
+                    }
                     if (o.groupId) { newObj.groupId = o.groupId; newObj.el.classList.add('f2d-grouped'); }
                     newObj.x = o.x; newObj.y = o.y; newObj.width = o.width; newObj.rotation = o.rotation;
                     if (o.height) newObj.height = o.height; 

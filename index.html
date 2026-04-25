@@ -26595,16 +26595,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ST.marqueeActive = false;
                 cedRender();
             }
-            // Mehrere selektierte Items in einem Pass löschen
+            // Mehrere selektierte Items in einem Pass löschen — nutzt _deleteComp damit Strang-Reparatur greift
             function _deleteSelected() {
                 const ids = Array.from(ST.selectedIds);
                 clearSelection();
                 ids.forEach(id => {
-                    const w = ST.wires.find(x => x.id === id);
-                    if (w) ST.wires = ST.wires.filter(x => x.id !== id);
-                    else {
-                        ST.components = ST.components.filter(c => c.id !== id);
-                        ST.wires = ST.wires.filter(x => x.from.compId !== id && x.to.compId !== id);
+                    if (ST.wires.find(x => x.id === id)) {
+                        ST.wires = ST.wires.filter(x => x.id !== id);
+                    } else if (ST.components.find(c => c.id === id)) {
+                        _deleteComp(id);
                     }
                 });
                 cedRender();
@@ -26891,20 +26890,27 @@ You must output exactly this JSON format. The logic code goes as a single string
             // ---------- Delete ----------
             function _deleteComp(id) {
                 const comp = ST.components.find(c => c.id === id);
-                // Junction mit genau 2 angeschlossenen Wires → "rauskürzen": die zwei Wires zu einem zusammenfassen
-                if (comp && CTYPES[comp.type] && CTYPES[comp.type].kind === 'junction') {
+                if (comp && CTYPES[comp.type]) {
+                    const t = CTYPES[comp.type];
                     const connected = ST.wires.filter(w => w.from.compId === id || w.to.compId === id);
+                    // Strang-Reparatur: zwei Wires (an in/out bzw. bei Junction beliebig) → zu einem zusammenfassen
                     if (connected.length === 2) {
-                        const [w1, w2] = connected;
-                        const otherEnd1 = (w1.from.compId === id) ? w1.to : w1.from;
-                        const otherEnd2 = (w2.from.compId === id) ? w2.to : w2.from;
-                        ST.wires = ST.wires.filter(w => w.id !== w1.id && w.id !== w2.id);
-                        ST.components = ST.components.filter(c => c.id !== id);
-                        ST.wires.push({ id: nextId('w'), from: otherEnd1, to: otherEnd2 });
-                        ST.selectedIds.delete(id);
-                        cedRender();
-                        _maybeSync();
-                        return;
+                        const pinsInvolved = connected.map(w => (w.from.compId === id ? w.from.pin : w.to.pin));
+                        // Bei Junctions: alle Pin-Kombis OK. Bei anderen: nur in+out (Strang durch die Komponente)
+                        const canRepair = (t.kind === 'junction') ||
+                                          (pinsInvolved.includes('in') && pinsInvolved.includes('out'));
+                        if (canRepair) {
+                            const [w1, w2] = connected;
+                            const otherEnd1 = (w1.from.compId === id) ? w1.to : w1.from;
+                            const otherEnd2 = (w2.from.compId === id) ? w2.to : w2.from;
+                            ST.wires = ST.wires.filter(w => w.id !== w1.id && w.id !== w2.id);
+                            ST.components = ST.components.filter(c => c.id !== id);
+                            ST.wires.push({ id: nextId('w'), from: otherEnd1, to: otherEnd2 });
+                            ST.selectedIds.delete(id);
+                            cedRender();
+                            _maybeSync();
+                            return;
+                        }
                     }
                 }
                 // Standard: Komponente + alle daran hängenden Wires entfernen

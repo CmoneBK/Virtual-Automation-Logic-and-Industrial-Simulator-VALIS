@@ -279,6 +279,45 @@
         }
         .view-btn { background-color: #555; transition: background 0.2s; }
         .view-btn.active { background-color: #f58231; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+        /* === Schaltplan-Editor (CED) === */
+        .ced-tool-active { background:#1976d2 !important; box-shadow:inset 0 0 4px rgba(0,0,0,0.4); }
+        .ced-pal-cat { color:#90a4ae; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:6px 4px 3px; border-bottom:1px solid #3a3a3a; margin-top:4px; }
+        .ced-pal-cat:first-child { margin-top:0; }
+        .ced-pal-item { display:flex; align-items:center; gap:6px; padding:5px; background:#fff; margin:3px 0; border-radius:3px; cursor:grab; user-select:none; transition:background 0.15s; border:1px solid #ddd; }
+        .ced-pal-item:hover { background:#e3f2fd; border-color:#1976d2; }
+        .ced-pal-item:active { cursor:grabbing; }
+        .ced-pal-item span:last-child { font-size:10px; color:#333; }
+        .ced-pal-item .ced-pal-mini { display:inline-flex; width:34px; height:38px; flex-shrink:0; background:#fff; border-radius:2px; align-items:center; justify-content:center; }
+        .ced-pal-item .ced-pal-mini svg { display:block; }
+        .ced-comp { cursor:move; }
+        .ced-comp.ced-selected > .ced-comp-bg { stroke:#1976d2; stroke-width:2; stroke-dasharray:3,3; fill:rgba(25,118,210,0.08); }
+        /* pointer-events:all damit das transparente Hintergrund-Rect auch Wire-Drop empfängt */
+        .ced-comp-bg { fill:transparent; stroke:transparent; pointer-events:all; }
+        .ced-comp-label { font-family:sans-serif; font-size:11px; font-weight:bold; fill:#1976d2; pointer-events:none; }
+        .ced-comp-type { font-family:sans-serif; font-size:9px; fill:#666; pointer-events:none; }
+        .ced-pin { fill:#ff5722; stroke:#fff; stroke-width:1.2; cursor:crosshair; opacity:0; transition:opacity 0.1s, r 0.1s; }
+        .ced-comp:hover .ced-pin, .ced-tool-wire-mode .ced-pin { opacity:1; }
+        .ced-pin:hover { fill:#4caf50; r:7 !important; }
+        .ced-wire { stroke:#000; stroke-width:2; fill:none; pointer-events:none; }
+        .ced-wire-hit { stroke:transparent; stroke-width:14; fill:none; cursor:pointer; pointer-events:stroke; }
+        .ced-wire-hit:hover + .ced-wire { stroke:#1976d2; stroke-width:3; }
+        .ced-wire.ced-selected { stroke:#1976d2; stroke-width:3; stroke-dasharray:4,2; }
+        .ced-wire-preview { stroke:#1976d2; stroke-width:2; stroke-dasharray:4,3; fill:none; pointer-events:none; }
+        .ced-tool-wire-mode #ced-canvas-area { cursor:crosshair; }
+        .ced-tool-delete-mode #ced-canvas-area { cursor:not-allowed; }
+        #ced-canvas-area.ced-drag-over { background-color:#e8f5e9; }
+        .ced-rail { cursor:crosshair; }
+        .ced-rail-hit { transition:stroke 0.05s; }
+        .ced-rail-hit:hover { stroke:rgba(0, 188, 212, 0.22) !important; }
+        /* Während des Wire-Drags: ständig sichtbar, damit klar ist wo gedropt werden kann */
+        .ced-wire-dragging .ced-rail-hit { stroke:rgba(0, 188, 212, 0.18) !important; }
+        .ced-wire-dragging .ced-rail-hit:hover { stroke:rgba(0, 188, 212, 0.45) !important; }
+        #ced-overlay { pointer-events:none; }
+        .ced-rail-handle { fill:#fff; stroke:#1976d2; stroke-width:1.5; cursor:ew-resize; transition:r 0.1s, fill 0.1s; }
+        .ced-rail-handle:hover { fill:#1976d2; r:7 !important; }
+        /* Wiederverwendung der CSS-Klassen aus dem Original-Schaltplan im Editor */
+        #ced-svg .circ-static, #ced-svg .circ-component, #ced-svg .circ-moving-contact { fill:#fff; stroke:#000; }
+        #ced-svg .circ-moving-contact { transform-origin: center; }
 		.view-btn.detached { background-color: #2196f3 !important; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
 		/* NEU: Styles für Aufklapp-Header und den Greifer (Splitter) */
         .section-header { background: #333333; color: #d4d4d4; padding: 6px 10px; font-size: 12px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; user-select: none; transition: background 0.2s; }
@@ -1272,6 +1311,7 @@
                 <button id="btn-toggle-sidebar" class="btn-export" style="background-color: #333; border: 1px solid #555; padding: 4px 10px; font-size: 14px; margin-right: 5px;" onclick="toggleSidebar()" title="Seitenleiste einklappen">◀</button>
                 <button id="btn-view-fbs" class="btn-export view-btn active" onclick="toggleWorkspaceView('fbs-wrapper')" data-i18n="btn_view_fbs">Logikplan</button>
                 <button id="btn-view-iec" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-wrapper')" data-i18n="btn_view_iec">Schaltplan</button>
+                <button id="btn-view-iec-edit" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-editor-wrapper')" title="Freier Schaltplan-Editor mit Drag&amp;Drop und Reverse-Code-Erkennung">🎨 Editor</button>
                 <button id="btn-view-fac" class="btn-export view-btn" onclick="toggleWorkspaceView('factory-wrapper')" data-i18n="btn_view_fac">2D Anlage</button>
             </div>
             <div style="display: flex; gap: 5px; align-items: center; margin: 0 auto;">
@@ -1462,6 +1502,64 @@
                     <g id="circuit-content"></g>
                 </svg>
 				<div id="iec-context-menu" style="display: none; position: absolute; background: #2d2d30; border: 1px solid #555; padding: 5px 0; border-radius: 3px; z-index: 2000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); font-family: sans-serif;"></div>
+            </div>
+            <div class="workspace-resizer" id="ws-resizer-iec-edit"></div>
+            <div id="circuit-editor-wrapper" class="workspace-panel" style="display:none; flex-direction:column; background:#fafafa; position:relative;">
+                <div id="ced-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#2d2d30;border-bottom:1px solid #444;flex-wrap:wrap;flex-shrink:0;">
+                    <span style="color:#fff;font-size:12px;font-weight:bold;">🎨 Editor:</span>
+                    <button id="ced-tool-select" class="tool-btn ced-tool-active" onclick="window.cedSetTool('select')" title="Auswählen / Verschieben" style="background:#1976d2;color:#fff;">🖱 Auswählen</button>
+                    <button id="ced-tool-wire" class="tool-btn" onclick="window.cedSetTool('wire')" title="Leitung zeichnen (Pin-zu-Pin oder Pin-zur-Schiene)" style="background:#555;color:#fff;">↯ Leitung</button>
+                    <button id="ced-tool-delete" class="tool-btn" onclick="window.cedSetTool('delete')" title="Löschen" style="background:#555;color:#fff;">🗑 Löschen</button>
+                    <span style="color:#666;font-size:11px;margin-left:6px;">|</span>
+                    <label style="color:#fff;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <input type="checkbox" id="ced-livesync" checked onchange="window.cedToggleLiveSync()"> Live-Sync
+                    </label>
+                    <button id="ced-btn-generate" class="tool-btn" onclick="window.cedGenerateCode()" title="Code aus Schaltplan generieren" style="background:#ff9800;color:#fff;">⚙ Code generieren</button>
+                    <button class="tool-btn" onclick="window.cedAutoAlign()" title="Komponenten in Strängen vertikal ausrichten" style="background:#9c27b0;color:#fff;">⫯ Ausrichten</button>
+                    <button class="tool-btn" onclick="window.cedClear()" title="Alles löschen" style="background:#777;color:#fff;">♻ Reset</button>
+                    <span id="ced-status" style="color:#81c784;font-size:11px;margin-left:8px;"></span>
+                </div>
+                <div style="display:flex;flex:1;min-height:0;">
+                    <div id="ced-palette" style="width:170px;background:#252526;border-right:1px solid #444;overflow-y:auto;flex-shrink:0;padding:6px;">
+                        <div class="ced-pal-cat">Eingangskontakte</div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="taster">      <span class="ced-pal-mini" data-mini="taster"></span><span>Taster (NO)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="taster_nc">   <span class="ced-pal-mini" data-mini="taster_nc"></span><span>Taster (NC)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="schalter">    <span class="ced-pal-mini" data-mini="schalter"></span><span>Schalter (NO)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="schalter_nc"> <span class="ced-pal-mini" data-mini="schalter_nc"></span><span>Schalter (NC)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="nothalt">     <span class="ced-pal-mini" data-mini="nothalt"></span><span>Not-Halt (NC)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="key_switch">  <span class="ced-pal-mini" data-mini="key_switch"></span><span>Schlüssel (NO)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_ind">  <span class="ced-pal-mini" data-mini="sensor_ind"></span><span>Sensor (Ind.)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_kap">  <span class="ced-pal-mini" data-mini="sensor_kap"></span><span>Sensor (Kap.)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_opt">  <span class="ced-pal-mini" data-mini="sensor_opt"></span><span>Sensor (Opt.)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_mag">  <span class="ced-pal-mini" data-mini="sensor_mag"></span><span>Sensor (Mag.)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="mech_sensor"> <span class="ced-pal-mini" data-mini="mech_sensor"></span><span>Pos.-Schalter</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="light_curtain"><span class="ced-pal-mini" data-mini="light_curtain"></span><span>Lichtgitter (NC)</span></div>
+                        <div class="ced-pal-cat">Hilfskontakte</div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="relay_no">    <span class="ced-pal-mini" data-mini="relay_no"></span><span>Hilfs-NO</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="relay_nc">    <span class="ced-pal-mini" data-mini="relay_nc"></span><span>Hilfs-NC</span></div>
+                        <div class="ced-pal-cat">Spulen / Ausgänge</div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="relais">     <span class="ced-pal-mini" data-mini="relais"></span><span>Relais (-K)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="valve">      <span class="ced-pal-mini" data-mini="valve"></span><span>Ventil (-Y)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="motor">      <span class="ced-pal-mini" data-mini="motor"></span><span>Motor (-M)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="led">        <span class="ced-pal-mini" data-mini="led"></span><span>LED (-P)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="siren">      <span class="ced-pal-mini" data-mini="siren"></span><span>Sirene (-H)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="heater">     <span class="ced-pal-mini" data-mini="heater"></span><span>Heizung (-E)</span></div>
+                        <div class="ced-pal-cat">Verbindung</div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="junction">   <span class="ced-pal-mini" data-mini="junction"></span><span>T-Knoten</span></div>
+                        <div style="margin-top:14px;padding:6px;background:#1e1e1e;border-radius:3px;color:#888;font-size:10px;line-height:1.4;">
+                            <b style="color:#90a4ae;">RS/SR-Glieder</b> baust du als Selbsthaltung: parallel zum Start-Taster ein Hilfskontakt der Spule, in Reihe ein Öffner als Stop. Wird automatisch erkannt.
+                        </div>
+                    </div>
+                    <div id="ced-canvas-area" style="flex:1;overflow:auto;position:relative;background:#fafafa;background-image:radial-gradient(#d0d0d0 1px,transparent 1px);background-size:10px 10px;">
+                        <svg id="ced-svg" xmlns="http://www.w3.org/2000/svg" width="2400" height="800" style="display:block;">
+                            <g id="ced-rails"></g>
+                            <g id="ced-wires"></g>
+                            <g id="ced-components"></g>
+                            <g id="ced-overlay"></g>
+                        </svg>
+                    </div>
+                </div>
+                <div id="ced-name-popup" style="display:none;position:fixed;background:#2d2d30;border:1px solid #555;padding:8px;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.6);z-index:3000;font-family:sans-serif;"></div>
             </div>
             <div class="workspace-resizer" id="ws-resizer-2" style="grid-area: r2;"></div>
             <div id="factory-wrapper" class="workspace-panel" style="display: none; grid-area: sim; background-color: #e8ecef;">
@@ -5884,20 +5982,25 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
             let fbs = checkState('fbs-wrapper');
             let circ = checkState('circuit-wrapper');
+            let cedit = checkState('circuit-editor-wrapper');
             let fac = checkState('factory-wrapper');
             const resizer1 = document.getElementById('ws-resizer-1');
             const resizer2 = document.getElementById('ws-resizer-2');
+            const resizerEdit = document.getElementById('ws-resizer-iec-edit');
             const isGrid = currentLayout.startsWith('grid-');
-            // Im Grid-Modus gelten alle Panels als aktiv (für Resizer- und Button-Logik)
             let p0 = fbs.isMainVisible || isGrid;
             let p1 = circ.isMainVisible || isGrid;
+            let pE = cedit.isMainVisible; // Editor ist NICHT Teil des Grid-Layouts
             let p2 = fac.isMainVisible || isGrid;
             if (isGrid) {
                 if (resizer1) resizer1.style.display = 'none';
                 if (resizer2) resizer2.style.display = 'none';
+                if (resizerEdit) resizerEdit.style.display = pE ? 'block' : 'none';
             } else {
-                if (resizer1) resizer1.style.display = (p0 && (p1 || p2)) ? 'block' : 'none';
-                if (resizer2) resizer2.style.display = (p1 && p2) ? 'block' : 'none';
+                if (resizer1) resizer1.style.display = (p0 && (p1 || pE || p2)) ? 'block' : 'none';
+                // Editor-Resizer sichtbar wenn Editor aktiv UND ein Nachbar-Panel ebenfalls aktiv
+                if (resizerEdit) resizerEdit.style.display = (pE && (p1 || p0 || p2)) ? 'block' : 'none';
+                if (resizer2) resizer2.style.display = ((p1 || pE) && p2) ? 'block' : 'none';
             }
             // Button-Zustände: detached = blau, active = orange
             const updateBtn = (btnId, state, pVisible) => {
@@ -5944,7 +6047,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (!panel) return;
             // 3. Zählen: Wie viele sind HIER noch sichtbar? (nur lokale, nicht ausgelagerte Panels)
             let mainVisibleCount = 0;
-            ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper'].forEach(id => {
                 let p = document.getElementById(id);
                 if (p && p.style.display !== 'none') mainVisibleCount++;
             });
@@ -5965,6 +6068,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 requestAnimationFrame(() => {
                     if (panelId === 'fbs-wrapper' && currentGraph) drawGraph(currentGraph);
                     if (panelId === 'circuit-wrapper' && currentGraph) drawCircuitPlan(currentGraph, globalInputs, globalOutputs);
+                    if (panelId === 'circuit-editor-wrapper' && window.cedInit) window.cedInit();
                     if (panelId === 'factory-wrapper') startFactoryEngine();
                     updateWorkspace();
                 });
@@ -6013,6 +6117,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const isVerticalSplit = val === 'grid-sim-bottom' || val === 'grid-sim-top';
                 document.getElementById('ws-resizer-1').style.cursor = isVerticalSplit ? 'col-resize' : 'row-resize';
                 document.getElementById('ws-resizer-2').style.cursor = isVerticalSplit ? 'row-resize' : 'col-resize';
+                const rE = document.getElementById('ws-resizer-iec-edit');
+                if (rE) rE.style.cursor = 'col-resize';
             } else {
                 // Zurück in den flexiblen Modus (Nebeneinander/Untereinander)
                 let isCol = val === 'flex-col';
@@ -8265,10 +8371,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (ta) { ta.readOnly = true; ta.classList.add('task-area-blocked-code'); }
             }
             const panelIds = {
-                ioPanel:    'simulator-panel',
-                logikplan:  'fbs-wrapper',
-                schaltplan: 'circuit-wrapper',
-                factory2d:  'factory-wrapper'
+                ioPanel:        'simulator-panel',
+                logikplan:      'fbs-wrapper',
+                schaltplan:     'circuit-wrapper',
+                circuitEditor:  'circuit-editor-wrapper',
+                factory2d:      'factory-wrapper'
             };
             for (let [key, id] of Object.entries(panelIds)) {
                 if (areas[key]) {
@@ -8338,7 +8445,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let ta = document.getElementById('code');
             if (ta) { ta.readOnly = false; ta.classList.remove('task-area-blocked-code'); }
             // Panel-Sperren entfernen
-            ['simulator-panel','fbs-wrapper','circuit-wrapper','factory-wrapper'].forEach(id => {
+            ['simulator-panel','fbs-wrapper','circuit-wrapper','circuit-editor-wrapper','factory-wrapper'].forEach(id => {
                 let el = document.getElementById(id);
                 if (el) el.classList.remove('task-area-blocked');
             });
@@ -8386,7 +8493,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // In Grid-Layout erzwingt CSS "display:flex !important" auf allen Panels →
             // erst in flex-row wechseln damit display:none greift
             _taskSavedLayout = null;
-            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.factory2d;
+            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.circuitEditor || areas.factory2d;
             if (_wsAnyHide && typeof currentLayout !== 'undefined' && currentLayout.startsWith('grid-')) {
                 _taskSavedLayout = currentLayout;
                 window.changeWorkspaceLayout('flex-row');
@@ -8394,9 +8501,10 @@ You must output exactly this JSON format. The logic code goes as a single string
 
             // Workspace-Panels: Tab-Button UND Panel ausblenden
             const wsPanels = [
-                { key:'logikplan',  btn:'btn-view-fbs', pid:'fbs-wrapper'    },
-                { key:'schaltplan', btn:'btn-view-iec', pid:'circuit-wrapper' },
-                { key:'factory2d',  btn:'btn-view-fac', pid:'factory-wrapper' },
+                { key:'logikplan',     btn:'btn-view-fbs',      pid:'fbs-wrapper'    },
+                { key:'schaltplan',    btn:'btn-view-iec',      pid:'circuit-wrapper' },
+                { key:'circuitEditor', btn:'btn-view-iec-edit', pid:'circuit-editor-wrapper' },
+                { key:'factory2d',     btn:'btn-view-fac',      pid:'factory-wrapper' },
             ];
             for (let {key, btn, pid} of wsPanels) {
                 if (!areas[key]) continue;
@@ -9050,16 +9158,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ioPanel:         !!(document.getElementById('ted-block-io') || {}).checked,
                 logikplan:       !!(document.getElementById('ted-block-fbs') || {}).checked,
                 schaltplan:      !!(document.getElementById('ted-block-iec') || {}).checked,
+                circuitEditor:   !!(document.getElementById('ted-block-edit') || {}).checked,
                 factory2d:       !!(document.getElementById('ted-block-2d') || {}).checked,
                 factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
                 excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
             };
             task.hideAreas = {
-                codeEditor: !!(document.getElementById('ted-hide-code') || {}).checked,
-                ioPanel:    !!(document.getElementById('ted-hide-io') || {}).checked,
-                logikplan:  !!(document.getElementById('ted-hide-fbs') || {}).checked,
-                schaltplan: !!(document.getElementById('ted-hide-iec') || {}).checked,
-                factory2d:  !!(document.getElementById('ted-hide-2d') || {}).checked,
+                codeEditor:   !!(document.getElementById('ted-hide-code') || {}).checked,
+                ioPanel:      !!(document.getElementById('ted-hide-io') || {}).checked,
+                logikplan:    !!(document.getElementById('ted-hide-fbs') || {}).checked,
+                schaltplan:   !!(document.getElementById('ted-hide-iec') || {}).checked,
+                circuitEditor:!!(document.getElementById('ted-hide-edit') || {}).checked,
+                factory2d:    !!(document.getElementById('ted-hide-2d') || {}).checked,
             };
             return task;
         }
@@ -9274,6 +9384,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             ['io',     'Ein-/Ausgänge',      'ted-block-io',     'ted-hide-io',     (task.blockAreas||{}).ioPanel,     (task.hideAreas||{}).ioPanel,     ''],
                             ['fbs',    'Logikplan',          'ted-block-fbs',    'ted-hide-fbs',    (task.blockAreas||{}).logikplan,   (task.hideAreas||{}).logikplan,   '(Sperren lässt Code-Bearbeitung über FBS zu, wenn nicht gesperrt)'],
                             ['iec',    'Schaltplan',         'ted-block-iec',    'ted-hide-iec',    (task.blockAreas||{}).schaltplan,  (task.hideAreas||{}).schaltplan,  '(Sperren lässt Code-Bearbeitung über Schaltplan zu, wenn nicht gesperrt)'],
+                            ['edit',   '🎨 Schaltplan-Editor','ted-block-edit',  'ted-hide-edit',   (task.blockAreas||{}).circuitEditor,(task.hideAreas||{}).circuitEditor,'(Sperren lässt Wires/Komponenten betrachten, aber nichts mehr ändern)'],
                             ['2d',     '2D Anlage',          'ted-block-2d',     'ted-hide-2d',     (task.blockAreas||{}).factory2d,   (task.hideAreas||{}).factory2d,   ''],
                         ].map(([key,label,blockId,hideId,blockChk,hideChk,hint]) => `
                             <tr style="border-top:1px solid #2a2a2a;">
@@ -20013,7 +20124,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 keyBindings: window.inputKeyBindings,
                 factory: getFactoryStateObj(),
                 plugins: activePlugins,
-                userPlugins: userPlugins
+                userPlugins: userPlugins,
+                circuitEditor: (window.cedExportState ? window.cedExportState() : null)
             };
             let jsonString = JSON.stringify(saveData);
             textArea.value = JSON.stringify(saveData, null, 2);
@@ -20737,6 +20849,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 } else {
                     clearFactory(true);
                 }
+                // Schaltplan-Editor State laden (oder leeren)
+                if (window.cedImportState) {
+                    if (data.circuitEditor) window.cedImportState(data.circuitEditor);
+                    else { try { localStorage.removeItem('cedEditorState'); } catch(e) {} window.cedImportState({components:[],wires:[],idCounter:1}); }
+                }
                 closeSaveLoadModal();
                 // Kurze visuelle Bestätigung
                 const ind = document.getElementById('save-indicator');
@@ -20799,7 +20916,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     } else {
                         clearFactory(true);
                     }
-                    return true; 
+                    if (window.cedImportState) {
+                        if (data.circuitEditor) window.cedImportState(data.circuitEditor);
+                        else { try { localStorage.removeItem('cedEditorState'); } catch(e) {} window.cedImportState({components:[],wires:[],idCounter:1}); }
+                    }
+                    return true;
                 } catch (e) {
                     console.error("Link konnte nicht gelesen werden:", e);
                     alert("Der Link ist ungültig oder beschädigt. Es wird die zuletzt gespeicherte Anlage geladen.");
@@ -25675,6 +25796,1647 @@ You must output exactly this JSON format. The logic code goes as a single string
             } else {
                 makePluginModalDraggable();
             }
+        })();
+
+        // ============================================================
+        // === SCHALTPLAN-EDITOR (CED) — Drag&Drop + Reverse-Logic  ===
+        // ============================================================
+        (function(){
+            const GRID = 10;
+            const RAIL_PLUS_Y = 50;       // +24V Schiene oben
+            const RAIL_MINUS_Y = 700;     // 0V Schiene unten
+            const RAIL_X_MIN = 40;
+            const RAIL_X_MAX = 2360;
+            const SVG_NS = 'http://www.w3.org/2000/svg';
+            // Komponenten-Geometrie ist auf das Original-Schaltplan-Symbol abgestimmt:
+            // Kontakte: Pin-Pin-Abstand 30 (wie Original), Treiber sitzt links → w=70, cx=40 (Mitte des Kontakts);
+            //   Pin oben bei (cx, 0), Pin unten bei (cx, 30), center bei (cx, 15).
+            // Spulen: Pin-Pin-Abstand 40, Hauptkörper 40x20, Pin oben (cx, 0), Pin unten (cx, 40), center (cx, 20).
+            const CTYPES = {
+                // Eingangskontakte
+                taster:        { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'T_',  label:'Taster (NO)' },
+                taster_nc:     { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'T_',  label:'Taster (NC)' },
+                schalter:      { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'S_',  label:'Schalter (NO)' },
+                schalter_nc:   { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'S_',  label:'Schalter (NC)' },
+                nothalt:       { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'NH_', label:'Not-Halt' },
+                key_switch:    { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'KS_', label:'Schlüssel (NO)' },
+                sensor_ind:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Ind.)' },
+                sensor_kap:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Kap.)' },
+                sensor_opt:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Opt.)' },
+                sensor_mag:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Mag.)' },
+                mech_sensor:   { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'S_',  label:'Pos.-Schalter' },
+                light_curtain: { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'L_',  label:'Lichtgitter (NC)' },
+                // Hilfskontakte (referenzieren eine Spule)
+                relay_no:      { kind:'aux',     nc:false, w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NO' },
+                relay_nc:      { kind:'aux',     nc:true,  w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NC' },
+                // Spulen
+                relais:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'K',  label:'Relais (-K)' },
+                valve:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'Y',  label:'Ventil (-Y)' },
+                motor:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'M',  label:'Motor (-M)' },
+                led:           { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'P',  label:'LED (-P)' },
+                siren:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'H',  label:'Sirene (-H)' },
+                heater:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'E',  label:'Heizung (-E)' },
+                // Verbindungsknoten — 4 Pins (top/bottom/left/right) für saubere T-/X-Kreuzungen
+                junction:      { kind:'junction',w:20, h:20, cx:10, cy:10 }
+            };
+            const _needsVar = (type) => {
+                const t = CTYPES[type]; if (!t) return false;
+                return t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil' || t.kind === 'sensor';
+            };
+
+            // State
+            const ST = window._cedState = {
+                components: [],     // [{id, type, x, y, varName}]
+                // Wire endpoints: { compId, pin } OR { rail:'plus'|'minus', x }
+                wires: [],          // [{id, from, to}]
+                tool: 'select',
+                liveSync: true,
+                selectedIds: new Set(),
+                wireStart: null,    // active wire endpoint
+                dragInfo: null,
+                idCounter: 1
+            };
+            const nextId = (p) => p + (ST.idCounter++);
+
+            function snap(v) { return Math.round(v / GRID) * GRID; }
+
+            // Selection-Helper
+            const isSelected   = (id) => ST.selectedIds.has(id);
+            const setSelection = (id) => { ST.selectedIds.clear(); if (id != null) ST.selectedIds.add(id); };
+            const addSelection = (id) => { if (id != null) ST.selectedIds.add(id); };
+            const toggleSelection = (id) => { if (id == null) return; if (ST.selectedIds.has(id)) ST.selectedIds.delete(id); else ST.selectedIds.add(id); };
+            const clearSelection = () => ST.selectedIds.clear();
+
+            // ---------- SVG Helpers ----------
+            function el(tag, attrs, parent) {
+                const n = document.createElementNS(SVG_NS, tag);
+                if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+                if (parent) parent.appendChild(n);
+                return n;
+            }
+            function clear(g) { while (g.firstChild) g.removeChild(g.firstChild); }
+
+            // ---------- Init / Render ----------
+            window.cedInit = function() {
+                if (ST._initialized) { cedRender(); return; }
+                ST._initialized = true;
+                _loadStateFromStorage();
+                _bindPalette();
+                _bindCanvas();
+                cedRender();
+            };
+            // Persistenz: State in/aus localStorage und als JSON-Objekt für Save-Load-Modal
+            function _serializeState() {
+                return {
+                    components: ST.components,
+                    wires: ST.wires,
+                    idCounter: ST.idCounter
+                };
+            }
+            function _applyState(data) {
+                if (!data || typeof data !== 'object') return false;
+                if (Array.isArray(data.components)) ST.components = data.components;
+                if (Array.isArray(data.wires)) ST.wires = data.wires;
+                if (typeof data.idCounter === 'number') ST.idCounter = data.idCounter;
+                return true;
+            }
+            function _saveStateToStorage() {
+                try { localStorage.setItem('cedEditorState', JSON.stringify(_serializeState())); } catch(e) {}
+            }
+            function _loadStateFromStorage() {
+                try {
+                    const raw = localStorage.getItem('cedEditorState');
+                    if (!raw) return false;
+                    return _applyState(JSON.parse(raw));
+                } catch(e) { return false; }
+            }
+            // Public API für Save-Load-System
+            window.cedExportState = function() {
+                if (!ST.components.length && !ST.wires.length) return null;
+                return _serializeState();
+            };
+            window.cedImportState = function(data) {
+                if (!_applyState(data)) return false;
+                _saveStateToStorage();
+                if (ST._initialized) cedRender();
+                return true;
+            };
+
+            window.cedSetTool = function(t) {
+                ST.tool = t;
+                ['select','wire','delete'].forEach(x => {
+                    const b = document.getElementById('ced-tool-'+x);
+                    if (b) b.classList.toggle('ced-tool-active', x === t);
+                });
+                const wrapper = document.getElementById('circuit-editor-wrapper');
+                if (wrapper) {
+                    wrapper.classList.toggle('ced-tool-wire-mode', t === 'wire');
+                    wrapper.classList.toggle('ced-tool-delete-mode', t === 'delete');
+                }
+                if (t !== 'wire' && ST.wireStart) {
+                    ST.wireStart = null;
+                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                }
+            };
+
+            window.cedToggleLiveSync = function() {
+                ST.liveSync = document.getElementById('ced-livesync').checked;
+                if (ST.liveSync) cedGenerateCode();
+            };
+
+            window.cedClear = function() {
+                if (!confirm('Schaltplan-Editor wirklich zurücksetzen? Alle Komponenten und Leitungen werden entfernt.')) return;
+                ST.components = [];
+                ST.wires = [];
+                clearSelection();
+                cedRender();
+                _maybeSync();
+            };
+
+            // ---------- Render ----------
+            function cedRender() {
+                _refreshJunctionPins();
+                _renderRails();
+                _renderWires();
+                _renderComponents();
+                _updateStatus();
+            }
+            // Nach jeder Änderung: für jeden Wire der mit einem Junction verbunden ist,
+            // wähle den Junction-Pin so dass er der Anflug-Richtung des anderen Endpunkts entspricht.
+            function _refreshJunctionPins() {
+                let changed = true, safety = 5;
+                while (changed && safety-- > 0) {
+                    changed = false;
+                    ST.wires.forEach(w => {
+                        ['from','to'].forEach(end => {
+                            const ref = w[end];
+                            if (!ref.compId) return;
+                            const c = ST.components.find(x => x.id === ref.compId);
+                            if (!c) return;
+                            const t = CTYPES[c.type];
+                            if (!t || t.kind !== 'junction') return;
+                            const otherRef = w[end === 'from' ? 'to' : 'from'];
+                            const otherPos = _pinPos(otherRef);
+                            if (!otherPos) return;
+                            const cxA = c.x + t.cx, cyA = c.y + t.cy;
+                            const dx = otherPos.x - cxA, dy = otherPos.y - cyA;
+                            let newPin;
+                            if (Math.abs(dy) >= Math.abs(dx)) newPin = (dy > 0) ? 'bottom' : 'top';
+                            else                              newPin = (dx > 0) ? 'right'  : 'left';
+                            if (ref.pin !== newPin) { ref.pin = newPin; changed = true; }
+                        });
+                    });
+                }
+            }
+
+            function _renderRails() {
+                const g = document.getElementById('ced-rails');
+                if (!g) return;
+                clear(g);
+                // Hitbox-Linien (transparent, dick) für komfortables Klicken
+                const hitPlus = el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: RAIL_X_MAX, y2: RAIL_PLUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'plus' }, g);
+                const hitMinus = el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: RAIL_X_MAX, y2: RAIL_MINUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'minus' }, g);
+                hitPlus.style.cursor = 'crosshair';
+                hitMinus.style.cursor = 'crosshair';
+                // Sichtbare Schienen
+                el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: RAIL_X_MAX, y2: RAIL_PLUS_Y, stroke:'#d32f2f', 'stroke-width':3, 'pointer-events':'none' }, g);
+                el('text', { x: RAIL_X_MIN - 6, y: RAIL_PLUS_Y - 6, 'font-size':12, 'font-weight':'bold', fill:'#d32f2f', 'text-anchor':'end' }, g).textContent = '+24V';
+                el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: RAIL_X_MAX, y2: RAIL_MINUS_Y, stroke:'#1976d2', 'stroke-width':3, 'pointer-events':'none' }, g);
+                el('text', { x: RAIL_X_MIN - 6, y: RAIL_MINUS_Y + 16, 'font-size':12, 'font-weight':'bold', fill:'#1976d2', 'text-anchor':'end' }, g).textContent = '0V';
+                const svg = document.getElementById('ced-svg');
+                if (svg) svg.setAttribute('height', RAIL_MINUS_Y + 60);
+            }
+
+            function _renderComponents() {
+                const g = document.getElementById('ced-components');
+                if (!g) return;
+                clear(g);
+                ST.components.forEach(comp => _drawComponent(comp, g));
+            }
+
+            function _drawComponent(comp, g) {
+                const t = CTYPES[comp.type];
+                if (!t) return;
+                const grp = el('g', {
+                    class: 'ced-comp' + (isSelected(comp.id) ? ' ced-selected' : ''),
+                    transform: `translate(${comp.x}, ${comp.y})`,
+                    'data-id': comp.id
+                }, g);
+                el('rect', { x:-4, y:-4, width: t.w + 8, height: t.h + 8, class:'ced-comp-bg', rx:2 }, grp);
+                _renderIecSymbol(grp, comp);
+                const pinR = 4;
+                if (t.kind === 'junction') {
+                    // Junction: alle 4 Pin-Marker am Mittelpunkt — Wires laufen direkt zum schwarzen Punkt
+                    el('circle', { cx:t.cx, cy:t.cy, r:pinR, class:'ced-pin', 'data-pin':'top'    }, grp);
+                    el('circle', { cx:t.cx, cy:t.cy, r:pinR, class:'ced-pin', 'data-pin':'bottom' }, grp);
+                    el('circle', { cx:t.cx, cy:t.cy, r:pinR, class:'ced-pin', 'data-pin':'left'   }, grp);
+                    el('circle', { cx:t.cx, cy:t.cy, r:pinR, class:'ced-pin', 'data-pin':'right'  }, grp);
+                } else {
+                    el('circle', { cx:t.cx, cy:0,   r:pinR, class:'ced-pin', 'data-pin':'in'  }, grp);
+                    el('circle', { cx:t.cx, cy:t.h, r:pinR, class:'ced-pin', 'data-pin':'out' }, grp);
+                    if (t.kind === 'sensor') {
+                        el('circle', { cx:t.w, cy:t.cy, r:pinR, class:'ced-pin', 'data-pin':'signal' }, grp);
+                    }
+                }
+                grp.addEventListener('mousedown', _onCompMouseDown);
+                grp.addEventListener('dblclick', _onCompDblClick);
+                grp.addEventListener('contextmenu', _onCompContextMenu);
+            }
+
+            // Render IEC-Symbol — exakte Geometrien aus drawContact/drawCoil/drawLED/drawSiren/drawMotor/drawHeater
+            // des Original-Schaltplans (siehe Funktionen ab Zeile ~6639). Lokales Koordinatensystem:
+            //   x ist der Symbol-Mittelpunkt (entspricht dem original `x`-Parameter der draw-Funktion)
+            //   y ist die Symbol-Mitte (entspricht dem original `y`-Parameter)
+            function _renderIecSymbol(grp, comp) {
+                const t = CTYPES[comp.type];
+                if (!t) return;
+                const x = t.cx, y = t.cy; // Symbol-Mittelpunkt im lokalen Koordinatensystem
+                const labelText = comp.varName || '?';
+                if (t.kind === 'sensor') {
+                    // === EXAKT identisch zum Original-Schaltplan (Zeilen 7017-7031): ===
+                    // 30x30 Box, sBoxY=0 im lokalen System; cx=15, cy=15.
+                    // Im Original: gSens-Box bei (currX-15, sBoxY) Größe 30x30; Diamant innen + zwei Vertikallinien;
+                    // typ-spezifisches Symbol darunter; 3 Anschlüsse: oben (+24V), unten (0V), rechts (Signal).
+                    const sBoxY = 0; // Lokales y der Box-Oberkante
+                    el('rect',    {x:x-15, y:sBoxY, width:30, height:30, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                    el('polygon', {points:`${x},${sBoxY+3} ${x+7},${sBoxY+10} ${x},${sBoxY+17} ${x-7},${sBoxY+10}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                    el('line',    {x1:x-2.5, y1:sBoxY+5.5, x2:x-2.5, y2:sBoxY+14.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                    el('line',    {x1:x+2.5, y1:sBoxY+5.5, x2:x+2.5, y2:sBoxY+14.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                    if (comp.type === 'sensor_ind') {
+                        el('path', {d:`M ${x-9} ${sBoxY+26} L ${x-9} ${sBoxY+23} A 3 3 0 0 1 ${x-3} ${sBoxY+23} A 3 3 0 0 1 ${x+3} ${sBoxY+23} A 3 3 0 0 1 ${x+9} ${sBoxY+23} L ${x+9} ${sBoxY+26}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                    } else if (comp.type === 'sensor_kap') {
+                        el('line', {x1:x, y1:sBoxY+18, x2:x, y2:sBoxY+22, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('line', {x1:x-6, y1:sBoxY+22, x2:x+6, y2:sBoxY+22, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('line', {x1:x-6, y1:sBoxY+25, x2:x+6, y2:sBoxY+25, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('line', {x1:x, y1:sBoxY+25, x2:x, y2:sBoxY+29, stroke:'#000', 'stroke-width':1.5}, grp);
+                    } else if (comp.type === 'sensor_opt') {
+                        el('line', {x1:x-7, y1:sBoxY+27, x2:x-1, y2:sBoxY+21, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('polyline', {points:`${x-4},${sBoxY+21} ${x-1},${sBoxY+21} ${x-1},${sBoxY+24}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('line', {x1:x, y1:sBoxY+27, x2:x+6, y2:sBoxY+21, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('polyline', {points:`${x+3},${sBoxY+21} ${x+6},${sBoxY+21} ${x+6},${sBoxY+24}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                    } else if (comp.type === 'sensor_mag') {
+                        el('rect', {x:x-6, y:sBoxY+22, width:12, height:6, fill:'#000'}, grp);
+                        el('rect', {x:x-3, y:sBoxY+22, width:6,  height:3.5, fill:'#fff'}, grp);
+                    }
+                    // Variablen-Label oberhalb der Box (entspricht addLabelText(gSens, currX+20, sBoxY-5, ...))
+                    el('text', {x:x+20, y:sBoxY-5, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
+                    return;
+                }
+                if (t.kind === 'contact' || t.kind === 'aux') {
+                    // === Identisch zu drawContact() im Original ===
+                    el('circle', {cx:x, cy:y-15, r:2.5, fill:'#000', class:'circ-static'}, grp);
+                    el('circle', {cx:x, cy:y+15, r:2.5, fill:'#000', class:'circ-static'}, grp);
+                    el('line',   {x1:x, y1:y-15, x2:x, y2:y-5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                    el('line',   {x1:x, y1:y+15, x2:x, y2:y+5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                    const movingGroup = el('g', { class:`circ-moving-contact ${t.nc ? 'is-nc' : 'is-no'}`, stroke:'#000' }, grp);
+                    movingGroup.style.transformOrigin = `${x}px ${y + 15}px`;
+                    if (!t.nc) movingGroup.classList.add('open');
+                    el('line', {x1:x, y1:y-6, x2:x, y2:y+15, 'stroke-width':2}, movingGroup);
+                    if (t.nc) el('line', {x1:x, y1:y-5, x2:x+8, y2:y-5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                    // Treiber-Symbol (gestrichelte Linie + Antrieb) für: Taster, Schalter, Not-Halt, Pos.-Schalter, Schlüssel, Lichtgitter
+                    const hasDriverInRegistry = ComponentRegistry && ComponentRegistry[comp.type] && ComponentRegistry[comp.type].iecSymbol;
+                    const drawDriver = (comp.type === 'taster' || comp.type === 'taster_nc' || comp.type === 'schalter' || comp.type === 'schalter_nc' || comp.type === 'nothalt' || hasDriverInRegistry);
+                    if (drawDriver) {
+                        const dashEndX = t.nc ? x + 3 : x - 5;
+                        el('line', {x1:dashEndX, y1:y+2.5, x2:x-18, y2:y+2.5, stroke:'#000', 'stroke-width':1.5, 'stroke-dasharray':'2,2'}, grp);
+                        if (comp.type === 'nothalt') {
+                            // Pilzkopf-Knopf
+                            el('line', {x1:x-18, y1:y-2.5, x2:x-18, y2:y+7.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('path', {d:`M ${x-18} ${y-2.5} A 5 5 0 0 0 ${x-18} ${y+7.5} Z`, fill:'#000'}, grp);
+                            el('path', {d:`M ${x-12} ${y-0.5} L ${x-9} ${y+2.5} L ${x-12} ${y+5.5}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                        } else if (hasDriverInRegistry) {
+                            // Verwende exakt die selbe iecSymbol-Funktion wie der Original-Schaltplan (z.B. mech_sensor, key_switch, light_curtain)
+                            try {
+                                const fn = (tag, attrs) => {
+                                    const e = document.createElementNS(SVG_NS, tag);
+                                    if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+                                    return e;
+                                };
+                                ComponentRegistry[comp.type].iecSymbol(grp, x, y, t.nc, fn);
+                            } catch(e) { /* fallback: leer */ }
+                        } else {
+                            // Standard-Antrieb (Taster/Schalter): Rechteck + ggf. Pfeil für Schalter
+                            el('line', {x1:x-18, y1:y-2.5, x2:x-18, y2:y+7.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('line', {x1:x-18, y1:y-2.5, x2:x-14, y2:y-2.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('line', {x1:x-18, y1:y+7.5, x2:x-14, y2:y+7.5, stroke:'#000', 'stroke-width':1.5}, grp);
+                            if (comp.type === 'schalter' || comp.type === 'schalter_nc') {
+                                el('path', {d:`M ${x-12} ${y-0.5} L ${x-9} ${y+2.5} L ${x-12} ${y+5.5}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                            }
+                        }
+                    }
+                    // Aux-Marker (kleines „K" links oben)
+                    if (t.kind === 'aux') {
+                        el('text', {x:x-6, y:y-7, 'font-size':7, fill:'#1976d2', 'text-anchor':'end', 'font-weight':'bold', 'font-family':'sans-serif'}, grp).textContent = 'K';
+                    }
+                    // Variablen-Label rechts neben dem Symbol (entspricht addLabelText(g, x+15, y))
+                    el('text', {x:x+18, y:y-2, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
+                } else if (t.kind === 'coil') {
+                    // === Identisch zu drawCoil/drawLED/drawSiren/drawMotor/drawHeater im Original ===
+                    if (comp.type === 'led') {
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-15, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+15, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('circle', {cx:x, cy:y, r:15, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                        el('line', {x1:x-10.6, y1:y-10.6, x2:x+10.6, y2:y+10.6, stroke:'#000', 'stroke-width':2}, grp);
+                        el('line', {x1:x-10.6, y1:y+10.6, x2:x+10.6, y2:y-10.6, stroke:'#000', 'stroke-width':2}, grp);
+                    } else if (comp.type === 'motor') {
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-15, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+15, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('circle', {cx:x, cy:y, r:15, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                        el('text', {x, y:y+5, 'font-size':14, 'font-weight':'900', 'text-anchor':'middle', 'font-family':'Arial'}, grp).textContent = 'M';
+                    } else if (comp.type === 'siren') {
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        const sirenPath = `M ${x-10} ${y-10} A 10 10 0 0 0 ${x-10} ${y+10} L ${x+10} ${y+15} L ${x+10} ${y-15} Z`;
+                        el('path', {d:sirenPath, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                    } else if (comp.type === 'heater') {
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('rect', {x:x-15, y:y-10, width:30, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                        el('path', {d:`M ${x-8} ${y-4} Q ${x-5} ${y-8} ${x-2} ${y-4} T ${x+4} ${y-4} T ${x+10} ${y-4}`, fill:'none', stroke:'#000', 'stroke-width':1}, grp);
+                        el('path', {d:`M ${x-8} ${y+1} Q ${x-5} ${y-3} ${x-2} ${y+1} T ${x+4} ${y+1} T ${x+10} ${y+1}`, fill:'none', stroke:'#000', 'stroke-width':1}, grp);
+                        el('path', {d:`M ${x-8} ${y+6} Q ${x-5} ${y+2} ${x-2} ${y+6} T ${x+4} ${y+6} T ${x+10} ${y+6}`, fill:'none', stroke:'#000', 'stroke-width':1}, grp);
+                    } else if (comp.type === 'valve') {
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('rect', {x:x-20, y:y-10, width:40, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                        el('line', {x1:x-20, y1:y+10, x2:x+20, y2:y-10, stroke:'#000', 'stroke-width':2}, grp);
+                    } else {
+                        // Relais: Standard-Rechteck
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('rect', {x:x-20, y:y-10, width:40, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                    }
+                    // Variablen-Label rechts (entspricht addLabelText(g, x+30, y) bzw. x+25 für LED/Motor)
+                    const lblX = (comp.type === 'led' || comp.type === 'motor' || comp.type === 'heater') ? x + 25 : (comp.type === 'siren' ? x + 20 : x + 30);
+                    el('text', {x:lblX, y, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif', 'dominant-baseline':'middle'}, grp).textContent = labelText;
+                } else if (t.kind === 'junction') {
+                    el('circle', {cx:x, cy:y, r:5, fill:'#000'}, grp);
+                }
+            }
+
+            function _renderWires() {
+                const g = document.getElementById('ced-wires');
+                if (!g) return;
+                clear(g);
+                ST.wires.forEach(w => {
+                    const pa = _pinPos(w.from), pb = _pinPos(w.to);
+                    if (!pa || !pb) return;
+                    const d = _wirePath(pa, pb);
+                    // Unsichtbarer dicker Path als Hitbox (cursor:pointer, klickbar)
+                    const hit = el('path', { d, class:'ced-wire-hit', 'data-id': w.id }, g);
+                    el('path', { d, class:'ced-wire' + (isSelected(w.id) ? ' ced-selected' : ''), 'data-id': w.id }, g);
+                    hit.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (ST.tool === 'delete') { _deleteWire(w.id); return; }
+                        if (e.shiftKey) toggleSelection(w.id); else setSelection(w.id);
+                        cedRender();
+                    });
+                    // Drag-Handles für Schienen-Endpunkte (entlang der Schiene verschiebbar)
+                    if (w.from.rail) _renderRailHandle(g, w.id, 'from', pa);
+                    if (w.to.rail)   _renderRailHandle(g, w.id, 'to',   pb);
+                });
+            }
+            function _renderRailHandle(g, wireId, end, pos) {
+                const handle = el('circle', { cx: pos.x, cy: pos.y, r: 5, class:'ced-rail-handle', 'data-wire': wireId, 'data-end': end }, g);
+                handle.addEventListener('mousedown', _onRailHandleMouseDown);
+            }
+            function _onRailHandleMouseDown(e) {
+                if (e.button !== 0) return;
+                e.stopPropagation(); e.preventDefault();
+                const wireId = e.currentTarget.getAttribute('data-wire');
+                const end = e.currentTarget.getAttribute('data-end'); // 'from' | 'to'
+                ST.railDragInfo = { wireId, end };
+                document.addEventListener('mousemove', _onRailHandleMove);
+                document.addEventListener('mouseup', _onRailHandleUp);
+            }
+            function _onRailHandleMove(e) {
+                if (!ST.railDragInfo) return;
+                const w = ST.wires.find(x => x.id === ST.railDragInfo.wireId);
+                if (!w) return;
+                const ep = w[ST.railDragInfo.end];
+                if (!ep || !ep.rail) return;
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const cy = e.clientY - rect.top;
+                const railY = ep.rail === 'plus' ? RAIL_PLUS_Y : RAIL_MINUS_Y;
+                // Vertikales Wegziehen (>25px) → Wire vom Schienen-Endpunkt lösen
+                if (Math.abs(cy - railY) > 25) {
+                    const otherEnd = (ST.railDragInfo.end === 'from') ? w.to : w.from;
+                    ST.wires = ST.wires.filter(x => x.id !== w.id);
+                    ST.railDragInfo = null;
+                    document.removeEventListener('mousemove', _onRailHandleMove);
+                    document.removeEventListener('mouseup', _onRailHandleUp);
+                    ST.wireStart = otherEnd;
+                    document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                    document.addEventListener('mousemove', _onWireDragMove);
+                    document.addEventListener('mouseup', _onWireDragUp);
+                    cedRender();
+                    _updateWirePreview(e.clientX, e.clientY);
+                    return;
+                }
+                ep.x = snap(e.clientX - rect.left);
+                cedRender();
+            }
+            function _onRailHandleUp() {
+                ST.railDragInfo = null;
+                document.removeEventListener('mousemove', _onRailHandleMove);
+                document.removeEventListener('mouseup', _onRailHandleUp);
+                _maybeSync();
+            }
+            // Manhattan-Routing mit Pin-Richtungen 'v'/'r'/'l'. Pfade gehen aus dem Pin in
+            // dessen Richtung (Stub) heraus, dann Manhattan zum Stub des Ziel-Pins.
+            function _wirePath(pa, pb) {
+                const pts = _wirePathPoints(pa, pb);
+                if (!pts || pts.length === 0) return `M ${pa.x} ${pa.y}`;
+                return 'M ' + pts.map(p => `${p.x} ${p.y}`).join(' L ');
+            }
+            // Liefert die Knickpunkte des Manhattan-Pfads — wird auch für Hit-Test (Wire-Drop) genutzt
+            function _wirePathPoints(pa, pb) {
+                if (pa.x === pb.x && pa.y === pb.y) return [{x:pa.x, y:pa.y}];
+                const aDir = pa.dir || 'd';
+                const bDir = pb.dir || 'u';
+                const STUB = 20;
+                const stubFor = (p, d) => {
+                    if (d === 'r') return { x: p.x + STUB, y: p.y };
+                    if (d === 'l') return { x: p.x - STUB, y: p.y };
+                    if (d === 'u') return { x: p.x, y: p.y - STUB };
+                    if (d === 'd') return { x: p.x, y: p.y + STUB };
+                    return { x: p.x, y: p.y };
+                };
+                const sa = stubFor(pa, aDir);
+                const sb = stubFor(pb, bDir);
+                const aH = (aDir === 'r' || aDir === 'l');
+                const bH = (bDir === 'r' || bDir === 'l');
+                const pts = [{x:pa.x, y:pa.y}, {x:sa.x, y:sa.y}];
+                if (!aH && !bH) {
+                    if (sa.x === sb.x) {
+                        // Direkte vertikale Linie — keine zusätzlichen Punkte nötig
+                    } else if (Math.abs(sa.x - sb.x) <= 30) {
+                        // Kleiner x-Versatz → L-Routing direkt nahe einem Pin (statt Z in der Mitte)
+                        // Knick beim oberen Pin: erst horizontal versetzen, dann gerade runter
+                        if (sa.y < sb.y) pts.push({x:sb.x, y:sa.y});
+                        else             pts.push({x:sa.x, y:sb.y});
+                    } else {
+                        const mY = Math.round((sa.y + sb.y) / 2 / GRID) * GRID;
+                        pts.push({x:sa.x, y:mY}, {x:sb.x, y:mY});
+                    }
+                } else if (aH && bH) {
+                    const mX = Math.round((sa.x + sb.x) / 2 / GRID) * GRID;
+                    pts.push({x:mX, y:sa.y}, {x:mX, y:sb.y});
+                } else if (aH && !bH) {
+                    // Wenn Ziel auf der "Rück"-Seite des Stub liegt (z.B. Pin geht rechts raus
+                    // aber Ziel ist links), einen vertikalen Umweg machen statt durch die Komponente
+                    const wrongSide = (aDir === 'r' && pb.x < pa.x) || (aDir === 'l' && pb.x > pa.x);
+                    if (wrongSide && Math.abs(sb.y - sa.y) < 30) {
+                        // Detour: weit genug vertikal weg, dann horizontal, dann wieder vertikal
+                        const detour = sa.y + 40;
+                        pts.push({x:sa.x, y:detour}, {x:sb.x, y:detour});
+                    } else {
+                        pts.push({x:sa.x, y:sb.y});
+                    }
+                } else { // !aH && bH
+                    const wrongSide = (bDir === 'r' && pa.x < pb.x) || (bDir === 'l' && pa.x > pb.x);
+                    if (wrongSide && Math.abs(sa.y - sb.y) < 30) {
+                        const detour = sb.y + 40;
+                        pts.push({x:sa.x, y:detour}, {x:sb.x, y:detour});
+                    } else {
+                        pts.push({x:sb.x, y:sa.y});
+                    }
+                }
+                pts.push({x:sb.x, y:sb.y}, {x:pb.x, y:pb.y});
+                return pts;
+            }
+            // Bestimmt ob der Hit-Punkt auf einem horizontalen ('h') oder vertikalen ('v') Wire-Segment liegt
+            function _wireSegmentDirAt(wire, hitX, hitY) {
+                const pa = _pinPos(wire.from), pb = _pinPos(wire.to);
+                if (!pa || !pb) return null;
+                const pts = _wirePathPoints(pa, pb);
+                const TOL = 8;
+                for (let i = 0; i < pts.length - 1; i++) {
+                    const p1 = pts[i], p2 = pts[i+1];
+                    if (p1.x === p2.x && p1.y === p2.y) continue;
+                    if (p1.x === p2.x) {
+                        if (Math.abs(hitX - p1.x) <= TOL &&
+                            Math.min(p1.y, p2.y) - TOL <= hitY && hitY <= Math.max(p1.y, p2.y) + TOL) return 'v';
+                    } else if (p1.y === p2.y) {
+                        if (Math.abs(hitY - p1.y) <= TOL &&
+                            Math.min(p1.x, p2.x) - TOL <= hitX && hitX <= Math.max(p1.x, p2.x) + TOL) return 'h';
+                    }
+                }
+                return 'v';
+            }
+
+            function _pinPos(ref) {
+                // dir = Richtung in die der Wire vom Pin abgeht:
+                //   'u'/'d' = vertikal nach oben/unten
+                //   'r'/'l' = horizontal nach rechts/links
+                if (ref.rail === 'plus')  return { x: ref.x, y: RAIL_PLUS_Y,  dir:'d' };
+                if (ref.rail === 'minus') return { x: ref.x, y: RAIL_MINUS_Y, dir:'u' };
+                const c = ST.components.find(x => x.id === ref.compId);
+                if (!c) return null;
+                const t = CTYPES[c.type];
+                if (!t) return null;
+                if (ref.pin === 'in')     return { x: c.x + t.cx, y: c.y,        dir:'u' };
+                if (ref.pin === 'out')    return { x: c.x + t.cx, y: c.y + t.h,  dir:'d' };
+                if (ref.pin === 'signal') return { x: c.x + t.w,  y: c.y + t.cy, dir:'r' };
+                // Junction: alle 4 Pins liefern den Mittelpunkt → Wires berühren den schwarzen Punkt
+                if (ref.pin === 'top')    return { x: c.x + t.cx, y: c.y + t.cy, dir:'u' };
+                if (ref.pin === 'bottom') return { x: c.x + t.cx, y: c.y + t.cy, dir:'d' };
+                if (ref.pin === 'left')   return { x: c.x + t.cx, y: c.y + t.cy, dir:'l' };
+                if (ref.pin === 'right')  return { x: c.x + t.cx, y: c.y + t.cy, dir:'r' };
+                return null;
+            }
+
+            function _updateStatus() {
+                const s = document.getElementById('ced-status');
+                if (!s) return;
+                const nC = ST.components.filter(c => CTYPES[c.type] && CTYPES[c.type].kind === 'coil').length;
+                s.textContent = `${ST.components.length} Komponenten · ${ST.wires.length} Leitungen · ${nC} Spulen`;
+            }
+
+            // ---------- Drop-Ghost (Vorschau beim Drag aus der Palette) ----------
+            // Zeichnet eine halbtransparente Vorschau der zu droppenden Komponente an der Cursor-Position.
+            // Bei Hover über vertikalem Wire-Segment: Vorschau snapt an die Wire-x und zeigt Insert-Marker.
+            function _updateDropGhost(clientX, clientY) {
+                const type = ST.dragPreviewType;
+                if (!type || !CTYPES[type]) return;
+                const tt = CTYPES[type];
+                const ov = document.getElementById('ced-overlay');
+                if (!ov) return;
+                clear(ov);
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const cursorX = clientX - rect.left;
+                const cursorY = clientY - rect.top;
+                let x, y, isInsert = false;
+                // Wire-Hit-Test (nur für einsetzbare Komponenten)
+                const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
+                if (insertable) {
+                    const eltUnder = document.elementFromPoint(clientX, clientY);
+                    if (eltUnder && eltUnder.classList && eltUnder.classList.contains('ced-wire-hit')) {
+                        const wireId = eltUnder.getAttribute('data-id');
+                        const wire = ST.wires.find(w => w.id === wireId);
+                        if (wire) {
+                            const segDir = _wireSegmentDirAt(wire, cursorX, cursorY);
+                            if (segDir === 'v') {
+                                const pa = _pinPos(wire.from);
+                                if (pa) {
+                                    x = pa.x - tt.cx;
+                                    y = _clampCompY(snap(cursorY) - tt.cy, type);
+                                    isInsert = true;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!isInsert) {
+                    x = snap(cursorX) - tt.cx;
+                    y = _clampCompY(snap(cursorY) - tt.cy, type);
+                }
+                // Ghost rendern (halbtransparent, ohne Pointer-Events)
+                const ghost = el('g', { transform:`translate(${x}, ${y})`, opacity:'0.55', 'pointer-events':'none' }, ov);
+                _renderIecSymbol(ghost, { type, varName: tt.label || '?', x, y });
+                if (isInsert) {
+                    // Orange-gestrichelter Insert-Indikator + Marker am Wire
+                    el('rect', {
+                        x: x - 4, y: y - 4,
+                        width: tt.w + 8, height: tt.h + 8,
+                        fill:'rgba(255,152,0,0.08)', stroke:'#ff9800', 'stroke-width':1.5, 'stroke-dasharray':'4,2',
+                        'pointer-events':'none', rx:2
+                    }, ov);
+                }
+            }
+
+            // ---------- Drag from Palette ----------
+            function _bindPalette() {
+                const items = document.querySelectorAll('#ced-palette .ced-pal-item');
+                items.forEach(it => {
+                    it.addEventListener('dragstart', (e) => {
+                        const type = it.getAttribute('data-ctype');
+                        e.dataTransfer.setData('text/x-ced-type', type);
+                        e.dataTransfer.effectAllowed = 'copy';
+                        ST.dragPreviewType = type;
+                    });
+                    it.addEventListener('dragend', () => {
+                        ST.dragPreviewType = null;
+                        const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                    });
+                    // Mini-Symbol befüllen
+                    const mini = it.querySelector('.ced-pal-mini');
+                    if (mini && !mini.firstChild) {
+                        const type = mini.getAttribute('data-mini') || it.getAttribute('data-ctype');
+                        const fakeComp = { id:'__pal__', type, varName:'', x:0, y:0 };
+                        const tt = CTYPES[type];
+                        if (tt) {
+                            const svg = document.createElementNS(SVG_NS, 'svg');
+                            svg.setAttribute('width', tt.w);
+                            svg.setAttribute('height', tt.h);
+                            svg.setAttribute('viewBox', `-2 -2 ${tt.w+4} ${tt.h+4}`);
+                            const g = el('g', { transform:'translate(0,0)' }, svg);
+                            _renderIecSymbol(g, fakeComp);
+                            mini.appendChild(svg);
+                        }
+                    }
+                });
+            }
+            function _bindCanvas() {
+                const area = document.getElementById('ced-canvas-area');
+                if (!area || area._cedBound) return;
+                area._cedBound = true;
+                area.addEventListener('dragover', (e) => {
+                    if (e.dataTransfer.types.indexOf('text/x-ced-type') >= 0) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        area.classList.add('ced-drag-over');
+                        _updateDropGhost(e.clientX, e.clientY);
+                    }
+                });
+                area.addEventListener('dragleave', () => {
+                    area.classList.remove('ced-drag-over');
+                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                });
+                area.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    area.classList.remove('ced-drag-over');
+                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                    ST.dragPreviewType = null;
+                    const type = e.dataTransfer.getData('text/x-ced-type');
+                    if (!type || !CTYPES[type]) return;
+                    const svg = document.getElementById('ced-svg');
+                    const rect = svg.getBoundingClientRect();
+                    // Pin-Snap: cursor.x → snap → das wird die Pin-x; comp.x = pinX - cx
+                    const tt = CTYPES[type];
+                    const cursorX = e.clientX - rect.left;
+                    const cursorY = e.clientY - rect.top;
+                    const pinX = snap(cursorX);
+                    const pinY = snap(cursorY);
+                    let x = pinX - tt.cx;
+                    let y = _clampCompY(pinY - tt.cy, type);
+                    // Drop auf einer Wire? → Komponente in den Wire einfügen (vertikales Segment, Komponente mit in/out)
+                    const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
+                    let insertIntoWire = null, insertSegDir = null;
+                    if (insertable) {
+                        const eltUnder = document.elementFromPoint(e.clientX, e.clientY);
+                        if (eltUnder && eltUnder.classList && eltUnder.classList.contains('ced-wire-hit')) {
+                            const wireId = eltUnder.getAttribute('data-id');
+                            const wire = ST.wires.find(w => w.id === wireId);
+                            if (wire) {
+                                insertIntoWire = wire;
+                                insertSegDir = _wireSegmentDirAt(wire, cursorX, cursorY);
+                            }
+                        }
+                    }
+                    const comp = { id: nextId('c'), type, x, y };
+                    if (insertIntoWire && insertSegDir === 'v') {
+                        // Vertikales Wire: Komponente an Wire-x ausrichten (Pin-Mittellinie auf Wire)
+                        const pa = _pinPos(insertIntoWire.from), pb = _pinPos(insertIntoWire.to);
+                        const wireX = pa.x; // bei vertikalen Segmenten ist pa.x === pb.x === Wire-x
+                        comp.x = wireX - tt.cx;
+                        comp.y = _clampCompY(snap(cursorY) - tt.cy, type);
+                        // Top-/Bottom-Ende des Original-Wires bestimmen
+                        const topEnd = (pa.y <= pb.y) ? insertIntoWire.from : insertIntoWire.to;
+                        const botEnd = (pa.y <= pb.y) ? insertIntoWire.to   : insertIntoWire.from;
+                        ST.wires = ST.wires.filter(w => w.id !== insertIntoWire.id);
+                        ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in'  } });
+                        ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
+                    }
+                    ST.components.push(comp);
+                    if (_needsVar(type)) {
+                        cedRender();
+                        _showNamePopup(comp);
+                    } else {
+                        cedRender();
+                        _maybeSync();
+                    }
+                });
+                document.getElementById('ced-canvas-area').addEventListener('click', (e) => {
+                    if (e.target.id === 'ced-canvas-area' || e.target.id === 'ced-svg') {
+                        // Marquee-Drag setzt selectedIds — bei reinem Klick ohne Marquee zurücksetzen
+                        if (!ST.marqueeActive) { clearSelection(); cedRender(); }
+                    }
+                });
+                // Marquee-Selection: mousedown auf leerem Canvas → Box ziehen
+                area.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0 || ST.tool !== 'select') return;
+                    const t = e.target;
+                    // Nur starten wenn auf wirklich leerem Bereich (nicht auf Komponente, Pin, Wire, Schiene)
+                    const onEmpty = (t.id === 'ced-canvas-area' || t.id === 'ced-svg' || t.tagName === 'svg' || (t.parentNode && t.parentNode.id === 'ced-rails' && !t.classList.contains('ced-rail-hit')));
+                    if (!onEmpty) return;
+                    const svg = document.getElementById('ced-svg');
+                    const rect = svg.getBoundingClientRect();
+                    ST.marqueeInfo = {
+                        startCx: e.clientX, startCy: e.clientY,
+                        startSx: e.clientX - rect.left, startSy: e.clientY - rect.top,
+                        additive: e.shiftKey
+                    };
+                    ST.marqueeActive = false; // wird bei tatsächlichem Drag aktiviert
+                    document.addEventListener('mousemove', _onMarqueeMove);
+                    document.addEventListener('mouseup', _onMarqueeUp);
+                });
+                document.addEventListener('keydown', (e) => {
+                    const wrapper = document.getElementById('circuit-editor-wrapper');
+                    if (!wrapper || wrapper.style.display === 'none') return;
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                        if (ST.selectedIds.size > 0) _deleteSelected();
+                    } else if (e.key === 'Escape') {
+                        clearSelection(); ST.wireStart = null;
+                        const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                        cedRender();
+                    }
+                });
+            }
+            // Marquee-Drag: Vorschau-Rechteck zeichnen
+            function _onMarqueeMove(e) {
+                if (!ST.marqueeInfo) return;
+                const mi = ST.marqueeInfo;
+                if (!ST.marqueeActive && (Math.abs(e.clientX - mi.startCx) + Math.abs(e.clientY - mi.startCy) > 4)) {
+                    ST.marqueeActive = true;
+                }
+                if (!ST.marqueeActive) return;
+                const ov = document.getElementById('ced-overlay');
+                if (!ov) return;
+                clear(ov);
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const cx = e.clientX - rect.left;
+                const cy = e.clientY - rect.top;
+                const x = Math.min(mi.startSx, cx), y = Math.min(mi.startSy, cy);
+                const w = Math.abs(cx - mi.startSx), h = Math.abs(cy - mi.startSy);
+                el('rect', { x, y, width:w, height:h, fill:'rgba(25,118,210,0.10)', stroke:'#1976d2', 'stroke-width':1, 'stroke-dasharray':'4,3', 'pointer-events':'none' }, ov);
+            }
+            // Marquee-Mouseup: Komponenten und Wires im Rechteck selektieren
+            function _onMarqueeUp(e) {
+                document.removeEventListener('mousemove', _onMarqueeMove);
+                document.removeEventListener('mouseup', _onMarqueeUp);
+                const mi = ST.marqueeInfo;
+                ST.marqueeInfo = null;
+                const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                if (!mi || !ST.marqueeActive) { ST.marqueeActive = false; return; }
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+                const x1 = Math.min(mi.startSx, cx), x2 = Math.max(mi.startSx, cx);
+                const y1 = Math.min(mi.startSy, cy), y2 = Math.max(mi.startSy, cy);
+                if (!mi.additive) clearSelection();
+                // Komponenten deren Bounding Box vom Marquee überlappt wird
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type]; if (!t) return;
+                    const cl = c.x, cr = c.x + t.w, ct = c.y, cb = c.y + t.h;
+                    if (cl < x2 && cr > x1 && ct < y2 && cb > y1) addSelection(c.id);
+                });
+                // Wires: wenn beide Endpunkte im Marquee oder ein Knickpunkt
+                ST.wires.forEach(w => {
+                    const pa = _pinPos(w.from), pb = _pinPos(w.to);
+                    if (!pa || !pb) return;
+                    const inside = (p) => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
+                    if (inside(pa) && inside(pb)) addSelection(w.id);
+                });
+                ST.marqueeActive = false;
+                cedRender();
+            }
+            // Mehrere selektierte Items in einem Pass löschen
+            function _deleteSelected() {
+                const ids = Array.from(ST.selectedIds);
+                clearSelection();
+                ids.forEach(id => {
+                    const w = ST.wires.find(x => x.id === id);
+                    if (w) ST.wires = ST.wires.filter(x => x.id !== id);
+                    else {
+                        ST.components = ST.components.filter(c => c.id !== id);
+                        ST.wires = ST.wires.filter(x => x.from.compId !== id && x.to.compId !== id);
+                    }
+                });
+                cedRender();
+                _maybeSync();
+            }
+            function _clampCompY(y, type) {
+                const h = CTYPES[type].h;
+                return Math.max(RAIL_PLUS_Y + 20, Math.min(RAIL_MINUS_Y - 20 - h, y));
+            }
+
+            // ---------- Component Drag ----------
+            function _onCompMouseDown(e) {
+                if (e.button !== 0) return;
+                const grp = e.currentTarget;
+                const id = grp.getAttribute('data-id');
+                const pinTarget = e.target.classList && e.target.classList.contains('ced-pin');
+                // Pin-Drag: existierenden Wire lösen ODER neuen starten
+                if (pinTarget && ST.tool !== 'delete') {
+                    const pin = e.target.getAttribute('data-pin');
+                    // Hat dieser Pin schon einen Wire? Dann lösen + freier Drag vom anderen Ende
+                    const existing = ST.wires.find(w =>
+                        (w.from.compId === id && w.from.pin === pin) ||
+                        (w.to.compId   === id && w.to.pin   === pin)
+                    );
+                    if (existing) {
+                        const otherEnd = (existing.from.compId === id && existing.from.pin === pin) ? existing.to : existing.from;
+                        ST.wires = ST.wires.filter(w => w.id !== existing.id);
+                        ST.wireStart = otherEnd;
+                        document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                        _updateWirePreview(e.clientX, e.clientY);
+                        cedRender();
+                    } else {
+                        _startWire(id, pin, e);
+                    }
+                    document.addEventListener('mousemove', _onWireDragMove);
+                    document.addEventListener('mouseup', _onWireDragUp);
+                    e.stopPropagation(); e.preventDefault();
+                    return;
+                }
+                if (ST.tool === 'delete') { _deleteComp(id); e.stopPropagation(); return; }
+                if (ST.tool === 'wire') return;
+                // Selection-Logik: Shift toggelt, sonst: wenn schon mit-selektiert → behalten (für Multi-Drag), sonst single-select
+                if (e.shiftKey) {
+                    toggleSelection(id);
+                } else if (!isSelected(id)) {
+                    setSelection(id);
+                }
+                const comp = ST.components.find(c => c.id === id);
+                if (!comp) { cedRender(); return; }
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                // Snapshot der Start-Positionen aller selektierten Komponenten für gemeinsamen Drag
+                const startPositions = new Map();
+                ST.selectedIds.forEach(sid => {
+                    const sc = ST.components.find(x => x.id === sid);
+                    if (sc) startPositions.set(sid, { x: sc.x, y: sc.y });
+                });
+                ST.dragInfo = {
+                    id, ox: e.clientX - rect.left - comp.x, oy: e.clientY - rect.top - comp.y,
+                    anchorStartX: comp.x, anchorStartY: comp.y,
+                    startPositions
+                };
+                cedRender();
+                e.stopPropagation();
+                document.addEventListener('mousemove', _onDragMove);
+                document.addEventListener('mouseup', _onDragUp);
+            }
+            function _onDragMove(e) {
+                if (!ST.dragInfo) return;
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const anchor = ST.components.find(c => c.id === ST.dragInfo.id);
+                if (!anchor) return;
+                const t = CTYPES[anchor.type];
+                // Anchor-Position berechnen mit Pin-Snap
+                const rawX = e.clientX - rect.left - ST.dragInfo.ox;
+                const rawY = e.clientY - rect.top  - ST.dragInfo.oy;
+                const newAnchorX = snap(rawX + t.cx) - t.cx;
+                const newAnchorY = _clampCompY(snap(rawY + t.cy) - t.cy, anchor.type);
+                const dx = newAnchorX - ST.dragInfo.anchorStartX;
+                const dy = newAnchorY - ST.dragInfo.anchorStartY;
+                // Alle selektierten Komponenten relativ zum Anchor verschieben
+                ST.dragInfo.startPositions.forEach((startPos, compId) => {
+                    const c = ST.components.find(x => x.id === compId);
+                    if (!c) return;
+                    c.x = startPos.x + dx;
+                    c.y = _clampCompY(startPos.y + dy, c.type);
+                });
+                cedRender();
+            }
+            function _onDragUp() {
+                ST.dragInfo = null;
+                document.removeEventListener('mousemove', _onDragMove);
+                document.removeEventListener('mouseup', _onDragUp);
+                _maybeSync();
+            }
+
+            function _onCompDblClick(e) {
+                const id = e.currentTarget.getAttribute('data-id');
+                const comp = ST.components.find(c => c.id === id);
+                if (comp && _needsVar(comp.type)) _showNamePopup(comp);
+            }
+            function _onCompContextMenu(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = e.currentTarget.getAttribute('data-id');
+                const comp = ST.components.find(c => c.id === id);
+                if (!comp) return;
+                setSelection(id);
+                cedRender();
+                if (_needsVar(comp.type)) _showNamePopup(comp, e.clientX, e.clientY);
+            }
+
+            // ---------- Wire Drawing (Drag & Drop) ----------
+            function _startWire(compId, pin, e) {
+                ST.wireStart = { compId, pin };
+                document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                _updateWirePreview(e.clientX, e.clientY);
+            }
+            // Drag-Move: Preview folgt dem Cursor
+            function _onWireDragMove(e) {
+                _updateWirePreview(e.clientX, e.clientY);
+            }
+            // Mouseup: prüft worauf losgelassen wurde (Pin / Schiene / Nichts)
+            function _onWireDragUp(e) {
+                document.removeEventListener('mousemove', _onWireDragMove);
+                document.removeEventListener('mouseup', _onWireDragUp);
+                document.getElementById('circuit-editor-wrapper').classList.remove('ced-wire-dragging');
+                if (!ST.wireStart) return;
+                const target = _hitTestEndpoint(e.clientX, e.clientY);
+                const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                if (!target) {
+                    // Drop ins Leere: Wire (falls bereits gelöst) bleibt entfernt → sync
+                    ST.wireStart = null;
+                    cedRender();
+                    _maybeSync();
+                    return;
+                }
+                // Selbstverbindung verhindern
+                if (target.compId && ST.wireStart.compId === target.compId && ST.wireStart.pin === target.pin) {
+                    ST.wireStart = null;
+                    cedRender();
+                    _maybeSync();
+                    return;
+                }
+                // Drop auf Wire → 4-Pin-Junction erzeugen; Pins werden nach Wire-Segment-Richtung gewählt
+                if (target.wireId) {
+                    const original = ST.wires.find(w => w.id === target.wireId);
+                    if (!original) { ST.wireStart = null; cedRender(); _maybeSync(); return; }
+                    const tj = CTYPES.junction;
+                    const junctionId = nextId('c');
+                    const jx = target.x - tj.cx, jy = target.y - tj.cy;
+                    ST.components.push({ id: junctionId, type:'junction', x: jx, y: jy });
+                    // Richtung des getroffenen Segments bestimmt die Split-Pins:
+                    // 'h' → Splits horizontal (left/right); 'v' → vertikal (top/bottom)
+                    const segDir = _wireSegmentDirAt(original, target.x, target.y);
+                    const pa = _pinPos(original.from), pb = _pinPos(original.to);
+                    let fromPin, toPin;
+                    if (segDir === 'h') {
+                        fromPin = (pa.x <= target.x) ? 'left'  : 'right';
+                        toPin   = (fromPin === 'left') ? 'right' : 'left';
+                    } else {
+                        fromPin = (pa.y <= target.y) ? 'top'    : 'bottom';
+                        toPin   = (fromPin === 'top')  ? 'bottom' : 'top';
+                    }
+                    // Neuer Wire: Pin am Junction nach Anflug-Richtung des wireStart wählen
+                    const wsPos = _pinPos(ST.wireStart);
+                    let newPin;
+                    if (segDir === 'h') {
+                        // Original-Wire ist horizontal → neuer Wire kommt von oben oder unten
+                        newPin = (wsPos.y < target.y) ? 'top' : 'bottom';
+                    } else {
+                        // Original-Wire ist vertikal → neuer Wire kommt von links oder rechts
+                        newPin = (wsPos.x < target.x) ? 'left' : 'right';
+                    }
+                    ST.wires = ST.wires.filter(w => w.id !== original.id);
+                    ST.wires.push({ id: nextId('w'), from: original.from,                          to: { compId: junctionId, pin: fromPin } });
+                    ST.wires.push({ id: nextId('w'), from: { compId: junctionId, pin: toPin },     to: original.to });
+                    ST.wires.push({ id: nextId('w'), from: ST.wireStart,                           to: { compId: junctionId, pin: newPin } });
+                    ST.wireStart = null;
+                    cedRender();
+                    _maybeSync();
+                    return;
+                }
+                ST.wires.push({ id: nextId('w'), from: ST.wireStart, to: target });
+                ST.wireStart = null;
+                cedRender();
+                _maybeSync();
+            }
+            function _updateWirePreview(clientX, clientY) {
+                if (!ST.wireStart) return;
+                const ov = document.getElementById('ced-overlay');
+                if (!ov) return;
+                clear(ov);
+                const start = _pinPos(ST.wireStart);
+                if (!start) return;
+                const svg = document.getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const ex = clientX - rect.left;
+                const ey = clientY - rect.top;
+                // Snap an mögliches Ziel (für visuelles Feedback)
+                const hit = _hitTestEndpoint(clientX, clientY);
+                let target;
+                if (hit && hit.wireId !== undefined) {
+                    target = { x: hit.x, y: hit.y, dir: 'v' }; // Wire-Drop → Junction
+                } else if (hit) {
+                    target = _pinPos(hit);
+                } else {
+                    target = { x: ex, y: ey };
+                }
+                const d = _wirePath(start, target);
+                el('path', { d, class:'ced-wire-preview' }, ov);
+                if (hit) {
+                    // Andere Farbe für Wire-Drop (T-Knoten) als für Pin/Schiene
+                    const isJunctionDrop = hit.wireId !== undefined;
+                    const fill = isJunctionDrop ? 'rgba(255,152,0,0.5)' : 'rgba(76,175,80,0.5)';
+                    const stroke = isJunctionDrop ? '#ff9800' : '#4caf50';
+                    el('circle', { cx:target.x, cy:target.y, r:7, fill, stroke, 'stroke-width':2, 'pointer-events':'none' }, ov);
+                }
+            }
+            // Findet ob unter (clientX,clientY) ein gültiger Endpunkt liegt: Pin / Schiene / Wire / Komponente
+            function _hitTestEndpoint(clientX, clientY) {
+                const elt = document.elementFromPoint(clientX, clientY);
+                if (!elt) return null;
+                if (elt.classList && elt.classList.contains('ced-pin')) {
+                    const grp = elt.closest('.ced-comp');
+                    if (!grp) return null;
+                    return { compId: grp.getAttribute('data-id'), pin: elt.getAttribute('data-pin') };
+                }
+                if (elt.classList && elt.classList.contains('ced-rail-hit')) {
+                    const svg = document.getElementById('ced-svg');
+                    const rect = svg.getBoundingClientRect();
+                    return { rail: elt.getAttribute('data-rail'), x: snap(clientX - rect.left) };
+                }
+                if (elt.classList && elt.classList.contains('ced-wire-hit')) {
+                    const svg = document.getElementById('ced-svg');
+                    const rect = svg.getBoundingClientRect();
+                    const wireId = elt.getAttribute('data-id');
+                    // Beim Drop wird hier ein T-Knoten erzeugt → Wire wird gesplittet
+                    return { wireId, x: snap(clientX - rect.left), y: snap(clientY - rect.top) };
+                }
+                // Komponenten-Symbol direkt getroffen (kein Pin) → nimm nächsten Pin basierend auf Anflug
+                const grp = elt.closest && elt.closest('.ced-comp');
+                if (grp && ST.wireStart) {
+                    const compId = grp.getAttribute('data-id');
+                    const comp = ST.components.find(c => c.id === compId);
+                    if (!comp) return null;
+                    const pin = _bestPinForApproach(comp, ST.wireStart);
+                    if (!pin) return null;
+                    if (ST.wireStart.compId === compId && ST.wireStart.pin === pin) return null;
+                    return { compId, pin };
+                }
+                return null;
+            }
+            // Bestimmt den passenden Pin der Zielkomponente für die Wire-Verbindung
+            function _bestPinForApproach(comp, wireStartRef) {
+                const t = CTYPES[comp.type]; if (!t) return null;
+                const startPos = _pinPos(wireStartRef); if (!startPos) return null;
+                // Junctions: alle Pins liegen am Mittelpunkt → nach Anflug-Richtung wählen
+                if (t.kind === 'junction') {
+                    const cxA = comp.x + t.cx, cyA = comp.y + t.cy;
+                    const dx = startPos.x - cxA, dy = startPos.y - cyA;
+                    if (Math.abs(dy) >= Math.abs(dx)) return (dy > 0) ? 'bottom' : 'top';
+                    return (dx > 0) ? 'right' : 'left';
+                }
+                // Standard: nach Pin-Distanz
+                const pins = (t.kind === 'sensor') ? ['in','out','signal'] : ['in','out'];
+                let best = null, bestD = Infinity;
+                pins.forEach(pin => {
+                    const p = _pinPos({ compId: comp.id, pin });
+                    if (!p) return;
+                    const d = Math.hypot(p.x - startPos.x, p.y - startPos.y);
+                    if (d < bestD) { bestD = d; best = pin; }
+                });
+                return best;
+            }
+            // Click auf Schiene = Tap-Punkt erzeugen (für separate Wires die NICHT gerade gedragt werden)
+            // Wird nur noch für Edge-Cases benötigt; Hauptweg ist Drag & Drop.
+            function _onRailClick(e) {
+                // Falls eine Komponente per Drag aktiv ist, ignoriere
+                if (ST.wireStart || ST.dragInfo) return;
+            }
+
+            // ---------- Delete ----------
+            function _deleteComp(id) {
+                const comp = ST.components.find(c => c.id === id);
+                // Junction mit genau 2 angeschlossenen Wires → "rauskürzen": die zwei Wires zu einem zusammenfassen
+                if (comp && CTYPES[comp.type] && CTYPES[comp.type].kind === 'junction') {
+                    const connected = ST.wires.filter(w => w.from.compId === id || w.to.compId === id);
+                    if (connected.length === 2) {
+                        const [w1, w2] = connected;
+                        const otherEnd1 = (w1.from.compId === id) ? w1.to : w1.from;
+                        const otherEnd2 = (w2.from.compId === id) ? w2.to : w2.from;
+                        ST.wires = ST.wires.filter(w => w.id !== w1.id && w.id !== w2.id);
+                        ST.components = ST.components.filter(c => c.id !== id);
+                        ST.wires.push({ id: nextId('w'), from: otherEnd1, to: otherEnd2 });
+                        ST.selectedIds.delete(id);
+                        cedRender();
+                        _maybeSync();
+                        return;
+                    }
+                }
+                // Standard: Komponente + alle daran hängenden Wires entfernen
+                ST.components = ST.components.filter(c => c.id !== id);
+                ST.wires = ST.wires.filter(w => w.from.compId !== id && w.to.compId !== id);
+                ST.selectedIds.delete(id);
+                cedRender();
+                _maybeSync();
+            }
+            function _deleteWire(id) {
+                ST.wires = ST.wires.filter(w => w.id !== id);
+                ST.selectedIds.delete(id);
+                cedRender();
+                _maybeSync();
+            }
+
+            // ---------- Name Popup ----------
+            function _showNamePopup(comp, atClientX, atClientY) {
+                const pop = document.getElementById('ced-name-popup');
+                if (!pop) return;
+                const t = CTYPES[comp.type];
+                const isAux = t.kind === 'aux';
+                const isCoil = t.kind === 'coil';
+                let coilOptions = '';
+                if (isAux) {
+                    // Hilfskontakte gibt es nur an Relais (nicht an LED/Motor/Sirene/etc.)
+                    const coils = ST.components.filter(c => c.type === 'relais' && c.varName);
+                    coilOptions = coils.map(c => `<option value="${c.varName}" ${c.varName === comp.varName ? 'selected' : ''}>${c.varName}</option>`).join('');
+                }
+                pop.innerHTML = `
+                    <div style="color:#fff;font-size:11px;margin-bottom:6px;font-weight:bold;">
+                        ${isCoil ? '🔵 Spule benennen' : (isAux ? '🔗 Hilfskontakt → Spule' : '🔌 Variable zuweisen')}
+                    </div>
+                    ${isAux && coilOptions ? `
+                        <select id="ced-pop-sel" style="width:160px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;margin-bottom:4px;">
+                            <option value="">-- Spule wählen --</option>${coilOptions}
+                        </select><br>` : ''}
+                    <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:160px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
+                    <div style="margin-top:6px;display:flex;gap:4px;">
+                        <button onclick="window._cedConfirmName('${comp.id}')" style="background:#4caf50;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">OK</button>
+                        <button onclick="document.getElementById('ced-name-popup').style.display='none'" style="background:#555;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">Abbrechen</button>
+                    </div>
+                `;
+                // Wenn Client-Koordinaten übergeben (Rechtsklick) → direkt am Cursor öffnen
+                if (typeof atClientX === 'number' && typeof atClientY === 'number') {
+                    pop.style.left = Math.min(window.innerWidth - 220, atClientX + 4) + 'px';
+                    pop.style.top  = Math.min(window.innerHeight - 140, atClientY + 4) + 'px';
+                } else {
+                    const svg = document.getElementById('ced-svg');
+                    const rect = svg.getBoundingClientRect();
+                    pop.style.left = Math.min(window.innerWidth - 220, rect.left + comp.x + 70) + 'px';
+                    pop.style.top  = (rect.top + comp.y + 30) + 'px';
+                }
+                pop.style.display = 'block';
+                setTimeout(() => {
+                    const inp = document.getElementById('ced-pop-input');
+                    if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') window._cedConfirmName(comp.id);
+                        if (e.key === 'Escape') pop.style.display = 'none';
+                    }); }
+                    const sel = document.getElementById('ced-pop-sel');
+                    if (sel) sel.addEventListener('change', () => { document.getElementById('ced-pop-input').value = sel.value; });
+                }, 10);
+            }
+            window._cedConfirmName = function(id) {
+                const comp = ST.components.find(c => c.id === id);
+                if (!comp) return;
+                const inp = document.getElementById('ced-pop-input');
+                const v = (inp && inp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
+                comp.varName = v;
+                document.getElementById('ced-name-popup').style.display = 'none';
+                cedRender();
+                _maybeSync();
+            };
+
+            // ---------- Auto-Alignment ----------
+            // Richtet Komponenten in vertikalen Strängen auf gemeinsame x-Mittellinie aus.
+            // Iterative Mittelwert-Konvergenz: für jeden Wire mit zwei vertikalen Pin-Endpunkten
+            // (in/out/top/bottom) werden beide Komponenten auf den gerundeten Mittelwert ihrer
+            // Pin-x-Position gezogen. Mehrfaches Anwenden lässt verbundene Stränge konvergieren.
+            window.cedAutoAlign = function() {
+                const VERT_PINS = ['in','out','top','bottom'];
+                const compPinX = (compId, pin) => {
+                    const c = ST.components.find(x => x.id === compId);
+                    if (!c) return null;
+                    const t = CTYPES[c.type];
+                    if (!t || !VERT_PINS.includes(pin)) return null;
+                    return c.x + t.cx;
+                };
+                const setCompPinX = (compId, pin, targetX) => {
+                    const c = ST.components.find(x => x.id === compId);
+                    if (!c) return false;
+                    const t = CTYPES[c.type];
+                    if (!t) return false;
+                    const newX = targetX - t.cx;
+                    if (c.x === newX) return false;
+                    c.x = newX;
+                    return true;
+                };
+                let changedAny = false;
+                for (let pass = 0; pass < 8; pass++) {
+                    let changed = false;
+                    ST.wires.forEach(w => {
+                        // Komponente ↔ Komponente (beide vertikale Pins): Mittelwert
+                        if (w.from.compId && w.to.compId) {
+                            const xF = compPinX(w.from.compId, w.from.pin);
+                            const xT = compPinX(w.to.compId,   w.to.pin);
+                            if (xF == null || xT == null) return;
+                            if (xF === xT) return;
+                            const target = Math.round((xF + xT) / 2 / GRID) * GRID;
+                            if (setCompPinX(w.from.compId, w.from.pin, target)) changed = true;
+                            if (setCompPinX(w.to.compId,   w.to.pin,   target)) changed = true;
+                            return;
+                        }
+                        // Komponente ↔ Schiene: Schienen-Endpunkt an Komponenten-cx ziehen (Schiene ist flexibel)
+                        if (w.from.compId && w.to.rail) {
+                            const xF = compPinX(w.from.compId, w.from.pin);
+                            if (xF == null) return;
+                            if (w.to.x !== xF) { w.to.x = xF; changed = true; }
+                            return;
+                        }
+                        if (w.to.compId && w.from.rail) {
+                            const xT = compPinX(w.to.compId, w.to.pin);
+                            if (xT == null) return;
+                            if (w.from.x !== xT) { w.from.x = xT; changed = true; }
+                            return;
+                        }
+                    });
+                    if (!changed) break;
+                    changedAny = true;
+                }
+                if (changedAny) {
+                    cedRender();
+                    _maybeSync();
+                    _setStatus('✓ Stränge ausgerichtet');
+                } else {
+                    _setStatus('Bereits ausgerichtet');
+                }
+            };
+
+            // ---------- Code Generation (Reverse Logic) ----------
+            window.cedGenerateCode = function(silent) {
+                const code = _generateCode();
+                _publishComponentTypes();
+                if (!silent) {
+                    const ta = document.getElementById('code');
+                    if (ta) {
+                        const writeCode = () => {
+                            ta.value = code;
+                            ST.lastGeneratedCode = code;
+                            ta.dispatchEvent(new Event('input', { bubbles: true }));
+                        };
+                        // Warnung wenn bestehender User-Code überschrieben würde
+                        const suppress = (() => { try { return localStorage.getItem('cedSuppressOverwriteWarning') === '1'; } catch(e) { return false; } })();
+                        const existingCode = (ta.value || '').trim();
+                        const isFromEditor = ST.lastGeneratedCode && existingCode === ST.lastGeneratedCode.trim();
+                        if (!suppress && existingCode && !isFromEditor && !ST.warnedThisSession && !ST.warningOpen) {
+                            ST.warningOpen = true;
+                            _showOverwriteWarning(
+                                () => {  // OK
+                                    ST.warningOpen = false;
+                                    ST.warnedThisSession = true;
+                                    writeCode();
+                                    _setStatus('✓ Code generiert');
+                                },
+                                () => {  // Abbrechen → Live-Sync deaktivieren
+                                    ST.warningOpen = false;
+                                    ST.liveSync = false;
+                                    const cb = document.getElementById('ced-livesync');
+                                    if (cb) cb.checked = false;
+                                    _setStatus('⚠ Code nicht überschrieben — Live-Sync deaktiviert');
+                                }
+                            );
+                            return code;
+                        }
+                        writeCode();
+                    }
+                }
+                _setStatus('✓ Code generiert (' + code.split('\n').filter(l => l.trim() && !l.startsWith('//')).length + ' Zeilen)');
+                return code;
+            };
+            // Modal-Warnung beim ersten Überschreiben von vorhandenem Code
+            function _showOverwriteWarning(onConfirm, onCancel) {
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:5000;display:flex;align-items:center;justify-content:center;';
+                modal.innerHTML = `
+                    <div style="background:#2d2d30;color:#fff;padding:20px;border-radius:5px;max-width:420px;font-family:sans-serif;box-shadow:0 6px 30px rgba(0,0,0,0.6);">
+                        <h3 style="margin:0 0 10px 0;color:#ff9800;font-size:14px;">⚠ Bestehender Code wird überschrieben</h3>
+                        <p style="font-size:12px;line-height:1.5;color:#ddd;margin:0 0 12px 0;">Der Schaltplan-Editor erzeugt aus deiner Verdrahtung neuen Code und ersetzt damit den aktuellen Inhalt des Code-Editors. Der bisherige Code geht verloren.</p>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:8px 0 14px;cursor:pointer;color:#bbb;">
+                            <input type="checkbox" id="ced-suppress-warning"> Diese Warnung nicht mehr anzeigen
+                        </label>
+                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                            <button id="ced-warn-cancel" style="background:#555;color:#fff;border:none;padding:6px 14px;border-radius:3px;cursor:pointer;font-size:12px;">Abbrechen</button>
+                            <button id="ced-warn-ok" style="background:#ff9800;color:#fff;border:none;padding:6px 14px;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold;">Überschreiben</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                modal.querySelector('#ced-warn-ok').onclick = () => {
+                    if (modal.querySelector('#ced-suppress-warning').checked) {
+                        try { localStorage.setItem('cedSuppressOverwriteWarning', '1'); } catch(e) {}
+                    }
+                    modal.remove();
+                    onConfirm();
+                };
+                modal.querySelector('#ced-warn-cancel').onclick = () => {
+                    modal.remove();
+                    onCancel();
+                };
+            }
+            // Trägt die Komponenten-Typen in componentTypes ein (closure-Zugriff auf
+            // die outer-scope Variable), damit die Simulation weiß welcher Variablenname
+            // welcher Bauteiltyp ist (Eingangs-/Ausgangs-Klassifikation).
+            // Relais die als Hilfskontakt verwendet werden (intermediate) werden inline substituiert
+            // und tauchen nicht im Code auf — daher auch keinen Typ registrieren.
+            function _publishComponentTypes() {
+                if (typeof componentTypes === 'undefined') return;
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || !c.varName) return;
+                    if (t.kind === 'contact' || t.kind === 'sensor') {
+                        // Eingangskontakte und Sensoren: c.type entspricht direkt dem Sim-Typ
+                        // (taster, schalter_nc, nothalt, sensor_ind, sensor_kap, sensor_opt, sensor_mag, …)
+                        componentTypes[c.varName] = c.type;
+                    } else if (t.kind === 'coil' && c.type !== 'relais') {
+                        // Relais werden im Editor gar nicht im Code geschrieben → keinen Typ setzen
+                        const map = { valve:'valve', motor:'motor', led:'led', siren:'siren', heater:'heater' };
+                        componentTypes[c.varName] = map[c.type] || 'relais';
+                    }
+                });
+                try { localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes)); } catch(e) {}
+            }
+            function _maybeSync() {
+                _saveStateToStorage();
+                if (ST.liveSync) cedGenerateCode();
+            }
+            function _setStatus(msg) {
+                const s = document.getElementById('ced-status');
+                if (s) {
+                    s.textContent = msg;
+                    setTimeout(_updateStatus, 1500);
+                }
+            }
+
+            function _generateCode() {
+                const coilGroups = {};
+                ST.components.forEach(c => {
+                    if (CTYPES[c.type].kind === 'coil') {
+                        if (!c.varName) return;
+                        if (!coilGroups[c.varName]) coilGroups[c.varName] = [];
+                        coilGroups[c.varName].push(c);
+                    }
+                });
+                const usedAsAux = new Set();
+                ST.components.forEach(c => {
+                    if (CTYPES[c.type] && CTYPES[c.type].kind === 'aux' && c.varName) usedAsAux.add(c.varName);
+                });
+                // Sensor-Validierung: Warnung wenn Signal-Pin mit Versorgung kurzgeschlossen ist
+                const warnings = [];
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || t.kind !== 'sensor' || !c.varName) return;
+                    if (_sensorSignalShorted(c)) warnings.push(`// ⚠ Sensor ${c.varName}: Signal-Pin mit Versorgung kurzgeschlossen — Signal wird ignoriert`);
+                });
+                // Pass 1: RS-Detection für ALLE Coils (auch intermediate). Bei RS-Match wird der
+                // effektive Wert eines Coil zu Q<n>, sonst zum raw expr.
+                const ssCounter = { rs: 0 };
+                const codeOps = []; // sequenziell zu schreibende Code-Items: { kind, ... }
+                const intermediateRelais = {}; // varName → effektiver Wert (Q<n> oder expr ohne Self-Ref)
+                const selfRefRe = (v) => new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+                Object.keys(coilGroups).forEach(coilVar => {
+                    const coil = coilGroups[coilVar][0];
+                    const isRelais = (coil.type === 'relais');
+                    const isUsedAsAux = usedAsAux.has(coilVar);
+                    const expr = _exprForCoil(coil);
+                    if (expr === null) {
+                        codeOps.push({ kind:'warn', msg:`// ⚠ ${coilVar}: Pfad zu L+ nicht erkannt` });
+                        return;
+                    }
+                    // Relais ohne Hilfskontakt → tote Logik, kein Code, Warnung
+                    if (isRelais && !isUsedAsAux) {
+                        codeOps.push({ kind:'warn', msg:`// ⚠ Relais ${coilVar}: kein Hilfskontakt referenziert — Logik wird ignoriert` });
+                        return;
+                    }
+                    const isIntermediate = isRelais && isUsedAsAux;
+                    const rs = _detectRS(coil, expr);
+                    if (rs) {
+                        ssCounter.rs++;
+                        const n = ssCounter.rs;
+                        codeOps.push({ kind:'rs', n, set: rs.set, reset: rs.reset, comment: `// Selbsthaltung erkannt für ${coilVar}` });
+                        const effective = `Q${n}`;
+                        if (isIntermediate) {
+                            intermediateRelais[coilVar] = effective;
+                        } else {
+                            codeOps.push({ kind:'coil', name: coilVar, expr: effective });
+                        }
+                        return;
+                    }
+                    if (selfRefRe(coilVar).test(expr)) {
+                        codeOps.push({ kind:'warn', msg:`// ⚠ ${coilVar}: Selbst-Referenz aber kein erkanntes RS/SR-Pattern` });
+                        if (!isIntermediate) codeOps.push({ kind:'coil', name: coilVar, expr });
+                        return;
+                    }
+                    if (isIntermediate) {
+                        intermediateRelais[coilVar] = expr;
+                    } else {
+                        codeOps.push({ kind:'coil', name: coilVar, expr });
+                    }
+                });
+                // Pass 2: substituiere intermediate Relais in S/R/Coil-Ausdrücken
+                const substitute = (text) => {
+                    if (!text) return text;
+                    let out = text, changed = true, safety = 50;
+                    while (changed && safety-- > 0) {
+                        changed = false;
+                        for (const [v, vVal] of Object.entries(intermediateRelais)) {
+                            // Selbstreferenz im Wert würde Loop erzeugen — überspringen
+                            if (selfRefRe(v).test(vVal)) continue;
+                            const re = new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+                            if (re.test(out)) {
+                                const wrapped = (vVal.includes('||') || vVal.includes('&&')) ? '(' + vVal + ')' : vVal;
+                                out = out.replace(re, wrapped);
+                                changed = true;
+                            }
+                        }
+                    }
+                    return out;
+                };
+                // Pass 3: Code-Zeilen schreiben
+                const lines = [];
+                codeOps.forEach(op => {
+                    if (op.kind === 'warn') { lines.push(op.msg); return; }
+                    if (op.kind === 'rs') {
+                        if (op.comment) lines.push(op.comment);
+                        lines.push(`S${op.n} := ${substitute(op.set)}`);
+                        lines.push(`R${op.n} := ${substitute(op.reset)}`);
+                        return;
+                    }
+                    if (op.kind === 'coil') {
+                        lines.push(`${op.name} := ${substitute(op.expr)}`);
+                        lines.push('');
+                    }
+                });
+                if (lines.length === 0) return '// Schaltplan-Editor: Komponenten platzieren und mit L+/L− verdrahten';
+                const result = (warnings.length > 0 ? warnings.join('\n') + '\n\n' : '') + lines.join('\n').trim();
+                return result;
+            }
+            // Prüft ob ein Sensor-Signal-Pin mit Versorgungs-Pins (in/out) oder Schienen kurzgeschlossen ist
+            function _sensorSignalShorted(sensor) {
+                const uf = _UnionFind();
+                const PLUS = '__PLUS__', MINUS = '__MINUS__';
+                const nodeOf = (id, pin) => id + ':' + pin;
+                ST.wires.forEach(w => {
+                    const a = w.from.rail ? (w.from.rail === 'plus' ? PLUS : MINUS) : nodeOf(w.from.compId, w.from.pin);
+                    const b = w.to.rail   ? (w.to.rail   === 'plus' ? PLUS : MINUS) : nodeOf(w.to.compId,   w.to.pin);
+                    uf.union(a, b);
+                });
+                ST.components.forEach(c => {
+                    if (CTYPES[c.type] && CTYPES[c.type].kind === 'junction') {
+                        const base = nodeOf(c.id, 'top');
+                        uf.union(base, nodeOf(c.id, 'bottom'));
+                        uf.union(base, nodeOf(c.id, 'left'));
+                        uf.union(base, nodeOf(c.id, 'right'));
+                    }
+                });
+                const sig = uf.find(nodeOf(sensor.id, 'signal'));
+                return sig === uf.find(nodeOf(sensor.id, 'in'))
+                    || sig === uf.find(nodeOf(sensor.id, 'out'))
+                    || sig === uf.find(PLUS)
+                    || sig === uf.find(MINUS);
+            }
+
+            // Compute boolean expression for a coil:
+            //   path through contacts from +24V → coil.IN, while coil.OUT must reach 0V.
+            // Model: union-find on pin-nodes connected via wires; rails 'plus' and 'minus' are
+            // virtual super-nodes. Contacts/Aux are edges (IN↔OUT) labeled with their (possibly
+            // negated) variable. Coils contribute no edge — they are sinks.
+            function _exprForCoil(coil) {
+                const uf = _UnionFind();
+                const PLUS = '__PLUS__', MINUS = '__MINUS__';
+                const nodeOf = (id, pin) => id + ':' + pin;
+                const railNode = (ref) => ref.rail === 'plus' ? PLUS : MINUS;
+                ST.wires.forEach(w => {
+                    const a = w.from.rail ? railNode(w.from) : nodeOf(w.from.compId, w.from.pin);
+                    const b = w.to.rail   ? railNode(w.to)   : nodeOf(w.to.compId, w.to.pin);
+                    uf.union(a, b);
+                });
+                // Junctions sind Pass-Through für alle 4 Pins
+                ST.components.forEach(c => {
+                    if (CTYPES[c.type] && CTYPES[c.type].kind === 'junction') {
+                        const base = nodeOf(c.id, 'top');
+                        uf.union(base, nodeOf(c.id, 'bottom'));
+                        uf.union(base, nodeOf(c.id, 'left'));
+                        uf.union(base, nodeOf(c.id, 'right'));
+                    }
+                });
+                // Sanity: coil OUT must reach 0V — if not, warn (still try to compute)
+                const coilOut = uf.find(nodeOf(coil.id, 'out'));
+                const minus = uf.find(MINUS);
+                if (coilOut !== minus) {
+                    return null; // coil not connected to 0V
+                }
+                const coilIn = uf.find(nodeOf(coil.id, 'in'));
+                const plus = uf.find(PLUS);
+                if (coilIn === plus) return 'TRUE'; // coil directly on +24V (no logic)
+                // Build edge list:
+                //   - Kontakte/Hilfskontakte: Edge in↔out mit Variable (negiert wenn NC)
+                //   - Sensoren: Phantom-Edge PLUS↔signal mit sensor.varName (Sensor wirkt als Quelle)
+                const edges = [];
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || !c.varName) return;
+                    if (t.kind === 'contact' || t.kind === 'aux') {
+                        let v = c.varName;
+                        if (t.nc) v = '¬' + v;
+                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: v });
+                    } else if (t.kind === 'sensor') {
+                        // Signal-Pin = virtuelle Quelle mit Wert sensor.varName
+                        const sigNode = uf.find(nodeOf(c.id, 'signal'));
+                        const inNode  = uf.find(nodeOf(c.id, 'in'));
+                        const outNode = uf.find(nodeOf(c.id, 'out'));
+                        // Schaltfehler: signal mit Versorgung kurzgeschlossen → Edge auslassen
+                        if (sigNode === inNode || sigNode === outNode || sigNode === uf.find(PLUS) || sigNode === uf.find(MINUS)) {
+                            return;
+                        }
+                        edges.push({ a: uf.find(PLUS), b: sigNode, expr: c.varName });
+                    }
+                });
+                return _seriesParallel(edges, plus, coilIn);
+            }
+
+            function _UnionFind() {
+                const parent = {};
+                const find = (x) => {
+                    if (!(x in parent)) parent[x] = x;
+                    if (parent[x] === x) return x;
+                    parent[x] = find(parent[x]);
+                    return parent[x];
+                };
+                const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+                return { find, union };
+            }
+
+            // Series-Parallel reduction. Reduces edges between source and sink iteratively.
+            function _seriesParallel(edges, source, sink) {
+                let E = edges.slice();
+                const wrap = (s) => (s.includes('||') ? '(' + s + ')' : s);
+                let changed = true;
+                let iter = 0;
+                while (changed && iter < 200) {
+                    changed = false;
+                    iter++;
+                    // Parallel reduction: merge edges with same {a,b}
+                    const grouped = {};
+                    E.forEach(e => {
+                        const k1 = e.a + '|' + e.b;
+                        const k2 = e.b + '|' + e.a;
+                        const k = grouped[k1] ? k1 : (grouped[k2] ? k2 : k1);
+                        if (!grouped[k]) grouped[k] = [];
+                        grouped[k].push(e);
+                    });
+                    const newE = [];
+                    Object.values(grouped).forEach(grp => {
+                        if (grp.length === 1) { newE.push(grp[0]); return; }
+                        changed = true;
+                        const expr = grp.map(e => wrap(e.expr)).join(' || ');
+                        newE.push({ a: grp[0].a, b: grp[0].b, expr });
+                    });
+                    E = newE;
+                    // Series reduction: find a node (not source/sink) with degree exactly 2 → merge
+                    const deg = {};
+                    const incident = {};
+                    E.forEach((e, i) => {
+                        deg[e.a] = (deg[e.a]||0) + 1;
+                        deg[e.b] = (deg[e.b]||0) + 1;
+                        if (!incident[e.a]) incident[e.a] = [];
+                        if (!incident[e.b]) incident[e.b] = [];
+                        incident[e.a].push(i);
+                        incident[e.b].push(i);
+                    });
+                    for (const node in deg) {
+                        if (node === source || node === sink) continue;
+                        if (deg[node] === 2) {
+                            const [i1, i2] = incident[node];
+                            if (i1 === i2) continue;
+                            const e1 = E[i1], e2 = E[i2];
+                            const otherA = e1.a === node ? e1.b : e1.a;
+                            const otherB = e2.a === node ? e2.b : e2.a;
+                            const expr = wrapAnd(e1.expr) + ' && ' + wrapAnd(e2.expr);
+                            const filtered = E.filter((_, idx) => idx !== i1 && idx !== i2);
+                            filtered.push({ a: otherA, b: otherB, expr });
+                            E = filtered;
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                function wrapAnd(s) { return s.includes('||') ? '(' + s + ')' : s; }
+                // Final: if exactly one edge between source and sink, return its expr
+                const finals = E.filter(e => (e.a === source && e.b === sink) || (e.a === sink && e.b === source));
+                if (finals.length === 1) return finals[0].expr;
+                if (finals.length > 1) return finals.map(e => wrap(e.expr)).join(' || ');
+                // not connected
+                return null;
+            }
+
+            // RS-Detection: Check if the coil has an aux-NO contact of itself parallel to a sub-expression
+            // Simple heuristic: in the generated expression, look for pattern (X || COIL_VAR) && Y
+            // → S = X, R = ¬Y (because Y typically contains a NC stop contact that breaks circuit when Y=false)
+            function _detectRS(coil, expr) {
+                if (!expr || !coil.varName) return null;
+                // Look for the coil's own aux contact (varName matching coil.varName) in OR branch
+                // Match: ( ... || COIL ) && rest    OR    ( COIL || ... ) && rest
+                // Use regex tolerant to spaces and parens
+                const v = coil.varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Pattern A: (set || COIL) && reset
+                let m = expr.match(new RegExp('^\\(\\s*([^()]+?)\\s*\\|\\|\\s*' + v + '\\s*\\)\\s*&&\\s*(.+)$'));
+                if (!m) m = expr.match(new RegExp('^\\(\\s*' + v + '\\s*\\|\\|\\s*([^()]+?)\\s*\\)\\s*&&\\s*(.+)$'));
+                if (!m) return null;
+                const setExpr = m[1];
+                const resetExpr = m[2];
+                // Reset is typically a NC: e.g. "¬STOP". So R := ¬resetExpr means: if resetExpr = ¬STOP, then R = STOP
+                // Smart inversion:
+                let rExpr;
+                if (/^¬\s*[A-Z0-9_]+$/.test(resetExpr.trim())) {
+                    rExpr = resetExpr.trim().replace(/^¬\s*/, '');
+                } else {
+                    rExpr = '¬(' + resetExpr.trim() + ')';
+                }
+                return { set: setExpr.trim(), reset: rExpr };
+            }
+
         })();
     </script>
 

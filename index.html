@@ -6738,8 +6738,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                 g.appendChild(createSvgElement('line', {x1: x, y1: y + 10, x2: x, y2: y + 20, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 let rect = createSvgElement('rect', {id: `circ-out-${id}`, class: 'circ-component', x: x - 20, y: y - 10, width: 40, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 2});
                 g.appendChild(rect);
-                if (type === 'valve') g.appendChild(createSvgElement('line', {x1: x - 20, y1: y + 10, x2: x + 20, y2: y - 10, stroke: '#000', 'stroke-width': 2}));
-                addLabelText(g, x + 30, y, label, true);
+                if (type === 'valve') {
+                    g.appendChild(createSvgElement('line', {x1: x - 20, y1: y + 10, x2: x + 20, y2: y - 10, stroke: '#000', 'stroke-width': 2}));
+                    // Mechanische Ventilandeutung rechts vom Spulenkörper (gestrichelte Wirkungslinie + Ventilkörper)
+                    const vx = x + 35; // Mittelpunkt des Ventilkörpers
+                    g.appendChild(createSvgElement('line', {x1: x + 20, y1: y, x2: vx - 5, y2: y, stroke: '#000', 'stroke-width': 1.2, 'stroke-dasharray': '2,2'}));
+                    g.appendChild(createSvgElement('line', {x1: vx, y1: y - 14, x2: vx, y2: y - 8, stroke: '#000', 'stroke-width': 1.5}));
+                    g.appendChild(createSvgElement('line', {x1: vx, y1: y + 8, x2: vx, y2: y + 14, stroke: '#000', 'stroke-width': 1.5}));
+                    g.appendChild(createSvgElement('polygon', {points: `${vx-7},${y-8} ${vx+7},${y-8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width': 1.5}));
+                    g.appendChild(createSvgElement('polygon', {points: `${vx-7},${y+8} ${vx+7},${y+8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width': 1.5}));
+                }
+                const labelX = (type === 'valve') ? x + 50 : x + 30;
+                addLabelText(g, labelX, y, label, true);
                 let pinTop = type === 'valve' ? '1' : (label.includes('(R)') ? 'A3' : 'A1');
                 let pinBot = type === 'valve' ? '2' : (label.includes('(R)') ? 'A4' : 'A2');
                 drawSmallText(g, x - 5, y - 15, pinTop, 'end'); drawSmallText(g, x - 5, y + 20, pinBot, 'end');
@@ -25323,8 +25333,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 else if (e.key === 'Escape') { _close(); }
             });
 
-            // Trigger after each keystroke (deferred so value is updated)
-            textarea.addEventListener('input', () => setTimeout(_open, 0));
+            // Trigger after each keystroke (deferred so value is updated).
+            // Nur wenn textarea wirklich fokussiert ist — sonst öffnet das Dropdown auch bei
+            // programmatischem Code-Update (z.B. vom Schaltplan-Editor).
+            textarea.addEventListener('input', () => setTimeout(() => {
+                if (document.activeElement !== textarea) return;
+                _open();
+            }, 0));
 
             document.addEventListener('mousedown', e => { const drop = _getDrop(); if (!drop || !drop.contains(e.target)) _close(); });
             textarea.addEventListener('blur',   () => setTimeout(_close, 150));
@@ -26082,6 +26097,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                 grp.addEventListener('contextmenu', _onCompContextMenu);
             }
 
+            // Pin-Beschriftungen analog zum Original-Schaltplan (drawSmallText)
+            // Standard: rechts neben dem Pin (text-anchor:end mit kleinem x-Offset → Text steht links)
+            function _drawPinLabel(grp, x, y, txt, anchor) {
+                el('text', { x, y, 'font-size':9, fill:'#666', 'font-family':'monospace', 'text-anchor': anchor || 'end' }, grp).textContent = txt;
+            }
+            // Liefert die Pin-Bezeichnungen { top, bottom, signal? } passend zum Komponententyp
+            function _pinLabels(comp) {
+                const t = CTYPES[comp.type]; if (!t) return null;
+                if (t.kind === 'contact' || t.kind === 'aux') {
+                    // Kontakt-Pins nach IEC: NC=11/12, NO=13/14
+                    return t.nc ? { top:'11', bottom:'12' } : { top:'13', bottom:'14' };
+                }
+                if (t.kind === 'coil') {
+                    if (comp.type === 'valve')  return { top:'1',  bottom:'2'  };
+                    if (comp.type === 'motor')  return { top:'U1', bottom:'U2' };
+                    if (comp.type === 'led' || comp.type === 'siren' || comp.type === 'heater')
+                        return { top:'X1', bottom:'X2' };
+                    return { top:'A1', bottom:'A2' }; // Relais (Standard)
+                }
+                if (t.kind === 'sensor') return { top:'BN', bottom:'BU', signal:'BK' };
+                return null;
+            }
+
             // Render IEC-Symbol — exakte Geometrien aus drawContact/drawCoil/drawLED/drawSiren/drawMotor/drawHeater
             // des Original-Schaltplans (siehe Funktionen ab Zeile ~6639). Lokales Koordinatensystem:
             //   x ist der Symbol-Mittelpunkt (entspricht dem original `x`-Parameter der draw-Funktion)
@@ -26117,6 +26155,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                         el('rect', {x:x-6, y:sBoxY+22, width:12, height:6, fill:'#000'}, grp);
                         el('rect', {x:x-3, y:sBoxY+22, width:6,  height:3.5, fill:'#fff'}, grp);
                     }
+                    // Pin-Beschriftungen (BN oben, BU unten, BK rechts)
+                    _drawPinLabel(grp, x - 4,  sBoxY - 2,         'BN', 'end');
+                    _drawPinLabel(grp, x - 4,  sBoxY + 30 + 8,    'BU', 'end');
+                    _drawPinLabel(grp, x + 18, sBoxY + 13,        'BK', 'start');
                     // Variablen-Label oberhalb der Box (entspricht addLabelText(gSens, currX+20, sBoxY-5, ...))
                     el('text', {x:x+20, y:sBoxY-5, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
                     return;
@@ -26167,6 +26209,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (t.kind === 'aux') {
                         el('text', {x:x-6, y:y-7, 'font-size':7, fill:'#1976d2', 'text-anchor':'end', 'font-weight':'bold', 'font-family':'sans-serif'}, grp).textContent = 'K';
                     }
+                    // Pin-Beschriftungen (z.B. NC=11/12, NO=13/14)
+                    const _plC = _pinLabels(comp);
+                    if (_plC) {
+                        _drawPinLabel(grp, x - 4, y - 10, _plC.top,    'end');
+                        _drawPinLabel(grp, x - 4, y + 15, _plC.bottom, 'end');
+                    }
                     // Variablen-Label rechts neben dem Symbol (entspricht addLabelText(g, x+15, y))
                     el('text', {x:x+18, y:y-2, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
                 } else if (t.kind === 'coil') {
@@ -26199,14 +26247,32 @@ You must output exactly this JSON format. The logic code goes as a single string
                         el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
                         el('rect', {x:x-20, y:y-10, width:40, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
                         el('line', {x1:x-20, y1:y+10, x2:x+20, y2:y-10, stroke:'#000', 'stroke-width':2}, grp);
+                        // Mechanische Ventilandeutung rechts (gestrichelte Wirkungslinie + zwei Dreiecke)
+                        const vx = x + 35;
+                        el('line', {x1:x+20, y1:y, x2:vx-5, y2:y, stroke:'#000', 'stroke-width':1.2, 'stroke-dasharray':'2,2'}, grp);
+                        el('line', {x1:vx, y1:y-14, x2:vx, y2:y-8, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('line', {x1:vx, y1:y+8,  x2:vx, y2:y+14, stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('polygon', {points:`${vx-7},${y-8} ${vx+7},${y-8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('polygon', {points:`${vx-7},${y+8} ${vx+7},${y+8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
                     } else {
                         // Relais: Standard-Rechteck
                         el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
                         el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
                         el('rect', {x:x-20, y:y-10, width:40, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
                     }
+                    // Pin-Beschriftungen (Relais A1/A2, Motor U1/U2, LED/Sirene/Heizung X1/X2, Ventil 1/2)
+                    const _plK = _pinLabels(comp);
+                    if (_plK) {
+                        const _topY = (comp.type === 'led' || comp.type === 'motor') ? y - 18 : y - 15;
+                        const _botY = (comp.type === 'led' || comp.type === 'motor') ? y + 20 : y + 18;
+                        _drawPinLabel(grp, x - 4, _topY, _plK.top,    'end');
+                        _drawPinLabel(grp, x - 4, _botY, _plK.bottom, 'end');
+                    }
                     // Variablen-Label rechts (entspricht addLabelText(g, x+30, y) bzw. x+25 für LED/Motor)
-                    const lblX = (comp.type === 'led' || comp.type === 'motor' || comp.type === 'heater') ? x + 25 : (comp.type === 'siren' ? x + 20 : x + 30);
+                    const lblX = (comp.type === 'led' || comp.type === 'motor' || comp.type === 'heater') ? x + 25
+                               : (comp.type === 'siren') ? x + 20
+                               : (comp.type === 'valve') ? x + 50  // Platz für Ventilandeutung
+                               : x + 30;
                     el('text', {x:lblX, y, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif', 'dominant-baseline':'middle'}, grp).textContent = labelText;
                 } else if (t.kind === 'junction') {
                     el('circle', {cx:x, cy:y, r:5, fill:'#000'}, grp);
@@ -27177,11 +27243,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t || !c.varName) return;
                     if (t.kind === 'contact' || t.kind === 'sensor') {
                         // Eingangskontakte und Sensoren: c.type entspricht direkt dem Sim-Typ
-                        // (taster, schalter_nc, nothalt, sensor_ind, sensor_kap, sensor_opt, sensor_mag, …)
                         componentTypes[c.varName] = c.type;
-                    } else if (t.kind === 'coil' && c.type !== 'relais') {
-                        // Relais werden im Editor gar nicht im Code geschrieben → keinen Typ setzen
-                        const map = { valve:'valve', motor:'motor', led:'led', siren:'siren', heater:'heater' };
+                    } else if (t.kind === 'coil') {
+                        // Relais → 'relais' (Simulator zeigt es als Hilfsrelais-Label)
+                        // Andere Spulen → entsprechender Sim-Typ
+                        const map = { relais:'relais', valve:'valve', motor:'motor', led:'led', siren:'siren', heater:'heater' };
                         componentTypes[c.varName] = map[c.type] || 'relais';
                     }
                 });
@@ -27219,11 +27285,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t || t.kind !== 'sensor' || !c.varName) return;
                     if (_sensorSignalShorted(c)) warnings.push(`// ⚠ Sensor ${c.varName}: Signal-Pin mit Versorgung kurzgeschlossen — Signal wird ignoriert`);
                 });
-                // Pass 1: RS-Detection für ALLE Coils (auch intermediate). Bei RS-Match wird der
-                // effektive Wert eines Coil zu Q<n>, sonst zum raw expr.
+                // Pass 1: Code-Items sammeln. Relais werden NICHT mehr inline substituiert,
+                // sondern als eigene Variable im Code geschrieben (analog zu klassischen Hilfsrelais).
+                // Hilfskontakte verweisen via Variablennamen darauf — beide Ansichten
+                // (Editor + Auto-Schaltplan) sehen dadurch dieselbe Strang-Struktur.
                 const ssCounter = { rs: 0 };
-                const codeOps = []; // sequenziell zu schreibende Code-Items: { kind, ... }
-                const intermediateRelais = {}; // varName → effektiver Wert (Q<n> oder expr ohne Self-Ref)
+                const codeOps = [];
                 const selfRefRe = (v) => new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
                 Object.keys(coilGroups).forEach(coilVar => {
                     const coil = coilGroups[coilVar][0];
@@ -27239,62 +27306,33 @@ You must output exactly this JSON format. The logic code goes as a single string
                         codeOps.push({ kind:'warn', msg:`// ⚠ Relais ${coilVar}: kein Hilfskontakt referenziert — Logik wird ignoriert` });
                         return;
                     }
-                    const isIntermediate = isRelais && isUsedAsAux;
                     const rs = _detectRS(coil, expr);
                     if (rs) {
                         ssCounter.rs++;
                         const n = ssCounter.rs;
                         codeOps.push({ kind:'rs', n, set: rs.set, reset: rs.reset, comment: `// Selbsthaltung erkannt für ${coilVar}` });
-                        const effective = `Q${n}`;
-                        if (isIntermediate) {
-                            intermediateRelais[coilVar] = effective;
-                        } else {
-                            codeOps.push({ kind:'coil', name: coilVar, expr: effective });
-                        }
+                        codeOps.push({ kind:'coil', name: coilVar, expr: `Q${n}` });
                         return;
                     }
                     if (selfRefRe(coilVar).test(expr)) {
                         codeOps.push({ kind:'warn', msg:`// ⚠ ${coilVar}: Selbst-Referenz aber kein erkanntes RS/SR-Pattern` });
-                        if (!isIntermediate) codeOps.push({ kind:'coil', name: coilVar, expr });
+                        codeOps.push({ kind:'coil', name: coilVar, expr });
                         return;
                     }
-                    if (isIntermediate) {
-                        intermediateRelais[coilVar] = expr;
-                    } else {
-                        codeOps.push({ kind:'coil', name: coilVar, expr });
-                    }
+                    codeOps.push({ kind:'coil', name: coilVar, expr });
                 });
-                // Pass 2: substituiere intermediate Relais in S/R/Coil-Ausdrücken
-                const substitute = (text) => {
-                    if (!text) return text;
-                    let out = text, changed = true, safety = 50;
-                    while (changed && safety-- > 0) {
-                        changed = false;
-                        for (const [v, vVal] of Object.entries(intermediateRelais)) {
-                            // Selbstreferenz im Wert würde Loop erzeugen — überspringen
-                            if (selfRefRe(v).test(vVal)) continue;
-                            const re = new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
-                            if (re.test(out)) {
-                                const wrapped = (vVal.includes('||') || vVal.includes('&&')) ? '(' + vVal + ')' : vVal;
-                                out = out.replace(re, wrapped);
-                                changed = true;
-                            }
-                        }
-                    }
-                    return out;
-                };
-                // Pass 3: Code-Zeilen schreiben
+                // Pass 2: Code-Zeilen schreiben (keine Substitution mehr nötig)
                 const lines = [];
                 codeOps.forEach(op => {
                     if (op.kind === 'warn') { lines.push(op.msg); return; }
                     if (op.kind === 'rs') {
                         if (op.comment) lines.push(op.comment);
-                        lines.push(`S${op.n} := ${substitute(op.set)}`);
-                        lines.push(`R${op.n} := ${substitute(op.reset)}`);
+                        lines.push(`S${op.n} := ${op.set}`);
+                        lines.push(`R${op.n} := ${op.reset}`);
                         return;
                     }
                     if (op.kind === 'coil') {
-                        lines.push(`${op.name} := ${substitute(op.expr)}`);
+                        lines.push(`${op.name} := ${op.expr}`);
                         lines.push('');
                     }
                 });
@@ -27367,7 +27405,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
                     if (!t || !c.varName) return;
-                    if (t.kind === 'contact' || t.kind === 'aux') {
+                    if (t.kind === 'contact') {
+                        // Eingangskontakt: NC/NO-Eigenschaft steckt im Variablen-Typ (componentTypes).
+                        // KEIN ¬ im Code — sonst doppelte Inversion (im Schaltplan zeigt der Kontakt sonst falsche Form).
+                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: c.varName });
+                    } else if (t.kind === 'aux') {
+                        // Hilfskontakt: Relais hat keine NC/NO-Eigenschaft → ¬ im Code für NC nötig
                         let v = c.varName;
                         if (t.nc) v = '¬' + v;
                         edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: v });
@@ -27475,14 +27518,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!m) m = expr.match(new RegExp('^\\(\\s*' + v + '\\s*\\|\\|\\s*([^()]+?)\\s*\\)\\s*&&\\s*(.+)$'));
                 if (!m) return null;
                 const setExpr = m[1];
-                const resetExpr = m[2];
-                // Reset is typically a NC: e.g. "¬STOP". So R := ¬resetExpr means: if resetExpr = ¬STOP, then R = STOP
-                // Smart inversion:
+                const resetExpr = m[2].trim();
+                // R := ¬resetTerm — Reset wird ausgelöst wenn der Reset-Strompfad-Term FALSE wird.
+                // Smart-Inversion bietet die kompakteste äquivalente Form:
+                //   ¬X        → X         (z.B. Pattern aus klassischem Hand-Code)
+                //   X (simpel)→ ¬X        (z.B. NC-Eingangskontakt aus dem Editor: STOP_NC → ¬STOP_NC)
+                //   komplex   → ¬(...)
                 let rExpr;
-                if (/^¬\s*[A-Z0-9_]+$/.test(resetExpr.trim())) {
-                    rExpr = resetExpr.trim().replace(/^¬\s*/, '');
+                if (/^¬\s*[A-Za-z_][A-Za-z0-9_]*$/.test(resetExpr)) {
+                    rExpr = resetExpr.replace(/^¬\s*/, '');
+                } else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(resetExpr)) {
+                    rExpr = '¬' + resetExpr;
                 } else {
-                    rExpr = '¬(' + resetExpr.trim() + ')';
+                    rExpr = '¬(' + resetExpr + ')';
                 }
                 return { set: setExpr.trim(), reset: rExpr };
             }

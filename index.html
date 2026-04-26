@@ -1923,6 +1923,7 @@
             </div>
             <div id="task-panel-timer" style="display:none; padding:4px 12px; color:#ffb300; font-size:11px; background:#162030; border-bottom:1px solid #1a3a5a;">⏱ <span id="task-timer-val">0:00</span></div>
             <div id="task-panel-body" style="padding:8px 12px 4px; overflow-y:auto; min-height:0; flex:1;">
+                <div id="task-panel-stages" style="display:none; margin-bottom:6px;"></div>
                 <div id="task-desc-header" onclick="window._taskToggleDesc()" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; cursor:pointer; padding:2px 0; border-bottom:1px solid #263238;">
                     <span style="color:#90a4ae; font-size:10px; font-weight:bold; letter-spacing:0.5px;">📋 AUFGABENSTELLUNG</span>
                     <span id="task-desc-collapse-btn" style="color:#90a4ae; font-size:11px;">▼</span>
@@ -1933,6 +1934,7 @@
                     <span id="task-cond-collapse-btn" style="color:#90a4ae; font-size:11px;">▼</span>
                 </div>
                 <div id="task-conditions-list" style="margin-bottom:4px;"></div>
+                <div id="task-stage-done-banner" style="display:none;"></div>
             </div>
             <div id="task-panel-footer" style="padding:8px 12px; border-top:1px solid #1a3a5a; flex-shrink:0;">
                 <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
@@ -7549,6 +7551,671 @@ You must output exactly this JSON format. The logic code goes as a single string
                 Array.from(circuitContent.childNodes).slice(pass2Start).forEach(el => gPass2.appendChild(el));
                 circuitContent.appendChild(gPass2);
             }
+            // ============================================================
+            // === PNEUMATIK- / HYDRAULIK-SCHALTPLAN  (DIN ISO 1219-1) ===
+            // ============================================================
+            {
+                const _isAct = (t) => t === 'zylinder_single' || t === 'zylinder_double' || t === 'gate_pneu';
+                const pneuValves = factoryObjects.filter(o => o.type === 'valve_pneu' && o.targetCylinderId);
+                const hydValves  = factoryObjects.filter(o => o.type === 'valve_hyd'  && o.targetCylinderId);
+
+                // ----- Hilfsmittel: Magnetspule (rechteck mit diagonaler Linie) ------
+                const _drawSolenoid = (g, x, y, w, h, leftSide, label, varName) => {
+                    g.appendChild(createSvgElement('rect', {x, y, width: w, height: h, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('line', {
+                        x1: x + (leftSide ? 0 : w), y1: y, x2: x + (leftSide ? w : 0), y2: y + h,
+                        stroke: '#000', 'stroke-width': 1
+                    }));
+                    if (label) {
+                        let mL = createSvgElement('text', {
+                            x: x + w/2, y: y - 3, 'font-size': '8',
+                            fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'
+                        });
+                        mL.textContent = label; g.appendChild(mL);
+                    }
+                    if (varName) {
+                        let vL = createSvgElement('text', {
+                            x: x + w/2, y: y + h + 9, 'font-size': '8',
+                            fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'
+                        });
+                        vL.textContent = varName; g.appendChild(vL);
+                    }
+                };
+
+                // ----- Hilfsmittel: Federsymbol (Zickzack) ---------------------------
+                const _drawSpring = (g, x, y, w, h) => {
+                    let mid = y + h/2;
+                    let d = `M ${x} ${y+2} L ${x+w*0.25} ${mid-3} L ${x+w*0.5} ${y+2} L ${x+w*0.75} ${mid-3} L ${x+w} ${y+2} ` +
+                            `L ${x+w*0.85} ${mid+1} L ${x+w*0.6} ${y+h-2} L ${x+w*0.4} ${mid+1} L ${x+w*0.15} ${y+h-2} L ${x} ${mid+1} Z`;
+                    // Bessere Darstellung: einfache Zickzack-Linie
+                    let zg = '';
+                    let n = 4;
+                    for (let i = 0; i <= n; i++) {
+                        let xx = x + (w * i / n);
+                        let yy = (i % 2 === 0) ? (y + 2) : (y + h - 2);
+                        zg += (i === 0 ? `M ${xx} ${yy}` : ` L ${xx} ${yy}`);
+                    }
+                    g.appendChild(createSvgElement('path', {d: zg, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                };
+
+                // ----- Hilfsmittel: blockierter Anschluss (T-Stop) -------------------
+                const _drawBlockedPort = (g, px, py, fromTop) => {
+                    let dy = fromTop ? 4 : -4;
+                    g.appendChild(createSvgElement('line', {x1: px, y1: py, x2: px, y2: py + dy, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: px-3, y1: py + dy, x2: px+3, y2: py + dy, stroke: '#000', 'stroke-width': 1}));
+                };
+
+                // ----- Hilfsmittel: Pfeilkopf an einem Punkt -------------------------
+                const _drawArrowHead = (g, x, y, dir) => {
+                    // dir: 'up' | 'down' | 'left' | 'right'
+                    const s = 3;
+                    let d;
+                    if (dir === 'up')    d = `M ${x-s} ${y+s} L ${x} ${y} L ${x+s} ${y+s}`;
+                    else if (dir === 'down')  d = `M ${x-s} ${y-s} L ${x} ${y} L ${x+s} ${y-s}`;
+                    else if (dir === 'left')  d = `M ${x+s} ${y-s} L ${x} ${y} L ${x+s} ${y+s}`;
+                    else                       d = `M ${x-s} ${y-s} L ${x} ${y} L ${x-s} ${y+s}`;
+                    g.appendChild(createSvgElement('path', {d, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                };
+
+                // ----- Wegeventil (DIN ISO 1219-1) -----------------------------------
+                // Box-Geometrie: jede Schaltstellung 36×34 px, alle Boxen aneinandergereiht.
+                // Anschlusspositionen pro Box (ISO-Norm, 5/n-Ventil):
+                //   oben:   Port 2 (A) bei 30 % Breite,  Port 4 (B) bei 70 %
+                //   unten:  Port 3 (R) bei 20 %,  Port 1 (P) bei 50 %,  Port 5 (S) bei 80 %
+                // Für 3/n-Ventile: oben Port 2 mittig, unten Ports 1 (links) und 3 (rechts).
+                const _drawValveSym = (cx, cy, valve, sys) => {
+                    let g = createSvgElement('g', {});
+                    g.setAttribute('data-obj-id', valve.id);
+                    g.style.cursor = 'pointer';
+                    g.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        // Doppelt wirkende Aktoren: 5/2 ↔ 5/3 umschalten
+                        let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId);
+                        let isAct2 = cyl && (cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu');
+                        if (!isAct2) return;
+                        let isTriple = !!valve.isTriple;
+                        let choice = confirm((isTriple
+                            ? `Wegeventil ${valve.normLabel || valve.id} ist 5/3.\n\nAuf 5/2 (bistabil) umschalten?`
+                            : `Wegeventil ${valve.normLabel || valve.id} ist 5/2.\n\nAuf 5/3 (Sperrmittelstellung) umschalten?`));
+                        if (!choice) return;
+                        valve.isTriple = !isTriple;
+                        valve.isDouble = true;
+                        saveFactoryState();
+                    });
+                    let isDouble = !!valve.isDouble;
+                    let isTriple = !!valve.isTriple;
+                    let nBoxes = isTriple ? 3 : 2;
+                    let bw = 36, bh = 34;
+                    let totalW = bw * nBoxes;
+                    let bx = cx - totalW/2;
+                    let by = cy - bh/2;
+                    // Außenrahmen
+                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: totalW, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
+                    for (let i = 1; i < nBoxes; i++) {
+                        g.appendChild(createSvgElement('line', {
+                            x1: bx + bw*i, y1: by, x2: bx + bw*i, y2: by + bh,
+                            stroke: '#000', 'stroke-width': 1
+                        }));
+                    }
+                    // Lokale Anschlusspositionen pro Box (5-Wege)
+                    const portsX5 = (boxIdx) => ({
+                        p2: bx + bw*boxIdx + bw*0.30,  // A (top)
+                        p4: bx + bw*boxIdx + bw*0.70,  // B (top)
+                        p3: bx + bw*boxIdx + bw*0.20,  // R (bot)
+                        p1: bx + bw*boxIdx + bw*0.50,  // P (bot)
+                        p5: bx + bw*boxIdx + bw*0.80   // S (bot)
+                    });
+                    const portsX3 = (boxIdx) => ({
+                        p2: bx + bw*boxIdx + bw*0.50,  // A (top)
+                        p1: bx + bw*boxIdx + bw*0.30,  // P (bot)
+                        p3: bx + bw*boxIdx + bw*0.70   // R (bot)
+                    });
+                    const yTopIn = by + 5;
+                    const yBotIn = by + bh - 5;
+                    const yMid   = (yTopIn + yBotIn) / 2;
+
+                    // Internen Schaltzustand pro Box zeichnen
+                    // DIN ISO 1219: Pfeile zeigen die Strömungsrichtung in der jeweiligen
+                    // Schaltstellung. "Active" zeichnet die typische X-Kreuzung (1→4, 2→3),
+                    // "rest" die parallele Durchströmung (1→2, 4→5).
+                    const drawState = (boxIdx, state) => {
+                        if (isDouble || isTriple) {
+                            let p = portsX5(boxIdx);
+                            if (state === 'rest') {
+                                // Parallele Strömung — direkte Pfeile von unten nach oben
+                                // 1 → 2  (P → A)
+                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p2, yTopIn + 1, 'up');
+                                // 4 → 5  (B → S, Entlüftung)
+                                g.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p5, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p5, yBotIn - 1, 'down');
+                                // 3 gesperrt
+                                _drawBlockedPort(g, p.p3, yBotIn, false);
+                            } else if (state === 'active') {
+                                // Gekreuzte Strömung (X) — Norm-Symbol für aktive Schaltstellung
+                                // 1 → 4  (P → B)
+                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p4, yTopIn + 1, 'up');
+                                // 2 → 3  (A → R, Entlüftung)
+                                g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p3, yBotIn - 1, 'down');
+                                // 5 gesperrt
+                                _drawBlockedPort(g, p.p5, yBotIn, false);
+                            } else if (state === 'closed') {
+                                // Sperrmittelstellung (5/3): alle Ports per T-Stop gesperrt
+                                _drawBlockedPort(g, p.p1, yBotIn, false);
+                                _drawBlockedPort(g, p.p3, yBotIn, false);
+                                _drawBlockedPort(g, p.p5, yBotIn, false);
+                                _drawBlockedPort(g, p.p2, yTopIn, true);
+                                _drawBlockedPort(g, p.p4, yTopIn, true);
+                            }
+                        } else {
+                            // 3/2-Wegeventil (Sperr-Ruhestellung)
+                            let p = portsX3(boxIdx);
+                            if (state === 'rest') {
+                                // 1 gesperrt, 2→3 (Entlüftung des Aktors)
+                                _drawBlockedPort(g, p.p1, yBotIn, false);
+                                g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p3, yBotIn - 1, 'down');
+                            } else if (state === 'active') {
+                                // 1→2 (Druckdurchfluss),  3 gesperrt
+                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(g, p.p2, yTopIn + 1, 'up');
+                                _drawBlockedPort(g, p.p3, yBotIn, false);
+                            }
+                        }
+                    };
+
+                    // Zustand pro Box festlegen
+                    if (isTriple) { drawState(0, 'active'); drawState(1, 'closed'); drawState(2, 'rest'); }
+                    else          { drawState(0, 'active'); drawState(1, 'rest'); }
+
+                    // ----- Magnetspulen / Federn -------------------------------------
+                    const sw = 12, sh = 14;
+                    if (valve.linkedVarExt) {
+                        _drawSolenoid(g, bx - sw - 1, by + bh/2 - sh/2, sw, sh, true, 'Y1', valve.linkedVarExt);
+                        // Stößelstrich zur Box
+                        g.appendChild(createSvgElement('line', {x1: bx - 1, y1: by + bh/2, x2: bx, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
+                    } else {
+                        // monostabile Variante mit Magnet auf einer Seite UND linkedVarExt fehlt → Default als Hand
+                        // (sehr selten — wir markieren als Federrückstellung links)
+                        _drawSpring(g, bx - 12, by + bh/2 - 4, 11, 8);
+                    }
+                    if (valve.linkedVarRet && (isDouble || isTriple)) {
+                        _drawSolenoid(g, bx + totalW + 1, by + bh/2 - sh/2, sw, sh, false, 'Y2', valve.linkedVarRet);
+                        g.appendChild(createSvgElement('line', {x1: bx + totalW, y1: by + bh/2, x2: bx + totalW + 1, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
+                    } else if (!isTriple) {
+                        // monostabil: Feder rechts
+                        _drawSpring(g, bx + totalW + 1, by + bh/2 - 4, 11, 8);
+                    }
+                    // Bei 5/3 zentrierte Federn (zusätzlich zu beiden Magneten): kleine Detentkennung oben
+                    if (isTriple) {
+                        // Kleine Federn-Symbole rechts und links zwischen Magnet und Box deuten zentrierende Rückstellfedern an
+                        if (valve.linkedVarRet) _drawSpring(g, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
+                        if (valve.linkedVarExt) _drawSpring(g, bx - sw - 10, by + bh/2 + 8, 8, 5);
+                    }
+
+                    // ----- Externe Anschlussstutzen (an Ruhestellung-Box) -----------
+                    // Index der Ruhestellung
+                    let rest = isTriple ? 1 : 1;
+                    let restPorts = (isDouble || isTriple) ? portsX5(rest) : portsX3(rest);
+                    // Anschlüsse senkrecht aus der Ruhestellung-Box raus
+                    if (isDouble || isTriple) {
+                        // Port 2 (A) nach oben
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
+                        let lA = createSvgElement('text', {x: restPorts.p2, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lA.textContent = sys === 'pneu' ? '2' : 'A'; g.appendChild(lA);
+                        // Port 4 (B) nach oben
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p4, y1: yTopIn, x2: restPorts.p4, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
+                        let lB = createSvgElement('text', {x: restPorts.p4, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lB.textContent = sys === 'pneu' ? '4' : 'B'; g.appendChild(lB);
+                        // Port 1 (P) nach unten
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p1, y1: yBotIn, x2: restPorts.p1, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        let lP = createSvgElement('text', {x: restPorts.p1, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lP.textContent = sys === 'pneu' ? '1' : 'P'; g.appendChild(lP);
+                        // Port 3 (R) nach unten
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p3, y1: yBotIn, x2: restPorts.p3, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        let l3 = createSvgElement('text', {x: restPorts.p3, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        l3.textContent = sys === 'pneu' ? '3' : 'T1'; g.appendChild(l3);
+                        // Port 5 (S) nach unten
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p5, y1: yBotIn, x2: restPorts.p5, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        let l5 = createSvgElement('text', {x: restPorts.p5, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        l5.textContent = sys === 'pneu' ? '5' : 'T2'; g.appendChild(l5);
+                    } else {
+                        // 3/2-Wegeventil
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
+                        let lA = createSvgElement('text', {x: restPorts.p2, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lA.textContent = sys === 'pneu' ? '2' : 'A'; g.appendChild(lA);
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p1, y1: yBotIn, x2: restPorts.p1, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        let lP = createSvgElement('text', {x: restPorts.p1, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lP.textContent = sys === 'pneu' ? '1' : 'P'; g.appendChild(lP);
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p3, y1: yBotIn, x2: restPorts.p3, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        let l3 = createSvgElement('text', {x: restPorts.p3, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        l3.textContent = sys === 'pneu' ? '3' : 'T'; g.appendChild(l3);
+                    }
+
+                    // Typ-Bezeichnung (5/2 / 3/2 / 5/3) und Norm-Label
+                    let typeLabel = isTriple ? '5/3' : (isDouble ? '5/2' : '3/2');
+                    let tL = createSvgElement('text', {x: cx, y: by - 24, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-weight': 'bold'});
+                    tL.textContent = typeLabel; g.appendChild(tL);
+                    if (valve.normLabel) {
+                        let nL = createSvgElement('text', {x: cx, y: by - 36, 'font-size': '10', fill: '#000', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'monospace'});
+                        nL.textContent = valve.normLabel; g.appendChild(nL);
+                    }
+
+                    // Externe Anschluss-Y zurückgeben für Hose-Routing
+                    g._portsY = { topY: by - 4, botY: by + bh + 4 };
+                    g._portsX = restPorts;
+                    return g;
+                };
+
+                // ----- Drosselrückschlagventil (DIN ISO 1219-1) ----------------------
+                // Symbol: Quadratischer Rahmen mit Drossel (variabel) und parallel
+                // dazu ein Rückschlagventil (Kegel + Sitz). Verstellbarkeit durch Pfeil.
+                const _drawThrottleSym = (cx, cy, thr) => {
+                    let g = createSvgElement('g', {});
+                    g.setAttribute('data-obj-id', thr.id);
+                    g.style.cursor = 'pointer';
+                    g.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        let cur = thr.opening != null ? thr.opening : 100;
+                        let inp = prompt(`Drossel ${thr.normLabel || thr.id}\nÖffnungsgrad in % (1–100):`, String(cur));
+                        if (inp == null) return;
+                        let v = parseInt(inp);
+                        if (!isNaN(v) && v >= 1 && v <= 100) {
+                            thr.opening = v;
+                            // Visuelles Update am Fabrik-Element
+                            let valD = thr.el && thr.el.querySelector('.f2d-throttle-val');
+                            let knob = thr.el && thr.el.querySelector('.f2d-throttle-knob');
+                            if (valD) valD.textContent = v + '%';
+                            if (knob) knob.style.transform = `rotate(${v * 2.7}deg)`;
+                            let valDH = thr.el && thr.el.querySelector('.f2d-throttle-val-hyd');
+                            let knobH = thr.el && thr.el.querySelector('.f2d-throttle-knob-hyd');
+                            if (valDH) valDH.textContent = v + '%';
+                            if (knobH) knobH.style.transform = `rotate(${v * 2.7}deg)`;
+                            saveFactoryState();
+                        }
+                    });
+                    let bw = 36, bh = 40;
+                    let bx = cx - bw/2, by = cy - bh/2;
+                    // Außenrahmen
+                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    // Anschlussstutzen oben und unten (kurze Linien außerhalb der Box)
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: by - 4, x2: cx, y2: by, stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: by + bh, x2: cx, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1.2}));
+                    // Sammelpunkte oben/unten (T-Verzweigung) für die parallelen Pfade
+                    let yIn = by + 4, yOut = by + bh - 4;
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: by, x2: cx, y2: yIn, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: yOut, x2: cx, y2: by + bh, stroke: '#000', 'stroke-width': 1}));
+                    // Linker Pfad: Drossel (zwei aufeinander zulaufende Bögen mit Verstellpfeil)
+                    let dx = cx - 9;
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: yIn, x2: dx, y2: yIn, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: dx, y1: yIn, x2: dx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: dx, y1: yOut, x2: cx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
+                    // Drossel-Symbol (verengende Bögen) auf dem linken Pfad
+                    let dyMid = (yIn + yOut)/2;
+                    g.appendChild(createSvgElement('path', {d: `M ${dx-4} ${dyMid-5} Q ${dx} ${dyMid-2} ${dx-4} ${dyMid+1}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('path', {d: `M ${dx+4} ${dyMid+5} Q ${dx} ${dyMid+2} ${dx+4} ${dyMid-1}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                    // Verstell-Pfeil (diagonal mit Pfeilkopf — Symbol für variable Drossel)
+                    g.appendChild(createSvgElement('line', {x1: dx-7, y1: dyMid+7, x2: dx+5, y2: dyMid-7, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('path', {d: `M ${dx+1} ${dyMid-7} L ${dx+5} ${dyMid-7} L ${dx+5} ${dyMid-3}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                    // Rechter Pfad: Rückschlagventil (Kegel + Sitz) im Bypass
+                    let bx2 = cx + 9;
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: yIn, x2: bx2, y2: yIn, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: bx2, y1: yIn, x2: bx2, y2: yOut, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: bx2, y1: yOut, x2: cx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
+                    // Rückschlag-Symbol: Kreis (Kugel) auf V-Sitz — Durchfluss von oben nach unten frei,
+                    // umgekehrt sperrt die Kugel auf dem Sitz.
+                    g.appendChild(createSvgElement('path', {d: `M ${bx2-3} ${dyMid+3} L ${bx2+3} ${dyMid+3} L ${bx2} ${dyMid-3} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('circle', {cx: bx2, cy: dyMid - 5, r: 1.6, fill: '#000'}));
+                    // Öffnungsgrad in %
+                    let pct = createSvgElement('text', {x: cx, y: by + bh + 14, 'font-size': '9', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                    pct.textContent = (thr.opening != null ? thr.opening : 100) + ' %'; g.appendChild(pct);
+                    if (thr.normLabel) {
+                        let nL = createSvgElement('text', {x: cx, y: by - 4, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        nL.textContent = thr.normLabel; g.appendChild(nL);
+                    }
+                    g._anchorTopY = by; g._anchorBotY = by + bh;
+                    return g;
+                };
+
+                // ----- Doppeltwirkender / Einfachwirkender Zylinder (DIN ISO 1219) ---
+                // Symbol-Aufbau gemäß DIN ISO 1219-1 (Festo):
+                //   • Vollständig geschlossenes Zylindergehäuse (Rechteck, alle 4 Seiten)
+                //   • Kolben in T-Form: senkrechter Balken + Kolbenstange durch eine Endkappe
+                //   • Stangen-Dichtung: kurze parallele Linien an der Stangen-Austrittsstelle
+                //   • Einfachwirkender Zyl.: Rückstellfeder als Zickzack INNERHALB des Gehäuses
+                //   • Anschlüsse als kurze Stutzen aus dem Gehäuse heraus, mit Port-Nummern
+                const _drawCylinderSym = (cx, cy, cyl, sys) => {
+                    let g = createSvgElement('g', {});
+                    g.setAttribute('data-obj-id', cyl.id);
+                    g.style.cursor = 'pointer';
+                    let isDouble = cyl.type === 'zylinder_double';
+                    let isPneu = sys === 'pneu';
+                    let portA = isPneu ? '1' : 'A';
+                    let portB = isPneu ? '2' : 'B';
+                    let bw = 90, bh = 28;
+                    let bx = cx - bw/2 - 6, by = cy - bh/2;
+                    // Komplett geschlossenes Zylindergehäuse
+                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
+                    // Kolben (massiver senkrechter Balken)
+                    let pXFrac = isDouble ? 0.42 : 0.55; // einfachwirkend: Kolben weiter rechts (Federraum links)
+                    let pX = bx + bw * pXFrac;
+                    g.appendChild(createSvgElement('rect', {x: pX-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
+                    // Kolbenstange (durch rechte Endkappe)
+                    let rodOut = 16; // Stangen-Auszugslänge in der Symbolik
+                    let rEnd = bx + bw + rodOut;
+                    g.appendChild(createSvgElement('line', {x1: pX, y1: by + bh/2, x2: rEnd, y2: by + bh/2, stroke: '#000', 'stroke-width': 2}));
+                    // Stangen-Dichtung: zwei kurze parallele Striche an der Austrittsstelle (Norm-Detail)
+                    g.appendChild(createSvgElement('line', {x1: bx + bw + 2, y1: by + bh/2 - 3, x2: bx + bw + 2, y2: by + bh/2 + 3, stroke: '#000', 'stroke-width': 0.8}));
+                    g.appendChild(createSvgElement('line', {x1: bx + bw + 4, y1: by + bh/2 - 3, x2: bx + bw + 4, y2: by + bh/2 + 3, stroke: '#000', 'stroke-width': 0.8}));
+                    // Einfachwirkend: Rückstellfeder INNERHALB des Gehäuses (links vom Kolben)
+                    if (!isDouble) {
+                        // Zickzack-Feder zwischen linker Endkappe und Kolbenrücken
+                        let fxs = bx + 3, fxe = pX - 3;
+                        let fy0 = by + 4, fy1 = by + bh - 4;
+                        let n = 6;
+                        let zg = `M ${fxs} ${(fy0+fy1)/2}`;
+                        for (let i = 1; i <= n; i++) {
+                            let xx = fxs + ((fxe - fxs) * i) / n;
+                            let yy = (i % 2 === 1) ? fy0 : fy1;
+                            zg += ` L ${xx} ${yy}`;
+                        }
+                        zg += ` L ${fxe} ${(fy0+fy1)/2}`;
+                        g.appendChild(createSvgElement('path', {d: zg, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                    }
+                    // Anschluss-Stutzen nach OBEN (für Kopplung an Drosseln in der Schemaspalte)
+                    // Position: unmittelbar hinter dem Kolbenboden auf der jeweiligen Kammerseite
+                    let portAx = bx + bw * 0.18;
+                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by, x2: portAx, y2: by - 10, stroke: '#000', 'stroke-width': 1}));
+                    let lA = createSvgElement('text', {x: portAx, y: by - 13, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                    lA.textContent = portA; g.appendChild(lA);
+                    if (isDouble) {
+                        let portBx = bx + bw * 0.78;
+                        g.appendChild(createSvgElement('line', {x1: portBx, y1: by, x2: portBx, y2: by - 10, stroke: '#000', 'stroke-width': 1}));
+                        let lB = createSvgElement('text', {x: portBx, y: by - 13, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        lB.textContent = portB; g.appendChild(lB);
+                        g._portBx = portBx;
+                    }
+                    g._portAx = portAx;
+                    // Norm-Label und Variablen
+                    if (cyl.normLabel) {
+                        let nL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 16, 'font-size': '11', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        nL.textContent = cyl.normLabel; g.appendChild(nL);
+                    }
+                    let vNames = [];
+                    if (cyl.linkedVarExt) vNames.push(cyl.linkedVarExt);
+                    if (cyl.linkedVarRet) vNames.push(cyl.linkedVarRet);
+                    if (vNames.length > 0) {
+                        let vL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 30, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        vL.textContent = vNames.join(' / '); g.appendChild(vL);
+                    }
+                    // Hub und Durchmesser-Info
+                    if (cyl.pistonD || cyl.stroke) {
+                        let dimL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 44, 'font-size': '8', fill: '#666', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        dimL.textContent = `Ø ${cyl.pistonD||20}/${cyl.rodD||8} × ${cyl.stroke||100} mm`;
+                        g.appendChild(dimL);
+                    }
+                    return g;
+                };
+
+                // ----- Pneumatik-Tor: doppeltwirkender Zylinder + Lastsymbol Tor -----
+                const _drawGateSym = (cx, cy, cyl, sys) => {
+                    let g = createSvgElement('g', {});
+                    g.setAttribute('data-obj-id', cyl.id);
+                    g.style.cursor = 'pointer';
+                    let isPneu = sys === 'pneu';
+                    let portA = isPneu ? '1' : 'A';
+                    let portB = isPneu ? '2' : 'B';
+                    // Oben: doppeltwirkender Zylindersymbol-Kern (kompakter)
+                    let bw = 80, bh = 22;
+                    let bx = cx - bw/2, by = cy - bh - 8;
+                    g.appendChild(createSvgElement('line', {x1: bx, y1: by, x2: bx+bw, y2: by, stroke:'#000', 'stroke-width':1.5}));
+                    g.appendChild(createSvgElement('line', {x1: bx, y1: by+bh, x2: bx+bw, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
+                    g.appendChild(createSvgElement('line', {x1: bx, y1: by, x2: bx, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
+                    g.appendChild(createSvgElement('line', {x1: bx+bw, y1: by, x2: bx+bw, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
+                    // Kolben mittig
+                    g.appendChild(createSvgElement('rect', {x: cx-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
+                    // Doppelseitige Kolbenstangen (horizontaler Linearantrieb)
+                    g.appendChild(createSvgElement('line', {x1: bx-12, y1: by+bh/2, x2: bx, y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
+                    g.appendChild(createSvgElement('line', {x1: bx+bw, y1: by+bh/2, x2: bx+bw+12, y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
+                    // Mechanische Kopplung an Tor (Strichlinien)
+                    g.appendChild(createSvgElement('line', {x1: bx-12, y1: by+bh/2, x2: bx-12, y2: cy+10, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
+                    g.appendChild(createSvgElement('line', {x1: bx+bw+12, y1: by+bh/2, x2: bx+bw+12, y2: cy+10, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
+                    // Anschlüsse 1 und 2 oben aus dem Zylinder
+                    let portAx = bx + bw * 0.20;
+                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by, x2: portAx, y2: by-8, stroke:'#000', 'stroke-width':1}));
+                    let lA = createSvgElement('text', {x: portAx, y: by-11, 'font-size':'8', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
+                    lA.textContent = portA; g.appendChild(lA);
+                    let portBx = bx + bw * 0.80;
+                    g.appendChild(createSvgElement('line', {x1: portBx, y1: by, x2: portBx, y2: by-8, stroke:'#000', 'stroke-width':1}));
+                    let lB = createSvgElement('text', {x: portBx, y: by-11, 'font-size':'8', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
+                    lB.textContent = portB; g.appendChild(lB);
+                    g._portAx = portAx; g._portBx = portBx;
+                    // Tor: Rahmen mit zwei Flügeln und Linearpfeilen
+                    let gw = bw + 28, gh = 14, gx = cx - gw/2, gy = cy + 10;
+                    g.appendChild(createSvgElement('rect', {x: gx, y: gy, width: gw, height: gh, fill:'#fff', stroke:'#000', 'stroke-width':1.2}));
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: gy+2, x2: cx, y2: gy+gh-2, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'2,2'}));
+                    // Linearbewegungs-Pfeile (Doppelpfeil horizontal)
+                    g.appendChild(createSvgElement('line', {x1: cx-gw/4, y1: gy+gh/2, x2: cx+gw/4, y2: gy+gh/2, stroke:'#000', 'stroke-width':1}));
+                    g.appendChild(createSvgElement('path', {d:`M ${cx-gw/4+3} ${gy+gh/2-3} L ${cx-gw/4} ${gy+gh/2} L ${cx-gw/4+3} ${gy+gh/2+3}`, fill:'none', stroke:'#000', 'stroke-width':1}));
+                    g.appendChild(createSvgElement('path', {d:`M ${cx+gw/4-3} ${gy+gh/2-3} L ${cx+gw/4} ${gy+gh/2} L ${cx+gw/4-3} ${gy+gh/2+3}`, fill:'none', stroke:'#000', 'stroke-width':1}));
+                    // Norm-Label und Variablen
+                    if (cyl.normLabel) {
+                        let nL = createSvgElement('text', {x: cx, y: gy+gh+14, 'font-size':'11', 'font-weight':'bold', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
+                        nL.textContent = cyl.normLabel; g.appendChild(nL);
+                    }
+                    let vNames = [];
+                    if (cyl.linkedVarExt) vNames.push(cyl.linkedVarExt);
+                    if (cyl.linkedVarRet) vNames.push(cyl.linkedVarRet);
+                    if (vNames.length > 0) {
+                        let vL = createSvgElement('text', {x: cx, y: gy+gh+28, 'font-size':'9', fill:'#0288d1', 'text-anchor':'middle', 'font-family':'monospace'});
+                        vL.textContent = vNames.join(' / '); g.appendChild(vL);
+                    }
+                    return g;
+                };
+
+                // ----- Aktor-Auswahl (Zylinder oder Tor) -----------------------------
+                const _drawActuatorSym = (cx, cy, cyl, sys) => {
+                    if (cyl.type === 'gate_pneu') return _drawGateSym(cx, cy, cyl, sys);
+                    return _drawCylinderSym(cx, cy, cyl, sys);
+                };
+
+                // ----- Druckquelle (DIN ISO 1219) ------------------------------------
+                // Vereinfachtes Druckquellen-Symbol: Dreieck mit horizontaler Druck-Auslassleitung.
+                //   Hydraulik:  ausgefülltes Dreieck ▶
+                //   Pneumatik:  nicht ausgefülltes Dreieck ▷
+                // Erweitert um Antriebs-Motor M (Kreis) als Antrieb für die Pumpe/den Verdichter.
+                const _drawSupplySym = (g, cx, cy, supplyObj, isPneu) => {
+                    // Antriebsmotor M (links)
+                    let mx = cx - 26, my = cy;
+                    g.appendChild(createSvgElement('circle', {cx: mx, cy: my, r: 10, fill: '#fff', stroke: '#000', 'stroke-width': 1.4}));
+                    let mL = createSvgElement('text', {x: mx, y: my + 4, 'font-size': '11', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                    mL.textContent = 'M'; g.appendChild(mL);
+                    // Antriebswelle
+                    g.appendChild(createSvgElement('line', {x1: mx + 10, y1: my, x2: cx - 8, y2: cy, stroke: '#000', 'stroke-width': 1.4}));
+                    // Druckquellen-Symbol: Dreieck mit Spitze nach rechts (Druck-Auslassrichtung)
+                    let triPath = `M ${cx-8} ${cy-7} L ${cx+5} ${cy} L ${cx-8} ${cy+7} Z`;
+                    if (isPneu) {
+                        // Verdichter / pneumatische Druckquelle: nicht ausgefüllt
+                        g.appendChild(createSvgElement('path', {d: triPath, fill: '#fff', stroke: '#000', 'stroke-width': 1.4}));
+                    } else {
+                        // Hydraulikpumpe / hydraulische Druckquelle: ausgefüllt
+                        g.appendChild(createSvgElement('path', {d: triPath, fill: '#000', stroke: '#000', 'stroke-width': 1}));
+                    }
+                    // Druck-Auslassleitung (kurze horizontale Linie nach rechts)
+                    g.appendChild(createSvgElement('line', {x1: cx + 5, y1: cy, x2: cx + 14, y2: cy, stroke: '#000', 'stroke-width': 1.4}));
+                    // Norm-Label und Druck
+                    let nL = createSvgElement('text', {x: cx - 6, y: cy - 14, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                    nL.textContent = supplyObj.normLabel || (isPneu ? '-GQA1' : '-GPA1'); g.appendChild(nL);
+                    let pL = createSvgElement('text', {x: cx - 6, y: cy + 22, 'font-size': '9', fill: '#666', 'text-anchor': 'middle'});
+                    pL.textContent = (supplyObj.pressure || (isPneu ? 6 : 100)) + ' bar'; g.appendChild(pL);
+                };
+
+                // ----- Tank (offenes Reservoir, DIN ISO 1219) ------------------------
+                const _drawTankSym = (g, cx, cy, tankObj) => {
+                    // Offenes U-Rechteck (oben offen)
+                    g.appendChild(createSvgElement('path', {d: `M ${cx-12} ${cy-8} L ${cx-12} ${cy+10} L ${cx+12} ${cy+10} L ${cx+12} ${cy-8}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
+                    let tL = createSvgElement('text', {x: cx, y: cy - 12, 'font-size': '9', 'text-anchor': 'middle', fill: '#000', 'font-family': 'monospace'});
+                    tL.textContent = tankObj.normLabel || '-GTA1'; g.appendChild(tL);
+                };
+
+                // ----- Wartungseinheit / Verteiler-Symbol (Pneumatik) ----------------
+                const _drawManifoldSym = (g, cx, cy, manifoldObj, isPneu) => {
+                    // Einfacher horizontaler Balken mit Anschlussstutzen oben (Verteilerfunktion)
+                    let bw = 40, bh = 6;
+                    g.appendChild(createSvgElement('rect', {x: cx-bw/2, y: cy-bh/2, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    if (manifoldObj && manifoldObj.normLabel) {
+                        let nL = createSvgElement('text', {x: cx, y: cy + 16, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        nL.textContent = manifoldObj.normLabel; g.appendChild(nL);
+                    }
+                };
+
+                // ====================================================================
+                // === Schaltplan-Layout: Aufruf pro System ===========================
+                // ====================================================================
+                const _drawFluidSchema = (sys, valves, startY) => {
+                    const isPneu = sys === 'pneu';
+                    const lblColor = isPneu ? '#0288d1' : '#ef6c00';
+                    const supplyType = isPneu ? 'compressor' : 'hydraulic_unit';
+                    const throttleType = isPneu ? 'throttle' : 'throttle_hyd';
+                    const titleText = isPneu ? '— Pneumatik-Schaltplan (DIN ISO 1219-1) —' : '— Hydraulik-Schaltplan (DIN ISO 1219-1) —';
+                    let header = createSvgElement('text', {
+                        x: 25, y: startY, 'font-size': '14', 'font-weight': 'bold',
+                        fill: lblColor, 'font-family': 'Segoe UI, Tahoma, sans-serif'
+                    });
+                    header.textContent = titleText; circuitContent.appendChild(header);
+                    const railTop      = startY + 60;
+                    const valveCenterY = railTop + 95;
+                    const throttleY    = valveCenterY + 80;
+                    const actuatorY    = throttleY + 75;
+                    const railBot      = actuatorY + 90;
+                    let curX = 100;
+                    // ----- Versorgung -----
+                    const supplyObj = factoryObjects.find(o => o.type === supplyType);
+                    if (supplyObj) {
+                        let g = createSvgElement('g', {});
+                        let supX = curX + 18, supY = railTop - 22;
+                        _drawSupplySym(g, supX, supY, supplyObj, isPneu);
+                        // Druckleitung: vom Auslass (rechts vom Dreieck) im 90°-Knie auf die P-Schiene
+                        let outletX = supX + 14, outletY = supY;
+                        g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: '#000', 'stroke-width': 1.5}));
+                        g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railTop, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(g);
+                        // Tank für Hydraulik
+                        if (!isPneu) {
+                            let tankObj = factoryObjects.find(o => o.type === 'oil_tank');
+                            if (tankObj) {
+                                let gT = createSvgElement('g', {});
+                                _drawTankSym(gT, supX, railBot + 18, tankObj);
+                                circuitContent.appendChild(gT);
+                            }
+                        }
+                        curX += 80;
+                    }
+                    // ----- Spalten-Layout für Ventile + Aktoren -----
+                    const colW = 165;
+                    const endX = Math.max(curX + valves.length * colW + 50, 700);
+                    // P-Schiene
+                    let pRail = createSvgElement('line', {x1: curX, y1: railTop, x2: endX, y2: railTop, stroke: '#000', 'stroke-width': 2.5});
+                    circuitContent.appendChild(pRail);
+                    let pLbl = createSvgElement('text', {x: curX-4, y: railTop-4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
+                    pLbl.textContent = isPneu ? '1 (P)' : 'P'; circuitContent.appendChild(pLbl);
+                    // T-Schiene (Hydraulik)
+                    if (!isPneu) {
+                        let tRail = createSvgElement('line', {x1: curX, y1: railBot, x2: endX, y2: railBot, stroke: '#000', 'stroke-width': 2});
+                        circuitContent.appendChild(tRail);
+                        let tLbl = createSvgElement('text', {x: curX-4, y: railBot+4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
+                        tLbl.textContent = 'T'; circuitContent.appendChild(tLbl);
+                    }
+                    // ----- Pro Ventil eine Säule -----
+                    valves.forEach(valve => {
+                        let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId && _isAct(o.type));
+                        if (!cyl) return;
+                        let cx = curX + 80;
+                        let isDouble = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
+                        // Ventil zeichnen, dabei die Anschluss-X-Positionen merken
+                        let valveG = _drawValveSym(cx, valveCenterY, valve, sys);
+                        circuitContent.appendChild(valveG);
+                        let pX = valveG._portsX;
+                        let portsTopY = valveG._portsY.topY;
+                        let portsBotY = valveG._portsY.botY;
+                        // P-Schiene → Port 1
+                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: railTop, x2: pX.p1, y2: portsBotY, stroke: '#000', 'stroke-width': 1.5}));
+                        // Drosseln finden
+                        let tExt = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ext');
+                        let tRet = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ret');
+                        // Port 2 (A) → Drossel ext → Aktor
+                        let extDrosselX = isDouble ? cx - 18 : cx;
+                        let retDrosselX = cx + 18;
+                        let extPortValveX = pX.p2 || pX.p2;
+                        let retPortValveX = pX.p4;
+                        // Vom Ventil-Port 2 ins Knie und runter zur Drossel-Spalte
+                        let kneeY = portsTopY - 16;
+                        circuitContent.appendChild(createSvgElement('line', {x1: extPortValveX, y1: portsTopY, x2: extPortValveX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: extPortValveX, y1: kneeY, x2: extDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY, x2: extDrosselX, y2: throttleY - 18, stroke: '#000', 'stroke-width': 1.5}));
+                        if (isDouble) {
+                            circuitContent.appendChild(createSvgElement('line', {x1: retPortValveX, y1: portsTopY, x2: retPortValveX, y2: kneeY-3, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retPortValveX, y1: kneeY-3, x2: retDrosselX, y2: kneeY-3, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY-3, x2: retDrosselX, y2: throttleY - 18, stroke: '#000', 'stroke-width': 1.5}));
+                        }
+                        // Drosseln zeichnen
+                        let extDrosselG = tExt ? _drawThrottleSym(extDrosselX, throttleY, tExt) : null;
+                        let retDrosselG = tRet ? _drawThrottleSym(retDrosselX, throttleY, tRet) : null;
+                        if (extDrosselG) circuitContent.appendChild(extDrosselG);
+                        if (retDrosselG) circuitContent.appendChild(retDrosselG);
+                        // Aktor zeichnen, Anschluss-X-Positionen ermitteln
+                        let actG = _drawActuatorSym(cx, actuatorY + 12, cyl, sys);
+                        circuitContent.appendChild(actG);
+                        let actPortAx = actG._portAx, actPortBx = actG._portBx;
+                        // Drossel → Aktor (Port A bzw. B)
+                        let dropEndY = actuatorY + 4;
+                        // ext-Pfad: Drossel-Ausgang → Knie → Aktor-Port A
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleY + 18, x2: extDrosselX, y2: dropEndY - 8, stroke: '#000', 'stroke-width': 1.5}));
+                        if (actPortAx != null) {
+                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: dropEndY - 8, x2: actPortAx, y2: dropEndY - 8, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: dropEndY - 8, x2: actPortAx, y2: dropEndY, stroke: '#000', 'stroke-width': 1.5}));
+                        }
+                        if (isDouble && actPortBx != null) {
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleY + 18, x2: retDrosselX, y2: dropEndY - 12, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: dropEndY - 12, x2: actPortBx, y2: dropEndY - 12, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: dropEndY - 12, x2: actPortBx, y2: dropEndY, stroke: '#000', 'stroke-width': 1.5}));
+                        }
+                        // Auslassports am Ventil
+                        if (isPneu) {
+                            // Pneumatik: 3 und 5 → Schalldämpfer-Symbol (ISO 1219: Dreieck mit gestrichelter Ausströmlinie)
+                            const _drawSilencer = (px) => {
+                                circuitContent.appendChild(createSvgElement('line', {x1: px, y1: portsBotY, x2: px, y2: portsBotY + 14, stroke: '#000', 'stroke-width': 1}));
+                                // Dreieck (Schalldämpfer)
+                                circuitContent.appendChild(createSvgElement('path', {d: `M ${px-5} ${portsBotY+14} L ${px+5} ${portsBotY+14} L ${px} ${portsBotY+22} Z`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
+                                // Pfeile-Striche (Auslass)
+                                circuitContent.appendChild(createSvgElement('line', {x1: px-3, y1: portsBotY+24, x2: px-1, y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
+                                circuitContent.appendChild(createSvgElement('line', {x1: px,   y1: portsBotY+24, x2: px,   y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
+                                circuitContent.appendChild(createSvgElement('line', {x1: px+3, y1: portsBotY+24, x2: px+1, y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
+                            };
+                            _drawSilencer(pX.p3);
+                            _drawSilencer(pX.p5);
+                        } else {
+                            // Hydraulik: 3 und 5 → T-Schiene
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p3, y1: portsBotY, x2: pX.p3, y2: railBot, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p5, y1: portsBotY, x2: pX.p5, y2: railBot, stroke: '#000', 'stroke-width': 1.5}));
+                            // Pfeile in Tankrichtung
+                            _drawArrowHead({appendChild:(c)=>circuitContent.appendChild(c)}, pX.p3, railBot, 'down');
+                            _drawArrowHead({appendChild:(c)=>circuitContent.appendChild(c)}, pX.p5, railBot, 'down');
+                        }
+                        curX += colW;
+                    });
+                    return railBot + 60;
+                };
+
+                if (pneuValves.length > 0 || hydValves.length > 0) {
+                    const _hasDual = window.configDualCircuit && dualLoadNodeIds.size > 0;
+                    let fluidY = _hasDual ? (yBot + 700 + 100) : (yBot + 240);
+                    if (pneuValves.length > 0) fluidY = _drawFluidSchema('pneu', pneuValves, fluidY) + 60;
+                    if (hydValves.length  > 0) fluidY = _drawFluidSchema('hyd',  hydValves,  fluidY);
+                }
+            }
             setTimeout(() => {
                 let pCirc = circuitSvg.closest('.workspace-panel') || document.getElementById('circuit-wrapper');
                 if (pCirc && pCirc.offsetWidth > 0 && pCirc.offsetHeight > 0) { 
@@ -8306,6 +8973,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             activeTask = taskObj;
+            // Multi-Stage-Init: erste Stage aktivieren falls vorhanden
+            if (Array.isArray(activeTask.stages) && activeTask.stages.length > 0) {
+                activeTask.currentStage = 0;
+            }
             taskSolved = false;
             taskStartTime = Date.now();
             taskSimSeconds = 0;
@@ -8317,8 +8988,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             let diffEl = document.getElementById('task-panel-diff');
             diffEl.textContent = taskObj.difficulty || '';
             diffEl.style.color = _getDiffColor(taskObj.difficulty);
-            document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(taskObj.description || '');
-            document.getElementById('task-hint-btn').style.display = taskObj.hint ? 'inline-block' : 'none';
+            // Beschreibung, Hinweis und Stufenanzeige aus aktueller Stage (oder Top-Level wenn Single-Stage)
+            _taskRenderStageInfo();
+            const _bn = document.getElementById('task-stage-done-banner');
+            if (_bn) { _bn.style.display = 'none'; _bn.innerHTML = ''; }
             _taskRenderConditions();
 
             if (taskObj.timeLimit && taskObj.timeLimit > 0) {
@@ -8748,7 +9421,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let list = document.getElementById('task-conditions-list');
             list.innerHTML = '';
             list.classList.remove('task-conds-multicol');
-            (activeTask.conditions || []).forEach((cond, i) => {
+            _taskActiveConds().forEach((cond, i) => {
                 let div = document.createElement('div');
                 div.className = 'task-cond pending';
                 div.id = 'task-cond-' + i;
@@ -8852,8 +9525,15 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
 
         window._taskShowHint = function() {
-            if (!activeTask || !activeTask.hint) return;
-            document.getElementById('task-hint-content').innerHTML = _taskMarkdownToHtml(activeTask.hint);
+            if (!activeTask) return;
+            // Multi-Stage: Hint der aktuellen Stage hat Vorrang vor Top-Level-Hint
+            let hint = activeTask.hint || '';
+            if (Array.isArray(activeTask.stages) && activeTask.stages.length > 0) {
+                const st = activeTask.stages[activeTask.currentStage || 0];
+                if (st && st.hint) hint = st.hint;
+            }
+            if (!hint) return;
+            document.getElementById('task-hint-content').innerHTML = _taskMarkdownToHtml(hint);
             document.getElementById('task-hint-modal').style.display = 'flex';
         };
 
@@ -8908,24 +9588,111 @@ You must output exactly this JSON format. The logic code goes as a single string
             } catch(e) { return false; }
         }
 
+        // Liefert die aktuell aktiven Conditions: Stage-Conditions wenn Multi-Stage, sonst Top-Level
+        function _taskActiveConds() {
+            if (!activeTask) return [];
+            if (Array.isArray(activeTask.stages) && activeTask.stages.length > 0) {
+                const idx = activeTask.currentStage || 0;
+                const st = activeTask.stages[idx];
+                return (st && Array.isArray(st.conditions)) ? st.conditions : [];
+            }
+            return activeTask.conditions || [];
+        }
+        function _taskHasMultipleStages() {
+            return !!(activeTask && Array.isArray(activeTask.stages) && activeTask.stages.length > 1);
+        }
+        function _taskIsLastStage() {
+            if (!_taskHasMultipleStages()) return true;
+            return (activeTask.currentStage || 0) >= activeTask.stages.length - 1;
+        }
+
         window._taskCheckConditions = function() {
             if (!activeTask || taskSolved) return;
             let allDone = true;
-            let conds = activeTask.conditions || [];
+            let conds = _taskActiveConds();
             conds.forEach((cond, i) => {
                 let done = _checkCondition(cond);
                 if (!done) allDone = false;
                 let el = document.getElementById('task-cond-' + i);
                 if (el) el.className = 'task-cond ' + (done ? 'done' : 'pending');
             });
-            if (allDone && conds.length > 0) window._taskSolve();
+            if (allDone && conds.length > 0) window._taskStageDone();
             _taskUpdateSolutionBtn();
         };
 
+        // Wird aufgerufen wenn alle Conditions der aktuellen Stage erfüllt sind.
+        // Bei Multi-Stage und nicht letzter Stage: kompakte Erfolgsmeldung mit Weiter-Button.
+        // Bei letzter Stage (oder Single-Stage): vollständiger Solve-Flow.
+        window._taskStageDone = function() {
+            if (taskSolved || !activeTask) return;
+            if (_taskIsLastStage()) { window._taskSolve(); return; }
+            // Zwischen-Erfolg: Banner anzeigen, Conditions-Check pausieren bis User weiterklickt
+            taskSolved = true; // verhindert weitere Auto-Triggers
+            const idx = activeTask.currentStage || 0;
+            const next = idx + 1;
+            const total = activeTask.stages.length;
+            const banner = document.getElementById('task-stage-done-banner');
+            if (banner) {
+                banner.innerHTML =
+                    `<div style="background:#1b2a1b;border:1px solid #4caf50;border-radius:6px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:10px;">` +
+                        `<span style="font-size:18px;">✅</span>` +
+                        `<span style="flex:1;color:#c8e6c9;font-size:12px;">Stufe ${idx+1} von ${total} geschafft! Bereit für die nächste Stufe?</span>` +
+                        `<button onclick="window._taskAdvanceStage()" style="background:#4caf50;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:bold;font-size:12px;white-space:nowrap;">Weiter zu Stufe ${next+1} →</button>` +
+                    `</div>`;
+                banner.style.display = 'block';
+            }
+        };
+
+        // Wechsel zur nächsten Stage — Code, Anlage und Variablen bleiben erhalten
+        window._taskAdvanceStage = function() {
+            if (!activeTask || !Array.isArray(activeTask.stages)) return;
+            const next = (activeTask.currentStage || 0) + 1;
+            if (next >= activeTask.stages.length) { window._taskSolve(); return; }
+            activeTask.currentStage = next;
+            taskSolved = false;
+            _taskCheckThrottle = 0;
+            const banner = document.getElementById('task-stage-done-banner');
+            if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+            _taskRenderStageInfo();
+            _taskRenderConditions();
+            _taskUpdateSolutionBtn();
+        };
+
+        // Rendert Beschreibung, Hinweis-Button und Stufenanzeige basierend auf der aktuellen Stage
+        function _taskRenderStageInfo() {
+            if (!activeTask) return;
+            const stagesEl = document.getElementById('task-panel-stages');
+            if (_taskHasMultipleStages()) {
+                const cur = activeTask.currentStage || 0;
+                const total = activeTask.stages.length;
+                const stage = activeTask.stages[cur] || {};
+                if (stagesEl) {
+                    const pct = Math.round((cur / total) * 100);
+                    stagesEl.innerHTML =
+                        `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">` +
+                            `<span style="color:#90a4ae;font-size:11px;font-weight:bold;">Stufe ${cur+1} / ${total}</span>` +
+                            `<div style="flex:1;height:4px;background:#37474f;border-radius:2px;overflow:hidden;">` +
+                                `<div style="width:${pct}%;height:100%;background:#4caf50;transition:width 0.3s;"></div>` +
+                            `</div>` +
+                        `</div>`;
+                    stagesEl.style.display = 'block';
+                }
+                document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(stage.description || activeTask.description || '');
+                const hintAvail = !!(stage.hint || activeTask.hint);
+                document.getElementById('task-hint-btn').style.display = hintAvail ? 'inline-block' : 'none';
+            } else {
+                if (stagesEl) { stagesEl.style.display = 'none'; stagesEl.innerHTML = ''; }
+                document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(activeTask.description || '');
+                document.getElementById('task-hint-btn').style.display = activeTask.hint ? 'inline-block' : 'none';
+            }
+        }
+
         window._taskSolve = function() {
-            if (taskSolved) return;
+            if (taskSolved && !_taskHasMultipleStages()) return;
             taskSolved = true;
             if (_taskTimerInterval) { clearInterval(_taskTimerInterval); _taskTimerInterval = null; }
+            const banner = document.getElementById('task-stage-done-banner');
+            if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
             let elapsed = Math.round((Date.now() - taskStartTime) / 1000);
             document.getElementById('task-success-name').textContent = activeTask.name || '';
             document.getElementById('task-success-time').textContent = 'Benötigte Zeit: ' + _fmtTaskTime(elapsed);
@@ -9085,6 +9852,88 @@ You must output exactly this JSON format. The logic code goes as a single string
             _taskRenderCondRow({ type:'sps_output', variable:'', value:true, label:'' }, list.children.length);
         };
 
+        // ---------- Multi-Stage-Editor ----------
+        // Persistiert die aktuellen Editor-Felder (description/hint/conditions) in die aktive Stage
+        function _stagePersistCurrent() {
+            const modal = document.getElementById('task-editor-modal');
+            const task = modal && modal._editTask;
+            if (!task || !Array.isArray(task._stages)) return;
+            const idx = task._currentStage || 0;
+            const desc = (document.getElementById('ted-desc') || {}).value || '';
+            const hint = (document.getElementById('ted-hint') || {}).value || '';
+            const conds = _taskCollectConditions();
+            task._stages[idx] = { description: desc, hint, conditions: conds };
+        }
+        // Lädt eine Stage in die Editor-Felder
+        function _stageLoad(idx) {
+            const modal = document.getElementById('task-editor-modal');
+            const task = modal && modal._editTask;
+            if (!task || !Array.isArray(task._stages)) return;
+            if (idx < 0 || idx >= task._stages.length) return;
+            task._currentStage = idx;
+            const st = task._stages[idx] || {};
+            const dEl = document.getElementById('ted-desc'); if (dEl) dEl.value = st.description || '';
+            const hEl = document.getElementById('ted-hint'); if (hEl) hEl.value = st.hint || '';
+            const dPv = document.getElementById('ted-desc-preview'); if (dPv) { dPv.innerHTML = _taskMarkdownToHtml(st.description || ''); dPv.style.display = (st.description || '').trim() ? '' : 'none'; }
+            const hPv = document.getElementById('ted-hint-preview'); if (hPv) { hPv.innerHTML = _taskMarkdownToHtml(st.hint || ''); hPv.style.display = (st.hint || '').trim() ? '' : 'none'; }
+            const list = document.getElementById('ted-cond-list');
+            if (list) {
+                list.innerHTML = '';
+                (st.conditions || []).forEach((c, i) => _taskRenderCondRow(c, i));
+            }
+            _stageRenderTabs();
+        }
+        // Rendert die Tab-Leiste über dem Beschreibungsfeld
+        function _stageRenderTabs() {
+            const modal = document.getElementById('task-editor-modal');
+            const task = modal && modal._editTask;
+            const tabsEl = document.getElementById('ted-stage-tabs');
+            if (!task || !tabsEl || !Array.isArray(task._stages)) return;
+            const cur = task._currentStage || 0;
+            let html = '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:8px;padding:6px;background:#151515;border-radius:4px;border:1px solid #333;">';
+            html += '<span style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;margin-right:8px;">🔢 Stufen:</span>';
+            task._stages.forEach((s, i) => {
+                const active = (i === cur);
+                html += `<span style="display:inline-flex;align-items:center;background:${active?'#1565c0':'#37474f'};color:#fff;border-radius:3px;overflow:hidden;">`;
+                html += `<button onclick="window._stageSwitch(${i})" style="background:transparent;color:#fff;border:none;padding:4px 10px;cursor:pointer;font-size:11px;${active?'font-weight:bold;':''}">Stufe ${i+1}</button>`;
+                if (task._stages.length > 1) {
+                    html += `<button onclick="window._stageDelete(${i})" title="Stufe entfernen" style="background:transparent;color:#fff;border:none;border-left:1px solid rgba(255,255,255,0.2);padding:4px 6px;cursor:pointer;font-size:10px;">×</button>`;
+                }
+                html += '</span>';
+            });
+            html += `<button onclick="window._stageAdd()" title="Neue Stufe hinzufügen" style="background:#4caf50;color:#fff;border:none;border-radius:3px;padding:4px 10px;cursor:pointer;font-size:11px;">+ Stufe</button>`;
+            if (task._stages.length === 1) {
+                html += '<span style="color:#607d8b;font-size:10px;margin-left:auto;">Single-Stage — klicke + Stufe für mehrstufige Aufgabe</span>';
+            } else {
+                html += `<span style="color:#90a4ae;font-size:10px;margin-left:auto;">Anlage und Code bleiben zwischen den Stufen erhalten</span>`;
+            }
+            html += '</div>';
+            tabsEl.innerHTML = html;
+        }
+        window._stageSwitch = function(idx) {
+            _stagePersistCurrent();
+            _stageLoad(idx);
+        };
+        window._stageAdd = function() {
+            _stagePersistCurrent();
+            const modal = document.getElementById('task-editor-modal');
+            const task = modal && modal._editTask;
+            if (!task) return;
+            if (!Array.isArray(task._stages)) task._stages = [];
+            task._stages.push({ description: '', hint: '', conditions: [] });
+            _stageLoad(task._stages.length - 1);
+        };
+        window._stageDelete = function(idx) {
+            const modal = document.getElementById('task-editor-modal');
+            const task = modal && modal._editTask;
+            if (!task || !Array.isArray(task._stages) || task._stages.length <= 1) return;
+            if (!confirm(`Stufe ${idx+1} wirklich entfernen?`)) return;
+            _stagePersistCurrent();
+            task._stages.splice(idx, 1);
+            const newIdx = Math.max(0, Math.min(idx, task._stages.length - 1));
+            _stageLoad(newIdx);
+        };
+
         function _taskInitCondDrag(list) {
             if (!list || list._dndInit) return;
             list._dndInit = true;
@@ -9179,7 +10028,25 @@ You must output exactly this JSON format. The logic code goes as a single string
             task.difficulty = document.getElementById('ted-diff').value;
             let tl = parseInt(document.getElementById('ted-time').value) || 0;
             task.timeLimit = tl > 0 ? tl : null;
-            task.conditions = _taskCollectConditions();
+            // Aktuelle Stage persistieren (in _stages[currentStage])
+            _stagePersistCurrent();
+            const stages = task._stages || [];
+            if (stages.length === 1) {
+                // Single-Stage → Top-Level + stages=null
+                task.stages = null;
+                task.description = stages[0].description || '';
+                task.hint = stages[0].hint || '';
+                task.conditions = stages[0].conditions || [];
+            } else if (stages.length > 1) {
+                // Multi-Stage → stages-Array + Top-Level als Stage-1-Spiegel (Fallback)
+                task.stages = stages.map(s => ({ description: s.description || '', hint: s.hint || '', conditions: s.conditions || [] }));
+                task.description = stages[0].description || '';
+                task.hint = stages[0].hint || '';
+                task.conditions = stages[0].conditions || [];
+            } else {
+                // Sollte nicht vorkommen — Fallback
+                task.conditions = _taskCollectConditions();
+            }
             const selectedRadio = document.querySelector('input[name="ted-restrict"]:checked');
             task.restrictObjects = selectedRadio ? selectedRadio.value : 'none';
             task.allowedObjectTypes = [];
@@ -9285,12 +10152,22 @@ You must output exactly this JSON format. The logic code goes as a single string
                 restrictObjects:'none', allowedObjectTypes:[]
             };
             modal._editTask = task;
+            // Multi-Stage State initialisieren: aus task.stages oder Single-Stage aus Top-Level-Daten
+            if (Array.isArray(task.stages) && task.stages.length > 0) {
+                task._stages = task.stages.map(s => ({
+                    description: s.description || '', hint: s.hint || '', conditions: Array.isArray(s.conditions) ? s.conditions : []
+                }));
+            } else {
+                task._stages = [{ description: task.description || '', hint: task.hint || '', conditions: task.conditions || [] }];
+            }
+            task._currentStage = 0;
             modal._savedSnapshot = JSON.stringify(task);
             let body = document.getElementById('task-editor-body');
             body.innerHTML = `
                 <label class="task-ed-label">Name *</label>
                 <input id="ted-name" class="task-ed-input" type="text" value="${_escHtml(task.name)}" placeholder="Aufgabentitel">
-                <label class="task-ed-label">Beschreibung</label>
+                <div id="ted-stage-tabs" style="margin-top:8px;"></div>
+                <label class="task-ed-label">Beschreibung der aktuellen Stufe</label>
                 <div style="display:flex;gap:3px;margin-bottom:4px;flex-wrap:wrap;align-items:center;">
                     <button type="button" onclick="_taskEdWrap('**','**')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:bold;line-height:1.4;" title="Fett: **Text**"><b>B</b></button>
                     <button type="button" onclick="_taskEdWrap('*','*')" style="background:#37474f;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;font-style:italic;line-height:1.4;" title="Kursiv: *Text*"><i>I</i></button>
@@ -9335,7 +10212,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ${task.preset ? '<button onclick="document.getElementById(\'task-editor-modal\')._editTask.preset=null;document.getElementById(\'ted-preset-info\').textContent=\'⬜ Kein Preset\'" style="background:#c62828;color:#fff;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;margin-left:6px;">🗑 Preset löschen</button>' : ''}
                 </div>
                 <div style="margin-top:14px;">
-                    <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">✅ Erfolgsbedingungen (alle müssen erfüllt sein), mind. eine muss vorhanden sein</div>
+                    <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">✅ Erfolgsbedingungen der aktuellen Stufe (alle müssen erfüllt sein, mind. eine vorhanden)</div>
                     <div id="ted-cond-list"></div>
                     <button onclick="window._taskAddCondition()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">+ Bedingung hinzufügen</button>
                     ${(() => {
@@ -9472,7 +10349,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     <button onclick="window._taskEditorExport()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">📤 Als .valitask exportieren</button>
                     <button onclick="window._taskEditorClose()" style="background:#555;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">✖ Schließen</button>
                 </div>`;
-            (task.conditions || []).forEach((cond, i) => _taskRenderCondRow(cond, i));
+            // Initial-Render: erste Stage in die Editor-Felder laden + Tabs zeigen
+            _stageLoad(0);
             _taskInitCondDrag(document.getElementById('ted-cond-list'));
             modal._savedSnapshot = JSON.stringify(_taskCollectFromEditor()); // Nach DOM-Aufbau normalisieren
             modal.style.display = 'flex';
@@ -9511,8 +10389,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
         }
 
+        // Editor-internal-Felder aus task-Kopie entfernen (für persistierte Form)
+        function _taskCleanInternal(t) {
+            const c = JSON.parse(JSON.stringify(t));
+            delete c._stages;
+            delete c._currentStage;
+            return c;
+        }
         window._taskEditorSave = function() {
-            let task = _taskCollectFromEditor();
+            let task = _taskCleanInternal(_taskCollectFromEditor());
             if (!task.name) { _showToast('⚠ Bitte einen Aufgabennamen eingeben.', '#b71c1c'); return; }
             const doSave = () => {
                 _saveTaskLocally(task);
@@ -9521,7 +10406,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 window._openTaskManager();
                 _showToast('✅ Aufgabe "' + task.name + '" gespeichert.');
             };
-            if (!task.conditions || task.conditions.length === 0) {
+            const hasAnyConds = (task.stages && task.stages.some(s => s.conditions && s.conditions.length > 0)) ||
+                                (task.conditions && task.conditions.length > 0);
+            if (!hasAnyConds) {
                 _showNoCritWarning(doSave);
             } else {
                 doSave();
@@ -9529,7 +10416,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
 
         window._taskEditorExport = function() {
-            let task = _taskCollectFromEditor();
+            let task = _taskCleanInternal(_taskCollectFromEditor());
             if (!task.name) { alert('Bitte einen Aufgabennamen eingeben.'); return; }
             _exportTask(task);
         };
@@ -11027,7 +11914,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let hasLeak = factoryObjects.some(o =>
                         (o.type === 'compressor' || o.type === 'valve_pneu' ||
                          (o.type === 'zylinder_single' && o.hasPneumatics) ||
-                         (o.type === 'zylinder_double' && o.hasPneumatics))
+                         (o.type === 'zylinder_double' && o.hasPneumatics) ||
+                         (o.type === 'gate_pneu' && o.hasPneumatics))
                         && (o.leakRate || 0) > 0
                     );
                     spsState[obj.linkedVarLeak] = hasLeak ? 0 : 1;
@@ -11430,7 +12318,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let hasLeak = factoryObjects.some(o =>
                             (o.type === 'hydraulic_unit' || o.type === 'valve_hyd' ||
                              (o.type === 'zylinder_single' && o.hasHydraulics) ||
-                             (o.type === 'zylinder_double' && o.hasHydraulics))
+                             (o.type === 'zylinder_double' && o.hasHydraulics) ||
+                             (o.type === 'gate_pneu' && o.hasHydraulics))
                             && (o.leakRate || 0) > 0
                         );
                         spsState[obj.linkedVarLeak] = hasLeak ? 0 : 1;
@@ -15369,6 +16258,236 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
         },
         // ====================================================
+        'gate_pneu': {
+            directSpawn: false, hasHeight: true, noRodAttach: true,
+            role: 'output', color: '#546e7a', view: 'side',
+            i18n: {
+                de: { name: 'Pneumatik-Tor (horizontal)', desc: 'Horizontal öffnendes Tor, angetrieben durch einen Pneumatikzylinder. Zwei Torhälften gleiten beim Öffnen nach links/rechts auseinander. Zwei Ausgänge: AUFfahren und ZUfahren. Optional Endlagensensoren.' },
+                en: { name: 'Pneumatic Gate (horizontal)', desc: 'Horizontally opening gate driven by a pneumatic cylinder. Two halves slide outward when opening. Two outputs: open and close. Optional limit sensors.' }
+            },
+            meta: { icon: '🚪' },
+            modalConfig: { t: '🚪 Pneumatik-Tor anlegen:', l1: 'Tor AUFfahren (z.B. A_TOR_AUF)', l2: 'Tor ZUfahren (z.B. A_TOR_ZU)', out: true },
+            menuTarget: '#menu-aktoren',
+            insertBefore: '#menu-act-sep',
+            menuHtml: `<div onclick="addFactoryDevice('gate_pneu')">🚪 <span data-i18n="plug_gate_pneu_name">Tor (Pneumatik, horizontal)</span></div>`,
+            getVar2ForRestore: function(o) { return o.linkedVarRet; },
+            css: `
+                .f2d-gate-pneu { position:absolute; box-sizing:border-box; overflow:visible; background:transparent; }
+                /* Pneumatik-Zylinder oben (horizontal) */
+                .f2d-gp-cylinder {
+                    position:absolute; top:0; left:8%; right:8%; height:22%;
+                    background:linear-gradient(180deg,#546e7a 0%,#37474f 100%);
+                    border:2px solid #263238; border-radius:3px;
+                    box-sizing:border-box; z-index:2;
+                }
+                .f2d-gp-cyl-tube {
+                    position:absolute; top:25%; bottom:25%; left:6%; right:6%;
+                    background:linear-gradient(180deg,#cfd8dc 0%,#90a4ae 50%,#78909c 100%);
+                    border:1px solid #455a64; border-radius:2px;
+                    overflow:hidden;
+                }
+                .f2d-gp-cyl-piston {
+                    position:absolute; top:0; bottom:0; width:14%; left:0;
+                    background:linear-gradient(180deg,#ef5350,#c62828);
+                    border-right:2px solid #b71c1c;
+                }
+                .f2d-gp-cyl-rod-l, .f2d-gp-cyl-rod-r {
+                    position:absolute; top:46%; height:8%;
+                    background:linear-gradient(180deg,#eceff1,#b0bec5);
+                    border:1px solid #607d8b; box-sizing:border-box;
+                }
+                .f2d-gp-cyl-rod-l { left:0; }
+                .f2d-gp-cyl-rod-r { right:0; }
+                /* Rahmen / Tor-Öffnung */
+                .f2d-gp-frame {
+                    position:absolute; top:22%; bottom:0; left:0; right:0;
+                    border:3px solid #455a64; background:#1a242a;
+                    box-sizing:border-box; overflow:hidden;
+                }
+                /* Torhälften (zwei metallische Flügel) */
+                .f2d-gp-half {
+                    position:absolute; top:0; bottom:0; width:50%;
+                    background-color:#78909c;
+                    background-image:
+                        linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(0,0,0,0.25) 100%),
+                        repeating-linear-gradient(90deg,
+                            rgba(0,0,0,0.25) 0, rgba(0,0,0,0.25) 1px,
+                            transparent 1px, transparent 7px);
+                    box-shadow:inset 0 0 4px rgba(0,0,0,0.4);
+                    box-sizing:border-box;
+                }
+                .f2d-gp-half-l { left:0; border-right:1px solid #263238; }
+                .f2d-gp-half-r { right:0; border-left:1px solid #263238; }
+                /* LED-Statusanzeige */
+                .f2d-gp-led {
+                    position:absolute; top:5%; right:3%;
+                    width:7px; height:7px; border-radius:50%;
+                    background:#f44336; box-shadow:0 0 4px #f44336;
+                    z-index:5;
+                }
+                .f2d-gate-pneu.gp-open   .f2d-gp-led { background:#4caf50; box-shadow:0 0 5px #4caf50; }
+                .f2d-gate-pneu.gp-moving .f2d-gp-led { background:#ff9800; box-shadow:0 0 5px #ff9800; }
+                .f2d-gate-pneu .f2d-resize-handle-xy {
+                    position:absolute; bottom:0; right:0; width:10px; height:10px;
+                    cursor:se-resize; background:rgba(255,255,255,0.2); z-index:10;
+                }
+            `,
+            build: function(obj, el, var1, var2) {
+                obj.linkedVarExt = var1 || null;   // Tor AUFfahren
+                obj.linkedVarRet = var2 || null;   // Tor ZUfahren
+                obj.linkedVarSensorAuf = null;
+                obj.linkedVarSensorZu = null;
+                obj.gateSpeed = 50;   // %/s
+                obj.gatePos = 0;      // 0 = zu, 100 = offen
+                obj.width = 140; obj.height = 70;
+                obj.useGravity = false;
+                el.className = 'f2d-obj f2d-gate-pneu';
+                el.style.width = obj.width + 'px';
+                el.style.height = obj.height + 'px';
+                el.innerHTML = `
+                    <div class="f2d-gp-cylinder">
+                        <div class="f2d-gp-cyl-rod-l"></div>
+                        <div class="f2d-gp-cyl-tube"><div class="f2d-gp-cyl-piston"></div></div>
+                        <div class="f2d-gp-cyl-rod-r"></div>
+                    </div>
+                    <div class="f2d-gp-frame">
+                        <div class="f2d-gp-half f2d-gp-half-l"></div>
+                        <div class="f2d-gp-half f2d-gp-half-r"></div>
+                    </div>
+                    <div class="f2d-gp-led"></div>
+                `;
+                obj._halfL = el.querySelector('.f2d-gp-half-l');
+                obj._halfR = el.querySelector('.f2d-gp-half-r');
+                obj._piston = el.querySelector('.f2d-gp-cyl-piston');
+                obj._rodL = el.querySelector('.f2d-gp-cyl-rod-l');
+                obj._rodR = el.querySelector('.f2d-gp-cyl-rod-r');
+                ComponentRegistry['gate_pneu']._apply(obj);
+                let label = document.createElement('div');
+                label.className = 'f2d-label';
+                label.textContent = var1 ? `🚪 ${var1}` : '🚪 Tor';
+                el.appendChild(label);
+                let resizer = document.createElement('div');
+                resizer.className = 'f2d-resize-handle-xy';
+                obj.resizerEl = resizer;
+                el.appendChild(resizer);
+            },
+            _apply: function(obj) {
+                let pos = obj.gatePos || 0;     // 0..100
+                let pct = pos / 100;
+                // Torhälften schrumpfen von 50 % → 0 % (gleiten in die Wand)
+                if (obj._halfL) obj._halfL.style.width = (50 * (1 - pct)) + '%';
+                if (obj._halfR) obj._halfR.style.width = (50 * (1 - pct)) + '%';
+                // Pneumatik-Zylinder: Kolben fährt von links (zu) nach rechts (offen)
+                if (obj._piston) obj._piston.style.left = (pct * 86) + '%';
+                // Sichtbare Kolbenstangen-Länge ändert sich gegenläufig
+                if (obj._rodL) obj._rodL.style.width = (3 + pct * 7) + '%';
+                if (obj._rodR) obj._rodR.style.width = (10 - pct * 7) + '%';
+            },
+            animate: function(obj, spsState) {
+                let auf = obj.linkedVarExt ? !!spsState[obj.linkedVarExt] : false;
+                let zu  = obj.linkedVarRet ? !!spsState[obj.linkedVarRet] : false;
+                let spd = (obj.gateSpeed != null ? obj.gateSpeed : 50) * window.simSpeed * timeScale / 60;
+                let prev = obj.gatePos || 0;
+                if (auf && !zu)      obj.gatePos = Math.min(100, prev + spd);
+                else if (zu && !auf) obj.gatePos = Math.max(0,   prev - spd);
+                // beide aktiv ODER beide aus → Tor steht still
+                let pos = obj.gatePos;
+                let changed = Math.abs(pos - prev) > 0.05;
+                if (changed) {
+                    ComponentRegistry['gate_pneu']._apply(obj);
+                    if ((prev < 50) !== (pos < 50)) fluidGridDirty = true;
+                }
+                let isOpen = pos >= 98, isMoving = changed && pos > 2 && pos < 98;
+                if (obj._gpOpen !== isOpen || obj._gpMoving !== isMoving) {
+                    obj._gpOpen = isOpen; obj._gpMoving = isMoving;
+                    obj.el.classList.toggle('gp-open',   isOpen);
+                    obj.el.classList.toggle('gp-moving', isMoving);
+                    // Pneumatik-Zisch beim Schalten
+                    if (typeof SoundEngine !== 'undefined' && SoundEngine.ctx && (window.soundMode === 2 || window.soundMode === 3) && !obj.muteSound) {
+                        if (isMoving && !obj._gpAudioGain) {
+                            let ctx = SoundEngine.ctx;
+                            let bufferSize = 2 * ctx.sampleRate;
+                            let noiseBuf = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                            let data = noiseBuf.getChannelData(0);
+                            for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.5;
+                            let src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+                            let bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 1.2;
+                            let gain = ctx.createGain(); gain.gain.setValueAtTime(0, ctx.currentTime);
+                            gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.05);
+                            src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
+                            src.start();
+                            obj._gpAudioSrc = src; obj._gpAudioGain = gain;
+                        } else if (!isMoving && obj._gpAudioGain) {
+                            obj._gpAudioGain.gain.linearRampToValueAtTime(0.001, SoundEngine.ctx.currentTime + 0.1);
+                            let g = obj._gpAudioGain, s = obj._gpAudioSrc;
+                            setTimeout(() => { try { s.stop(); g.disconnect(); } catch(e){} }, 150);
+                            obj._gpAudioGain = null; obj._gpAudioSrc = null;
+                        }
+                    }
+                }
+                if (obj.linkedVarSensorAuf) spsState[obj.linkedVarSensorAuf] = (pos >= 98);
+                if (obj.linkedVarSensorZu)  spsState[obj.linkedVarSensorZu]  = (pos <= 2);
+            },
+            getFluidSolidCells: function(obj) {
+                if ((obj.gatePos || 0) >= 50) return [];
+                let cells = [];
+                // Nur unterer Bereich blockt – oben sitzt der Pneumatik-Zylinder
+                let yStart = obj.y + obj.height * 0.22;
+                let x0 = Math.floor(obj.x / _solidCS), x1 = Math.floor((obj.x + obj.width - 1) / _solidCS);
+                let y0 = Math.floor(yStart / _solidCS), y1 = Math.floor((obj.y + obj.height - 1) / _solidCS);
+                for (let gx = x0; gx <= x1; gx++)
+                    for (let gy = y0; gy <= y1; gy++) cells.push([gx, gy]);
+                return cells;
+            },
+            physics: function(obj, item) {
+                if ((obj.gatePos || 0) >= 90) return;
+                let yOff = obj.height * 0.22;
+                let h = obj.height - yOff;
+                resolveOBBCollision(item, obj.x + obj.width / 2, obj.y + yOff + h / 2, obj.width / 2, h / 2, 0);
+            },
+            contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                helpers.addVarSelect('🔓 Tor AUFfahren (Ausgang)', obj.linkedVarExt, 'out', 'linkedVarExt');
+                helpers.addVarSelect('🔒 Tor ZUfahren (Ausgang)',  obj.linkedVarRet, 'out', 'linkedVarRet');
+                helpers.addVarSelect('🟢 Endlage offen (Sensor)',  obj.linkedVarSensorAuf, 'in', 'linkedVarSensorAuf');
+                helpers.addVarSelect('🔴 Endlage zu (Sensor)',     obj.linkedVarSensorZu,  'in', 'linkedVarSensorZu');
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                let sep = document.createElement('div');
+                sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;';
+                ctxMenu.appendChild(sep);
+                let wrapS = document.createElement('div'); wrapS.style.padding = '5px 15px'; wrapS.onclick = e => e.stopPropagation();
+                wrapS.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚡ Torgeschwindigkeit (%/s)</div>`;
+                let inpS = document.createElement('input'); inpS.type = 'number'; inpS.min = '5'; inpS.max = '300'; inpS.step = '5';
+                inpS.value = obj.gateSpeed != null ? obj.gateSpeed : 50;
+                inpS.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                inpS.onchange = e => { obj.gateSpeed = parseFloat(e.target.value); saveCallback(); };
+                wrapS.appendChild(inpS); ctxMenu.appendChild(wrapS);
+            },
+            onLoadState: function(obj, savedData) {
+                obj.gateSpeed = savedData.gateSpeed != null ? savedData.gateSpeed : 50;
+                obj.linkedVarSensorAuf = savedData.linkedVarSensorAuf || null;
+                obj.linkedVarSensorZu  = savedData.linkedVarSensorZu  || null;
+                obj.gatePos = 0;
+                if (obj.el) {
+                    obj._halfL = obj.el.querySelector('.f2d-gp-half-l');
+                    obj._halfR = obj.el.querySelector('.f2d-gp-half-r');
+                    obj._piston = obj.el.querySelector('.f2d-gp-cyl-piston');
+                    obj._rodL = obj.el.querySelector('.f2d-gp-cyl-rod-l');
+                    obj._rodR = obj.el.querySelector('.f2d-gp-cyl-rod-r');
+                    ComponentRegistry['gate_pneu']._apply(obj);
+                }
+            },
+            onResize: function(obj) {
+                ComponentRegistry['gate_pneu']._apply(obj);
+            },
+            iecSymbol: function(g, x, y, isNC, fn) {
+                // Tor-Symbol: Rahmen + Pfeile nach außen (= horizontal öffnend)
+                g.appendChild(fn('rect', {x: x - 22, y: y - 1, width: 16, height: 7, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                g.appendChild(fn('line', {x1: x - 14, y1: y - 1, x2: x - 14, y2: y + 6, stroke: '#000', 'stroke-width': 0.8}));
+                g.appendChild(fn('path', {d: `M ${x-19} ${y+0.5} L ${x-21} ${y+2.5} L ${x-19} ${y+4.5}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                g.appendChild(fn('path', {d: `M ${x-9} ${y+0.5} L ${x-7} ${y+2.5} L ${x-9} ${y+4.5}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+            }
+        },
         }; //Ende von Component Registry
         // Einmalig berechnet: Typen die keine Rotation brauchen (Built-ins + ComponentRegistry-Plugins mit noRotate:true)
         const noRotateTypes = new Set([
@@ -16845,16 +17964,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _updateQUI();
                 ctxMenu.appendChild(qWrap);
             }
-            if (obj.type && obj.type.startsWith('zylinder')) {
+            if (obj.type && (obj.type.startsWith('zylinder') || obj.type === 'gate_pneu')) {
                 let associatedValve = factoryObjects.find(o => (o.type === 'valve_pneu' || o.type === 'valve_hyd') && o.targetCylinderId === obj.id);
                 if (!associatedValve) {
                     obj.hasPneumatics = false; obj.hasHydraulics = false;
                     let sepSpd = document.createElement('div'); sepSpd.style.borderTop = '1px solid #555'; sepSpd.style.margin = '5px 0'; ctxMenu.appendChild(sepSpd);
                     let spdWrapper = document.createElement('div'); spdWrapper.style.padding = '5px 15px';
-                    spdWrapper.onclick = (e) => e.stopPropagation(); 
+                    spdWrapper.onclick = (e) => e.stopPropagation();
                     spdWrapper.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">${window.t('ctx_fac_zyl_spd')}</div>`;
                     let spdInput = document.createElement('input');
-                    spdInput.type = 'number'; spdInput.min = '0.1'; spdInput.max = '50'; spdInput.step = '0.5'; 
+                    spdInput.type = 'number'; spdInput.min = '0.1'; spdInput.max = '50'; spdInput.step = '0.5';
                     spdInput.value = obj.speed !== undefined ? obj.speed : 10;
                     spdInput.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; box-sizing: border-box;";
                     spdInput.onchange = (e) => { let newVal = parseFloat(e.target.value); if (newVal > 0) { obj.speed = newVal; saveFactoryState(); } };
@@ -16895,6 +18014,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     addDimInput(window.t('ctx_fac_pneu_d2'), 'rodD');
                     addDimInput(window.t('ctx_fac_pneu_h'), 'stroke');
                 }
+                if (obj.type.startsWith('zylinder')) {
                 let attachedSensors = obj.children ? obj.children.filter(c => c.type === 'sensor_mag') : [];
                 if (attachedSensors.length > 0) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -16925,6 +18045,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         btnAddRight.onclick = () => { attachReed(obj, magVar, 'right'); saveFactoryState(); }; ctxMenu.appendChild(btnAddRight);
                     });
                 }
+                } // end zylinder-only reed sensor block
             }
             if (obj.type === 'valve_pneu' || obj.type === 'valve_hyd') {
                 const _vSys     = obj.type === 'valve_hyd' ? 'hyd' : 'pneu';
@@ -17149,7 +18270,30 @@ You must output exactly this JSON format. The logic code goes as a single string
             const _dropConn = c => c.aObjId !== _id && c.bObjId !== _id;
             if (window.pneuConnections)       window.pneuConnections       = window.pneuConnections.filter(_dropConn);
             if (window.fluidPipeConnections)  window.fluidPipeConnections  = window.fluidPipeConnections.filter(_dropConn);
+            // Auto-Heal: gelöschtes Ventil → angekoppelter Aktor verliert hasPneumatics/hasHydraulics
+            if (obj.type === 'valve_pneu' || obj.type === 'valve_hyd') {
+                let act = factoryObjects.find(o => o.id === obj.targetCylinderId);
+                if (act) {
+                    if (obj.type === 'valve_pneu') act.hasPneumatics = false;
+                    else                          act.hasHydraulics = false;
+                    act.normLabel = null;
+                    let cLbl = act.el && act.el.querySelector('.f2d-label');
+                    if (cLbl && act.originalLabelText) cLbl.innerHTML = act.originalLabelText;
+                }
+            }
+            // Auto-Heal: gelöschter Aktor → orphaned Ventil + Drosseln entfernen
+            if (obj.type === 'zylinder_single' || obj.type === 'zylinder_double' || obj.type === 'gate_pneu') {
+                let orphans = factoryObjects.filter(o =>
+                    (o.type === 'valve_pneu' || o.type === 'valve_hyd' ||
+                     o.type === 'throttle'   || o.type === 'throttle_hyd') &&
+                    o.targetCylinderId === _id);
+                orphans.forEach(o => deleteObjRecursive(o));
+            }
             updateFluidMenuVisibility();
+            // Verbindungs-Inferenz neu auswerten (z.B. wegfallende Drossel → Rest-Drossel neu zuordnen)
+            if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
+            if (typeof _applyHydManualConnections === 'function')  _applyHydManualConnections();
+            if (window._syncCircuitFromFactory) window._syncCircuitFromFactory();
         }
         function rotateObjRecursive(obj, deltaR = 90, px = null, py = null) {
             if (px === null) { px = obj.x + obj.width / 2; py = obj.y + (obj.height || obj.width) / 2; }
@@ -19448,6 +20592,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                 obj.rangeEl.style.width = obj.rangeEl.style.height = obj.rangeEl.style.top = obj.rangeEl.style.left = '';
             }
         }
+        // Zentraler Sync: zeichne den Auto-Schaltplan neu (debounced)
+        window._syncCircuitFromFactory = function(immediate) {
+            const _doRedraw = () => {
+                try {
+                    // Pneumatik-/Hydraulik-Verbindungs-Inferenz aktualisieren, damit
+                    // manuell verdrahtete Drosseln und Direktverbindungen vom Schaltplan
+                    // (und der Simulation) erkannt werden.
+                    if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
+                    if (typeof _applyHydManualConnections === 'function')  _applyHydManualConnections();
+                    if (typeof currentGraph !== 'undefined' && currentGraph) {
+                        drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true);
+                    }
+                } catch (e) { console.warn('Auto-Schaltplan-Sync:', e); }
+            };
+            if (immediate) { _doRedraw(); return; }
+            if (window._fluidSchemaRedrawTimer) clearTimeout(window._fluidSchemaRedrawTimer);
+            window._fluidSchemaRedrawTimer = setTimeout(_doRedraw, 80);
+        };
         function saveFactoryState() {
             if (isLoadingFactory || isApplyingHistory) return;
             const json = JSON.stringify(getFactoryStateObj());
@@ -19456,6 +20618,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             factoryHistory.push(json);
             while (factoryHistory.length > HISTORY_MAX) factoryHistory.shift();
             historyIndex = factoryHistory.length - 1;
+            window._syncCircuitFromFactory();
         }
         function undoFactory() {
             if (historyIndex <= 0) return;
@@ -19464,6 +20627,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             localStorage.setItem('logikFactoryState', factoryHistory[historyIndex]);
             loadFactoryState();
             isApplyingHistory = false;
+            if (window._syncCircuitFromFactory) window._syncCircuitFromFactory();
         }
         function redoFactory() {
             if (historyIndex >= factoryHistory.length - 1) return;
@@ -19472,6 +20636,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             localStorage.setItem('logikFactoryState', factoryHistory[historyIndex]);
             loadFactoryState();
             isApplyingHistory = false;
+            if (window._syncCircuitFromFactory) window._syncCircuitFromFactory();
         }
         // HIER WAR DER FEHLER: Diese Funktion hatte ich versehentlich weggeschnitten!
         window.loadFactoryState = function() {
@@ -24010,7 +25175,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 mLbl.style.top = '-25px'; mLbl.innerHTML = `Wartungseinheit<br><span style="color:#03a9f4; font-size:10px;">[${manifold.normLabel}]</span>`; 
                 manifold.el.appendChild(mLbl);
             }
-            let isDouble = cylObj.type === 'zylinder_double';
+            let isDouble = cylObj.type === 'zylinder_double' || cylObj.type === 'gate_pneu';
             let existingValves = factoryObjects.filter(o => o.type === 'valve_pneu');
             let groupNum = existingValves.length + 1;
             cylObj.normLabel = '-MM' + groupNum;
@@ -24069,6 +25234,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (manifold) updateObjTransform(manifold);
                 updateObjTransform(valve); updateObjTransform(tExt);
                 if (tRet) updateObjTransform(tRet);
+                // Auto-Verbindungen materialisieren (rechtsklick-fähig)
+                window.pneuConnections = window.pneuConnections || [];
+                const _pushPneuAuto = (aObj, aPort, bObj, bPort) => {
+                    if (!aObj || !bObj) return;
+                    let exists = window.pneuConnections.some(c =>
+                        (c.aObjId===aObj.id&&c.aPortId===aPort&&c.bObjId===bObj.id&&c.bPortId===bPort) ||
+                        (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort));
+                    if (!exists) window.pneuConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _auto:true});
+                };
+                if (comp && manifold) _pushPneuAuto(comp, '1', manifold, '1');
+                if (manifold)         _pushPneuAuto(manifold, '1', valve, '1');
+                if (tExt)             _pushPneuAuto(valve, '2', tExt, '2');
+                if (tExt)             _pushPneuAuto(tExt, '1', cylObj, '1');
+                else                  _pushPneuAuto(valve, '2', cylObj, '1');
+                if (isDouble) {
+                    if (tRet) _pushPneuAuto(valve, '4', tRet, '2');
+                    if (tRet) _pushPneuAuto(tRet, '1', cylObj, '2');
+                    else      _pushPneuAuto(valve, '4', cylObj, '2');
+                }
                 const scrollArea = document.getElementById('factory-canvas-area');
                 scrollArea.scrollTo({ left: zone.x * factoryScale - 50, top: zone.y * factoryScale - 50, behavior: 'smooth' });
                 saveFactoryState();
@@ -24116,52 +25300,97 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
             let comp = factoryObjects.find(o => o.type === 'compressor');
             let manifold = factoryObjects.find(o => o.type === 'manifold');
+            // Helper: prüft ob eine nicht-gebrochene Auto-Verbindung zwischen zwei (Objekt, Port)-Paaren existiert
+            const _hasPneuAutoConn = (aId, aPort, bId, bPort) => (window.pneuConnections || []).some(c =>
+                !c._broken &&
+                ((c.aObjId === aId && c.aPortId === aPort && c.bObjId === bId && c.bPortId === bPort) ||
+                 (c.aObjId === bId && c.aPortId === bPort && c.bObjId === aId && c.bPortId === aPort))
+            );
+            // Lazy-Migration für ältere Setups: Auto-Verbindungen materialisieren falls fehlend.
+            // Dadurch bleiben bestehende Pneumatik-Setups nach diesem Update sichtbar UND
+            // werden via Rechtsklick auf den Anschluss löschbar.
+            window.pneuConnections = window.pneuConnections || [];
+            const _ensurePneuAuto = (aObj, aPort, bObj, bPort) => {
+                if (!aObj || !bObj) return;
+                let exists = window.pneuConnections.some(c =>
+                    (c.aObjId===aObj.id&&c.aPortId===aPort&&c.bObjId===bObj.id&&c.bPortId===bPort) ||
+                    (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort));
+                if (!exists) window.pneuConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _auto:true});
+            };
+            factoryObjects.filter(o => o.type === 'valve_pneu' && o.targetCylinderId).forEach(valve => {
+                let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId);
+                if (!cyl) return;
+                let isCylDoubleM = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
+                let tExtM = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ext');
+                let tRetM = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ret');
+                if (comp && manifold) _ensurePneuAuto(comp, '1', manifold, '1');
+                if (manifold)         _ensurePneuAuto(manifold, '1', valve, '1');
+                if (tExtM)            { _ensurePneuAuto(valve, '2', tExtM, '2'); _ensurePneuAuto(tExtM, '1', cyl, '1'); }
+                else                  _ensurePneuAuto(valve, '2', cyl, '1');
+                if (isCylDoubleM) {
+                    if (tRetM) { _ensurePneuAuto(valve, '4', tRetM, '2'); _ensurePneuAuto(tRetM, '1', cyl, '2'); }
+                    else       _ensurePneuAuto(valve, '4', cyl, '2');
+                }
+            });
             if (comp && manifold) {
-                // Hauptleitung Kompressor -> Verteiler (immer unter Druck)
-                drawHose(comp.x + 80, comp.y + 50, manifold.x + 10, manifold.y + 7, 'pressurized');
+                // Hauptleitung Kompressor -> Verteiler (nur wenn Verbindung noch existiert)
+                if (_hasPneuAutoConn(comp.id, '1', manifold.id, '1')) {
+                    drawHose(comp.x + 80, comp.y + 50, manifold.x + 10, manifold.y + 7, 'pressurized');
+                }
             }
             // Helper: world position of a named port on a valve, derived from _pneuPortDefs
             const pneuVP = (valve, portId) => {
                 let pd = window._pneuPortDefs && window._pneuPortDefs(valve).find(p => p.id === portId);
                 return pd ? { x: valve.x + pd.lx, y: valve.y + pd.ly } : null;
             };
-            factoryObjects.filter(o => o.hasPneumatics && o.type.startsWith('zylinder')).forEach(cyl => {
+            factoryObjects.filter(o => o.hasPneumatics && (o.type.startsWith('zylinder') || o.type === 'gate_pneu')).forEach(cyl => {
                 let valve = factoryObjects.find(o => o.type === 'valve_pneu' && o.targetCylinderId === cyl.id);
                 if (!valve) return;
-                let isCylDouble = cyl.type === 'zylinder_double';
+                let isCylDouble = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
+                let isGate = cyl.type === 'gate_pneu';
                 let isExtending = valve.isActive;
                 let isCenterBlocked = valve.isTriple && valve.valveState === 'center';
                 // All port positions come from _pneuPortDefs — no magic numbers
                 let p1 = pneuVP(valve, '1'), p2 = pneuVP(valve, '2'), p4 = pneuVP(valve, '4');
                 if (!p1 || !p2) return;
                 // 1. Verteiler -> Ventil (Port 1)
-                if (manifold) drawHose(p1.x, manifold.y + 7, p1.x, p1.y, isCenterBlocked ? 'exhaust' : 'pressurized');
-                // 2. Ventil -> Drosseln -> Zylinder (Ausfahren / Vorhub)
+                if (manifold && _hasPneuAutoConn(manifold.id, '1', valve.id, '1')) {
+                    drawHose(p1.x, manifold.y + 7, p1.x, p1.y, isCenterBlocked ? 'exhaust' : 'pressurized');
+                }
+                // Port-Positionen am Aktor — Gate hat horizontale Pneumatik mit Anschlüssen oben
+                let rearLx  = isGate ? 12              : 14;
+                let frontLx = isGate ? cyl.width - 12  : cyl.width - 6;
+                // 2. Ventil -> Drosseln -> Aktor (Ausfahren / AUFfahren)
                 let tExt = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ext');
                 let extState = (!isCenterBlocked && isExtending) ? 'pressurized' : 'exhaust';
-                let cylRearPort = getRotatedPort(cyl, 14, -10);
+                let cylRearPort = getRotatedPort(cyl, rearLx, -10);
                 if (tExt) {
-                    drawHose(p2.x, p2.y, tExt.x + 20, tExt.y + 35, extState);
-                    drawHose(tExt.x + 20, tExt.y, cylRearPort.x, cylRearPort.y, extState);
-                } else {
+                    if (_hasPneuAutoConn(valve.id, '2', tExt.id, '2'))
+                        drawHose(p2.x, p2.y, tExt.x + 20, tExt.y + 35, extState);
+                    if (_hasPneuAutoConn(tExt.id, '1', cyl.id, '1'))
+                        drawHose(tExt.x + 20, tExt.y, cylRearPort.x, cylRearPort.y, extState);
+                } else if (_hasPneuAutoConn(valve.id, '2', cyl.id, '1')) {
                     drawHose(p2.x, p2.y, cylRearPort.x, cylRearPort.y, extState);
                 }
-                // 3. Ventil -> Drosseln -> Zylinder (Einfahren / Rückhub)
+                // 3. Ventil -> Drosseln -> Aktor (Einfahren / ZUfahren)
                 // Port 4 only exists on 5-port valves; p4 is null for 3/2
                 if (isCylDouble && p4) {
                     let tRet = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ret');
                     let retState = (!isCenterBlocked && !isExtending) ? 'pressurized' : 'exhaust';
-                    let cylFrontPort = getRotatedPort(cyl, cyl.width - 6, -10);
+                    let cylFrontPort = getRotatedPort(cyl, frontLx, -10);
                     if (tRet) {
-                        drawHose(p4.x, p4.y, tRet.x + 20, tRet.y + 35, retState);
-                        drawHose(tRet.x + 20, tRet.y, cylFrontPort.x, cylFrontPort.y, retState);
-                    } else {
+                        if (_hasPneuAutoConn(valve.id, '4', tRet.id, '2'))
+                            drawHose(p4.x, p4.y, tRet.x + 20, tRet.y + 35, retState);
+                        if (_hasPneuAutoConn(tRet.id, '1', cyl.id, '2'))
+                            drawHose(tRet.x + 20, tRet.y, cylFrontPort.x, cylFrontPort.y, retState);
+                    } else if (_hasPneuAutoConn(valve.id, '4', cyl.id, '2')) {
                         drawHose(p4.x, p4.y, cylFrontPort.x, cylFrontPort.y, retState);
                     }
                 }
             });
-            // Manual pneu connections
+            // Manual pneu connections (überspringt _auto, da diese oben schon gezeichnet werden)
             for (let conn of (window.pneuConnections || [])) {
+                if (conn._auto || conn._broken) continue;
                 let objA = factoryObjects.find(o => o.id === conn.aObjId);
                 let objB = factoryObjects.find(o => o.id === conn.bObjId);
                 if (!objA || !objB) continue;
@@ -24437,7 +25666,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     );
                 }
             }
-            let isDouble = cylObj.type === 'zylinder_double';
+            let isDouble = cylObj.type === 'zylinder_double' || cylObj.type === 'gate_pneu';
             let existingValves = factoryObjects.filter(o => o.type === 'valve_hyd');
             let groupNum = existingValves.length + 1;
             cylObj.normLabel = '-MM' + groupNum;
@@ -24493,7 +25722,35 @@ You must output exactly this JSON format. The logic code goes as a single string
                         c._sys === 'hyd' && (c.aObjId === manifold.id || c.bObjId === manifold.id) &&
                         (c.aObjId === manifold.id ? c.aPortId : c.bPortId).startsWith('O')
                     ).length;
-                    window.fluidPipeConnections.push({ aObjId: manifold.id, aPortId: 'O'+(_nOut+1), bObjId: valve.id, bPortId: 'P', _sys: 'hyd' });
+                    window.fluidPipeConnections.push({ aObjId: manifold.id, aPortId: 'O'+(_nOut+1), bObjId: valve.id, bPortId: 'P', _sys: 'hyd', _auto: true });
+                }
+                // Auto-Verbindungen materialisieren (rechtsklick-fähig) für die Hydraulik
+                const _pushHydAuto = (aObj, aPort, bObj, bPort) => {
+                    if (!aObj || !bObj) return;
+                    let exists = (window.fluidPipeConnections||[]).some(c =>
+                        c._sys === 'hyd' &&
+                        ((c.aObjId===aObj.id&&c.aPortId===aPort&&c.bObjId===bObj.id&&c.bPortId===bPort) ||
+                         (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort)));
+                    if (!exists) window.fluidPipeConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _sys:'hyd', _auto:true});
+                };
+                if (tExt) _pushHydAuto(valve, 'A', tExt, 'OUT');
+                if (tExt) _pushHydAuto(tExt, 'IN', cylObj, 'A');
+                else      _pushHydAuto(valve, 'A', cylObj, 'A');
+                if (isDouble) {
+                    if (tRet) _pushHydAuto(valve, 'B', tRet, 'OUT');
+                    if (tRet) _pushHydAuto(tRet, 'IN', cylObj, 'B');
+                    else      _pushHydAuto(valve, 'B', cylObj, 'B');
+                }
+                // T-Rückläufe (Tank): valve T → tank S
+                let tankObj = factoryObjects.find(o => o.type === 'oil_tank');
+                if (tankObj) {
+                    if (valve.isDouble || valve.isTriple) {
+                        _pushHydAuto(valve, 'T1', tankObj, 'S');
+                        _pushHydAuto(valve, 'T2', tankObj, 'S');
+                    } else {
+                        _pushHydAuto(valve, 'T', tankObj, 'S');
+                    }
+                    _pushHydAuto(unit, 'S', tankObj, 'S');
                 }
                 const scrollArea = document.getElementById('factory-canvas-area');
                 scrollArea.scrollTo({ left: zone.x * factoryScale - 50, top: zone.y * factoryScale - 50, behavior: 'smooth' });
@@ -24598,6 +25855,44 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let pd = window._fluidPipePortDefs && window._fluidPipePortDefs(obj).find(p => p.id === portId);
                 return pd ? window._hydPortWorld(obj, pd) : null;
             };
+            // Helper: prüft ob eine nicht-gebrochene Auto-Verbindung in den Hyd-Connections existiert
+            const _hasHydAutoConn = (aId, aPort, bId, bPort) => (window.hydConnections || []).some(c =>
+                !c._broken &&
+                ((c.aObjId === aId && c.aPortId === aPort && c.bObjId === bId && c.bPortId === bPort) ||
+                 (c.aObjId === bId && c.aPortId === bPort && c.bObjId === aId && c.bPortId === aPort))
+            );
+            // Lazy-Migration für Hydraulik: fehlende Auto-Verbindungen ergänzen
+            window.fluidPipeConnections = window.fluidPipeConnections || [];
+            const _ensureHydAuto = (aObj, aPort, bObj, bPort) => {
+                if (!aObj || !bObj) return;
+                let exists = (window.fluidPipeConnections||[]).some(c =>
+                    c._sys === 'hyd' &&
+                    ((c.aObjId===aObj.id&&c.aPortId===aPort&&c.bObjId===bObj.id&&c.bPortId===bPort) ||
+                     (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort)));
+                if (!exists) window.fluidPipeConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _sys:'hyd', _auto:true});
+            };
+            factoryObjects.filter(o => o.type === 'valve_hyd' && o.targetCylinderId).forEach(valve => {
+                let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId);
+                if (!cyl) return;
+                let isCylDoubleM = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
+                let tExtM = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ext');
+                let tRetM = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ret');
+                if (tExtM) { _ensureHydAuto(valve, 'A', tExtM, 'OUT'); _ensureHydAuto(tExtM, 'IN', cyl, 'A'); }
+                else       _ensureHydAuto(valve, 'A', cyl, 'A');
+                if (isCylDoubleM) {
+                    if (tRetM) { _ensureHydAuto(valve, 'B', tRetM, 'OUT'); _ensureHydAuto(tRetM, 'IN', cyl, 'B'); }
+                    else       _ensureHydAuto(valve, 'B', cyl, 'B');
+                }
+                if (tankObj) {
+                    if (valve.isDouble || valve.isTriple) {
+                        _ensureHydAuto(valve, 'T1', tankObj, 'S');
+                        _ensureHydAuto(valve, 'T2', tankObj, 'S');
+                    } else {
+                        _ensureHydAuto(valve, 'T', tankObj, 'S');
+                    }
+                }
+            });
+            if (unit && tankObj) _ensureHydAuto(unit, 'S', tankObj, 'S');
             if (unit && manifold) {
                 let uP = hydVP(unit, 'P'), mP = fluidVP(manifold, 'P');
                 let ux = uP ? uP.x : unit.x + 90,  uy = uP ? uP.y : unit.y + 60;
@@ -24605,59 +25900,73 @@ You must output exactly this JSON format. The logic code goes as a single string
                 drawHose(ux, uy, mx, my, 'pressurized');
             }
             if (unit && tankObj) {
-                let tS = hydVP(tankObj, 'S'), uS = hydVP(unit, 'S');
-                let tx = tS ? tS.x : tankObj.x + tankObj.width / 2, ty = tS ? tS.y : tankObj.y + tankObj.height;
-                let ux = uS ? uS.x : unit.x + 20, uy = uS ? uS.y : unit.y + 70;
-                drawHose(tx, ty, ux, uy, 'return');
+                if (_hasHydAutoConn(unit.id, 'S', tankObj.id, 'S')) {
+                    let tS = hydVP(tankObj, 'S'), uS = hydVP(unit, 'S');
+                    let tx = tS ? tS.x : tankObj.x + tankObj.width / 2, ty = tS ? tS.y : tankObj.y + tankObj.height;
+                    let ux = uS ? uS.x : unit.x + 20, uy = uS ? uS.y : unit.y + 70;
+                    drawHose(tx, ty, ux, uy, 'return');
+                }
             }
             // T-port return lines (Tankrücklauf) — positions from port defs
             if (tankObj) {
                 factoryObjects.filter(o => o.type === 'valve_hyd').forEach(valve => {
                     let tx = tankObj.x + tankObj.width / 2, ty = tankObj.y;
-                    if (valve.isDouble) {
+                    if (valve.isDouble || valve.isTriple) {
                         let t1 = hydVP(valve, 'T1'), t2 = hydVP(valve, 'T2');
-                        if (t1) drawHose(t1.x, t1.y, tx, ty, 'return');
-                        if (t2) drawHose(t2.x, t2.y, tx, ty, 'return');
+                        if (t1 && _hasHydAutoConn(valve.id, 'T1', tankObj.id, 'S')) drawHose(t1.x, t1.y, tx, ty, 'return');
+                        if (t2 && _hasHydAutoConn(valve.id, 'T2', tankObj.id, 'S')) drawHose(t2.x, t2.y, tx, ty, 'return');
                     } else {
                         let t = hydVP(valve, 'T');
-                        if (t) drawHose(t.x, t.y, tx, ty, 'return');
+                        if (t && _hasHydAutoConn(valve.id, 'T', tankObj.id, 'S')) drawHose(t.x, t.y, tx, ty, 'return');
                     }
                 });
             }
-            factoryObjects.filter(o => o.hasHydraulics && o.type.startsWith('zylinder')).forEach(cyl => {
+            factoryObjects.filter(o => o.hasHydraulics && (o.type.startsWith('zylinder') || o.type === 'gate_pneu')).forEach(cyl => {
                 let valve = factoryObjects.find(o => o.type === 'valve_hyd' && o.targetCylinderId === cyl.id);
                 if (!valve) return;
-                let isCylDouble = cyl.type === 'zylinder_double';
+                let isCylDouble = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
+                let isGate = cyl.type === 'gate_pneu';
                 let isExtending = valve.isActive;
                 let isCenterBlocked = valve.isTriple && valve.valveState === 'center';
                 // All port positions come from _hydPortDefs — no magic numbers
                 let pP = hydVP(valve, 'P'), pA = hydVP(valve, 'A'), pB = hydVP(valve, 'B');
                 if (!pP || !pA) return;
+                let rearLx  = isGate ? 12              : 14;
+                let frontLx = isGate ? cyl.width - 12  : cyl.width - 6;
                 let tExt = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ext');
                 let extState = (!isCenterBlocked && isExtending) ? 'pressurized' : 'return';
-                let cylRearPort = getRotatedPort(cyl, 14, -10);
+                let cylRearPort = getRotatedPort(cyl, rearLx, -10);
                 if (tExt) {
                     let tIN = hydVP(tExt, 'IN'), tOUT = hydVP(tExt, 'OUT');
                     if (tIN && tOUT) {
-                        drawHose(pA.x, pA.y, tOUT.x, tOUT.y, extState);
-                        drawHose(tIN.x, tIN.y, cylRearPort.x, cylRearPort.y, extState);
-                    } else { drawHose(pA.x, pA.y, cylRearPort.x, cylRearPort.y, extState); }
-                } else { drawHose(pA.x, pA.y, cylRearPort.x, cylRearPort.y, extState); }
+                        if (_hasHydAutoConn(valve.id, 'A', tExt.id, 'OUT')) drawHose(pA.x, pA.y, tOUT.x, tOUT.y, extState);
+                        if (_hasHydAutoConn(tExt.id, 'IN', cyl.id, 'A'))   drawHose(tIN.x, tIN.y, cylRearPort.x, cylRearPort.y, extState);
+                    } else if (_hasHydAutoConn(valve.id, 'A', cyl.id, 'A')) {
+                        drawHose(pA.x, pA.y, cylRearPort.x, cylRearPort.y, extState);
+                    }
+                } else if (_hasHydAutoConn(valve.id, 'A', cyl.id, 'A')) {
+                    drawHose(pA.x, pA.y, cylRearPort.x, cylRearPort.y, extState);
+                }
                 if (isCylDouble && pB) {
                     let tRet = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ret');
                     let retState = (!isCenterBlocked && !isExtending) ? 'pressurized' : 'return';
-                    let cylFrontPort = getRotatedPort(cyl, cyl.width - 6, -10);
+                    let cylFrontPort = getRotatedPort(cyl, frontLx, -10);
                     if (tRet) {
                         let tIN2 = hydVP(tRet, 'IN'), tOUT2 = hydVP(tRet, 'OUT');
                         if (tIN2 && tOUT2) {
-                            drawHose(pB.x, pB.y, tOUT2.x, tOUT2.y, retState);
-                            drawHose(tIN2.x, tIN2.y, cylFrontPort.x, cylFrontPort.y, retState);
-                        } else { drawHose(pB.x, pB.y, cylFrontPort.x, cylFrontPort.y, retState); }
-                    } else { drawHose(pB.x, pB.y, cylFrontPort.x, cylFrontPort.y, retState); }
+                            if (_hasHydAutoConn(valve.id, 'B', tRet.id, 'OUT')) drawHose(pB.x, pB.y, tOUT2.x, tOUT2.y, retState);
+                            if (_hasHydAutoConn(tRet.id, 'IN', cyl.id, 'B'))   drawHose(tIN2.x, tIN2.y, cylFrontPort.x, cylFrontPort.y, retState);
+                        } else if (_hasHydAutoConn(valve.id, 'B', cyl.id, 'B')) {
+                            drawHose(pB.x, pB.y, cylFrontPort.x, cylFrontPort.y, retState);
+                        }
+                    } else if (_hasHydAutoConn(valve.id, 'B', cyl.id, 'B')) {
+                        drawHose(pB.x, pB.y, cylFrontPort.x, cylFrontPort.y, retState);
+                    }
                 }
             });
-            // Manual hose connections
+            // Manual hose connections (überspringt _auto, da diese bereits oben gezeichnet werden)
             for (let conn of (window.hydConnections || [])) {
+                if (conn._auto || conn._broken) continue;
                 let objA = factoryObjects.find(o => o.id === conn.aObjId);
                 let objB = factoryObjects.find(o => o.id === conn.bObjId);
                 if (!objA || !objB) continue;
@@ -24782,6 +26091,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 { id:'A', label:'A', lx:14,                 ly:-10, ptype:'work', rot:true },
                 { id:'B', label:'B', lx:(obj.width||80)-6,  ly:-10, ptype:'work', rot:true }
             ];
+            if (obj.hasHydraulics && obj.type === 'gate_pneu') return [
+                { id:'A', label:'A', lx:12,                  ly:-10, ptype:'work', rot:true },
+                { id:'B', label:'B', lx:(obj.width||140)-12, ly:-10, ptype:'work', rot:true }
+            ];
             return [];
         };
 
@@ -24819,6 +26132,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (obj.hasPneumatics && obj.type === 'zylinder_double') return [
                 { id:'1', label:'1', lx:14,                ly:-10, ptype:'work', rot:true },
                 { id:'2', label:'2', lx:(obj.width||80)-6, ly:-10, ptype:'work', rot:true }
+            ];
+            if (obj.hasPneumatics && obj.type === 'gate_pneu') return [
+                { id:'1', label:'1', lx:12,                  ly:-10, ptype:'work', rot:true },
+                { id:'2', label:'2', lx:(obj.width||140)-12, ly:-10, ptype:'work', rot:true }
             ];
             return [];
         };
@@ -24950,8 +26267,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             let dot = e.currentTarget;
             let sys = dot.dataset.system, oid = dot.dataset.objId, pid = dot.dataset.portId;
             let conns = sys === 'hyd' ? (window.fluidPipeConnections||[]).filter(c=>c._sys==='hyd') : sys === 'fluid' ? (window.fluidPipeConnections||[]).filter(c=>!c._sys||c._sys==='fluid') : window.pneuConnections;
-            let connected = conns.filter(c =>
-                (c.aObjId === oid && c.aPortId === pid) || (c.bObjId === oid && c.bPortId === pid)
+            let connected = (conns || []).filter(c =>
+                !c._broken && ((c.aObjId === oid && c.aPortId === pid) || (c.bObjId === oid && c.bPortId === pid))
             );
             if (!connected.length) return;
 
@@ -24982,7 +26299,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             const rebuildList = () => {
                 list.innerHTML = '';
                 let currentConns = (sys === 'hyd' ? window.hydConnections : sys === 'fluid' ? window.fluidPipeConnections : window.pneuConnections).filter(c =>
-                    (c.aObjId === oid && c.aPortId === pid) || (c.bObjId === oid && c.bPortId === pid)
+                    !c._broken && ((c.aObjId === oid && c.aPortId === pid) || (c.bObjId === oid && c.bPortId === pid))
                 );
                 if (!currentConns.length) { overlay.remove(); return; }
                 currentConns.forEach(c => {
@@ -25004,18 +26321,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     delBtn.onmouseenter = () => delBtn.style.background = '#e74c3c';
                     delBtn.onmouseleave = () => delBtn.style.background = '#c0392b';
                     delBtn.onclick = () => {
-                        if (sys === 'hyd') {
-                            window.fluidPipeConnections = window.fluidPipeConnections.filter(x => x !== c);
-                            _applyHydManualConnections();
-                            drawHydraulicHoses();
-                        } else if (sys === 'fluid') {
-                            window.fluidPipeConnections = window.fluidPipeConnections.filter(x => x !== c);
-                            window.drawFluidPipeHoses();
+                        if (c._auto) {
+                            // Tombstone: nicht entfernen, sondern als gebrochen markieren —
+                            // damit die Lazy-Migration in drawHoses die Verbindung
+                            // nicht direkt wieder regeneriert.
+                            c._broken = true;
                         } else {
-                            window.pneuConnections = window.pneuConnections.filter(x => x !== c);
-                            _applyPneuManualConnections();
-                            drawPneumaticHoses();
+                            if (sys === 'hyd' || sys === 'fluid') {
+                                window.fluidPipeConnections = window.fluidPipeConnections.filter(x => x !== c);
+                            } else {
+                                window.pneuConnections = window.pneuConnections.filter(x => x !== c);
+                            }
                         }
+                        if (sys === 'hyd') { _applyHydManualConnections(); drawHydraulicHoses(); }
+                        else if (sys === 'fluid') { window.drawFluidPipeHoses(); }
+                        else { _applyPneuManualConnections(); drawPneumaticHoses(); }
                         saveFactoryState();
                         rebuildList();
                     };
@@ -25057,28 +26377,94 @@ You must output exactly this JSON format. The logic code goes as a single string
             drawPneumaticHoses();
         }
 
+        // Hilfsmittel: Akteur-Typen für Pneumatik/Hydraulik (Zylinder, Tor)
+        const _isFluidActuator = (t) => t === 'zylinder_single' || t === 'zylinder_double' || t === 'gate_pneu';
+
+        // Inferiert Drossel-Rolle (ext/ret) und targetCylinderId aus dem Verbindungsverlauf
+        // für eine einzelne Drossel.  thrType = 'throttle' (pneu) oder 'throttle_hyd'.
+        const _inferThrottleChain = (thr, conns, valveType, cylPortPair, valvePortPair) => {
+            // cylPortPair  = ['1','2']  (pneu) oder ['A','B']  (hyd)
+            // valvePortPair = ['2','4'] (pneu A,B) oder ['A','B'] (hyd)
+            // Drossel-Anschlüsse: pneu→ '1' (oben/Aktor) und '2' (unten/Ventil),
+            // hyd→ 'IN' (Aktor) und 'OUT' (Ventil).
+            const myPorts = thr.type === 'throttle_hyd' ? ['IN','OUT'] : ['1','2'];
+            const endpoints = [];
+            myPorts.forEach(myPort => {
+                let conn = (conns || []).find(c =>
+                    !c._broken && (
+                        (c.aObjId === thr.id && c.aPortId === myPort) ||
+                        (c.bObjId === thr.id && c.bPortId === myPort)
+                    )
+                );
+                if (conn) {
+                    endpoints.push({
+                        myPort,
+                        otherId:   conn.aObjId === thr.id ? conn.bObjId   : conn.aObjId,
+                        otherPort: conn.aObjId === thr.id ? conn.bPortId : conn.aPortId
+                    });
+                }
+            });
+            if (endpoints.length !== 2) {
+                thr.targetCylinderId = null; thr.role = null;
+                return;
+            }
+            const valveEnd = endpoints.find(e => {
+                let o = factoryObjects.find(x => x.id === e.otherId);
+                return o && o.type === valveType;
+            });
+            const cylEnd = endpoints.find(e => {
+                let o = factoryObjects.find(x => x.id === e.otherId);
+                return o && _isFluidActuator(o.type);
+            });
+            if (!valveEnd || !cylEnd) {
+                thr.targetCylinderId = null; thr.role = null;
+                return;
+            }
+            thr.targetCylinderId = cylEnd.otherId;
+            // Rolle anhand der Ventil-/Aktor-Anschlüsse herleiten:
+            //   Ventil A (2 / A) ↔ Aktor 1 (1 / A) → ext
+            //   Ventil B (4 / B) ↔ Aktor 2 (2 / B) → ret
+            if (valveEnd.otherPort === valvePortPair[0] || cylEnd.otherPort === cylPortPair[0]) {
+                thr.role = 'ext';
+            } else if (valveEnd.otherPort === valvePortPair[1] || cylEnd.otherPort === cylPortPair[1]) {
+                thr.role = 'ret';
+            } else {
+                thr.role = null;
+            }
+        };
+
         function _applyHydManualConnections() {
-            for (let conn of window.hydConnections) {
+            for (let conn of (window.hydConnections || [])) {
+                if (conn._broken) continue;
                 let a = factoryObjects.find(o => o.id === conn.aObjId);
                 let b = factoryObjects.find(o => o.id === conn.bObjId);
                 if (!a || !b) continue;
                 let valve = null, cyl = null;
-                if (a.type === 'valve_hyd' && b.type?.startsWith('zylinder')) { valve = a; cyl = b; }
-                if (b.type === 'valve_hyd' && a.type?.startsWith('zylinder')) { valve = b; cyl = a; }
+                if (a.type === 'valve_hyd' && _isFluidActuator(b.type)) { valve = a; cyl = b; }
+                if (b.type === 'valve_hyd' && _isFluidActuator(a.type)) { valve = b; cyl = a; }
                 if (valve && cyl) valve.targetCylinderId = cyl.id;
             }
+            // Drosseln (Hydraulik) anhand des Verbindungsverlaufs Rolle/targetCylinderId zuordnen
+            factoryObjects.filter(o => o.type === 'throttle_hyd').forEach(thr =>
+                _inferThrottleChain(thr, window.hydConnections, 'valve_hyd', ['A','B'], ['A','B'])
+            );
         }
 
         function _applyPneuManualConnections() {
-            for (let conn of window.pneuConnections) {
+            for (let conn of (window.pneuConnections || [])) {
+                if (conn._broken) continue;
                 let a = factoryObjects.find(o => o.id === conn.aObjId);
                 let b = factoryObjects.find(o => o.id === conn.bObjId);
                 if (!a || !b) continue;
                 let valve = null, cyl = null;
-                if (a.type === 'valve_pneu' && b.type?.startsWith('zylinder')) { valve = a; cyl = b; }
-                if (b.type === 'valve_pneu' && a.type?.startsWith('zylinder')) { valve = b; cyl = a; }
+                if (a.type === 'valve_pneu' && _isFluidActuator(b.type)) { valve = a; cyl = b; }
+                if (b.type === 'valve_pneu' && _isFluidActuator(a.type)) { valve = b; cyl = a; }
                 if (valve && cyl) valve.targetCylinderId = cyl.id;
             }
+            // Drosseln (Pneumatik) anhand des Verbindungsverlaufs Rolle/targetCylinderId zuordnen
+            factoryObjects.filter(o => o.type === 'throttle').forEach(thr =>
+                _inferThrottleChain(thr, window.pneuConnections, 'valve_pneu', ['1','2'], ['2','4'])
+            );
         }
         // =========================================================
 

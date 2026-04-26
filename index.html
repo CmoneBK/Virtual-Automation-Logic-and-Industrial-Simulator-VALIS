@@ -1408,6 +1408,7 @@
                     <button id="btn-iec-toggle" class="btn-export" style="background-color: #607d8b; border: 1px solid #455a64;" onclick="toggleIecToolbar()" data-i18n="iec_options">⚙️ Optionen</button>
                     <div id="iec-button-group">
                         <button id="btn-toggle-strict" class="btn-export" style="background-color: #4caf50; border: 1px solid #333;" onclick="toggleStrictHardware()">♾️ Hardware-Limit: MULTI</button>
+                        <button id="btn-toggle-nh-aux" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleNothaltAuxRelay()" title="Not-Halte als eigenständige Hilfsrelais-Stränge zeichnen (klassisch SF→KF). Standard: AUS — Not-Halt erscheint als normaler Kontakt direkt im Strang.">🛡 Not-Halt-Relais: AUS</button>
 						<button id="btn-toggle-econ" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleEconMode()" data-i18n="iec_mode_relay">💼 Modus: Relais (Klassisch)</button>
                         <button id="btn-toggle-colors" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleCircuitColors()" data-i18n="iec_colors_off">🌈 Bunte Pfade: AUS</button>
                         <button id="btn-toggle-wech" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleWechsler()" data-i18n="iec_wech_off">🔀 Wechslernummerierung: AUS</button>
@@ -1531,6 +1532,11 @@
                     </label>
                     <button id="ced-btn-generate" class="tool-btn" onclick="window.cedGenerateCode()" title="Code aus Schaltplan generieren" style="background:#ff9800;color:#fff;">⚙ Code generieren</button>
                     <button class="tool-btn" onclick="window.cedAutoAlign()" title="Komponenten in Strängen vertikal ausrichten" style="background:#9c27b0;color:#fff;">⫯ Ausrichten</button>
+                    <span style="display:inline-flex;gap:2px;margin-left:6px;border-left:1px solid #555;padding-left:6px;">
+                        <button class="tool-btn" onclick="window.cedZoomOut()"   title="Verkleinern" style="background:#555;color:#fff;padding:3px 8px;">−</button>
+                        <button class="tool-btn" onclick="window.cedZoomReset()" title="Zoom zurücksetzen (100%)" style="background:#555;color:#fff;padding:3px 8px;">⟲</button>
+                        <button class="tool-btn" onclick="window.cedZoomIn()"    title="Vergrößern" style="background:#555;color:#fff;padding:3px 8px;">+</button>
+                    </span>
                     <button class="tool-btn" onclick="window.cedClear()" title="Alles löschen" style="background:#777;color:#fff;">♻ Reset</button>
                     <span id="ced-status" style="color:#81c784;font-size:11px;margin-left:8px;"></span>
                 </div>
@@ -5901,6 +5907,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                    ? window.popOutWindows['circuit-wrapper'].document : document;
         }
 		window.configStrictHardware = false;
+        // Not-Halte als eigene Hilfsrelais-Stränge zeichnen — standardmäßig AUS damit
+        // Editor-generierter Code nicht plötzlich extra Hardware-Stränge im Auto-Schaltplan bekommt
+        window.configNothaltAuxRelay = false;
+        window.toggleNothaltAuxRelay = function() {
+            window.configNothaltAuxRelay = !window.configNothaltAuxRelay;
+            const btn = getCircDoc().getElementById('btn-toggle-nh-aux');
+            if (btn) {
+                if (window.configNothaltAuxRelay) {
+                    btn.style.backgroundColor = '#4caf50';
+                    btn.textContent = '🛡 Not-Halt-Relais: EIN';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '🛡 Not-Halt-Relais: AUS';
+                }
+            }
+            if (currentGraph) { drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true); runSimulationTick(); }
+        };
         window.toggleStrictHardware = function() {
             window.configStrictHardware = !window.configStrictHardware;
             const btn = getCircDoc().getElementById('btn-toggle-strict');
@@ -6553,10 +6576,14 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
             const usedAsSource = new Set(graph.edges.map(e => e.sourceId));
             let preRungsToDraw = [];
-            inputsList.forEach(i => { 
+            inputsList.forEach(i => {
                 let cType = componentTypes[i] || 'taster';
-                // 🌟 FIX: Lichtgitter ist ein aktiver Sensor (mit Kasten), mech_sensor bleibt ein passiver Kontakt!
-                if ((cType.startsWith('sensor_') || cType === 'light_curtain' || cType === 'nothalt') && usedAsSource.has(i)) {
+                // Sensoren und Lichtgitter bekommen IMMER ihren eigenen Hilfsrelais-Strang (sind aktive Komponenten).
+                // Not-Halt nur dann, wenn die Option aktiv ist (Default: AUS, weil sonst Editor-Code unerwartet
+                // zusätzliche Hardware-Stränge im Auto-Schaltplan erzeugt).
+                let isPreRung = (cType.startsWith('sensor_') || cType === 'light_curtain') ||
+                                (cType === 'nothalt' && window.configNothaltAuxRelay);
+                if (isPreRung && usedAsSource.has(i)) {
                     let deviceName = cType === 'nothalt' ? `-SF${sfCount++}` : `-BG${bgCount++}`;
                     let kfName = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (${deviceName})` : '');
                     contactTypeMap[i] = 'relais';
@@ -25898,7 +25925,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 selectedIds: new Set(),
                 wireStart: null,    // active wire endpoint
                 dragInfo: null,
-                idCounter: 1
+                idCounter: 1,
+                zoom: 1
             };
             const nextId = (p) => p + (ST.idCounter++);
 
@@ -25913,6 +25941,45 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const popped = window.popOutWindows && window.popOutWindows['circuit-editor-wrapper'];
                 return (popped && !popped.closed) ? popped : window;
             }
+            // Konvertiert Client-Koordinaten (z.B. e.clientX/Y) in SVG-Koordinaten unter Berücksichtigung des Zooms
+            function _clientToSvg(clientX, clientY) {
+                const svg = _d().getElementById('ced-svg');
+                if (!svg) return { x: clientX, y: clientY };
+                const rect = svg.getBoundingClientRect();
+                const z = ST.zoom || 1;
+                return { x: (clientX - rect.left) / z, y: (clientY - rect.top) / z };
+            }
+            // Zoom-Helper. Wenn anchorClientX/Y gegeben, bleibt die Stelle unter dem Anker stabil;
+            // sonst wird zur Mitte des sichtbaren Canvas-Bereichs gezoomt.
+            function _zoomBy(factor, anchorClientX, anchorClientY) {
+                const oldZoom = ST.zoom || 1;
+                const newZoom = Math.max(0.25, Math.min(3.0, oldZoom * factor));
+                if (Math.abs(newZoom - oldZoom) < 1e-4) return;
+                const svg = _d().getElementById('ced-svg');
+                const area = _d().getElementById('ced-canvas-area');
+                if (!svg || !area) return;
+                const rect = svg.getBoundingClientRect();
+                const aRect = area.getBoundingClientRect();
+                const cx = (typeof anchorClientX === 'number') ? anchorClientX : (aRect.left + aRect.width  / 2);
+                const cy = (typeof anchorClientY === 'number') ? anchorClientY : (aRect.top  + aRect.height / 2);
+                const cursorAbsX = cx - rect.left + area.scrollLeft;
+                const cursorAbsY = cy - rect.top  + area.scrollTop;
+                const ratio = newZoom / oldZoom;
+                ST.zoom = newZoom;
+                svg.style.transformOrigin = '0 0';
+                svg.style.transform = `scale(${newZoom})`;
+                area.scrollLeft = cursorAbsX * ratio - (cx - rect.left);
+                area.scrollTop  = cursorAbsY * ratio - (cy - rect.top);
+            }
+            window.cedZoomIn    = () => _zoomBy(1.2);
+            window.cedZoomOut   = () => _zoomBy(1/1.2);
+            window.cedZoomReset = () => {
+                const svg = _d().getElementById('ced-svg');
+                const area = _d().getElementById('ced-canvas-area');
+                if (svg) { svg.style.transform = ''; svg.style.transformOrigin = ''; }
+                if (area) { area.scrollLeft = 0; area.scrollTop = 0; }
+                ST.zoom = 1;
+            };
 
             // Selection-Helper
             const isSelected   = (id) => ST.selectedIds.has(id);
@@ -26322,7 +26389,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!ep || !ep.rail) return;
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
-                const cy = e.clientY - rect.top;
+                const cy = _clientToSvg(e.clientX, e.clientY).y;
                 const railY = ep.rail === 'plus' ? RAIL_PLUS_Y : RAIL_MINUS_Y;
                 // Vertikales Wegziehen (>25px) → Wire vom Schienen-Endpunkt lösen
                 if (Math.abs(cy - railY) > 25) {
@@ -26339,7 +26406,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     _updateWirePreview(e.clientX, e.clientY);
                     return;
                 }
-                ep.x = snap(e.clientX - rect.left);
+                ep.x = snap(_clientToSvg(e.clientX, e.clientY).x);
                 cedRender();
             }
             function _onRailHandleUp() {
@@ -26471,8 +26538,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 clear(ov);
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
-                const cursorX = clientX - rect.left;
-                const cursorY = clientY - rect.top;
+                const _csv = _clientToSvg(clientX, clientY);
+                const cursorX = _csv.x;
+                const cursorY = _csv.y;
                 let x, y, isInsert = false;
                 // Wire-Hit-Test (nur für einsetzbare Komponenten)
                 const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
@@ -26548,6 +26616,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const area = _d().getElementById('ced-canvas-area');
                 if (!area || area._cedBound) return;
                 area._cedBound = true;
+                // Mausrad → Zoom (Cursor als Anker, Stelle unter dem Cursor bleibt stabil)
+                area.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+                    _zoomBy(factor, e.clientX, e.clientY);
+                }, { passive: false });
                 area.addEventListener('dragover', (e) => {
                     if (e.dataTransfer.types.indexOf('text/x-ced-type') >= 0) {
                         e.preventDefault();
@@ -26571,8 +26645,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const rect = svg.getBoundingClientRect();
                     // Pin-Snap: cursor.x → snap → das wird die Pin-x; comp.x = pinX - cx
                     const tt = CTYPES[type];
-                    const cursorX = e.clientX - rect.left;
-                    const cursorY = e.clientY - rect.top;
+                    const _csvP = _clientToSvg(e.clientX, e.clientY);
+                    const cursorX = _csvP.x;
+                    const cursorY = _csvP.y;
                     const pinX = snap(cursorX);
                     const pinY = snap(cursorY);
                     let x = pinX - tt.cx;
@@ -26632,7 +26707,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const rect = svg.getBoundingClientRect();
                     ST.marqueeInfo = {
                         startCx: e.clientX, startCy: e.clientY,
-                        startSx: e.clientX - rect.left, startSy: e.clientY - rect.top,
+                        startSx: _clientToSvg(e.clientX, e.clientY).x, startSy: _clientToSvg(e.clientX, e.clientY).y,
                         additive: e.shiftKey
                     };
                     ST.marqueeActive = false; // wird bei tatsächlichem Drag aktiviert
@@ -26665,8 +26740,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 clear(ov);
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
-                const cx = e.clientX - rect.left;
-                const cy = e.clientY - rect.top;
+                const _csvMM = _clientToSvg(e.clientX, e.clientY);
+                const cx = _csvMM.x;
+                const cy = _csvMM.y;
                 const x = Math.min(mi.startSx, cx), y = Math.min(mi.startSy, cy);
                 const w = Math.abs(cx - mi.startSx), h = Math.abs(cy - mi.startSy);
                 el('rect', { x, y, width:w, height:h, fill:'rgba(25,118,210,0.10)', stroke:'#1976d2', 'stroke-width':1, 'stroke-dasharray':'4,3', 'pointer-events':'none' }, ov);
@@ -26681,7 +26757,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!mi || !ST.marqueeActive) { ST.marqueeActive = false; return; }
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
-                const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+                const _csvU = _clientToSvg(e.clientX, e.clientY); const cx = _csvU.x, cy = _csvU.y;
                 const x1 = Math.min(mi.startSx, cx), x2 = Math.max(mi.startSx, cx);
                 const y1 = Math.min(mi.startSy, cy), y2 = Math.max(mi.startSy, cy);
                 if (!mi.additive) clearSelection();
@@ -26768,7 +26844,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (sc) startPositions.set(sid, { x: sc.x, y: sc.y });
                 });
                 ST.dragInfo = {
-                    id, ox: e.clientX - rect.left - comp.x, oy: e.clientY - rect.top - comp.y,
+                    id, ox: _clientToSvg(e.clientX, e.clientY).x - comp.x, oy: _clientToSvg(e.clientX, e.clientY).y - comp.y,
                     anchorStartX: comp.x, anchorStartY: comp.y,
                     startPositions
                 };
@@ -26785,8 +26861,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!anchor) return;
                 const t = CTYPES[anchor.type];
                 // Anchor-Position berechnen mit Pin-Snap
-                const rawX = e.clientX - rect.left - ST.dragInfo.ox;
-                const rawY = e.clientY - rect.top  - ST.dragInfo.oy;
+                const _csvDM = _clientToSvg(e.clientX, e.clientY);
+                const rawX = _csvDM.x - ST.dragInfo.ox;
+                const rawY = _csvDM.y - ST.dragInfo.oy;
                 const newAnchorX = snap(rawX + t.cx) - t.cx;
                 const newAnchorY = _clampCompY(snap(rawY + t.cy) - t.cy, anchor.type);
                 const dx = newAnchorX - ST.dragInfo.anchorStartX;
@@ -26800,11 +26877,76 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 cedRender();
             }
-            function _onDragUp() {
+            function _onDragUp(e) {
+                const dragInfo = ST.dragInfo;
                 ST.dragInfo = null;
                 _d().removeEventListener('mousemove', _onDragMove);
                 _d().removeEventListener('mouseup', _onDragUp);
+                if (dragInfo && e) _tryRewireAfterDrag(dragInfo, e.clientX, e.clientY);
                 _maybeSync();
+            }
+            // Wenn die verschobene Komponente auf einer ANDEREN Wire landet → in diese einbauen.
+            // Bestehender Strang an der alten Position wird repariert (analog _deleteComp).
+            function _tryRewireAfterDrag(dragInfo, clientX, clientY) {
+                if (dragInfo.startPositions && dragInfo.startPositions.size > 1) return;
+                const comp = ST.components.find(c => c.id === dragInfo.id);
+                if (!comp) return;
+                const t = CTYPES[comp.type];
+                if (!t || !(t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil')) return;
+                const svg = _d().getElementById('ced-svg');
+                const rect = svg.getBoundingClientRect();
+                const _csvR = _clientToSvg(clientX, clientY); const cursorX = _csvR.x, cursorY = _csvR.y;
+                // Geometrische Wire-Suche unter dem Cursor (ohne DOM-Hit-Test, daher unbeeinflusst von eigenen Wires)
+                const hit = _findWireAtPoint(cursorX, cursorY, comp.id);
+                if (!hit || hit.segDir !== 'v') return;
+                const targetWire = hit.wire;
+                // Strang am alten Ort reparieren (1 in + 1 out Wire vorhanden)
+                const inWires  = ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === 'in')  || (w.to.compId === comp.id && w.to.pin === 'in'));
+                const outWires = ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === 'out') || (w.to.compId === comp.id && w.to.pin === 'out'));
+                if (inWires.length === 1 && outWires.length === 1) {
+                    const wIn = inWires[0], wOut = outWires[0];
+                    const otherIn  = (wIn.from.compId  === comp.id) ? wIn.to  : wIn.from;
+                    const otherOut = (wOut.from.compId === comp.id) ? wOut.to : wOut.from;
+                    ST.wires = ST.wires.filter(w => w.id !== wIn.id && w.id !== wOut.id);
+                    ST.wires.push({ id: nextId('w'), from: otherIn, to: otherOut });
+                }
+                // Komponente an Wire-x ausrichten + Wire splitten
+                const pa = _pinPos(targetWire.from), pb = _pinPos(targetWire.to);
+                const wireX = pa.x;
+                comp.x = wireX - t.cx;
+                comp.y = _clampCompY(snap(cursorY) - t.cy, comp.type);
+                const topEnd = (pa.y <= pb.y) ? targetWire.from : targetWire.to;
+                const botEnd = (pa.y <= pb.y) ? targetWire.to   : targetWire.from;
+                ST.wires = ST.wires.filter(w => w.id !== targetWire.id);
+                ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in'  } });
+                ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
+                cedRender();
+            }
+            // Geometrischer Hit-Test gegen alle Wires (ausgenommen die der eigenen Komponente)
+            function _findWireAtPoint(svgX, svgY, excludeCompId) {
+                const TOL = 8;
+                for (const w of ST.wires) {
+                    if (excludeCompId && (w.from.compId === excludeCompId || w.to.compId === excludeCompId)) continue;
+                    const pa = _pinPos(w.from), pb = _pinPos(w.to);
+                    if (!pa || !pb) continue;
+                    const pts = _wirePathPoints(pa, pb);
+                    for (let i = 0; i < pts.length - 1; i++) {
+                        const p1 = pts[i], p2 = pts[i+1];
+                        if (p1.x === p2.x && p1.y === p2.y) continue;
+                        if (p1.x === p2.x) {
+                            if (Math.abs(svgX - p1.x) <= TOL &&
+                                Math.min(p1.y, p2.y) - TOL <= svgY && svgY <= Math.max(p1.y, p2.y) + TOL) {
+                                return { wire: w, segDir: 'v' };
+                            }
+                        } else if (p1.y === p2.y) {
+                            if (Math.abs(svgY - p1.y) <= TOL &&
+                                Math.min(p1.x, p2.x) - TOL <= svgX && svgX <= Math.max(p1.x, p2.x) + TOL) {
+                                return { wire: w, segDir: 'h' };
+                            }
+                        }
+                    }
+                }
+                return null;
             }
 
             function _onCompDblClick(e) {
@@ -26908,8 +27050,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!start) return;
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
-                const ex = clientX - rect.left;
-                const ey = clientY - rect.top;
+                const _csvW2 = _clientToSvg(clientX, clientY);
+                const ex = _csvW2.x;
+                const ey = _csvW2.y;
                 // Snap an mögliches Ziel (für visuelles Feedback)
                 const hit = _hitTestEndpoint(clientX, clientY);
                 let target;
@@ -26942,14 +27085,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (elt.classList && elt.classList.contains('ced-rail-hit')) {
                     const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
-                    return { rail: elt.getAttribute('data-rail'), x: snap(clientX - rect.left) };
+                    return { rail: elt.getAttribute('data-rail'), x: snap(_clientToSvg(clientX, clientY).x) };
                 }
                 if (elt.classList && elt.classList.contains('ced-wire-hit')) {
                     const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     const wireId = elt.getAttribute('data-id');
                     // Beim Drop wird hier ein T-Knoten erzeugt → Wire wird gesplittet
-                    return { wireId, x: snap(clientX - rect.left), y: snap(clientY - rect.top) };
+                    const _csvW = _clientToSvg(clientX, clientY);
+                    return { wireId, x: snap(_csvW.x), y: snap(_csvW.y) };
                 }
                 // Komponenten-Symbol direkt getroffen (kein Pin) → nimm nächsten Pin basierend auf Anflug
                 const grp = elt.closest && elt.closest('.ced-comp');
@@ -27507,32 +27651,92 @@ You must output exactly this JSON format. The logic code goes as a single string
             // RS-Detection: Check if the coil has an aux-NO contact of itself parallel to a sub-expression
             // Simple heuristic: in the generated expression, look for pattern (X || COIL_VAR) && Y
             // → S = X, R = ¬Y (because Y typically contains a NC stop contact that breaks circuit when Y=false)
+            // Splittet einen Boolean-Ausdruck am Top-Level am gegebenen Operator (außerhalb von Klammern)
+            function _splitTopLevel(expr, op) {
+                const parts = []; let depth = 0; let last = 0;
+                for (let i = 0; i <= expr.length - op.length; i++) {
+                    const c = expr[i];
+                    if (c === '(') depth++;
+                    else if (c === ')') depth--;
+                    else if (depth === 0 && expr.substr(i, op.length) === op) {
+                        parts.push(expr.substring(last, i).trim());
+                        last = i + op.length;
+                        i += op.length - 1;
+                    }
+                }
+                parts.push(expr.substring(last).trim());
+                return parts;
+            }
+            // Entfernt ein einzelnes umschließendes Klammerpaar (nur wenn es das ganze Stück umfasst)
+            function _stripOuterParens(s) {
+                s = s.trim();
+                if (!s.startsWith('(') || !s.endsWith(')')) return s;
+                let depth = 0;
+                for (let i = 0; i < s.length; i++) {
+                    if (s[i] === '(') depth++;
+                    else if (s[i] === ')') { depth--; if (depth === 0 && i < s.length - 1) return s; }
+                }
+                return s.substring(1, s.length - 1).trim();
+            }
+            // Flacht verschachtelte AND-Strukturen ab: ((A && B) && C) → [A, B, C].
+            // Klammern um OR-Blöcke bleiben erhalten weil sie semantisch nötig sind.
+            function _flattenAndTerms(expr) {
+                const result = [];
+                const terms = _splitTopLevel(expr, '&&');
+                for (const t of terms) {
+                    const stripped = _stripOuterParens(t);
+                    if (stripped === t.trim()) {
+                        result.push(t.trim());
+                    } else {
+                        const subAnds = _splitTopLevel(stripped, '&&');
+                        if (subAnds.length > 1) {
+                            result.push(..._flattenAndTerms(stripped));
+                        } else {
+                            result.push(stripped); // war nur ein Klammern-Wrapper um einen OR-/Atomic-Term
+                        }
+                    }
+                }
+                return result;
+            }
+
+            // RS-Pattern: sucht in den (geflatteten) AND-Termen nach einem OR-Block der die eigene
+            // Coil-Variable enthält. Funktioniert mit beliebig verschachtelten AND-Klammerungen.
             function _detectRS(coil, expr) {
                 if (!expr || !coil.varName) return null;
-                // Look for the coil's own aux contact (varName matching coil.varName) in OR branch
-                // Match: ( ... || COIL ) && rest    OR    ( COIL || ... ) && rest
-                // Use regex tolerant to spaces and parens
-                const v = coil.varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                // Pattern A: (set || COIL) && reset
-                let m = expr.match(new RegExp('^\\(\\s*([^()]+?)\\s*\\|\\|\\s*' + v + '\\s*\\)\\s*&&\\s*(.+)$'));
-                if (!m) m = expr.match(new RegExp('^\\(\\s*' + v + '\\s*\\|\\|\\s*([^()]+?)\\s*\\)\\s*&&\\s*(.+)$'));
-                if (!m) return null;
-                const setExpr = m[1];
-                const resetExpr = m[2].trim();
-                // R := ¬resetTerm — Reset wird ausgelöst wenn der Reset-Strompfad-Term FALSE wird.
-                // Smart-Inversion bietet die kompakteste äquivalente Form:
-                //   ¬X        → X         (z.B. Pattern aus klassischem Hand-Code)
-                //   X (simpel)→ ¬X        (z.B. NC-Eingangskontakt aus dem Editor: STOP_NC → ¬STOP_NC)
-                //   komplex   → ¬(...)
-                let rExpr;
-                if (/^¬\s*[A-Za-z_][A-Za-z0-9_]*$/.test(resetExpr)) {
-                    rExpr = resetExpr.replace(/^¬\s*/, '');
-                } else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(resetExpr)) {
-                    rExpr = '¬' + resetExpr;
-                } else {
-                    rExpr = '¬(' + resetExpr + ')';
+                const v = coil.varName;
+                const andTerms = _flattenAndTerms(expr);
+                let setOrTerms = null;     // restliche OR-Terme im Set-Block (nach Entfernen der Coil)
+                const resetTerms = [];     // AND-Terme die zum Reset-Block gehören
+                for (const term of andTerms) {
+                    const inner = _stripOuterParens(term);
+                    const orParts = _splitTopLevel(inner, '||');
+                    const coilIdx = orParts.findIndex(p => p.trim() === v);
+                    if (setOrTerms === null && coilIdx >= 0) {
+                        // Set-Block gefunden — Coil entfernen, Rest sind Set-Trigger
+                        setOrTerms = orParts.filter((_, i) => i !== coilIdx).map(s => s.trim()).filter(Boolean);
+                    } else {
+                        resetTerms.push(term);
+                    }
                 }
-                return { set: setExpr.trim(), reset: rExpr };
+                if (setOrTerms === null || setOrTerms.length === 0) return null;
+                if (resetTerms.length === 0) return null;
+                const setExpr = setOrTerms.length === 1
+                    ? setOrTerms[0]
+                    : setOrTerms.map(s => s.includes('&&') ? '(' + s + ')' : s).join(' || ');
+                const resetCombined = resetTerms.length === 1
+                    ? _stripOuterParens(resetTerms[0])
+                    : resetTerms.map(t => _stripOuterParens(t)).map(t => t.includes('||') ? '(' + t + ')' : t).join(' && ');
+                // Smart-Inversion: kompakteste äquivalente Form für ¬resetCombined
+                const t = resetCombined.trim();
+                let rExpr;
+                if (/^¬\s*[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
+                    rExpr = t.replace(/^¬\s*/, '');
+                } else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
+                    rExpr = '¬' + t;
+                } else {
+                    rExpr = '¬(' + t + ')';
+                }
+                return { set: setExpr, reset: rExpr };
             }
 
         })();

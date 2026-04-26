@@ -279,6 +279,12 @@
         }
         .view-btn { background-color: #555; transition: background 0.2s; }
         .view-btn.active { background-color: #f58231; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
+        /* Combined Toggle-Pill für Schaltplan + Editor */
+        .view-pill { display:inline-flex; align-items:center; gap:6px; }
+        .view-pill-label { color:#ccc; font-size:11px; font-weight:bold; padding-right:1px; }
+        .view-pill-group { display:inline-flex; border-radius:4px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,0.3); }
+        .view-pill-group .view-btn { border-radius:0; margin:0; box-shadow:none; padding:4px 10px; border:none; }
+        .view-pill-group .view-btn + .view-btn { border-left:1px solid rgba(0,0,0,0.35); }
         /* === Schaltplan-Editor (CED) === */
         .ced-tool-active { background:#1976d2 !important; box-shadow:inset 0 0 4px rgba(0,0,0,0.4); }
         .ced-pal-cat { color:#90a4ae; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:6px 4px 3px; border-bottom:1px solid #3a3a3a; margin-top:4px; }
@@ -1245,12 +1251,15 @@
                 </div>
                 <button class="btn-export" onclick="openHelpModal()" style="background: #17a2b8; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_help">ℹ️ Hilfe / Tipps</button>
                 <button class="btn-export" onclick="openSaveLoadModal()" style="background: #2196f3; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_save_load">💾 Speichern / Laden</button>
-                <button class="btn-export" onclick="openExamplesModal()" style="background: #6a1b9a; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_examples">📋 Beispiele</button>
-                <button class="btn-export" onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" style="background: #555; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Code-Editor leeren">🗑️ Leeren</button>
+                <button class="btn-export" onclick="startTutorial()" style="background: #5c6bc0; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Interaktive Schritt-für-Schritt-Tour">🎓 Tour</button>
             </div>
         </div>
-        <div class="section-header" onclick="toggleSection('editor-container', this)">
-            <span class="toggle-icon">▼</span> Logik-Editor
+        <div class="section-header" onclick="toggleSection('editor-container', this)" style="justify-content:space-between;">
+            <span><span class="toggle-icon">▼</span> Logik-Editor</span>
+            <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
+                <button onclick="openExamplesModal()" data-i18n="btn_examples" title="Beispielprojekte" style="background:#6a1b9a;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">📋 Beispiele</button>
+                <button onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" title="Code-Editor leeren" style="background:#555;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🗑️ Leeren</button>
+            </span>
         </div>
         <div id="editor-container">
             <div class="legend-box">
@@ -1297,8 +1306,12 @@
             </div>
         </div>
         <div id="panel-resizer"></div>
-        <div class="section-header" onclick="toggleSection('simulator-container', this)">
-            <span class="toggle-icon">▼</span> Simulation (Ein- & Ausgänge)
+        <div class="section-header" onclick="toggleSection('simulator-container', this)" style="justify-content:space-between;">
+            <span><span class="toggle-icon">▼</span> Simulation (Ein- & Ausgänge)</span>
+            <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
+                <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
+                <button onclick="openAnalyzerModal()" title="Oszilloskop öffnen" style="background:#607d8b;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📊</button>
+            </span>
         </div>
         <div id="simulator-container">
             <div id="simulator-panel">
@@ -1313,10 +1326,15 @@
         <div class="graph-top-bar">
             <div style="display: flex; gap: 5px; align-items: center;">
                 <button id="btn-toggle-sidebar" class="btn-export" style="background-color: #333; border: 1px solid #555; padding: 4px 10px; font-size: 14px; margin-right: 5px;" onclick="toggleSidebar()" title="Seitenleiste einklappen">◀</button>
-                <button id="btn-view-fbs" class="btn-export view-btn active" onclick="toggleWorkspaceView('fbs-wrapper')" data-i18n="btn_view_fbs">Logikplan</button>
-                <button id="btn-view-iec" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-wrapper')" data-i18n="btn_view_iec">Schaltplan</button>
-                <button id="btn-view-iec-edit" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-editor-wrapper')" title="Freier Schaltplan-Editor mit Drag&amp;Drop und Reverse-Code-Erkennung">🎨 Editor</button>
-                <button id="btn-view-fac" class="btn-export view-btn" onclick="toggleWorkspaceView('factory-wrapper')" data-i18n="btn_view_fac">2D Anlage</button>
+                <button id="btn-view-fbs" class="btn-export view-btn active" onclick="toggleWorkspaceView('fbs-wrapper')" data-i18n="btn_view_fbs" title="Aus dem Code automatisch generierter Funktionsblock-Logikplan (mit eigenen Bearbeitungsfunktionen)">Logikplan</button>
+                <span class="view-pill">
+                    <span class="view-pill-label">Schaltplan:</span>
+                    <span class="view-pill-group">
+                        <button id="btn-view-iec" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-wrapper')" title="Aus dem Code automatisch generierter Schaltplan (mit eigenen Bearbeitungsfunktionen)">Auto</button>
+                        <button id="btn-view-iec-edit" class="btn-export view-btn" onclick="toggleWorkspaceView('circuit-editor-wrapper')" title="Freier Schaltplan-Editor mit Drag&amp;Drop und Reverse-Code-Erkennung">Editor</button>
+                    </span>
+                </span>
+                <button id="btn-view-fac" class="btn-export view-btn" onclick="toggleWorkspaceView('factory-wrapper')" data-i18n="btn_view_fac" title="Interaktive 2D-Anlage zum Aufbau und Live-Test der Steuerung mit Sensoren, Aktoren, Werkstücken und Materialfluss">2D Anlage</button>
             </div>
             <div style="display: flex; gap: 5px; align-items: center; margin: 0 auto;">
                 <div class="tb-dropdown">
@@ -1339,14 +1357,14 @@
                             <div style="padding:5px 12px 3px;color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;background:#252526;border-bottom:1px solid #3a3a3a;font-weight:bold;" data-i18n="layout_cat_detach">Abkoppeln</div>
                             <div onclick="detachPanel('fbs-wrapper', 'Logikplan')" data-i18n="extra_detach_fbs" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Logikplan</div>
                             <div onclick="detachPanel('circuit-wrapper', 'Schaltplan')" data-i18n="extra_detach_iec" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Schaltplan</div>
+                            <div onclick="detachPanel('circuit-editor-wrapper', 'Editor')" data-i18n="extra_detach_iec_edit" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Editor</div>
                             <div onclick="detachPanel('factory-wrapper', '2D-Anlage')" data-i18n="extra_detach_fac" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ 2D-Anlage</div>
                             <div onclick="detachPanel('analyzer-modal', 'Oszilloskop')" data-i18n="extra_detach_osc" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Oszilloskop</div>
                         </div>
                       </div><!-- /flex-row wrapper -->
                     </div>
                 </div>
-                <button onclick="startTutorial()" class="btn-export" style="background-color: #5c6bc0; box-shadow: none;" title="Interaktive Schritt-für-Schritt-Tour">🎓 Tour</button>
-                <button onclick="window._openTaskManager()" class="btn-export" style="background-color: #e67e22; box-shadow: none;" title="Aufgaben-Modus">🎯 Aufgaben [beta]</button>
+                <button onclick="window._openTaskManager()" class="btn-export" style="background-color: #e67e22; box-shadow: none;" title="Aufgaben-Modus">🎯 Aufgaben</button>
                 <div class="info-hover-wrapper">
                     <button class="btn-export" id="btn-info" style="background-color: #17a2b8; cursor: help;" onclick="toggleInfoPanel()">ℹ️ Info</button>
                     <div class="info-hover-content" id="info-panel"></div>
@@ -1354,14 +1372,7 @@
             </div>
             <div style="display: flex; gap: 5px; align-items: center;">
                 <button id="btn-toggle-sim" class="btn-export" style="background-color: #e6194B;" onclick="toggleSimulation()" data-i18n="btn_sim_start">Simulation starten</button>
-                <button id="btn-record" class="btn-export" onclick="toggleRecording()" style="background:#b71c1c;box-shadow:none;padding:3px 9px;font-size:15px;" title="Simulation aufzeichnen">⏺</button>
                 <button id="btn-toggle-sound" class="btn-export" style="background-color: #555;" onclick="toggleSound()" data-i18n="sound_off">🔇 Ton: AUS</button>
-                <div class="tb-dropdown">
-                    <button id="btn-extras" class="btn-export" style="background-color: #607d8b; cursor: pointer;" data-i18n="btn_extras">🛠️ Extras ▼</button>
-                    <div class="tb-dropdown-content" style="right: 0; left: auto; min-width: 240px; text-align: left;">
-                        <div onclick="openAnalyzerModal()" data-i18n="extra_osc">📊 Oszilloskop öffnen</div>
-                    </div>
-                </div>
             </div>
         </div>
         <div id="workspace-container">
@@ -2824,6 +2835,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "extra_svg": "📸 Ansicht als SVG speichern",
                 "extra_detach_fbs": "⏏️ Logikplan abkoppeln (Multi-Screen)",
                 "extra_detach_iec": "⏏️ Schaltplan abkoppeln (Multi-Screen)",
+                "extra_detach_iec_edit": "⏏️ Editor abkoppeln (Multi-Screen)",
                 "extra_detach_fac": "⏏️ 2D-Anlage abkoppeln (Multi-Screen)",
                 "extra_detach_osc": "⏏️ Oszilloskop abkoppeln (Multi-Screen)",
                 "extra_scl": "📤 Als Siemens SCL exportieren (TIA Portal)",
@@ -3174,6 +3186,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "extra_svg": "📸 Save View as SVG",
                 "extra_detach_fbs": "⏏️ Detach Logic Diagram (Multi-Screen)",
                 "extra_detach_iec": "⏏️ Detach Circuit Diagram (Multi-Screen)",
+                "extra_detach_iec_edit": "⏏️ Detach Editor (Multi-Screen)",
                 "extra_detach_fac": "⏏️ Detach 2D Factory (Multi-Screen)",
                 "extra_detach_osc": "⏏️ Detach Oscilloscope (Multi-Screen)",
                 "extra_scl": "📤 Export as Siemens SCL (TIA Portal)",
@@ -6016,6 +6029,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
             updateBtn('btn-view-fbs', fbs, p0);
             updateBtn('btn-view-iec', circ, p1);
+            updateBtn('btn-view-iec-edit', cedit, pE);
             updateBtn('btn-view-fac', fac, p2);
             requestAnimationFrame(() => {
                 if (fbs.isMainVisible && panZoomInstance && fbs.el.offsetWidth > 0 && fbs.el.offsetHeight > 0) { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); }
@@ -6025,7 +6039,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         function _saveViewState() {
             let vis = {}, sizes = {};
             let wc = document.getElementById('workspace-container');
-            ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper'].forEach(id => {
                 let el = document.getElementById(id);
                 vis[id] = el ? el.style.display !== 'none' : true;
                 if (el && el.style.flex && el.style.flex !== '1 1 0%' && el.style.flex !== '1 1 0') sizes[id] = el.style.flex;
@@ -21747,11 +21761,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let vis = JSON.parse(_savedPanels);
                         let wc = document.getElementById('workspace-container');
                         let isGrid = wc && wc.classList.contains('layout-grid');
-                        ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
                             // Grid mode forces all panels visible via CSS !important — skip hiding
                             if (el && vis[id] !== undefined && !(isGrid && !vis[id])) {
                                 el.style.display = vis[id] ? 'flex' : 'none';
+                                if (id === 'circuit-editor-wrapper' && vis[id] && window.cedInit) window.cedInit();
                             }
                         });
                         updateWorkspace();
@@ -21761,7 +21776,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     try {
                         let sizes = JSON.parse(_savedSizes);
                         let wc = document.getElementById('workspace-container');
-                        ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'].forEach(id => {
+                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
                             if (el && sizes[id]) el.style.flex = sizes[id];
                         });
@@ -25342,9 +25357,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     target: '#btn-view-fbs', pos: 'bottom'
                 },
                 {
-                    title: '⚡ Schaltplan (IEC)',
-                    text: 'Automatisch erzeugter IEC-Schaltplan mit Kontakten und Spulen. Verschiedene Darstellungsoptionen stehen zur Wahl: Im bunten Modus stimmen die Strangfarben mit den Gattern und Signalen des Logikplans überein. Ideal für Steuerungsnachweise und Dokumentation.',
+                    title: '⚡ Schaltplan – Auto',
+                    text: 'Automatisch aus dem Code erzeugter IEC-Schaltplan mit Kontakten und Spulen. Verschiedene Darstellungsoptionen stehen zur Wahl: Im bunten Modus stimmen die Strangfarben mit den Gattern und Signalen des Logikplans überein. Eigene Bearbeitungsfunktionen für Anpassungen direkt im Plan.',
                     target: '#btn-view-iec', pos: 'bottom'
+                },
+                {
+                    title: '🎨 Schaltplan – Editor',
+                    text: 'Freier Schaltplan-Editor: ziehe Komponenten (Kontakte, Spulen, Sensoren, Hilfskontakte) per Drag & Drop zwischen die +24V/0V-Schienen und verdrahte sie. Aus deiner Verdrahtung wird automatisch der ST-Code erkannt – inklusive Selbsthaltungen als RS/SR-Glieder. Mit Marquee-Selektion, Auto-Ausrichten und vielem mehr.',
+                    target: '#btn-view-iec-edit', pos: 'bottom'
                 },
                 {
                     title: '🏭 2D-Anlage',
@@ -25352,9 +25372,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     target: '#btn-view-fac', pos: 'bottom'
                 },
                 {
-                    title: '🛠️ Extras',
-                    text: 'Hier findest du das Oszilloskop für Signalanalysen, PDF- & SVG-Export deiner Pläne sowie die Möglichkeit, Panels auf einen zweiten Monitor abzukoppeln.',
-                    target: '#btn-extras', pos: 'bottom'
+                    title: '📊 Oszilloskop & Aufnahme',
+                    text: 'Im Header der Simulations-Sektion (links) findest du das Oszilloskop für Signalanalysen sowie den roten Aufnahme-Button um die Simulation als Video festzuhalten.',
+                    target: '#btn-record', pos: 'right'
+                },
+                {
+                    title: '🎯 Aufgaben',
+                    text: 'Aufgaben-Modus: vorgefertigte Übungsaufgaben oder eigene erstellen mit definierten Erfolgsbedingungen, gesperrten Bearbeitungsbereichen und Musterlösung.',
+                    target: '[onclick="window._openTaskManager()"]', pos: 'bottom'
                 },
                 {
                     title: '💾 Speichern & Laden',
@@ -25864,6 +25889,16 @@ You must output exactly this JSON format. The logic code goes as a single string
 
             function snap(v) { return Math.round(v / GRID) * GRID; }
 
+            // Doc-Helper: liefert das aktuelle Document/Window (extern wenn Editor abgekoppelt)
+            function _d() {
+                const popped = window.popOutWindows && window.popOutWindows['circuit-editor-wrapper'];
+                return (popped && !popped.closed) ? popped.document : document;
+            }
+            function _w() {
+                const popped = window.popOutWindows && window.popOutWindows['circuit-editor-wrapper'];
+                return (popped && !popped.closed) ? popped : window;
+            }
+
             // Selection-Helper
             const isSelected   = (id) => ST.selectedIds.has(id);
             const setSelection = (id) => { ST.selectedIds.clear(); if (id != null) ST.selectedIds.add(id); };
@@ -25932,19 +25967,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const b = document.getElementById('ced-tool-'+x);
                     if (b) b.classList.toggle('ced-tool-active', x === t);
                 });
-                const wrapper = document.getElementById('circuit-editor-wrapper');
+                const wrapper = _d().getElementById('circuit-editor-wrapper');
                 if (wrapper) {
                     wrapper.classList.toggle('ced-tool-wire-mode', t === 'wire');
                     wrapper.classList.toggle('ced-tool-delete-mode', t === 'delete');
                 }
                 if (t !== 'wire' && ST.wireStart) {
                     ST.wireStart = null;
-                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                    const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                 }
             };
 
             window.cedToggleLiveSync = function() {
-                ST.liveSync = document.getElementById('ced-livesync').checked;
+                ST.liveSync = _d().getElementById('ced-livesync').checked;
                 if (ST.liveSync) cedGenerateCode();
             };
 
@@ -25994,7 +26029,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             function _renderRails() {
-                const g = document.getElementById('ced-rails');
+                const g = _d().getElementById('ced-rails');
                 if (!g) return;
                 clear(g);
                 // Hitbox-Linien (transparent, dick) für komfortables Klicken
@@ -26007,12 +26042,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 el('text', { x: RAIL_X_MIN - 6, y: RAIL_PLUS_Y - 6, 'font-size':12, 'font-weight':'bold', fill:'#d32f2f', 'text-anchor':'end' }, g).textContent = '+24V';
                 el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: RAIL_X_MAX, y2: RAIL_MINUS_Y, stroke:'#1976d2', 'stroke-width':3, 'pointer-events':'none' }, g);
                 el('text', { x: RAIL_X_MIN - 6, y: RAIL_MINUS_Y + 16, 'font-size':12, 'font-weight':'bold', fill:'#1976d2', 'text-anchor':'end' }, g).textContent = '0V';
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 if (svg) svg.setAttribute('height', RAIL_MINUS_Y + 60);
             }
 
             function _renderComponents() {
-                const g = document.getElementById('ced-components');
+                const g = _d().getElementById('ced-components');
                 if (!g) return;
                 clear(g);
                 ST.components.forEach(comp => _drawComponent(comp, g));
@@ -26179,7 +26214,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             function _renderWires() {
-                const g = document.getElementById('ced-wires');
+                const g = _d().getElementById('ced-wires');
                 if (!g) return;
                 clear(g);
                 ST.wires.forEach(w => {
@@ -26210,8 +26245,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const wireId = e.currentTarget.getAttribute('data-wire');
                 const end = e.currentTarget.getAttribute('data-end'); // 'from' | 'to'
                 ST.railDragInfo = { wireId, end };
-                document.addEventListener('mousemove', _onRailHandleMove);
-                document.addEventListener('mouseup', _onRailHandleUp);
+                _d().addEventListener('mousemove', _onRailHandleMove);
+                _d().addEventListener('mouseup', _onRailHandleUp);
             }
             function _onRailHandleMove(e) {
                 if (!ST.railDragInfo) return;
@@ -26219,7 +26254,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!w) return;
                 const ep = w[ST.railDragInfo.end];
                 if (!ep || !ep.rail) return;
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const cy = e.clientY - rect.top;
                 const railY = ep.rail === 'plus' ? RAIL_PLUS_Y : RAIL_MINUS_Y;
@@ -26228,12 +26263,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const otherEnd = (ST.railDragInfo.end === 'from') ? w.to : w.from;
                     ST.wires = ST.wires.filter(x => x.id !== w.id);
                     ST.railDragInfo = null;
-                    document.removeEventListener('mousemove', _onRailHandleMove);
-                    document.removeEventListener('mouseup', _onRailHandleUp);
+                    _d().removeEventListener('mousemove', _onRailHandleMove);
+                    _d().removeEventListener('mouseup', _onRailHandleUp);
                     ST.wireStart = otherEnd;
-                    document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
-                    document.addEventListener('mousemove', _onWireDragMove);
-                    document.addEventListener('mouseup', _onWireDragUp);
+                    _d().getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                    _d().addEventListener('mousemove', _onWireDragMove);
+                    _d().addEventListener('mouseup', _onWireDragUp);
                     cedRender();
                     _updateWirePreview(e.clientX, e.clientY);
                     return;
@@ -26243,8 +26278,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             function _onRailHandleUp() {
                 ST.railDragInfo = null;
-                document.removeEventListener('mousemove', _onRailHandleMove);
-                document.removeEventListener('mouseup', _onRailHandleUp);
+                _d().removeEventListener('mousemove', _onRailHandleMove);
+                _d().removeEventListener('mouseup', _onRailHandleUp);
                 _maybeSync();
             }
             // Manhattan-Routing mit Pin-Richtungen 'v'/'r'/'l'. Pfade gehen aus dem Pin in
@@ -26352,7 +26387,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             function _updateStatus() {
-                const s = document.getElementById('ced-status');
+                const s = _d().getElementById('ced-status');
                 if (!s) return;
                 const nC = ST.components.filter(c => CTYPES[c.type] && CTYPES[c.type].kind === 'coil').length;
                 s.textContent = `${ST.components.length} Komponenten · ${ST.wires.length} Leitungen · ${nC} Spulen`;
@@ -26365,10 +26400,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const type = ST.dragPreviewType;
                 if (!type || !CTYPES[type]) return;
                 const tt = CTYPES[type];
-                const ov = document.getElementById('ced-overlay');
+                const ov = _d().getElementById('ced-overlay');
                 if (!ov) return;
                 clear(ov);
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const cursorX = clientX - rect.left;
                 const cursorY = clientY - rect.top;
@@ -26376,7 +26411,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Wire-Hit-Test (nur für einsetzbare Komponenten)
                 const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
                 if (insertable) {
-                    const eltUnder = document.elementFromPoint(clientX, clientY);
+                    const eltUnder = _d().elementFromPoint(clientX, clientY);
                     if (eltUnder && eltUnder.classList && eltUnder.classList.contains('ced-wire-hit')) {
                         const wireId = eltUnder.getAttribute('data-id');
                         const wire = ST.wires.find(w => w.id === wireId);
@@ -26423,7 +26458,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
                     it.addEventListener('dragend', () => {
                         ST.dragPreviewType = null;
-                        const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                        const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                     });
                     // Mini-Symbol befüllen
                     const mini = it.querySelector('.ced-pal-mini');
@@ -26444,7 +26479,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
             }
             function _bindCanvas() {
-                const area = document.getElementById('ced-canvas-area');
+                const area = _d().getElementById('ced-canvas-area');
                 if (!area || area._cedBound) return;
                 area._cedBound = true;
                 area.addEventListener('dragover', (e) => {
@@ -26457,16 +26492,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 area.addEventListener('dragleave', () => {
                     area.classList.remove('ced-drag-over');
-                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                    const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                 });
                 area.addEventListener('drop', (e) => {
                     e.preventDefault();
                     area.classList.remove('ced-drag-over');
-                    const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                    const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                     ST.dragPreviewType = null;
                     const type = e.dataTransfer.getData('text/x-ced-type');
                     if (!type || !CTYPES[type]) return;
-                    const svg = document.getElementById('ced-svg');
+                    const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     // Pin-Snap: cursor.x → snap → das wird die Pin-x; comp.x = pinX - cx
                     const tt = CTYPES[type];
@@ -26480,7 +26515,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
                     let insertIntoWire = null, insertSegDir = null;
                     if (insertable) {
-                        const eltUnder = document.elementFromPoint(e.clientX, e.clientY);
+                        const eltUnder = _d().elementFromPoint(e.clientX, e.clientY);
                         if (eltUnder && eltUnder.classList && eltUnder.classList.contains('ced-wire-hit')) {
                             const wireId = eltUnder.getAttribute('data-id');
                             const wire = ST.wires.find(w => w.id === wireId);
@@ -26513,7 +26548,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         _maybeSync();
                     }
                 });
-                document.getElementById('ced-canvas-area').addEventListener('click', (e) => {
+                _d().getElementById('ced-canvas-area').addEventListener('click', (e) => {
                     if (e.target.id === 'ced-canvas-area' || e.target.id === 'ced-svg') {
                         // Marquee-Drag setzt selectedIds — bei reinem Klick ohne Marquee zurücksetzen
                         if (!ST.marqueeActive) { clearSelection(); cedRender(); }
@@ -26527,7 +26562,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const onEmpty = (t.id === 'ced-canvas-area' || t.id === 'ced-svg' || t.tagName === 'svg' || (t.parentNode && t.parentNode.id === 'ced-rails' && !t.classList.contains('ced-rail-hit')));
                     if (!onEmpty) return;
                     e.preventDefault(); // unterdrücke Browser-Text-Selection während des Drags
-                    const svg = document.getElementById('ced-svg');
+                    const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     ST.marqueeInfo = {
                         startCx: e.clientX, startCy: e.clientY,
@@ -26535,18 +26570,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                         additive: e.shiftKey
                     };
                     ST.marqueeActive = false; // wird bei tatsächlichem Drag aktiviert
-                    document.addEventListener('mousemove', _onMarqueeMove);
-                    document.addEventListener('mouseup', _onMarqueeUp);
+                    _d().addEventListener('mousemove', _onMarqueeMove);
+                    _d().addEventListener('mouseup', _onMarqueeUp);
                 });
-                document.addEventListener('keydown', (e) => {
-                    const wrapper = document.getElementById('circuit-editor-wrapper');
+                _d().addEventListener('keydown', (e) => {
+                    const wrapper = _d().getElementById('circuit-editor-wrapper');
                     if (!wrapper || wrapper.style.display === 'none') return;
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
                     if (e.key === 'Delete' || e.key === 'Backspace') {
                         if (ST.selectedIds.size > 0) _deleteSelected();
                     } else if (e.key === 'Escape') {
                         clearSelection(); ST.wireStart = null;
-                        const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                        const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                         cedRender();
                     }
                 });
@@ -26559,10 +26594,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ST.marqueeActive = true;
                 }
                 if (!ST.marqueeActive) return;
-                const ov = document.getElementById('ced-overlay');
+                const ov = _d().getElementById('ced-overlay');
                 if (!ov) return;
                 clear(ov);
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const cx = e.clientX - rect.left;
                 const cy = e.clientY - rect.top;
@@ -26572,33 +26607,33 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // Marquee-Mouseup: Komponenten und Wires im Rechteck selektieren
             function _onMarqueeUp(e) {
-                document.removeEventListener('mousemove', _onMarqueeMove);
-                document.removeEventListener('mouseup', _onMarqueeUp);
+                _d().removeEventListener('mousemove', _onMarqueeMove);
+                _d().removeEventListener('mouseup', _onMarqueeUp);
                 const mi = ST.marqueeInfo;
                 ST.marqueeInfo = null;
-                const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                 if (!mi || !ST.marqueeActive) { ST.marqueeActive = false; return; }
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
                 const x1 = Math.min(mi.startSx, cx), x2 = Math.max(mi.startSx, cx);
                 const y1 = Math.min(mi.startSy, cy), y2 = Math.max(mi.startSy, cy);
                 if (!mi.additive) clearSelection();
-                // Komponenten deren Bounding Box vom Marquee überlappt wird
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type]; if (!t) return;
                     const cl = c.x, cr = c.x + t.w, ct = c.y, cb = c.y + t.h;
                     if (cl < x2 && cr > x1 && ct < y2 && cb > y1) addSelection(c.id);
                 });
-                // Wires: wenn beide Endpunkte im Marquee oder ein Knickpunkt
                 ST.wires.forEach(w => {
                     const pa = _pinPos(w.from), pb = _pinPos(w.to);
                     if (!pa || !pb) return;
                     const inside = (p) => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
                     if (inside(pa) && inside(pb)) addSelection(w.id);
                 });
-                ST.marqueeActive = false;
                 cedRender();
+                // marqueeActive bleibt noch bis NACH dem nachfolgenden click-Event auf true
+                // (sonst würde der Canvas-Click-Handler die gerade gesetzte Selektion sofort wieder löschen)
+                setTimeout(() => { ST.marqueeActive = false; }, 0);
             }
             // Mehrere selektierte Items in einem Pass löschen — nutzt _deleteComp damit Strang-Reparatur greift
             function _deleteSelected() {
@@ -26637,14 +26672,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                         const otherEnd = (existing.from.compId === id && existing.from.pin === pin) ? existing.to : existing.from;
                         ST.wires = ST.wires.filter(w => w.id !== existing.id);
                         ST.wireStart = otherEnd;
-                        document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                        _d().getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
                         _updateWirePreview(e.clientX, e.clientY);
                         cedRender();
                     } else {
                         _startWire(id, pin, e);
                     }
-                    document.addEventListener('mousemove', _onWireDragMove);
-                    document.addEventListener('mouseup', _onWireDragUp);
+                    _d().addEventListener('mousemove', _onWireDragMove);
+                    _d().addEventListener('mouseup', _onWireDragUp);
                     e.stopPropagation(); e.preventDefault();
                     return;
                 }
@@ -26658,7 +26693,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 const comp = ST.components.find(c => c.id === id);
                 if (!comp) { cedRender(); return; }
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 // Snapshot der Start-Positionen aller selektierten Komponenten für gemeinsamen Drag
                 const startPositions = new Map();
@@ -26673,12 +26708,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 };
                 cedRender();
                 e.stopPropagation();
-                document.addEventListener('mousemove', _onDragMove);
-                document.addEventListener('mouseup', _onDragUp);
+                _d().addEventListener('mousemove', _onDragMove);
+                _d().addEventListener('mouseup', _onDragUp);
             }
             function _onDragMove(e) {
                 if (!ST.dragInfo) return;
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const anchor = ST.components.find(c => c.id === ST.dragInfo.id);
                 if (!anchor) return;
@@ -26701,8 +26736,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             function _onDragUp() {
                 ST.dragInfo = null;
-                document.removeEventListener('mousemove', _onDragMove);
-                document.removeEventListener('mouseup', _onDragUp);
+                _d().removeEventListener('mousemove', _onDragMove);
+                _d().removeEventListener('mouseup', _onDragUp);
                 _maybeSync();
             }
 
@@ -26725,7 +26760,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // ---------- Wire Drawing (Drag & Drop) ----------
             function _startWire(compId, pin, e) {
                 ST.wireStart = { compId, pin };
-                document.getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
+                _d().getElementById('circuit-editor-wrapper').classList.add('ced-wire-dragging');
                 _updateWirePreview(e.clientX, e.clientY);
             }
             // Drag-Move: Preview folgt dem Cursor
@@ -26734,12 +26769,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // Mouseup: prüft worauf losgelassen wurde (Pin / Schiene / Nichts)
             function _onWireDragUp(e) {
-                document.removeEventListener('mousemove', _onWireDragMove);
-                document.removeEventListener('mouseup', _onWireDragUp);
-                document.getElementById('circuit-editor-wrapper').classList.remove('ced-wire-dragging');
+                _d().removeEventListener('mousemove', _onWireDragMove);
+                _d().removeEventListener('mouseup', _onWireDragUp);
+                _d().getElementById('circuit-editor-wrapper').classList.remove('ced-wire-dragging');
                 if (!ST.wireStart) return;
                 const target = _hitTestEndpoint(e.clientX, e.clientY);
-                const ov = document.getElementById('ced-overlay'); if (ov) clear(ov);
+                const ov = _d().getElementById('ced-overlay'); if (ov) clear(ov);
                 if (!target) {
                     // Drop ins Leere: Wire (falls bereits gelöst) bleibt entfernt → sync
                     ST.wireStart = null;
@@ -26800,12 +26835,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             function _updateWirePreview(clientX, clientY) {
                 if (!ST.wireStart) return;
-                const ov = document.getElementById('ced-overlay');
+                const ov = _d().getElementById('ced-overlay');
                 if (!ov) return;
                 clear(ov);
                 const start = _pinPos(ST.wireStart);
                 if (!start) return;
-                const svg = document.getElementById('ced-svg');
+                const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const ex = clientX - rect.left;
                 const ey = clientY - rect.top;
@@ -26831,7 +26866,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // Findet ob unter (clientX,clientY) ein gültiger Endpunkt liegt: Pin / Schiene / Wire / Komponente
             function _hitTestEndpoint(clientX, clientY) {
-                const elt = document.elementFromPoint(clientX, clientY);
+                const elt = _d().elementFromPoint(clientX, clientY);
                 if (!elt) return null;
                 if (elt.classList && elt.classList.contains('ced-pin')) {
                     const grp = elt.closest('.ced-comp');
@@ -26839,12 +26874,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return { compId: grp.getAttribute('data-id'), pin: elt.getAttribute('data-pin') };
                 }
                 if (elt.classList && elt.classList.contains('ced-rail-hit')) {
-                    const svg = document.getElementById('ced-svg');
+                    const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     return { rail: elt.getAttribute('data-rail'), x: snap(clientX - rect.left) };
                 }
                 if (elt.classList && elt.classList.contains('ced-wire-hit')) {
-                    const svg = document.getElementById('ced-svg');
+                    const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     const wireId = elt.getAttribute('data-id');
                     // Beim Drop wird hier ein T-Knoten erzeugt → Wire wird gesplittet
@@ -26934,7 +26969,7 @@ You must output exactly this JSON format. The logic code goes as a single string
 
             // ---------- Name Popup ----------
             function _showNamePopup(comp, atClientX, atClientY) {
-                const pop = document.getElementById('ced-name-popup');
+                const pop = _d().getElementById('ced-name-popup');
                 if (!pop) return;
                 const t = CTYPES[comp.type];
                 const isAux = t.kind === 'aux';
@@ -26956,7 +26991,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:160px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
                     <div style="margin-top:6px;display:flex;gap:4px;">
                         <button onclick="window._cedConfirmName('${comp.id}')" style="background:#4caf50;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">OK</button>
-                        <button onclick="document.getElementById('ced-name-popup').style.display='none'" style="background:#555;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">Abbrechen</button>
+                        <button onclick="window._cedClosePopup()" style="background:#555;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">Abbrechen</button>
                     </div>
                 `;
                 // Wenn Client-Koordinaten übergeben (Rechtsklick) → direkt am Cursor öffnen
@@ -26964,31 +26999,35 @@ You must output exactly this JSON format. The logic code goes as a single string
                     pop.style.left = Math.min(window.innerWidth - 220, atClientX + 4) + 'px';
                     pop.style.top  = Math.min(window.innerHeight - 140, atClientY + 4) + 'px';
                 } else {
-                    const svg = document.getElementById('ced-svg');
+                    const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     pop.style.left = Math.min(window.innerWidth - 220, rect.left + comp.x + 70) + 'px';
                     pop.style.top  = (rect.top + comp.y + 30) + 'px';
                 }
                 pop.style.display = 'block';
                 setTimeout(() => {
-                    const inp = document.getElementById('ced-pop-input');
+                    const inp = _d().getElementById('ced-pop-input');
                     if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') window._cedConfirmName(comp.id);
                         if (e.key === 'Escape') pop.style.display = 'none';
                     }); }
-                    const sel = document.getElementById('ced-pop-sel');
-                    if (sel) sel.addEventListener('change', () => { document.getElementById('ced-pop-input').value = sel.value; });
+                    const sel = _d().getElementById('ced-pop-sel');
+                    if (sel) sel.addEventListener('change', () => { _d().getElementById('ced-pop-input').value = sel.value; });
                 }, 10);
             }
             window._cedConfirmName = function(id) {
                 const comp = ST.components.find(c => c.id === id);
                 if (!comp) return;
-                const inp = document.getElementById('ced-pop-input');
+                const inp = _d().getElementById('ced-pop-input');
                 const v = (inp && inp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
                 comp.varName = v;
-                document.getElementById('ced-name-popup').style.display = 'none';
+                _d().getElementById('ced-name-popup').style.display = 'none';
                 cedRender();
                 _maybeSync();
+            };
+            window._cedClosePopup = function() {
+                const p = _d().getElementById('ced-name-popup');
+                if (p) p.style.display = 'none';
             };
 
             // ---------- Auto-Alignment ----------
@@ -27084,7 +27123,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 () => {  // Abbrechen → Live-Sync deaktivieren
                                     ST.warningOpen = false;
                                     ST.liveSync = false;
-                                    const cb = document.getElementById('ced-livesync');
+                                    const cb = _d().getElementById('ced-livesync');
                                     if (cb) cb.checked = false;
                                     _setStatus('⚠ Code nicht überschrieben — Live-Sync deaktiviert');
                                 }
@@ -27099,7 +27138,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             };
             // Modal-Warnung beim ersten Überschreiben von vorhandenem Code
             function _showOverwriteWarning(onConfirm, onCancel) {
-                const modal = document.createElement('div');
+                const modal = _d().createElement('div');
                 modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:5000;display:flex;align-items:center;justify-content:center;';
                 modal.innerHTML = `
                     <div style="background:#2d2d30;color:#fff;padding:20px;border-radius:5px;max-width:420px;font-family:sans-serif;box-shadow:0 6px 30px rgba(0,0,0,0.6);">
@@ -27113,7 +27152,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             <button id="ced-warn-ok" style="background:#ff9800;color:#fff;border:none;padding:6px 14px;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold;">Überschreiben</button>
                         </div>
                     </div>`;
-                document.body.appendChild(modal);
+                _d().body.appendChild(modal);
                 modal.querySelector('#ced-warn-ok').onclick = () => {
                     if (modal.querySelector('#ced-suppress-warning').checked) {
                         try { localStorage.setItem('cedSuppressOverwriteWarning', '1'); } catch(e) {}
@@ -27153,7 +27192,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (ST.liveSync) cedGenerateCode();
             }
             function _setStatus(msg) {
-                const s = document.getElementById('ced-status');
+                const s = _d().getElementById('ced-status');
                 if (s) {
                     s.textContent = msg;
                     setTimeout(_updateStatus, 1500);

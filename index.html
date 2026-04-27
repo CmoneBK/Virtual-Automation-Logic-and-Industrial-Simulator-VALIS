@@ -7679,16 +7679,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                     g.appendChild(createSvgElement('line', {x1: px-3, y1: py + dy, x2: px+3, y2: py + dy, stroke: '#000', 'stroke-width': 1}));
                 };
 
-                // ----- Hilfsmittel: Pfeilkopf an einem Punkt -------------------------
-                const _drawArrowHead = (g, x, y, dir) => {
-                    // dir: 'up' | 'down' | 'left' | 'right'
-                    const s = 3;
-                    let d;
-                    if (dir === 'up')    d = `M ${x-s} ${y+s} L ${x} ${y} L ${x+s} ${y+s}`;
-                    else if (dir === 'down')  d = `M ${x-s} ${y-s} L ${x} ${y} L ${x+s} ${y-s}`;
-                    else if (dir === 'left')  d = `M ${x+s} ${y-s} L ${x} ${y} L ${x+s} ${y+s}`;
-                    else                       d = `M ${x-s} ${y-s} L ${x} ${y} L ${x-s} ${y+s}`;
-                    g.appendChild(createSvgElement('path', {d, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                // ----- Hilfsmittel: Pfeilkopf am Ende einer Linie ---------------------
+                // Geschlossene, SCHARFE Pfeilspitze (schmales gefülltes Dreieck) — DIN ISO 1219.
+                // Anordnung KOLLINEAR mit dem Pfeil: Spitze sitzt am Endpunkt (toX,toY),
+                // die Basis liegt rechtwinklig zur Linien-Richtung (fromX,fromY)→(toX,toY).
+                const _drawArrowHead = (g, fromX, fromY, toX, toY) => {
+                    const dx = toX - fromX, dy = toY - fromY;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const ux = dx / len, uy = dy / len;          // Einheits-Richtungsvektor
+                    const px = -uy, py = ux;                      // Senkrechte (90°)
+                    const arrowLen = 6;                           // Länge der Spitze (groß = sehr spitz)
+                    const halfBase = 2;                           // halbe Basisbreite (klein = sehr spitz)
+                    const baseX = toX - arrowLen * ux, baseY = toY - arrowLen * uy;
+                    const w1x = baseX + halfBase * px, w1y = baseY + halfBase * py;
+                    const w2x = baseX - halfBase * px, w2y = baseY - halfBase * py;
+                    g.appendChild(createSvgElement('path', {
+                        d: `M ${toX} ${toY} L ${w1x.toFixed(2)} ${w1y.toFixed(2)} L ${w2x.toFixed(2)} ${w2y.toFixed(2)} Z`,
+                        fill: '#000', stroke: '#000', 'stroke-width': 1, 'stroke-linejoin': 'miter'
+                    }));
                 };
 
                 // ----- Wegeventil (DIN ISO 1219-1) -----------------------------------
@@ -7761,20 +7769,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 // Parallele Strömung — direkte Pfeile von unten nach oben
                                 // 1 → 2  (P → A)
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn, 'up');
+                                _drawArrowHead(g, p.p1, yBotIn, p.p2, yTopIn);
                                 // 4 → 5  (B → S, Entlüftung)
                                 g.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p5, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p5, yBotIn, 'down');
+                                _drawArrowHead(g, p.p4, yTopIn, p.p5, yBotIn);
                                 // 3 gesperrt
                                 _drawBlockedPort(g, p.p3, yBotIn, false);
                             } else if (state === 'active') {
                                 // Gekreuzte Strömung (X) — Norm-Symbol für aktive Schaltstellung
                                 // 1 → 4  (P → B)
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p4, yTopIn, 'up');
+                                _drawArrowHead(g, p.p1, yBotIn, p.p4, yTopIn);
                                 // 2 → 3  (A → R, Entlüftung)
                                 g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p3, yBotIn, 'down');
+                                _drawArrowHead(g, p.p2, yTopIn, p.p3, yBotIn);
                                 // 5 gesperrt
                                 _drawBlockedPort(g, p.p5, yBotIn, false);
                             } else if (state === 'closed') {
@@ -7792,11 +7800,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 // 1 gesperrt, 2→3 (Entlüftung des Aktors)
                                 _drawBlockedPort(g, p.p1, yBotIn, false);
                                 g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p3, yBotIn, 'down');
+                                _drawArrowHead(g, p.p2, yTopIn, p.p3, yBotIn);
                             } else if (state === 'active') {
                                 // 1→2 (Druckdurchfluss),  3 gesperrt
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn, 'up');
+                                _drawArrowHead(g, p.p1, yBotIn, p.p2, yTopIn);
                                 _drawBlockedPort(g, p.p3, yBotIn, false);
                             }
                         }
@@ -7814,6 +7822,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     //   • 5/2 bistabil (isDouble): Magnet links + Magnet rechts
                     //   • 3/2 / 5/2 monostabil  : Magnet links + Federrückstellung rechts
                     const sw = 12, sh = 14;
+                    // Magnet-Box stößt DIREKT an die Ventilbox: gemeinsame Kante (kein Spalt,
+                    // keine doppelte Linie, kein Stößelstrich). Strokes überlappen exakt.
                     // Variablen am Ventil ggf. vom gekoppelten Aktor übernehmen
                     // (valve_pneu/_hyd-Build setzt linkedVarExt/Ret nicht — siehe loadFactoryState).
                     const __vv = _resolveValveVars(valve);
@@ -7822,17 +7832,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Magnet-Bezeichner aus dem vorab aufgebauten _magnetLabels-Map.
                     const coilLabelExt = (_coilExtVar && _magnetLabels[_coilExtVar]) || 'Y1';
                     const coilLabelRet = (_coilRetVar && _magnetLabels[_coilRetVar]) || 'Y2';
-                    // Linker Aktor (Magnet)
-                    _drawSolenoid(g, bx - sw - 1, by + bh/2 - sh/2, sw, sh, true, coilLabelExt, _coilExtVar || '');
-                    g.appendChild(createSvgElement('line', {x1: bx - 1, y1: by + bh/2, x2: bx, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
+                    // Linker Aktor (Magnet) — rechte Magnetkante = linke Ventilboxkante (bx).
+                    _drawSolenoid(g, bx - sw, by + bh/2 - sh/2, sw, sh, true, coilLabelExt, _coilExtVar || '');
                     // Rechter Aktor: bei isDouble/isTriple Magnet, sonst Feder
                     if (isDouble || isTriple) {
-                        _drawSolenoid(g, bx + totalW + 1, by + bh/2 - sh/2, sw, sh, false, coilLabelRet, _coilRetVar || '');
-                        g.appendChild(createSvgElement('line', {x1: bx + totalW, y1: by + bh/2, x2: bx + totalW + 1, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
+                        // Linke Magnetkante = rechte Ventilboxkante (bx + totalW).
+                        _drawSolenoid(g, bx + totalW, by + bh/2 - sh/2, sw, sh, false, coilLabelRet, _coilRetVar || '');
                     } else {
+                        // Feder direkt am Ventilrahmen (kein Stößel — Federkraft wirkt direkt)
                         _drawSpring(g, bx + totalW + 1, by + bh/2 - 4, 11, 8);
                     }
-                    // 5/3: zentrierende Rückstellfedern (immer beidseitig, unabhängig von Variablen)
+                    // 5/3: zentrierende Rückstellfedern auf der jeweiligen Außenseite des Magneten
                     if (isTriple) {
                         _drawSpring(g, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
                         _drawSpring(g, bx - sw - 10,         by + bh/2 + 8, 8, 5);
@@ -7927,38 +7937,44 @@ You must output exactly this JSON format. The logic code goes as a single string
                             saveFactoryState();
                         }
                     });
-                    let bw = 36, bh = 40;
+                    let bw = 40, bh = 44;
                     let bx = cx - bw/2, by = cy - bh/2;
-                    // Außenrahmen
+                    // Außenrahmen (Gehäuse)
                     g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
-                    // Anschlussstutzen oben und unten (kurze Linien außerhalb der Box)
+                    // Anschlussstutzen oben/unten (kurze Linien außerhalb der Box)
                     g.appendChild(createSvgElement('line', {x1: cx, y1: by - 4, x2: cx, y2: by, stroke: '#000', 'stroke-width': 1.2}));
                     g.appendChild(createSvgElement('line', {x1: cx, y1: by + bh, x2: cx, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1.2}));
-                    // Sammelpunkte oben/unten (T-Verzweigung) für die parallelen Pfade
-                    let yIn = by + 4, yOut = by + bh - 4;
-                    g.appendChild(createSvgElement('line', {x1: cx, y1: by, x2: cx, y2: yIn, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('line', {x1: cx, y1: yOut, x2: cx, y2: by + bh, stroke: '#000', 'stroke-width': 1}));
-                    // Linker Pfad: Drossel (zwei aufeinander zulaufende Bögen mit Verstellpfeil)
-                    let dx = cx - 9;
-                    g.appendChild(createSvgElement('line', {x1: cx, y1: yIn, x2: dx, y2: yIn, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('line', {x1: dx, y1: yIn, x2: dx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('line', {x1: dx, y1: yOut, x2: cx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
-                    // Drossel-Symbol (verengende Bögen) auf dem linken Pfad
-                    let dyMid = (yIn + yOut)/2;
-                    g.appendChild(createSvgElement('path', {d: `M ${dx-4} ${dyMid-5} Q ${dx} ${dyMid-2} ${dx-4} ${dyMid+1}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('path', {d: `M ${dx+4} ${dyMid+5} Q ${dx} ${dyMid+2} ${dx+4} ${dyMid-1}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
-                    // Verstell-Pfeil (diagonal mit Pfeilkopf — Symbol für variable Drossel)
-                    g.appendChild(createSvgElement('line', {x1: dx-7, y1: dyMid+7, x2: dx+5, y2: dyMid-7, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('path', {d: `M ${dx+1} ${dyMid-7} L ${dx+5} ${dyMid-7} L ${dx+5} ${dyMid-3}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
-                    // Rechter Pfad: Rückschlagventil (Kegel + Sitz) im Bypass
-                    let bx2 = cx + 9;
-                    g.appendChild(createSvgElement('line', {x1: cx, y1: yIn, x2: bx2, y2: yIn, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('line', {x1: bx2, y1: yIn, x2: bx2, y2: yOut, stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('line', {x1: bx2, y1: yOut, x2: cx, y2: yOut, stroke: '#000', 'stroke-width': 1}));
-                    // Rückschlag-Symbol: Kreis (Kugel) auf V-Sitz — Durchfluss von oben nach unten frei,
-                    // umgekehrt sperrt die Kugel auf dem Sitz.
-                    g.appendChild(createSvgElement('path', {d: `M ${bx2-3} ${dyMid+3} L ${bx2+3} ${dyMid+3} L ${bx2} ${dyMid-3} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
-                    g.appendChild(createSvgElement('circle', {cx: bx2, cy: dyMid - 5, r: 1.6, fill: '#000'}));
+                    // Hauptleitung (durchgehend von oben nach unten in der Box-Mitte)
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: by, x2: cx, y2: by + bh, stroke: '#000', 'stroke-width': 1.2}));
+                    // Bypass-Schleife LINKS — innerer Rahmen, an Hauptleitung über Knotenpunkte angeschlossen.
+                    // Die linke Vertikale ist beim Rückschlagventil UNTERBROCHEN, damit die Linie nicht
+                    // durch die Kugel verläuft — der Sitz/die Kugel sitzen exakt in dieser Lücke.
+                    let bypassX = cx - 14;
+                    let yTopJct = by + 8, yBotJct = by + bh - 8;
+                    let _cvDyMid = (yTopJct + yBotJct) / 2;
+                    let _cvGap = 5;
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: yTopJct, x2: bypassX, y2: yTopJct, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: bypassX, y1: yTopJct, x2: bypassX, y2: _cvDyMid - _cvGap, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: bypassX, y1: _cvDyMid + _cvGap, x2: bypassX, y2: yBotJct, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: bypassX, y1: yBotJct, x2: cx, y2: yBotJct, stroke: '#000', 'stroke-width': 1}));
+                    // Knotenpunkte (gefüllte Kreise) an den Verzweigungen auf der Hauptleitung
+                    g.appendChild(createSvgElement('circle', {cx: cx, cy: yTopJct, r: 1.6, fill: '#000'}));
+                    g.appendChild(createSvgElement('circle', {cx: cx, cy: yBotJct, r: 1.6, fill: '#000'}));
+                    // Drossel-Symbol AUF der Hauptleitung in der Mitte: zwei Bögen ( ), die nach AUSSEN gebogen sind.
+                    // Konkavseite jedes Bogens zeigt von der Mitte WEG (nicht zur Mitte hin).
+                    // → linker Bogen öffnet nach LINKS, rechter Bogen öffnet nach RECHTS. Die Bögen
+                    //   wölben sich zur Mitte hin und bilden so die Verengung des Strömungskanals.
+                    let dyMid = (yTopJct + yBotJct) / 2;
+                    g.appendChild(createSvgElement('path', {d: `M ${cx-5} ${dyMid-7} Q ${cx-1} ${dyMid} ${cx-5} ${dyMid+7}`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('path', {d: `M ${cx+5} ${dyMid-7} Q ${cx+1} ${dyMid} ${cx+5} ${dyMid+7}`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
+                    // Verstell-Pfeil (diagonal von links-unten nach rechts-oben durch die Drossel) — geschlossene Pfeilspitze
+                    g.appendChild(createSvgElement('line', {x1: cx-9, y1: dyMid+9, x2: cx+9, y2: dyMid-9, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('path', {d: `M ${cx+9} ${dyMid-9} L ${cx+5} ${dyMid-8} L ${cx+8} ${dyMid-4} Z`, fill: '#000', stroke: '#000', 'stroke-width': 1}));
+                    // Rückschlagventil AUF dem Bypass: nach OBEN offene Schale (Sitz) + Kugel DARIN.
+                    // Schale: U-förmige Kurve mit Boden bei dyMid+3, Rändern bei dyMid-3.
+                    // Kugel: gefüllt mit Weiß, damit eventuell durchquerende Linien verdeckt werden.
+                    g.appendChild(createSvgElement('path', {d: `M ${bypassX-4} ${dyMid-3} Q ${bypassX} ${dyMid+9} ${bypassX+4} ${dyMid-3}`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('circle', {cx: bypassX, cy: dyMid, r: 2.2, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
                     // Port-Beschriftungen ('1' oben am Aktor, '2' unten am Ventil) seitlich versetzt
                     // — auf der Seite gegenüber des Etiketten-Blocks, damit nichts kollidiert.
                     // Vertikal ≥ 6 px Abstand zur Boxkante.
@@ -8312,11 +8328,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let actPortAx = actG._portAx, actPortBx = actG._portBx;
                         let actPortBotY = actG._portBotY != null ? actG._portBotY : (actuatorY + 25);
                         // Drosseln finden + zeichnen
-                        // extDrosselX immer bei cx-18 — auch bei 3/2 — damit die Vertikalen
+                        // extDrosselX immer bei cx-22 — auch bei 3/2 — damit die Vertikalen
                         // Anschlussleitungen NICHT durch die Mitte laufen (wo die Ventil-Labels
-                        // "5/2"/"3/2"/"-QM…" zentriert oberhalb der Box sitzen).
-                        let extDrosselX = cx - 18;
-                        let retDrosselX = cx + 18;
+                        // "5/2"/"3/2"/"-QM…" zentriert oberhalb der Box sitzen). 4 px Spalt
+                        // zwischen ext- und ret-Drossel (Boxen je 36 px breit, einander zugewandte
+                        // Kanten bei cx-4 / cx+4 → 8 px Spalt).
+                        let extDrosselX = cx - 22;
+                        let retDrosselX = cx + 22;
                         let throttleTopY = throttleY - 24;   // throttle top stub start
                         let throttleBotY = throttleY + 24;   // throttle bottom stub start
                         let tExt = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ext');
@@ -21113,6 +21131,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (typeof _applyHydManualConnections  === 'function') _applyHydManualConnections();
                 if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
             } catch(e) { console.error(e); } finally { isLoadingFactory = false; }
+            // Schaltplan nach dem Laden synchronisieren — sonst zeigt der Pneumatik-/
+            // Hydraulik-Bereich beim ersten Seitenaufruf nichts an, weil drawCircuitPlan
+            // bereits VOR loadFactoryState() durch updateEditor() lief (ohne Aktoren/Ventile).
+            try {
+                if (typeof currentGraph !== 'undefined' && currentGraph) {
+                    drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true);
+                }
+            } catch(e) { /* currentGraph ggf. noch nicht bereit — egal */ }
         };
         // ==========================================
         // KOMMENTAR-PINS

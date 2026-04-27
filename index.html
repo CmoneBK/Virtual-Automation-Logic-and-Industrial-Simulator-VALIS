@@ -7559,7 +7559,73 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const pneuValves = factoryObjects.filter(o => o.type === 'valve_pneu' && o.targetCylinderId);
                 const hydValves  = factoryObjects.filter(o => o.type === 'valve_hyd'  && o.targetCylinderId);
 
+                // ----- Magnet-Bezeichnungen für alle Ventilspulen vorbereiten --------
+                // Reihenfolge:
+                //   1) iecSymMap (vom Elektro-Schaltplan): wenn die Variable dort als Ausgang
+                //      auftaucht, wird ihr Prefix (z.B. '-MB1', '-P1') übernommen → konsistent
+                //      mit dem Elektro-Schaltplan.
+                //   2) Sonst: eigene fortlaufende '-MB'-Nummerierung pro Pneumatik-Plan.
+                //      Sie startet hinter der höchsten bereits in iecSymMap belegten -MBn.
+                const _magnetLabels = {};
+                let _nextPneuMb = 1;
+                if (window.iecSymMap) {
+                    for (let v in window.iecSymMap) {
+                        let prefix = String(window.iecSymMap[v]).split(' ')[0];
+                        let m = prefix.match(/^-MB(\d+)$/);
+                        if (m) _nextPneuMb = Math.max(_nextPneuMb, parseInt(m[1], 10) + 1);
+                    }
+                }
+                // Helper: liefert (extVar, retVar) für ein Ventil — fällt auf den
+                // gekoppelten Aktor zurück, wenn das Ventil selbst die Variablen nicht trägt.
+                const _resolveValveVars = (valve) => {
+                    let extV = valve.linkedVarExt || null;
+                    let retV = valve.linkedVarRet || null;
+                    if ((!extV || !retV) && valve.targetCylinderId) {
+                        let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId);
+                        if (cyl) {
+                            if (!extV) extV = cyl.linkedVarExt || null;
+                            if (!retV) retV = cyl.linkedVarRet || null;
+                        }
+                    }
+                    return { extV, retV };
+                };
+                [...pneuValves, ...hydValves].forEach(v => {
+                    let { extV, retV } = _resolveValveVars(v);
+                    [extV, retV].forEach(varName => {
+                        if (!varName || _magnetLabels[varName]) return;
+                        let entry = window.iecSymMap && window.iecSymMap[varName];
+                        if (entry) {
+                            _magnetLabels[varName] = String(entry).split(' ')[0];
+                        } else {
+                            _magnetLabels[varName] = '-MB' + (_nextPneuMb++);
+                        }
+                    });
+                });
+                // ----- Fallback-NormLabel (-MMn) für Aktoren ohne Bezeichnung ---------
+                // (z.B. weil ein zwischenzeitlich gelöschtes Ventil obj.normLabel auf null
+                // gesetzt hat). Wir vergeben in diesem Schaltplan-Lauf einen eindeutigen
+                // -MMn-Bezeichner, ohne den Factory-Zustand zu mutieren.
+                const _actorLabels = {};
+                let _nextMm = 1;
+                [...pneuValves, ...hydValves].forEach(v => {
+                    let cyl = factoryObjects.find(o => o.id === v.targetCylinderId && _isAct(o.type));
+                    if (!cyl) return;
+                    let m = (cyl.normLabel || '').match(/^-MM(\d+)$/);
+                    if (m) _nextMm = Math.max(_nextMm, parseInt(m[1], 10) + 1);
+                });
+                [...pneuValves, ...hydValves].forEach(v => {
+                    let cyl = factoryObjects.find(o => o.id === v.targetCylinderId && _isAct(o.type));
+                    if (!cyl || _actorLabels[cyl.id]) return;
+                    _actorLabels[cyl.id] = cyl.normLabel || ('-MM' + (_nextMm++));
+                });
+
                 // ----- Hilfsmittel: Magnetspule (rechteck mit diagonaler Linie) ------
+                //   • Magnet-Bezeichner (Y1 / -MB1 …) WEIT oberhalb der Ventilbox-Oberkante
+                //     (nicht nur knapp über der Spule — sonst hängt das Label im Ventilgehäuse).
+                //   • Variablen-Label HORIZONTAL daneben:
+                //       leftSide=true (linker Magnet):  Variable steht LINKS, nach links wachsend
+                //       leftSide=false (rechter Magnet): Variable steht RECHTS, nach rechts wachsend
+                //     Schriftgröße 7 (statt 8), damit lange Variablennamen weniger Platz brauchen.
                 const _drawSolenoid = (g, x, y, w, h, leftSide, label, varName) => {
                     g.appendChild(createSvgElement('rect', {x, y, width: w, height: h, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
                     g.appendChild(createSvgElement('line', {
@@ -7567,16 +7633,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                         stroke: '#000', 'stroke-width': 1
                     }));
                     if (label) {
+                        // y-16 vom Spulen-Top → Label landet ~6 px über der Ventil-Boxkante
+                        // (nah am Magneten, klar erkennbar als sein Bezeichner).
                         let mL = createSvgElement('text', {
-                            x: x + w/2, y: y - 3, 'font-size': '8',
+                            x: x + w/2, y: y - 16, 'font-size': '8',
                             fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'
                         });
                         mL.textContent = label; g.appendChild(mL);
                     }
                     if (varName) {
+                        // Variable horizontal vom Magneten weg gerichtet, mit größerem Abstand (10 px)
+                        // damit 5/3-Zentrierfedern (links/rechts der Magnete) nicht im Weg sind.
                         let vL = createSvgElement('text', {
-                            x: x + w/2, y: y + h + 9, 'font-size': '8',
-                            fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'
+                            x: leftSide ? (x - 10) : (x + w + 10),
+                            y: y + h/2 + 3,
+                            'font-size': '7',
+                            fill: '#0288d1',
+                            'text-anchor': leftSide ? 'end' : 'start',
+                            'font-family': 'monospace'
                         });
                         vL.textContent = varName; g.appendChild(vL);
                     }
@@ -7645,7 +7719,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let isDouble = !!valve.isDouble;
                     let isTriple = !!valve.isTriple;
                     let nBoxes = isTriple ? 3 : 2;
-                    let bw = 36, bh = 34;
+                    // bw=50 (statt 36), damit alle 5 Anschlüsse + Beschriftungen kollisionsfrei nebeneinanderpassen
+                    let bw = 50, bh = 34;
                     let totalW = bw * nBoxes;
                     let bx = cx - totalW/2;
                     let by = cy - bh/2;
@@ -7670,9 +7745,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                         p1: bx + bw*boxIdx + bw*0.30,  // P (bot)
                         p3: bx + bw*boxIdx + bw*0.70   // R (bot)
                     });
-                    const yTopIn = by + 5;
-                    const yBotIn = by + bh - 5;
-                    const yMid   = (yTopIn + yBotIn) / 2;
+                    // Box-Kanten: Pfeile und T-Stops MÜSSEN exakt an den Boxrändern enden,
+                    // damit die Anschlussstutzen (außerhalb gezeichnet) bündig anschließen.
+                    const yTopIn = by;          // OBERE Boxkante
+                    const yBotIn = by + bh;     // UNTERE Boxkante
 
                     // Internen Schaltzustand pro Box zeichnen
                     // DIN ISO 1219: Pfeile zeigen die Strömungsrichtung in der jeweiligen
@@ -7685,20 +7761,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 // Parallele Strömung — direkte Pfeile von unten nach oben
                                 // 1 → 2  (P → A)
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn + 1, 'up');
+                                _drawArrowHead(g, p.p2, yTopIn, 'up');
                                 // 4 → 5  (B → S, Entlüftung)
                                 g.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p5, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p5, yBotIn - 1, 'down');
+                                _drawArrowHead(g, p.p5, yBotIn, 'down');
                                 // 3 gesperrt
                                 _drawBlockedPort(g, p.p3, yBotIn, false);
                             } else if (state === 'active') {
                                 // Gekreuzte Strömung (X) — Norm-Symbol für aktive Schaltstellung
                                 // 1 → 4  (P → B)
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p4, yTopIn + 1, 'up');
+                                _drawArrowHead(g, p.p4, yTopIn, 'up');
                                 // 2 → 3  (A → R, Entlüftung)
                                 g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p3, yBotIn - 1, 'down');
+                                _drawArrowHead(g, p.p3, yBotIn, 'down');
                                 // 5 gesperrt
                                 _drawBlockedPort(g, p.p5, yBotIn, false);
                             } else if (state === 'closed') {
@@ -7716,11 +7792,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 // 1 gesperrt, 2→3 (Entlüftung des Aktors)
                                 _drawBlockedPort(g, p.p1, yBotIn, false);
                                 g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p3, yBotIn - 1, 'down');
+                                _drawArrowHead(g, p.p3, yBotIn, 'down');
                             } else if (state === 'active') {
                                 // 1→2 (Druckdurchfluss),  3 gesperrt
                                 g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn + 1, 'up');
+                                _drawArrowHead(g, p.p2, yTopIn, 'up');
                                 _drawBlockedPort(g, p.p3, yBotIn, false);
                             }
                         }
@@ -7730,76 +7806,88 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (isTriple) { drawState(0, 'active'); drawState(1, 'closed'); drawState(2, 'rest'); }
                     else          { drawState(0, 'active'); drawState(1, 'rest'); }
 
-                    // ----- Magnetspulen / Federn -------------------------------------
+                    // ----- Magnetspulen / Federn (DIN ISO 1219) ----------------------
+                    // Die Wahl Magnet vs. Feder hängt am Ventiltyp (isDouble/isTriple),
+                    // NICHT am Vorhandensein einer linkedVar (eine Spule kann existieren,
+                    // ohne dass eine SPS-Variable angeschlossen ist).
+                    //   • 5/3 (isTriple)        : Magnet links + Magnet rechts + zentrierende Federn
+                    //   • 5/2 bistabil (isDouble): Magnet links + Magnet rechts
+                    //   • 3/2 / 5/2 monostabil  : Magnet links + Federrückstellung rechts
                     const sw = 12, sh = 14;
-                    if (valve.linkedVarExt) {
-                        _drawSolenoid(g, bx - sw - 1, by + bh/2 - sh/2, sw, sh, true, 'Y1', valve.linkedVarExt);
-                        // Stößelstrich zur Box
-                        g.appendChild(createSvgElement('line', {x1: bx - 1, y1: by + bh/2, x2: bx, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
-                    } else {
-                        // monostabile Variante mit Magnet auf einer Seite UND linkedVarExt fehlt → Default als Hand
-                        // (sehr selten — wir markieren als Federrückstellung links)
-                        _drawSpring(g, bx - 12, by + bh/2 - 4, 11, 8);
-                    }
-                    if (valve.linkedVarRet && (isDouble || isTriple)) {
-                        _drawSolenoid(g, bx + totalW + 1, by + bh/2 - sh/2, sw, sh, false, 'Y2', valve.linkedVarRet);
+                    // Variablen am Ventil ggf. vom gekoppelten Aktor übernehmen
+                    // (valve_pneu/_hyd-Build setzt linkedVarExt/Ret nicht — siehe loadFactoryState).
+                    const __vv = _resolveValveVars(valve);
+                    const _coilExtVar = __vv.extV;
+                    const _coilRetVar = __vv.retV;
+                    // Magnet-Bezeichner aus dem vorab aufgebauten _magnetLabels-Map.
+                    const coilLabelExt = (_coilExtVar && _magnetLabels[_coilExtVar]) || 'Y1';
+                    const coilLabelRet = (_coilRetVar && _magnetLabels[_coilRetVar]) || 'Y2';
+                    // Linker Aktor (Magnet)
+                    _drawSolenoid(g, bx - sw - 1, by + bh/2 - sh/2, sw, sh, true, coilLabelExt, _coilExtVar || '');
+                    g.appendChild(createSvgElement('line', {x1: bx - 1, y1: by + bh/2, x2: bx, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
+                    // Rechter Aktor: bei isDouble/isTriple Magnet, sonst Feder
+                    if (isDouble || isTriple) {
+                        _drawSolenoid(g, bx + totalW + 1, by + bh/2 - sh/2, sw, sh, false, coilLabelRet, _coilRetVar || '');
                         g.appendChild(createSvgElement('line', {x1: bx + totalW, y1: by + bh/2, x2: bx + totalW + 1, y2: by + bh/2, stroke: '#000', 'stroke-width': 1}));
-                    } else if (!isTriple) {
-                        // monostabil: Feder rechts
+                    } else {
                         _drawSpring(g, bx + totalW + 1, by + bh/2 - 4, 11, 8);
                     }
-                    // Bei 5/3 zentrierte Federn (zusätzlich zu beiden Magneten): kleine Detentkennung oben
+                    // 5/3: zentrierende Rückstellfedern (immer beidseitig, unabhängig von Variablen)
                     if (isTriple) {
-                        // Kleine Federn-Symbole rechts und links zwischen Magnet und Box deuten zentrierende Rückstellfedern an
-                        if (valve.linkedVarRet) _drawSpring(g, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
-                        if (valve.linkedVarExt) _drawSpring(g, bx - sw - 10, by + bh/2 + 8, 8, 5);
+                        _drawSpring(g, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
+                        _drawSpring(g, bx - sw - 10,         by + bh/2 + 8, 8, 5);
                     }
 
                     // ----- Externe Anschlussstutzen (an Ruhestellung-Box) -----------
-                    // Index der Ruhestellung
+                    // Port-Beschriftungen werden NEBEN den Stutzen platziert mit ≥ 5 px
+                    // seitlichem Versatz und ≥ 6 px vertikaler Abstand zur Box, damit
+                    // weder Box-Rand noch Anschluss-Linie überdeckt werden.
                     let rest = isTriple ? 1 : 1;
                     let restPorts = (isDouble || isTriple) ? portsX5(rest) : portsX3(rest);
-                    // Anschlüsse senkrecht aus der Ruhestellung-Box raus
+                    const _portLabel = (px, py, txt, anchor) => {
+                        let t = createSvgElement('text', {
+                            x: px + (anchor === 'start' ? 5 : -5), y: py,
+                            'font-size': '8', fill: '#000',
+                            'text-anchor': anchor || 'start', 'font-family': 'monospace'
+                        });
+                        t.textContent = txt; g.appendChild(t);
+                    };
                     if (isDouble || isTriple) {
-                        // Port 2 (A) nach oben
+                        // Top-Anschlüsse Port 2 (A) und Port 4 (B) — Anker nach AUSSEN (von der Mitte weg),
+                        // damit beide Beschriftungen sich nicht überlappen.
                         g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
-                        let lA = createSvgElement('text', {x: restPorts.p2, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        lA.textContent = sys === 'pneu' ? '2' : 'A'; g.appendChild(lA);
-                        // Port 4 (B) nach oben
+                        _portLabel(restPorts.p2, by - 10, sys === 'pneu' ? '2' : 'A', 'end');
                         g.appendChild(createSvgElement('line', {x1: restPorts.p4, y1: yTopIn, x2: restPorts.p4, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
-                        let lB = createSvgElement('text', {x: restPorts.p4, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        lB.textContent = sys === 'pneu' ? '4' : 'B'; g.appendChild(lB);
-                        // Port 1 (P) nach unten
+                        _portLabel(restPorts.p4, by - 10, sys === 'pneu' ? '4' : 'B', 'start');
+                        // Bottom-Anschlüsse:
+                        //   Port 3 (R / T1): links — Anker 'end'  → Text wächst NACH LINKS, weg vom Zentrum
+                        //   Port 1 (P)     : Mitte — Anker 'start' → Text wächst NACH RECHTS, weg von Port 3
+                        //   Port 5 (S / T2): rechts — Anker 'start' → Text wächst NACH RECHTS, weg vom Zentrum
                         g.appendChild(createSvgElement('line', {x1: restPorts.p1, y1: yBotIn, x2: restPorts.p1, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
-                        let lP = createSvgElement('text', {x: restPorts.p1, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        lP.textContent = sys === 'pneu' ? '1' : 'P'; g.appendChild(lP);
-                        // Port 3 (R) nach unten
+                        _portLabel(restPorts.p1, by + bh + 14, sys === 'pneu' ? '1' : 'P', 'start');
                         g.appendChild(createSvgElement('line', {x1: restPorts.p3, y1: yBotIn, x2: restPorts.p3, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
-                        let l3 = createSvgElement('text', {x: restPorts.p3, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        l3.textContent = sys === 'pneu' ? '3' : 'T1'; g.appendChild(l3);
-                        // Port 5 (S) nach unten
+                        _portLabel(restPorts.p3, by + bh + 14, sys === 'pneu' ? '3' : 'T1', 'end');
                         g.appendChild(createSvgElement('line', {x1: restPorts.p5, y1: yBotIn, x2: restPorts.p5, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
-                        let l5 = createSvgElement('text', {x: restPorts.p5, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        l5.textContent = sys === 'pneu' ? '5' : 'T2'; g.appendChild(l5);
+                        _portLabel(restPorts.p5, by + bh + 14, sys === 'pneu' ? '5' : 'T2', 'start');
                     } else {
-                        // 3/2-Wegeventil
+                        // 3/2-Wegeventil — beide Anschlüsse nach AUSSEN, damit sie sich nicht überlappen.
                         g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
-                        let lA = createSvgElement('text', {x: restPorts.p2, y: by - 7, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        lA.textContent = sys === 'pneu' ? '2' : 'A'; g.appendChild(lA);
+                        _portLabel(restPorts.p2, by - 10, sys === 'pneu' ? '2' : 'A', 'start');
                         g.appendChild(createSvgElement('line', {x1: restPorts.p1, y1: yBotIn, x2: restPorts.p1, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
-                        let lP = createSvgElement('text', {x: restPorts.p1, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        lP.textContent = sys === 'pneu' ? '1' : 'P'; g.appendChild(lP);
+                        _portLabel(restPorts.p1, by + bh + 14, sys === 'pneu' ? '1' : 'P', 'end');
                         g.appendChild(createSvgElement('line', {x1: restPorts.p3, y1: yBotIn, x2: restPorts.p3, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
-                        let l3 = createSvgElement('text', {x: restPorts.p3, y: by + bh + 14, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        l3.textContent = sys === 'pneu' ? '3' : 'T'; g.appendChild(l3);
+                        _portLabel(restPorts.p3, by + bh + 14, sys === 'pneu' ? '3' : 'T', 'start');
                     }
 
-                    // Typ-Bezeichnung (5/2 / 3/2 / 5/3) und Norm-Label
+                    // Typ-Bezeichnung und Norm-Label ZENTRIERT über der Ventilbox, knapp über dem
+                    // Knie-Korridor (kneeY2 = by-18). Bei 3/2 hat ein Anschluss seine
+                    // Vertikallinie sonst an cx, daher liegt extDrosselX einheitlich bei cx-18
+                    // → die Labels bei x=cx bleiben dadurch frei.
                     let typeLabel = isTriple ? '5/3' : (isDouble ? '5/2' : '3/2');
-                    let tL = createSvgElement('text', {x: cx, y: by - 24, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-weight': 'bold'});
+                    let tL = createSvgElement('text', {x: bx + totalW/2, y: by - 22, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-weight': 'bold'});
                     tL.textContent = typeLabel; g.appendChild(tL);
                     if (valve.normLabel) {
-                        let nL = createSvgElement('text', {x: cx, y: by - 36, 'font-size': '10', fill: '#000', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'monospace'});
+                        let nL = createSvgElement('text', {x: bx + totalW/2, y: by - 34, 'font-size': '10', fill: '#000', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'monospace'});
                         nL.textContent = valve.normLabel; g.appendChild(nL);
                     }
 
@@ -7812,7 +7900,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // ----- Drosselrückschlagventil (DIN ISO 1219-1) ----------------------
                 // Symbol: Quadratischer Rahmen mit Drossel (variabel) und parallel
                 // dazu ein Rückschlagventil (Kegel + Sitz). Verstellbarkeit durch Pfeil.
-                const _drawThrottleSym = (cx, cy, thr) => {
+                // labelSide: 'left' / 'right' — auf welcher Seite Norm-Label und %
+                // platziert werden, damit nebeneinanderstehende Drosseln sich nicht
+                // gegenseitig die Beschriftungen überdecken.
+                const _drawThrottleSym = (cx, cy, thr, labelSide) => {
                     let g = createSvgElement('g', {});
                     g.setAttribute('data-obj-id', thr.id);
                     g.style.cursor = 'pointer';
@@ -7868,13 +7959,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // umgekehrt sperrt die Kugel auf dem Sitz.
                     g.appendChild(createSvgElement('path', {d: `M ${bx2-3} ${dyMid+3} L ${bx2+3} ${dyMid+3} L ${bx2} ${dyMid-3} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
                     g.appendChild(createSvgElement('circle', {cx: bx2, cy: dyMid - 5, r: 1.6, fill: '#000'}));
-                    // Öffnungsgrad in %
-                    let pct = createSvgElement('text', {x: cx, y: by + bh + 14, 'font-size': '9', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                    pct.textContent = (thr.opening != null ? thr.opening : 100) + ' %'; g.appendChild(pct);
+                    // Port-Beschriftungen ('1' oben am Aktor, '2' unten am Ventil) seitlich versetzt
+                    // — auf der Seite gegenüber des Etiketten-Blocks, damit nichts kollidiert.
+                    // Vertikal ≥ 6 px Abstand zur Boxkante.
+                    const onLeft = labelSide === 'left' || labelSide == null;
+                    const portTxtX = onLeft ? cx + 5 : cx - 5;
+                    const portAnchor = onLeft ? 'start' : 'end';
+                    let p1Lbl = createSvgElement('text', {x: portTxtX, y: by - 8, 'font-size': '8', fill: '#000', 'text-anchor': portAnchor, 'font-family': 'monospace'});
+                    p1Lbl.textContent = '1'; g.appendChild(p1Lbl);
+                    let p2Lbl = createSvgElement('text', {x: portTxtX, y: by + bh + 12, 'font-size': '8', fill: '#000', 'text-anchor': portAnchor, 'font-family': 'monospace'});
+                    p2Lbl.textContent = '2'; g.appendChild(p2Lbl);
+                    // Norm-Label und Öffnungsgrad GEMEINSAM auf einer Seite (links oder rechts vom Block),
+                    // 8 px seitlicher Abstand zur Boxkante (statt vorher 4 px).
+                    const lblX     = onLeft ? bx - 8 : bx + bw + 8;
+                    const lblAnchor = onLeft ? 'end' : 'start';
                     if (thr.normLabel) {
-                        let nL = createSvgElement('text', {x: cx, y: by - 4, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        let nL = createSvgElement('text', {x: lblX, y: by + 8, 'font-size': '9', fill: '#000', 'text-anchor': lblAnchor, 'font-weight': 'bold', 'font-family': 'monospace'});
                         nL.textContent = thr.normLabel; g.appendChild(nL);
                     }
+                    let pct = createSvgElement('text', {x: lblX, y: by + bh - 4, 'font-size': '9', fill: '#0288d1', 'text-anchor': lblAnchor, 'font-weight': 'bold', 'font-family': 'monospace'});
+                    pct.textContent = (thr.opening != null ? thr.opening : 100) + ' %'; g.appendChild(pct);
                     g._anchorTopY = by; g._anchorBotY = by + bh;
                     return g;
                 };
@@ -7899,7 +8003,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Komplett geschlossenes Zylindergehäuse
                     g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
                     // Kolben (massiver senkrechter Balken)
-                    let pXFrac = isDouble ? 0.42 : 0.55; // einfachwirkend: Kolben weiter rechts (Federraum links)
+                    // Einfachwirkend: Kolben links → Druckluftkammer LINKS (Anschluss),  Federraum RECHTS (auf Stangenseite)
+                    // Doppeltwirkend:   Kolben mittig links → zwei Kammern beidseitig
+                    let pXFrac = isDouble ? 0.42 : 0.20;
                     let pX = bx + bw * pXFrac;
                     g.appendChild(createSvgElement('rect', {x: pX-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
                     // Kolbenstange (durch rechte Endkappe)
@@ -7909,10 +8015,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Stangen-Dichtung: zwei kurze parallele Striche an der Austrittsstelle (Norm-Detail)
                     g.appendChild(createSvgElement('line', {x1: bx + bw + 2, y1: by + bh/2 - 3, x2: bx + bw + 2, y2: by + bh/2 + 3, stroke: '#000', 'stroke-width': 0.8}));
                     g.appendChild(createSvgElement('line', {x1: bx + bw + 4, y1: by + bh/2 - 3, x2: bx + bw + 4, y2: by + bh/2 + 3, stroke: '#000', 'stroke-width': 0.8}));
-                    // Einfachwirkend: Rückstellfeder INNERHALB des Gehäuses (links vom Kolben)
+                    // Einfachwirkend: Rückstellfeder INNERHALB des Gehäuses, RECHTS vom Kolben
+                    // (zwischen Kolbenfront und stangenseitiger Endkappe — Feder umschließt die Stange)
                     if (!isDouble) {
-                        // Zickzack-Feder zwischen linker Endkappe und Kolbenrücken
-                        let fxs = bx + 3, fxe = pX - 3;
+                        let fxs = pX + 3, fxe = bx + bw - 3;
                         let fy0 = by + 4, fy1 = by + bh - 4;
                         let n = 6;
                         let zg = `M ${fxs} ${(fy0+fy1)/2}`;
@@ -7924,42 +8030,45 @@ You must output exactly this JSON format. The logic code goes as a single string
                         zg += ` L ${fxe} ${(fy0+fy1)/2}`;
                         g.appendChild(createSvgElement('path', {d: zg, fill: 'none', stroke: '#000', 'stroke-width': 1}));
                     }
-                    // Anschluss-Stutzen nach OBEN (für Kopplung an Drosseln in der Schemaspalte)
-                    // Position: unmittelbar hinter dem Kolbenboden auf der jeweiligen Kammerseite
+                    // Anschluss-Stutzen nach UNTEN (Aktor steht im Schaltplan oben, Druckluft kommt von unten)
                     let portAx = bx + bw * 0.18;
-                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by, x2: portAx, y2: by - 10, stroke: '#000', 'stroke-width': 1}));
-                    let lA = createSvgElement('text', {x: portAx, y: by - 13, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by + bh, x2: portAx, y2: by + bh + 10, stroke: '#000', 'stroke-width': 1}));
+                    // Port-Beschriftung NEBEN dem Stutzen (nicht darauf), 4 px versetzt
+                    let lA = createSvgElement('text', {x: portAx + 4, y: by + bh + 9, 'font-size': '8', fill: '#000', 'text-anchor': 'start', 'font-family': 'monospace'});
                     lA.textContent = portA; g.appendChild(lA);
                     if (isDouble) {
                         let portBx = bx + bw * 0.78;
-                        g.appendChild(createSvgElement('line', {x1: portBx, y1: by, x2: portBx, y2: by - 10, stroke: '#000', 'stroke-width': 1}));
-                        let lB = createSvgElement('text', {x: portBx, y: by - 13, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        g.appendChild(createSvgElement('line', {x1: portBx, y1: by + bh, x2: portBx, y2: by + bh + 10, stroke: '#000', 'stroke-width': 1}));
+                        let lB = createSvgElement('text', {x: portBx - 4, y: by + bh + 9, 'font-size': '8', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
                         lB.textContent = portB; g.appendChild(lB);
                         g._portBx = portBx;
                     }
                     g._portAx = portAx;
-                    // Norm-Label und Variablen
-                    if (cyl.normLabel) {
-                        let nL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 16, 'font-size': '11', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        nL.textContent = cyl.normLabel; g.appendChild(nL);
+                    g._portBotY = by + bh + 10;     // Anschluss-Stutzen-Endpunkt (für Schlauchführung)
+                    // Norm-Label, Variablen und Maße ÜBER dem Aktor — mit ≥ 6 px Abstand zum Gehäuse
+                    if (cyl.pistonD || cyl.stroke) {
+                        let dimL = createSvgElement('text', {x: bx + bw/2, y: by - 32, 'font-size': '8', fill: '#666', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        dimL.textContent = `Ø ${cyl.pistonD||20}/${cyl.rodD||8} × ${cyl.stroke||100} mm`;
+                        g.appendChild(dimL);
                     }
                     let vNames = [];
                     if (cyl.linkedVarExt) vNames.push(cyl.linkedVarExt);
                     if (cyl.linkedVarRet) vNames.push(cyl.linkedVarRet);
                     if (vNames.length > 0) {
-                        let vL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 30, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        let vL = createSvgElement('text', {x: bx + bw/2, y: by - 20, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'});
                         vL.textContent = vNames.join(' / '); g.appendChild(vL);
                     }
-                    // Hub und Durchmesser-Info
-                    if (cyl.pistonD || cyl.stroke) {
-                        let dimL = createSvgElement('text', {x: bx + bw/2, y: by + bh + 44, 'font-size': '8', fill: '#666', 'text-anchor': 'middle', 'font-family': 'monospace'});
-                        dimL.textContent = `Ø ${cyl.pistonD||20}/${cyl.rodD||8} × ${cyl.stroke||100} mm`;
-                        g.appendChild(dimL);
+                    let _cylNormLbl = cyl.normLabel || _actorLabels[cyl.id];
+                    if (_cylNormLbl) {
+                        let nL = createSvgElement('text', {x: bx + bw/2, y: by - 8, 'font-size': '11', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        nL.textContent = _cylNormLbl; g.appendChild(nL);
                     }
                     return g;
                 };
 
                 // ----- Pneumatik-Tor: doppeltwirkender Zylinder + Lastsymbol Tor -----
+                // Layout (Aktor oben im Schaltplan): Tor-Rahmen oben, mechanische Kopplung,
+                // Zylinder-Kern unten, Pneumatik-Anschlüsse weisen NACH UNTEN.
                 const _drawGateSym = (cx, cy, cyl, sys) => {
                     let g = createSvgElement('g', {});
                     g.setAttribute('data-obj-id', cyl.id);
@@ -7967,49 +8076,50 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let isPneu = sys === 'pneu';
                     let portA = isPneu ? '1' : 'A';
                     let portB = isPneu ? '2' : 'B';
-                    // Oben: doppeltwirkender Zylindersymbol-Kern (kompakter)
-                    let bw = 80, bh = 22;
-                    let bx = cx - bw/2, by = cy - bh - 8;
-                    g.appendChild(createSvgElement('line', {x1: bx, y1: by, x2: bx+bw, y2: by, stroke:'#000', 'stroke-width':1.5}));
-                    g.appendChild(createSvgElement('line', {x1: bx, y1: by+bh, x2: bx+bw, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
-                    g.appendChild(createSvgElement('line', {x1: bx, y1: by, x2: bx, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
-                    g.appendChild(createSvgElement('line', {x1: bx+bw, y1: by, x2: bx+bw, y2: by+bh, stroke:'#000', 'stroke-width':1.5}));
-                    // Kolben mittig
-                    g.appendChild(createSvgElement('rect', {x: cx-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
-                    // Doppelseitige Kolbenstangen (horizontaler Linearantrieb)
-                    g.appendChild(createSvgElement('line', {x1: bx-12, y1: by+bh/2, x2: bx, y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
-                    g.appendChild(createSvgElement('line', {x1: bx+bw, y1: by+bh/2, x2: bx+bw+12, y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
-                    // Mechanische Kopplung an Tor (Strichlinien)
-                    g.appendChild(createSvgElement('line', {x1: bx-12, y1: by+bh/2, x2: bx-12, y2: cy+10, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
-                    g.appendChild(createSvgElement('line', {x1: bx+bw+12, y1: by+bh/2, x2: bx+bw+12, y2: cy+10, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
-                    // Anschlüsse 1 und 2 oben aus dem Zylinder
-                    let portAx = bx + bw * 0.20;
-                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by, x2: portAx, y2: by-8, stroke:'#000', 'stroke-width':1}));
-                    let lA = createSvgElement('text', {x: portAx, y: by-11, 'font-size':'8', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
-                    lA.textContent = portA; g.appendChild(lA);
-                    let portBx = bx + bw * 0.80;
-                    g.appendChild(createSvgElement('line', {x1: portBx, y1: by, x2: portBx, y2: by-8, stroke:'#000', 'stroke-width':1}));
-                    let lB = createSvgElement('text', {x: portBx, y: by-11, 'font-size':'8', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
-                    lB.textContent = portB; g.appendChild(lB);
-                    g._portAx = portAx; g._portBx = portBx;
-                    // Tor: Rahmen mit zwei Flügeln und Linearpfeilen
-                    let gw = bw + 28, gh = 14, gx = cx - gw/2, gy = cy + 10;
+                    // Tor-Rahmen ganz oben (Last)
+                    let gw = 108, gh = 14, gx = cx - gw/2, gy = cy - 22;
                     g.appendChild(createSvgElement('rect', {x: gx, y: gy, width: gw, height: gh, fill:'#fff', stroke:'#000', 'stroke-width':1.2}));
                     g.appendChild(createSvgElement('line', {x1: cx, y1: gy+2, x2: cx, y2: gy+gh-2, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'2,2'}));
-                    // Linearbewegungs-Pfeile (Doppelpfeil horizontal)
+                    // Linearbewegungs-Pfeile am Tor (Doppelpfeil horizontal)
                     g.appendChild(createSvgElement('line', {x1: cx-gw/4, y1: gy+gh/2, x2: cx+gw/4, y2: gy+gh/2, stroke:'#000', 'stroke-width':1}));
                     g.appendChild(createSvgElement('path', {d:`M ${cx-gw/4+3} ${gy+gh/2-3} L ${cx-gw/4} ${gy+gh/2} L ${cx-gw/4+3} ${gy+gh/2+3}`, fill:'none', stroke:'#000', 'stroke-width':1}));
                     g.appendChild(createSvgElement('path', {d:`M ${cx+gw/4-3} ${gy+gh/2-3} L ${cx+gw/4} ${gy+gh/2} L ${cx+gw/4-3} ${gy+gh/2+3}`, fill:'none', stroke:'#000', 'stroke-width':1}));
-                    // Norm-Label und Variablen
-                    if (cyl.normLabel) {
-                        let nL = createSvgElement('text', {x: cx, y: gy+gh+14, 'font-size':'11', 'font-weight':'bold', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
-                        nL.textContent = cyl.normLabel; g.appendChild(nL);
+                    // Zylinder-Kern UNTERHALB des Tor-Rahmens
+                    let bw = 80, bh = 22;
+                    let bx = cx - bw/2, by = cy + 8;
+                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke:'#000', 'stroke-width':1.5}));
+                    // Kolben mittig
+                    g.appendChild(createSvgElement('rect', {x: cx-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
+                    // Doppelseitige Kolbenstangen (horizontaler Linearantrieb)
+                    g.appendChild(createSvgElement('line', {x1: bx-12, y1: by+bh/2, x2: bx,    y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
+                    g.appendChild(createSvgElement('line', {x1: bx+bw, y1: by+bh/2, x2: bx+bw+12, y2: by+bh/2, stroke:'#000', 'stroke-width':2}));
+                    // Mechanische Kopplung NACH OBEN zum Tor (Strichlinien)
+                    g.appendChild(createSvgElement('line', {x1: bx-12,    y1: by+bh/2, x2: bx-12,    y2: gy+gh, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
+                    g.appendChild(createSvgElement('line', {x1: bx+bw+12, y1: by+bh/2, x2: bx+bw+12, y2: gy+gh, stroke:'#000', 'stroke-width':1, 'stroke-dasharray':'3,2'}));
+                    // Pneumatik-Anschlüsse 1 und 2 NACH UNTEN aus dem Zylinder-Kern
+                    let portAx = bx + bw * 0.20;
+                    g.appendChild(createSvgElement('line', {x1: portAx, y1: by+bh, x2: portAx, y2: by+bh+8, stroke:'#000', 'stroke-width':1}));
+                    // Port-Beschriftung NEBEN dem Stutzen, 4 px versetzt
+                    let lA = createSvgElement('text', {x: portAx + 4, y: by+bh+8, 'font-size':'8', fill:'#000', 'text-anchor':'start', 'font-family':'monospace'});
+                    lA.textContent = portA; g.appendChild(lA);
+                    let portBx = bx + bw * 0.80;
+                    g.appendChild(createSvgElement('line', {x1: portBx, y1: by+bh, x2: portBx, y2: by+bh+8, stroke:'#000', 'stroke-width':1}));
+                    let lB = createSvgElement('text', {x: portBx - 4, y: by+bh+8, 'font-size':'8', fill:'#000', 'text-anchor':'end', 'font-family':'monospace'});
+                    lB.textContent = portB; g.appendChild(lB);
+                    g._portAx = portAx; g._portBx = portBx;
+                    g._portBotY = by + bh + 8;
+                    // Norm-Label und Variablen ÜBER dem Tor-Rahmen — mit ≥ 6 px Abstand.
+                    // Nutzt Fallback aus _actorLabels falls cyl.normLabel fehlt.
+                    let _gateNormLbl = cyl.normLabel || _actorLabels[cyl.id];
+                    if (_gateNormLbl) {
+                        let nL = createSvgElement('text', {x: cx, y: gy - 8, 'font-size':'11', 'font-weight':'bold', fill:'#000', 'text-anchor':'middle', 'font-family':'monospace'});
+                        nL.textContent = _gateNormLbl; g.appendChild(nL);
                     }
                     let vNames = [];
                     if (cyl.linkedVarExt) vNames.push(cyl.linkedVarExt);
                     if (cyl.linkedVarRet) vNames.push(cyl.linkedVarRet);
                     if (vNames.length > 0) {
-                        let vL = createSvgElement('text', {x: cx, y: gy+gh+28, 'font-size':'9', fill:'#0288d1', 'text-anchor':'middle', 'font-family':'monospace'});
+                        let vL = createSvgElement('text', {x: cx, y: gy - 20, 'font-size':'9', fill:'#0288d1', 'text-anchor':'middle', 'font-family':'monospace'});
                         vL.textContent = vNames.join(' / '); g.appendChild(vL);
                     }
                     return g;
@@ -8056,20 +8166,46 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const _drawTankSym = (g, cx, cy, tankObj) => {
                     // Offenes U-Rechteck (oben offen)
                     g.appendChild(createSvgElement('path', {d: `M ${cx-12} ${cy-8} L ${cx-12} ${cy+10} L ${cx+12} ${cy+10} L ${cx+12} ${cy-8}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
-                    let tL = createSvgElement('text', {x: cx, y: cy - 12, 'font-size': '9', 'text-anchor': 'middle', fill: '#000', 'font-family': 'monospace'});
+                    // Norm-Label ≥ 6 px über Tank-Oberkante (cy-8)
+                    let tL = createSvgElement('text', {x: cx, y: cy - 16, 'font-size': '9', 'text-anchor': 'middle', fill: '#000', 'font-weight': 'bold', 'font-family': 'monospace'});
                     tL.textContent = tankObj.normLabel || '-GTA1'; g.appendChild(tL);
                 };
 
-                // ----- Wartungseinheit / Verteiler-Symbol (Pneumatik) ----------------
-                const _drawManifoldSym = (g, cx, cy, manifoldObj, isPneu) => {
-                    // Einfacher horizontaler Balken mit Anschlussstutzen oben (Verteilerfunktion)
-                    let bw = 40, bh = 6;
-                    g.appendChild(createSvgElement('rect', {x: cx-bw/2, y: cy-bh/2, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                // ----- Wartungseinheit (DIN ISO 1219-1) ----------------------------
+                // Symbol gemäß DIN ISO 1219-1:
+                //   • Außenrechteck mit horizontalen Anschlussstutzen links (Eingang) und rechts (Ausgang)
+                //   • Innen: vertikale gestrichelte Linie (Filterelement)
+                //   • Manometer (Kreis mit diagonalem Zeiger) im Innern
+                //   • Wasserabscheider/Drain: kleines Dreieck nach unten weisend, unterhalb des Rahmens
+                // Liefert {leftPortX, rightPortX, topY, botY} für die Schlauch-Routenführung.
+                const _drawMaintenanceUnitSym = (g, cx, cy, manifoldObj) => {
+                    let bw = 46, bh = 26;
+                    let bx = cx - bw/2, by = cy - bh/2;
+                    // Außenrechteck
+                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
+                    // Anschlussstutzen links und rechts (horizontal, jeweils 5 px)
+                    g.appendChild(createSvgElement('line', {x1: bx - 5, y1: cy, x2: bx,        y2: cy, stroke: '#000', 'stroke-width': 1.5}));
+                    g.appendChild(createSvgElement('line', {x1: bx + bw, y1: cy, x2: bx + bw + 5, y2: cy, stroke: '#000', 'stroke-width': 1.5}));
+                    // Filterelement: vertikale gestrichelte Linie
+                    let fx = bx + bw * 0.30;
+                    g.appendChild(createSvgElement('line', {x1: fx, y1: by + 3, x2: fx, y2: by + bh - 3, stroke: '#000', 'stroke-width': 1, 'stroke-dasharray': '2,2'}));
+                    // Manometer: Kreis mit diagonalem Zeiger nach rechts oben
+                    let mcx = bx + bw * 0.62, mcy = cy;
+                    g.appendChild(createSvgElement('circle', {cx: mcx, cy: mcy, r: 6, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: mcx, y1: mcy, x2: mcx + 4, y2: mcy - 4, stroke: '#000', 'stroke-width': 1}));
+                    // Wasserabscheider-Drain: kleines ausgefülltes Dreieck unterhalb der Box
+                    let dx = bx + bw * 0.30;
+                    g.appendChild(createSvgElement('line', {x1: dx, y1: by + bh, x2: dx, y2: by + bh + 5, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('path', {d: `M ${dx-3} ${by+bh+5} L ${dx+3} ${by+bh+5} L ${dx} ${by+bh+9} Z`, fill: '#000'}));
+                    // Norm-Label oberhalb der Box (≥ 6 px Abstand)
                     if (manifoldObj && manifoldObj.normLabel) {
-                        let nL = createSvgElement('text', {x: cx, y: cy + 16, 'font-size': '8', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        let nL = createSvgElement('text', {x: cx, y: by - 8, 'font-size': '9', fill: '#000', 'text-anchor': 'middle', 'font-weight': 'bold', 'font-family': 'monospace'});
                         nL.textContent = manifoldObj.normLabel; g.appendChild(nL);
                     }
+                    return { leftX: bx - 5, rightX: bx + bw + 5, midY: cy, topY: by, botY: by + bh + 9 };
                 };
+                // Alias-Name für Abwärtskompatibilität
+                const _drawManifoldSym = (g, cx, cy, manifoldObj) => _drawMaintenanceUnitSym(g, cx, cy, manifoldObj);
 
                 // ====================================================================
                 // === Schaltplan-Layout: Aufruf pro System ===========================
@@ -8085,135 +8221,186 @@ You must output exactly this JSON format. The logic code goes as a single string
                         fill: lblColor, 'font-family': 'Segoe UI, Tahoma, sans-serif'
                     });
                     header.textContent = titleText; circuitContent.appendChild(header);
-                    const railTop      = startY + 60;
-                    const valveCenterY = railTop + 95;
-                    const throttleY    = valveCenterY + 80;
-                    const actuatorY    = throttleY + 75;
-                    const railBot      = actuatorY + 90;
+                    // Layout VON OBEN NACH UNTEN:
+                    //   Aktor (Zylinder/Tor) → Drossel → Wegeventil → P-Schiene → (T-Schiene Hyd) → Versorgung → Tank Hyd
+                    const actuatorY    = startY + 70;              // Mitte Aktor
+                    const throttleY    = actuatorY + 90;           // Mitte Drossel
+                    const valveCenterY = throttleY + 95;           // Mitte Ventil — etwas Abstand für die gestapelten Labels (Norm / Typ / Magnet-IDs) über der Ventilbox
+                    const railP        = valveCenterY + 50;        // P-Schiene (knapp unter Ventilen)
+                    const railT        = isPneu ? railP : (railP + 28);  // T-Schiene (nur Hyd)
+                    const supplyY      = (isPneu ? railP : railT) + 36;  // Druckquelle + Wartungseinheit
+                    const tankY        = supplyY + 60;             // Öltank (Hyd)
                     let curX = 100;
-                    // ----- Versorgung -----
+                    // X-Position des Versorgungs-Steigrohrs (P-Schiene) und des Tank-Steigrohrs
+                    // (T-Schiene, nur Hyd) — hier müssen die Schienen anschließen, sonst klafft
+                    // eine sichtbare Lücke zwischen Versorgung und Verteilerschiene.
+                    let _railStartXP = null;
+                    let _railStartXT = null;
+                    // ----- Versorgung (Druckquelle + Wartungseinheit) UNTERHALB der Schienen -----
                     const supplyObj = factoryObjects.find(o => o.type === supplyType);
                     if (supplyObj) {
                         let g = createSvgElement('g', {});
-                        let supX = curX + 18, supY = railTop - 22;
+                        let supX = curX + 18, supY = supplyY;
                         _drawSupplySym(g, supX, supY, supplyObj, isPneu);
-                        // Druckleitung: vom Auslass (rechts vom Dreieck) im 90°-Knie auf die P-Schiene
                         let outletX = supX + 14, outletY = supY;
-                        g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: '#000', 'stroke-width': 1.5}));
-                        g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railTop, stroke: '#000', 'stroke-width': 1.5}));
+                        let mfldObj = isPneu ? factoryObjects.find(o => o.type === 'manifold') : null;
+                        if (mfldObj) {
+                            let muCx = outletX + 8 + 23, muCy = outletY;
+                            let mu = _drawMaintenanceUnitSym(g, muCx, muCy, mfldObj);
+                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: mu.leftX, y2: mu.midY, stroke: '#000', 'stroke-width': 1.5}));
+                            // Ausgang Wartungseinheit → 90° → P-Schiene NACH OBEN
+                            g.appendChild(createSvgElement('line', {x1: mu.rightX, y1: mu.midY, x2: mu.rightX + 8, y2: mu.midY, stroke: '#000', 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: mu.rightX + 8, y1: mu.midY, x2: mu.rightX + 8, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                            _railStartXP = mu.rightX + 8;
+                            curX = mu.rightX + 8 - 100 + 30;
+                        } else {
+                            // Direkter Anschluss ohne Wartungseinheit (Hydraulik)
+                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: '#000', 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                            _railStartXP = outletX + 8;
+                        }
                         circuitContent.appendChild(g);
-                        // Tank für Hydraulik
+                        // Öltank (Hydraulik) ganz unten, mit Strich von T-Schiene
                         if (!isPneu) {
                             let tankObj = factoryObjects.find(o => o.type === 'oil_tank');
                             if (tankObj) {
                                 let gT = createSvgElement('g', {});
-                                _drawTankSym(gT, supX, railBot + 18, tankObj);
+                                let tankCx = supX + 50;
+                                _drawTankSym(gT, tankCx, tankY, tankObj);
+                                gT.appendChild(createSvgElement('line', {x1: tankCx, y1: railT, x2: tankCx, y2: tankY - 8, stroke: '#000', 'stroke-width': 1.5, 'stroke-dasharray': '5,3'}));
                                 circuitContent.appendChild(gT);
+                                _railStartXT = tankCx;
                             }
                         }
-                        curX += 80;
+                        curX += mfldObj ? 90 : 80;
                     }
                     // ----- Spalten-Layout für Ventile + Aktoren -----
-                    const colW = 165;
+                    // colW dynamisch: 200 px Basis + 2× max. Variablennamen-Breite,
+                    // damit auch lange Variablennamen (TOR_SCHLIESSEN, …) zwischen den
+                    // Ventilen Platz haben ohne in die Nachbarspalte zu ragen.
+                    let _maxVarLen = 0;
+                    valves.forEach(v => {
+                        let vv = _resolveValveVars(v);
+                        if (vv.extV) _maxVarLen = Math.max(_maxVarLen, vv.extV.length);
+                        if (vv.retV) _maxVarLen = Math.max(_maxVarLen, vv.retV.length);
+                    });
+                    const colW = Math.max(230, 200 + Math.ceil(_maxVarLen * 4.5) * 2);
                     const endX = Math.max(curX + valves.length * colW + 50, 700);
-                    // P-Schiene
-                    let pRail = createSvgElement('line', {x1: curX, y1: railTop, x2: endX, y2: railTop, stroke: '#000', 'stroke-width': 2.5});
+                    // P-Schiene — muss bündig am Versorgungs-Steigrohr ankoppeln (kein Spalt)
+                    const _pStart = _railStartXP != null ? Math.min(_railStartXP, curX) : curX;
+                    let pRail = createSvgElement('line', {x1: _pStart, y1: railP, x2: endX, y2: railP, stroke: '#000', 'stroke-width': 2.5});
                     circuitContent.appendChild(pRail);
-                    let pLbl = createSvgElement('text', {x: curX-4, y: railTop-4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
+                    let pLbl = createSvgElement('text', {x: _pStart-4, y: railP-4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
                     pLbl.textContent = isPneu ? '1 (P)' : 'P'; circuitContent.appendChild(pLbl);
-                    // T-Schiene (Hydraulik)
+                    // T-Schiene (nur Hydraulik) — knapp UNTER der P-Schiene, schließt am Tank-Pipe an
                     if (!isPneu) {
-                        let tRail = createSvgElement('line', {x1: curX, y1: railBot, x2: endX, y2: railBot, stroke: '#000', 'stroke-width': 2});
+                        const _tStart = _railStartXT != null ? Math.min(_railStartXT, curX) : curX;
+                        let tRail = createSvgElement('line', {x1: _tStart, y1: railT, x2: endX, y2: railT, stroke: '#000', 'stroke-width': 2});
                         circuitContent.appendChild(tRail);
-                        let tLbl = createSvgElement('text', {x: curX-4, y: railBot+4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
+                        let tLbl = createSvgElement('text', {x: _tStart-4, y: railT+4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
                         tLbl.textContent = 'T'; circuitContent.appendChild(tLbl);
                     }
-                    // ----- Pro Ventil eine Säule -----
+                    // ----- Pro Ventil eine Säule (Aktor oben → Drossel → Ventil → Schienen unten) -----
                     valves.forEach(valve => {
                         let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId && _isAct(o.type));
                         if (!cyl) return;
                         let cx = curX + 80;
                         let isDouble = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
-                        // Ventil zeichnen, dabei die Anschluss-X-Positionen merken
+                        // Aktor-Symbol oben in der Spalte
+                        let actG = _drawActuatorSym(cx, actuatorY, cyl, sys);
+                        circuitContent.appendChild(actG);
+                        let actPortAx = actG._portAx, actPortBx = actG._portBx;
+                        let actPortBotY = actG._portBotY != null ? actG._portBotY : (actuatorY + 25);
+                        // Drosseln finden + zeichnen
+                        // extDrosselX immer bei cx-18 — auch bei 3/2 — damit die Vertikalen
+                        // Anschlussleitungen NICHT durch die Mitte laufen (wo die Ventil-Labels
+                        // "5/2"/"3/2"/"-QM…" zentriert oberhalb der Box sitzen).
+                        let extDrosselX = cx - 18;
+                        let retDrosselX = cx + 18;
+                        let throttleTopY = throttleY - 24;   // throttle top stub start
+                        let throttleBotY = throttleY + 24;   // throttle bottom stub start
+                        let tExt = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ext');
+                        let tRet = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ret');
+                        // Beschriftungen je Drossel auf die AUSSENseite — damit ext- und ret-
+                        // Drossel sich nicht gegenseitig die Etiketten überdecken.
+                        // 3/2 hat nur ext-Drossel; sie sitzt auf der LEFT-Position (cx-18) und
+                        // bekommt deshalb auch die LEFT-Beschriftung wie ext bei 5/2.
+                        let extDrosselG = tExt ? _drawThrottleSym(extDrosselX, throttleY, tExt, 'left') : null;
+                        let retDrosselG = tRet ? _drawThrottleSym(retDrosselX, throttleY, tRet, 'right') : null;
+                        if (extDrosselG) circuitContent.appendChild(extDrosselG);
+                        if (retDrosselG) circuitContent.appendChild(retDrosselG);
+                        // Verbindung Aktor-Port (unten) → Drossel-Eingang (oben)
+                        if (actPortAx != null) {
+                            let kneeY = (actPortBotY + throttleTopY) / 2;
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: actPortBotY, x2: actPortAx, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: kneeY, x2: extDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY, x2: extDrosselX, y2: throttleTopY, stroke: '#000', 'stroke-width': 1.5}));
+                        }
+                        if (isDouble && actPortBx != null) {
+                            let kneeY = (actPortBotY + throttleTopY) / 2 + 4;
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: actPortBotY, x2: actPortBx, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: kneeY, x2: retDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY, x2: retDrosselX, y2: throttleTopY, stroke: '#000', 'stroke-width': 1.5}));
+                        }
+                        // Ventil zeichnen
                         let valveG = _drawValveSym(cx, valveCenterY, valve, sys);
                         circuitContent.appendChild(valveG);
                         let pX = valveG._portsX;
                         let portsTopY = valveG._portsY.topY;
                         let portsBotY = valveG._portsY.botY;
-                        // P-Schiene → Port 1
-                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: railTop, x2: pX.p1, y2: portsBotY, stroke: '#000', 'stroke-width': 1.5}));
-                        // Drosseln finden
-                        let tExt = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ext');
-                        let tRet = factoryObjects.find(o => o.type === throttleType && o.targetCylinderId === cyl.id && o.role === 'ret');
-                        // Port 2 (A) → Drossel ext → Aktor
-                        let extDrosselX = isDouble ? cx - 18 : cx;
-                        let retDrosselX = cx + 18;
-                        let extPortValveX = pX.p2 || pX.p2;
-                        let retPortValveX = pX.p4;
-                        // Vom Ventil-Port 2 ins Knie und runter zur Drossel-Spalte
-                        let kneeY = portsTopY - 16;
-                        circuitContent.appendChild(createSvgElement('line', {x1: extPortValveX, y1: portsTopY, x2: extPortValveX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: extPortValveX, y1: kneeY, x2: extDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY, x2: extDrosselX, y2: throttleY - 18, stroke: '#000', 'stroke-width': 1.5}));
-                        if (isDouble) {
-                            circuitContent.appendChild(createSvgElement('line', {x1: retPortValveX, y1: portsTopY, x2: retPortValveX, y2: kneeY-3, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: retPortValveX, y1: kneeY-3, x2: retDrosselX, y2: kneeY-3, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY-3, x2: retDrosselX, y2: throttleY - 18, stroke: '#000', 'stroke-width': 1.5}));
+                        // Verbindung Drossel-Ausgang (unten) → Ventil-Top-Port (A bzw. B)
+                        let kneeY2 = portsTopY - 14;
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleBotY, x2: extDrosselX, y2: kneeY2, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY2, x2: pX.p2, y2: kneeY2, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p2, y1: kneeY2, x2: pX.p2, y2: portsTopY, stroke: '#000', 'stroke-width': 1.5}));
+                        if (isDouble && pX.p4 != null) {
+                            let kneeY2b = portsTopY - 10;
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleBotY, x2: retDrosselX, y2: kneeY2b, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY2b, x2: pX.p4, y2: kneeY2b, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p4, y1: kneeY2b, x2: pX.p4, y2: portsTopY, stroke: '#000', 'stroke-width': 1.5}));
                         }
-                        // Drosseln zeichnen
-                        let extDrosselG = tExt ? _drawThrottleSym(extDrosselX, throttleY, tExt) : null;
-                        let retDrosselG = tRet ? _drawThrottleSym(retDrosselX, throttleY, tRet) : null;
-                        if (extDrosselG) circuitContent.appendChild(extDrosselG);
-                        if (retDrosselG) circuitContent.appendChild(retDrosselG);
-                        // Aktor zeichnen, Anschluss-X-Positionen ermitteln
-                        let actG = _drawActuatorSym(cx, actuatorY + 12, cyl, sys);
-                        circuitContent.appendChild(actG);
-                        let actPortAx = actG._portAx, actPortBx = actG._portBx;
-                        // Drossel → Aktor (Port A bzw. B)
-                        let dropEndY = actuatorY + 4;
-                        // ext-Pfad: Drossel-Ausgang → Knie → Aktor-Port A
-                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleY + 18, x2: extDrosselX, y2: dropEndY - 8, stroke: '#000', 'stroke-width': 1.5}));
-                        if (actPortAx != null) {
-                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: dropEndY - 8, x2: actPortAx, y2: dropEndY - 8, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: dropEndY - 8, x2: actPortAx, y2: dropEndY, stroke: '#000', 'stroke-width': 1.5}));
-                        }
-                        if (isDouble && actPortBx != null) {
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleY + 18, x2: retDrosselX, y2: dropEndY - 12, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: dropEndY - 12, x2: actPortBx, y2: dropEndY - 12, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: dropEndY - 12, x2: actPortBx, y2: dropEndY, stroke: '#000', 'stroke-width': 1.5}));
-                        }
-                        // Auslassports am Ventil
+                        // Ventil-Port 1 (P) → P-Schiene (NACH UNTEN)
+                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: portsBotY, x2: pX.p1, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                        // Ventil-Auslassports
                         if (isPneu) {
-                            // Pneumatik: 3 und 5 → Schalldämpfer-Symbol (ISO 1219: Dreieck mit gestrichelter Ausströmlinie)
-                            const _drawSilencer = (px) => {
-                                circuitContent.appendChild(createSvgElement('line', {x1: px, y1: portsBotY, x2: px, y2: portsBotY + 14, stroke: '#000', 'stroke-width': 1}));
-                                // Dreieck (Schalldämpfer)
-                                circuitContent.appendChild(createSvgElement('path', {d: `M ${px-5} ${portsBotY+14} L ${px+5} ${portsBotY+14} L ${px} ${portsBotY+22} Z`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
-                                // Pfeile-Striche (Auslass)
-                                circuitContent.appendChild(createSvgElement('line', {x1: px-3, y1: portsBotY+24, x2: px-1, y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
-                                circuitContent.appendChild(createSvgElement('line', {x1: px,   y1: portsBotY+24, x2: px,   y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
-                                circuitContent.appendChild(createSvgElement('line', {x1: px+3, y1: portsBotY+24, x2: px+1, y2: portsBotY+27, stroke: '#000', 'stroke-width': 0.8}));
+                            // Pneumatik-Auslassports 3 und 5 → "Entlüftung mit Anschluss" (DIN ISO 1219-1):
+                            //   • Anschluss-Stutzen → kurze Lotlinie
+                            //   • Horizontaler Querstrich (Anschluss-Indikator)
+                            //   • Offenes Dreieck (Spitze nach unten = Atmosphäre)
+                            // (Reines Dreieck-Symbol ohne extra Striche — die zuvor verwendeten
+                            //  drei Auslass-Strichlein gehören NICHT zur Norm.)
+                            const _drawVent = (px) => {
+                                let barY = portsBotY + 10;          // Anschluss-Querstrich
+                                let triTop = barY + 1;
+                                let triBot = triTop + 7;
+                                circuitContent.appendChild(createSvgElement('line', {x1: px, y1: portsBotY, x2: px, y2: barY, stroke: '#000', 'stroke-width': 1}));
+                                circuitContent.appendChild(createSvgElement('line', {x1: px-5, y1: barY, x2: px+5, y2: barY, stroke: '#000', 'stroke-width': 1}));
+                                circuitContent.appendChild(createSvgElement('path', {d: `M ${px-4} ${triTop} L ${px+4} ${triTop} L ${px} ${triBot} Z`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
                             };
-                            _drawSilencer(pX.p3);
-                            _drawSilencer(pX.p5);
+                            _drawVent(pX.p3);
+                            _drawVent(pX.p5);
                         } else {
-                            // Hydraulik: 3 und 5 → T-Schiene
-                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p3, y1: portsBotY, x2: pX.p3, y2: railBot, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p5, y1: portsBotY, x2: pX.p5, y2: railBot, stroke: '#000', 'stroke-width': 1.5}));
-                            // Pfeile in Tankrichtung
-                            _drawArrowHead({appendChild:(c)=>circuitContent.appendChild(c)}, pX.p3, railBot, 'down');
-                            _drawArrowHead({appendChild:(c)=>circuitContent.appendChild(c)}, pX.p5, railBot, 'down');
+                            // Hydraulik: T1, T2 → T-Schiene
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p3, y1: portsBotY, x2: pX.p3, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p5, y1: portsBotY, x2: pX.p5, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
                         }
                         curX += colW;
                     });
-                    return railBot + 60;
+                    return (isPneu ? supplyY + 30 : tankY + 30);
                 };
 
                 if (pneuValves.length > 0 || hydValves.length > 0) {
-                    const _hasDual = window.configDualCircuit && dualLoadNodeIds.size > 0;
-                    let fluidY = _hasDual ? (yBot + 700 + 100) : (yBot + 240);
-                    if (pneuValves.length > 0) fluidY = _drawFluidSchema('pneu', pneuValves, fluidY) + 60;
+                    // Pneumatik-/Hydraulik-Schaltplan OBERHALB des elektrischen Schaltplans positionieren.
+                    // Vorgehen: bisherige (elektrische) Inhalte merken, Fluid-Plan ab y=40 zeichnen,
+                    // dann den elektrischen Teil per <g translate(0, fluidHeight)> nach unten schieben.
+                    const electricalChildren = Array.from(circuitContent.childNodes);
+                    let fluidY = 40;
+                    if (pneuValves.length > 0) fluidY = _drawFluidSchema('pneu', pneuValves, fluidY) + 50;
                     if (hydValves.length  > 0) fluidY = _drawFluidSchema('hyd',  hydValves,  fluidY);
+                    const fluidHeight = fluidY + 30;  // kleine Lücke zum elektrischen Plan
+                    let gElec = createSvgElement('g', {transform: `translate(0, ${fluidHeight})`});
+                    electricalChildren.forEach(el => gElec.appendChild(el));
+                    circuitContent.appendChild(gElec);
                 }
             }
             setTimeout(() => {
@@ -20693,6 +20880,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                         var2 = ComponentRegistry[o.type].getVar2ForRestore(o);
                     }
                     let newObj = createFactoryObject(o.type, o.linkedVar || o.linkedVarExt, var2, o.id, o.color, o.interval, o.linkedVar3);
+                    // Explizites Wiederherstellen von linkedVarExt/Ret — bei Komponenten wie
+                    // valve_pneu / valve_hyd setzt die build()-Funktion var2 NICHT als
+                    // linkedVarRet (var2 ist dort 'double'/'triple'/'single'), sodass diese
+                    // Variablen ohne expliziten Restore nach einem Reload verloren gingen.
+                    if (o.linkedVarExt && newObj.linkedVarExt == null) newObj.linkedVarExt = o.linkedVarExt;
+                    if (o.linkedVarRet && newObj.linkedVarRet == null) newObj.linkedVarRet = o.linkedVarRet;
 					if (o.linkedVarX_Plus) newObj.linkedVarX_Plus = o.linkedVarX_Plus;
                     if (o.linkedVarX_Minus) newObj.linkedVarX_Minus = o.linkedVarX_Minus;
                     if (o.linkedVarY_Plus) newObj.linkedVarY_Plus = o.linkedVarY_Plus;
@@ -26378,11 +26571,14 @@ You must output exactly this JSON format. The logic code goes as a single string
         }
 
         // Hilfsmittel: Akteur-Typen für Pneumatik/Hydraulik (Zylinder, Tor)
-        const _isFluidActuator = (t) => t === 'zylinder_single' || t === 'zylinder_double' || t === 'gate_pneu';
+        // ⚠ Function-Declaration (nicht const) — wird gehoisted, sodass _applyPneu/HydManualConnections
+        // bereits beim ersten loadFactoryState()-Aufruf darauf zugreifen kann.
+        function _isFluidActuator(t) { return t === 'zylinder_single' || t === 'zylinder_double' || t === 'gate_pneu'; }
 
         // Inferiert Drossel-Rolle (ext/ret) und targetCylinderId aus dem Verbindungsverlauf
         // für eine einzelne Drossel.  thrType = 'throttle' (pneu) oder 'throttle_hyd'.
-        const _inferThrottleChain = (thr, conns, valveType, cylPortPair, valvePortPair) => {
+        // (Auch hier function-Declaration für Hoisting.)
+        function _inferThrottleChain(thr, conns, valveType, cylPortPair, valvePortPair) {
             // cylPortPair  = ['1','2']  (pneu) oder ['A','B']  (hyd)
             // valvePortPair = ['2','4'] (pneu A,B) oder ['A','B'] (hyd)
             // Drossel-Anschlüsse: pneu→ '1' (oben/Aktor) und '2' (unten/Ventil),
@@ -26431,7 +26627,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             } else {
                 thr.role = null;
             }
-        };
+        }
 
         function _applyHydManualConnections() {
             for (let conn of (window.hydConnections || [])) {

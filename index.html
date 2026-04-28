@@ -7732,10 +7732,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let totalW = bw * nBoxes;
                     let bx = cx - totalW/2;
                     let by = cy - bh/2;
+                    // Schiebe-Animation: in 'ext' wandert die Ventilbox NACH RECHTS, sodass die
+                    // (links liegende) ext-Box nun über den Anschlussstutzen liegt. 5/3 'ret'
+                    // schiebt entsprechend nach LINKS. Die externen Stutzen/Magnete bleiben fix.
+                    let _vs = valve.isTriple ? (valve.valveState || 'center')
+                            : valve.isDouble ? (valve.valveState || 'ret')
+                            : (valve.isActive ? 'ext' : 'rest');
+                    let _shift = 0;
+                    if (isTriple)      _shift = (_vs === 'ext') ?  bw : (_vs === 'ret') ? -bw : 0;
+                    else if (isDouble) _shift = (_vs === 'ext') ?  bw : 0;
+                    // Inneres Gruppen-Element für die boxen + Pfeil-Diagramme — WIRD verschoben.
+                    const gInner = createSvgElement('g', { transform: `translate(${_shift}, 0)` });
                     // Außenrahmen
-                    g.appendChild(createSvgElement('rect', {x: bx, y: by, width: totalW, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
+                    gInner.appendChild(createSvgElement('rect', {x: bx, y: by, width: totalW, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
                     for (let i = 1; i < nBoxes; i++) {
-                        g.appendChild(createSvgElement('line', {
+                        gInner.appendChild(createSvgElement('line', {
                             x1: bx + bw*i, y1: by, x2: bx + bw*i, y2: by + bh,
                             stroke: '#000', 'stroke-width': 1
                         }));
@@ -7762,57 +7773,67 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // DIN ISO 1219: Pfeile zeigen die Strömungsrichtung in der jeweiligen
                     // Schaltstellung. "Active" zeichnet die typische X-Kreuzung (1→4, 2→3),
                     // "rest" die parallele Durchströmung (1→2, 4→5).
+                    // DIN ISO 1219: Pfeile zeigen die Strömungsrichtung in der jeweiligen
+                    // Schaltstellung. Konvention im Code (siehe Hose-Routing):
+                    //   • 'active' (valve.isActive=true): Port 2 → Versorgung (P→A=2),
+                    //     Port 4 → Entlüftung (4→5)  ⇒ PARALLELE Strömung
+                    //   • 'rest'  (valve.isActive=false): Port 4 → Versorgung (P→B=4),
+                    //     Port 2 → Entlüftung (2→3)  ⇒ GEKREUZTE Strömung (X)
                     const drawState = (boxIdx, state) => {
                         if (isDouble || isTriple) {
                             let p = portsX5(boxIdx);
-                            if (state === 'rest') {
+                            if (state === 'active') {
                                 // Parallele Strömung — direkte Pfeile von unten nach oben
                                 // 1 → 2  (P → A)
-                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p1, yBotIn, p.p2, yTopIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p1, yBotIn, p.p2, yTopIn);
                                 // 4 → 5  (B → S, Entlüftung)
-                                g.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p5, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p4, yTopIn, p.p5, yBotIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p5, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p4, yTopIn, p.p5, yBotIn);
                                 // 3 gesperrt
-                                _drawBlockedPort(g, p.p3, yBotIn, false);
-                            } else if (state === 'active') {
-                                // Gekreuzte Strömung (X) — Norm-Symbol für aktive Schaltstellung
+                                _drawBlockedPort(gInner, p.p3, yBotIn, false);
+                            } else if (state === 'rest') {
+                                // Gekreuzte Strömung (X) — federzentrierte / unactive Stellung
                                 // 1 → 4  (P → B)
-                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p1, yBotIn, p.p4, yTopIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p1, yBotIn, p.p4, yTopIn);
                                 // 2 → 3  (A → R, Entlüftung)
-                                g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn, p.p3, yBotIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p2, yTopIn, p.p3, yBotIn);
                                 // 5 gesperrt
-                                _drawBlockedPort(g, p.p5, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p5, yBotIn, false);
                             } else if (state === 'closed') {
                                 // Sperrmittelstellung (5/3): alle Ports per T-Stop gesperrt
-                                _drawBlockedPort(g, p.p1, yBotIn, false);
-                                _drawBlockedPort(g, p.p3, yBotIn, false);
-                                _drawBlockedPort(g, p.p5, yBotIn, false);
-                                _drawBlockedPort(g, p.p2, yTopIn, true);
-                                _drawBlockedPort(g, p.p4, yTopIn, true);
+                                _drawBlockedPort(gInner, p.p1, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p3, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p5, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p2, yTopIn, true);
+                                _drawBlockedPort(gInner, p.p4, yTopIn, true);
                             }
                         } else {
                             // 3/2-Wegeventil (Sperr-Ruhestellung)
                             let p = portsX3(boxIdx);
                             if (state === 'rest') {
                                 // 1 gesperrt, 2→3 (Entlüftung des Aktors)
-                                _drawBlockedPort(g, p.p1, yBotIn, false);
-                                g.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p2, yTopIn, p.p3, yBotIn);
+                                _drawBlockedPort(gInner, p.p1, yBotIn, false);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p2, yTopIn, p.p3, yBotIn);
                             } else if (state === 'active') {
                                 // 1→2 (Druckdurchfluss),  3 gesperrt
-                                g.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
-                                _drawArrowHead(g, p.p1, yBotIn, p.p2, yTopIn);
-                                _drawBlockedPort(g, p.p3, yBotIn, false);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p1, yBotIn, p.p2, yTopIn);
+                                _drawBlockedPort(gInner, p.p3, yBotIn, false);
                             }
                         }
                     };
 
-                    // Zustand pro Box festlegen
+                    // Zustand pro Box festlegen — Box-Indizes (innerhalb gInner):
+                    //   • 5/2: [0=active | 1=rest]    Anschlüsse stehen an Box 1 (Federstellung)
+                    //   • 5/3: [0=active | 1=closed | 2=rest]  Anschlüsse an Box 1 (Mitte/closed)
                     if (isTriple) { drawState(0, 'active'); drawState(1, 'closed'); drawState(2, 'rest'); }
                     else          { drawState(0, 'active'); drawState(1, 'rest'); }
+                    // gInner an g anhängen, damit die boxen mitsamt Diagrammen verschoben werden.
+                    g.appendChild(gInner);
 
                     // ----- Magnetspulen / Federn (DIN ISO 1219) ----------------------
                     // Die Wahl Magnet vs. Feder hängt am Ventiltyp (isDouble/isTriple),
@@ -7832,20 +7853,22 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Magnet-Bezeichner aus dem vorab aufgebauten _magnetLabels-Map.
                     const coilLabelExt = (_coilExtVar && _magnetLabels[_coilExtVar]) || 'Y1';
                     const coilLabelRet = (_coilRetVar && _magnetLabels[_coilRetVar]) || 'Y2';
+                    // Magnete + Federn werden an gInner angehängt — sie sitzen fest am Ventilrahmen
+                    // und müssen mit der Box mitwandern, wenn die Schaltstellung umschaltet.
                     // Linker Aktor (Magnet) — rechte Magnetkante = linke Ventilboxkante (bx).
-                    _drawSolenoid(g, bx - sw, by + bh/2 - sh/2, sw, sh, true, coilLabelExt, _coilExtVar || '');
+                    _drawSolenoid(gInner, bx - sw, by + bh/2 - sh/2, sw, sh, true, coilLabelExt, _coilExtVar || '');
                     // Rechter Aktor: bei isDouble/isTriple Magnet, sonst Feder
                     if (isDouble || isTriple) {
                         // Linke Magnetkante = rechte Ventilboxkante (bx + totalW).
-                        _drawSolenoid(g, bx + totalW, by + bh/2 - sh/2, sw, sh, false, coilLabelRet, _coilRetVar || '');
+                        _drawSolenoid(gInner, bx + totalW, by + bh/2 - sh/2, sw, sh, false, coilLabelRet, _coilRetVar || '');
                     } else {
                         // Feder direkt am Ventilrahmen (kein Stößel — Federkraft wirkt direkt)
-                        _drawSpring(g, bx + totalW + 1, by + bh/2 - 4, 11, 8);
+                        _drawSpring(gInner, bx + totalW + 1, by + bh/2 - 4, 11, 8);
                     }
                     // 5/3: zentrierende Rückstellfedern auf der jeweiligen Außenseite des Magneten
                     if (isTriple) {
-                        _drawSpring(g, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
-                        _drawSpring(g, bx - sw - 10,         by + bh/2 + 8, 8, 5);
+                        _drawSpring(gInner, bx + totalW + sw + 2, by + bh/2 + 8, 8, 5);
+                        _drawSpring(gInner, bx - sw - 10,         by + bh/2 + 8, 8, 5);
                     }
 
                     // ----- Externe Anschlussstutzen (an Ruhestellung-Box) -----------
@@ -7970,11 +7993,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Verstell-Pfeil (diagonal von links-unten nach rechts-oben durch die Drossel) — geschlossene Pfeilspitze
                     g.appendChild(createSvgElement('line', {x1: cx-9, y1: dyMid+9, x2: cx+9, y2: dyMid-9, stroke: '#000', 'stroke-width': 1}));
                     g.appendChild(createSvgElement('path', {d: `M ${cx+9} ${dyMid-9} L ${cx+5} ${dyMid-8} L ${cx+8} ${dyMid-4} Z`, fill: '#000', stroke: '#000', 'stroke-width': 1}));
-                    // Rückschlagventil AUF dem Bypass: nach OBEN offene Schale (Sitz) + Kugel DARIN.
-                    // Schale: U-förmige Kurve mit Boden bei dyMid+3, Rändern bei dyMid-3.
-                    // Kugel: gefüllt mit Weiß, damit eventuell durchquerende Linien verdeckt werden.
+                    // Rückschlagventil AUF dem Bypass: nach OBEN offene Schale (Sitz) + Kugel.
+                    //   • Schale: U-förmige Kurve, Boden bei dyMid+9, Ränder bei dyMid-3
+                    //   • Kugel-Animation: bei Sperrrichtung (Druck am oberen Port > unten)
+                    //     wird die Kugel IN die Schale gedrückt (cy = dyMid+4 ≈ Schalen-Mitte);
+                    //     andernfalls schwebt sie minimal über dem Sitz (cy = dyMid-2).
                     g.appendChild(createSvgElement('path', {d: `M ${bypassX-4} ${dyMid-3} Q ${bypassX} ${dyMid+9} ${bypassX+4} ${dyMid-3}`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
-                    g.appendChild(createSvgElement('circle', {cx: bypassX, cy: dyMid, r: 2.2, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
+                    let _ballCy = dyMid - 2;  // Default: schwebt knapp über dem Sitz
+                    {
+                        let _p1 = window._fluidPressures && window._fluidPressures.pneu && window._fluidPressures.pneu[thr.id+':1'];
+                        let _p2 = window._fluidPressures && window._fluidPressures.pneu && window._fluidPressures.pneu[thr.id+':2'];
+                        if (_p1 == null || _p2 == null) {
+                            _p1 = window._fluidPressures && window._fluidPressures.hyd && window._fluidPressures.hyd[thr.id+':1'];
+                            _p2 = window._fluidPressures && window._fluidPressures.hyd && window._fluidPressures.hyd[thr.id+':2'];
+                        }
+                        // Sperrrichtung: oben (Aktor-Seite, Port 1) ist höher → Rückfluss
+                        // wird durch Kugel auf den Sitz blockiert.
+                        if (_p1 != null && _p2 != null && _p1 > _p2 + 0.3) _ballCy = dyMid + 4;
+                    }
+                    g.appendChild(createSvgElement('circle', {cx: bypassX, cy: _ballCy, r: 2.2, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
                     // Port-Beschriftungen ('1' oben am Aktor, '2' unten am Ventil) seitlich versetzt
                     // — auf der Seite gegenüber des Etiketten-Blocks, damit nichts kollidiert.
                     // Vertikal ≥ 6 px Abstand zur Boxkante.
@@ -8018,15 +8055,22 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let bx = cx - bw/2 - 6, by = cy - bh/2;
                     // Komplett geschlossenes Zylindergehäuse
                     g.appendChild(createSvgElement('rect', {x: bx, y: by, width: bw, height: bh, fill: '#fff', stroke: '#000', 'stroke-width': 1.5}));
-                    // Kolben (massiver senkrechter Balken)
-                    // Einfachwirkend: Kolben links → Druckluftkammer LINKS (Anschluss),  Federraum RECHTS (auf Stangenseite)
-                    // Doppeltwirkend:   Kolben mittig links → zwei Kammern beidseitig
-                    let pXFrac = isDouble ? 0.42 : 0.20;
+                    // Kolben (massiver senkrechter Balken) — Position folgt cyl.extension (0–100):
+                    //   extension=0   → Kolben links  (eingefahren)
+                    //   extension=100 → Kolben rechts (ausgefahren)
+                    // Bei einfachwirkend bleibt rechts Platz für die Rückstellfeder, daher
+                    //   weniger Hub innerhalb des Symbols.
+                    let _extPct = (cyl.extension != null ? cyl.extension : 0) / 100;
+                    let pXMin = 0.10;
+                    let pXMax = isDouble ? 0.85 : 0.55;
+                    let pXFrac = pXMin + (pXMax - pXMin) * _extPct;
                     let pX = bx + bw * pXFrac;
                     g.appendChild(createSvgElement('rect', {x: pX-1.5, y: by+1, width: 3, height: bh-2, fill: '#000'}));
-                    // Kolbenstange (durch rechte Endkappe)
-                    let rodOut = 16; // Stangen-Auszugslänge in der Symbolik
-                    let rEnd = bx + bw + rodOut;
+                    // Kolbenstange — feste Länge, an Kolben befestigt. Spitze wandert MIT dem
+                    // Kolben raus. Länge so gewählt, dass bei extension=0 die Spitze knapp
+                    // hinter der Endkappe sitzt; bei extension=100 fährt sie sichtbar weit raus.
+                    const _ROD_LEN = bw * (1 - pXMin) + 8;   // ≈ 89 px bei bw=90, pXMin=0.10
+                    let rEnd = pX + _ROD_LEN;
                     g.appendChild(createSvgElement('line', {x1: pX, y1: by + bh/2, x2: rEnd, y2: by + bh/2, stroke: '#000', 'stroke-width': 2}));
                     // Stangen-Dichtung: zwei kurze parallele Striche an der Austrittsstelle (Norm-Detail)
                     g.appendChild(createSvgElement('line', {x1: bx + bw + 2, y1: by + bh/2 - 3, x2: bx + bw + 2, y2: by + bh/2 + 3, stroke: '#000', 'stroke-width': 0.8}));
@@ -8231,6 +8275,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const lblColor = isPneu ? '#0288d1' : '#ef6c00';
                     const supplyType = isPneu ? 'compressor' : 'hydraulic_unit';
                     const throttleType = isPneu ? 'throttle' : 'throttle_hyd';
+                    // Solver-Druckkarte als Färbe-Quelle. Schwellen relativ zum Versorgungs-
+                    // druck (Pneumatik 6 bar, Hydraulik 100 bar) — ergibt griffige drei
+                    // Farben statt Gradient: rot=Druck, gelb=Übergang, blau=Entlüftung.
+                    const _refSupply = isPneu ? 6.0 : 100.0;
+                    const _portP = (objId, portId) => {
+                        const m = window._fluidPressures && window._fluidPressures[sys];
+                        return m ? m[objId+':'+portId] : null;
+                    };
+                    const _strokeForP = (p) => {
+                        if (p == null) return '#000';
+                        if (p > _refSupply * 0.6) return '#c62828';
+                        if (p > _refSupply * 0.1) return '#f9a825';
+                        return '#1565c0';
+                    };
+                    const _strokeFor = (objId, portId) => _strokeForP(_portP(objId, portId));
+                    const SUPPLY_COL = '#c62828';
+                    const EXHAUST_COL = '#1565c0';
                     const titleText = isPneu ? '— Pneumatik-Schaltplan (DIN ISO 1219-1) —' : '— Hydraulik-Schaltplan (DIN ISO 1219-1) —';
                     let header = createSvgElement('text', {
                         x: 25, y: startY, 'font-size': '14', 'font-weight': 'bold',
@@ -8263,16 +8324,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (mfldObj) {
                             let muCx = outletX + 8 + 23, muCy = outletY;
                             let mu = _drawMaintenanceUnitSym(g, muCx, muCy, mfldObj);
-                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: mu.leftX, y2: mu.midY, stroke: '#000', 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: mu.leftX, y2: mu.midY, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                             // Ausgang Wartungseinheit → 90° → P-Schiene NACH OBEN
-                            g.appendChild(createSvgElement('line', {x1: mu.rightX, y1: mu.midY, x2: mu.rightX + 8, y2: mu.midY, stroke: '#000', 'stroke-width': 1.5}));
-                            g.appendChild(createSvgElement('line', {x1: mu.rightX + 8, y1: mu.midY, x2: mu.rightX + 8, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: mu.rightX, y1: mu.midY, x2: mu.rightX + 8, y2: mu.midY, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: mu.rightX + 8, y1: mu.midY, x2: mu.rightX + 8, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                             _railStartXP = mu.rightX + 8;
                             curX = mu.rightX + 8 - 100 + 30;
                         } else {
                             // Direkter Anschluss ohne Wartungseinheit (Hydraulik)
-                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: '#000', 'stroke-width': 1.5}));
-                            g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
+                            g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                             _railStartXP = outletX + 8;
                         }
                         circuitContent.appendChild(g);
@@ -8302,9 +8363,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
                     const colW = Math.max(230, 200 + Math.ceil(_maxVarLen * 4.5) * 2);
                     const endX = Math.max(curX + valves.length * colW + 50, 700);
-                    // P-Schiene — muss bündig am Versorgungs-Steigrohr ankoppeln (kein Spalt)
+                    // P-Schiene — bündig am Versorgungs-Steigrohr (immer Versorgungsdruck rot)
                     const _pStart = _railStartXP != null ? Math.min(_railStartXP, curX) : curX;
-                    let pRail = createSvgElement('line', {x1: _pStart, y1: railP, x2: endX, y2: railP, stroke: '#000', 'stroke-width': 2.5});
+                    let pRail = createSvgElement('line', {x1: _pStart, y1: railP, x2: endX, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 2.5});
                     circuitContent.appendChild(pRail);
                     let pLbl = createSvgElement('text', {x: _pStart-4, y: railP-4, 'font-size': '10', 'font-weight': 'bold', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
                     pLbl.textContent = isPneu ? '1 (P)' : 'P'; circuitContent.appendChild(pLbl);
@@ -8347,18 +8408,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let retDrosselG = tRet ? _drawThrottleSym(retDrosselX, throttleY, tRet, 'right') : null;
                         if (extDrosselG) circuitContent.appendChild(extDrosselG);
                         if (retDrosselG) circuitContent.appendChild(retDrosselG);
-                        // Verbindung Aktor-Port (unten) → Drossel-Eingang (oben)
+                        // Werkanschluss-Leitungen: Aktor-Port → Drossel — Färbung nach Solver-
+                        // Druck am Aktor-Port (das ist die Kammer, deren Zustand wir sehen wollen).
+                        let _cylPortA = isPneu ? '1' : 'A';
+                        let _cylPortB = isPneu ? '2' : 'B';
+                        let _colExt = _strokeFor(cyl.id, _cylPortA);
+                        let _colRet = _strokeFor(cyl.id, _cylPortB);
                         if (actPortAx != null) {
                             let kneeY = (actPortBotY + throttleTopY) / 2;
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: actPortBotY, x2: actPortAx, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: kneeY, x2: extDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY, x2: extDrosselX, y2: throttleTopY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: actPortBotY, x2: actPortAx, y2: kneeY, stroke: _colExt, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortAx, y1: kneeY, x2: extDrosselX, y2: kneeY, stroke: _colExt, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY, x2: extDrosselX, y2: throttleTopY, stroke: _colExt, 'stroke-width': 1.5}));
                         }
                         if (isDouble && actPortBx != null) {
                             let kneeY = (actPortBotY + throttleTopY) / 2 + 4;
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: actPortBotY, x2: actPortBx, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: kneeY, x2: retDrosselX, y2: kneeY, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY, x2: retDrosselX, y2: throttleTopY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: actPortBotY, x2: actPortBx, y2: kneeY, stroke: _colRet, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: actPortBx, y1: kneeY, x2: retDrosselX, y2: kneeY, stroke: _colRet, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY, x2: retDrosselX, y2: throttleTopY, stroke: _colRet, 'stroke-width': 1.5}));
                         }
                         // Ventil zeichnen
                         let valveG = _drawValveSym(cx, valveCenterY, valve, sys);
@@ -8366,19 +8432,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                         let pX = valveG._portsX;
                         let portsTopY = valveG._portsY.topY;
                         let portsBotY = valveG._portsY.botY;
-                        // Verbindung Drossel-Ausgang (unten) → Ventil-Top-Port (A bzw. B)
+                        // Drossel-Ausgang → Ventil-Top-Port (Werkanschluss A=2 / B=4) —
+                        // Färbung nach Druck am jeweiligen Ventilport. Wird mit Drossel
+                        // dazwischen ggf. minimal anders als die Aktor-seitige Leitung.
+                        let _vp2 = isPneu ? '2' : 'A';
+                        let _vp4 = isPneu ? '4' : 'B';
+                        let _colV2 = _strokeFor(valve.id, _vp2);
+                        let _colV4 = _strokeFor(valve.id, _vp4);
                         let kneeY2 = portsTopY - 14;
-                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleBotY, x2: extDrosselX, y2: kneeY2, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY2, x2: pX.p2, y2: kneeY2, stroke: '#000', 'stroke-width': 1.5}));
-                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p2, y1: kneeY2, x2: pX.p2, y2: portsTopY, stroke: '#000', 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleBotY, x2: extDrosselX, y2: kneeY2, stroke: _colV2, 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: kneeY2, x2: pX.p2, y2: kneeY2, stroke: _colV2, 'stroke-width': 1.5}));
+                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p2, y1: kneeY2, x2: pX.p2, y2: portsTopY, stroke: _colV2, 'stroke-width': 1.5}));
                         if (isDouble && pX.p4 != null) {
                             let kneeY2b = portsTopY - 10;
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleBotY, x2: retDrosselX, y2: kneeY2b, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY2b, x2: pX.p4, y2: kneeY2b, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p4, y1: kneeY2b, x2: pX.p4, y2: portsTopY, stroke: '#000', 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleBotY, x2: retDrosselX, y2: kneeY2b, stroke: _colV4, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY2b, x2: pX.p4, y2: kneeY2b, stroke: _colV4, 'stroke-width': 1.5}));
+                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p4, y1: kneeY2b, x2: pX.p4, y2: portsTopY, stroke: _colV4, 'stroke-width': 1.5}));
                         }
-                        // Ventil-Port 1 (P) → P-Schiene (NACH UNTEN)
-                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: portsBotY, x2: pX.p1, y2: railP, stroke: '#000', 'stroke-width': 1.5}));
+                        // Ventil-Port 1 (P) → P-Schiene — immer Versorgungsdruck
+                        circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: portsBotY, x2: pX.p1, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                         // Ventil-Auslassports
                         if (isPneu) {
                             // Pneumatik-Auslassports 3 und 5 → "Entlüftung mit Anschluss" (DIN ISO 1219-1):
@@ -19201,6 +19273,27 @@ You must output exactly this JSON format. The logic code goes as a single string
 
         function factoryLoop() {
             if (fluidGridDirty) rebuildSolidGrid();
+            // Fluid-Solver: einmal pro Tick die Druckkarte für Pneumatik/Hydraulik
+            // aktualisieren. Verwendet die im VORIGEN Tick gesetzten valveStates —
+            // 1-Tick-Lag ist bei 60fps unsichtbar und vermeidet Verschachtelung mit
+            // den Animatoren in dieser Schleife.
+            if (typeof window._stepFluidSolver === 'function') {
+                try { window._stepFluidSolver(); } catch(e) { /* solver-Fehler still — Animation darf nicht abbrechen */ }
+            }
+            // Schaltplan-Animation: bei aktiver Simulation alle ~6 Frames (≈10 Hz)
+            // den Pneumatik-/Hydraulik-Schaltplan neu zeichnen, damit Kolben-Position
+            // (cyl.extension) und Leitungsfarben (Solver-Drücke) live mitlaufen.
+            // Nur dann, wenn das Schaltplan-Panel sichtbar ist — sonst Verschwendung.
+            if (isSimulationActive) {
+                window._fluidPlanRedrawCount = (window._fluidPlanRedrawCount || 0) + 1;
+                if (window._fluidPlanRedrawCount >= 2) {
+                    window._fluidPlanRedrawCount = 0;
+                    let _cw = document.getElementById('circuit-wrapper');
+                    if (_cw && _cw.offsetParent !== null && typeof currentGraph !== 'undefined' && currentGraph) {
+                        try { drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true); } catch(e) {}
+                    }
+                }
+            }
             // ==========================================
             // 🌟 NEU: PNEUMATIK-ZONEN TRACKER (Löschen)
             // ==========================================
@@ -21130,6 +21223,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 if (typeof _applyHydManualConnections  === 'function') _applyHydManualConnections();
                 if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
+                // Stale-Cleanup: Verbindungen, deren Endpunkt-Objekt nicht mehr
+                // existiert (z.B. nach Demo-Laden + manuellem Löschen), entfernen.
+                const _liveIds = new Set(factoryObjects.map(o => o.id));
+                const _alive = c => _liveIds.has(c.aObjId) && _liveIds.has(c.bObjId);
+                if (window.pneuConnections)      window.pneuConnections      = window.pneuConnections.filter(_alive);
+                if (window.fluidPipeConnections) window.fluidPipeConnections = window.fluidPipeConnections.filter(_alive);
             } catch(e) { console.error(e); } finally { isLoadingFactory = false; }
             // Schaltplan nach dem Laden synchronisieren — sonst zeigt der Pneumatik-/
             // Hydraulik-Bereich beim ersten Seitenaufruf nichts an, weil drawCircuitPlan
@@ -26688,6 +26787,386 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _inferThrottleChain(thr, window.pneuConnections, 'valve_pneu', ['1','2'], ['2','4'])
             );
         }
+        // =========================================================
+
+        // =========================================================
+        // FLUID-SOLVER (Pneumatik & Hydraulik) — numerische Druckkarte pro Port
+        // ---------------------------------------------------------
+        // Knoten = "objId:portId", Kanten = Verbindungen + ventil-interne Pfade
+        // (zustandsabhängig, valveState entscheidet welche Ports verbunden sind).
+        // Quellen (Druckquelle, Hydraulikaggregat) und Senken (Ventil-R/T-Ports,
+        // Tank) werden als Dirichlet-Randbedingungen festgelegt.
+        // Iterative Gauss-Seidel-Relaxation auf G·p = b (KCL pro Knoten).
+        //
+        // Throttle: Leitwert g = g_max · (opening/100)²  → quadratische Skalierung
+        // wie in Realität (Querschnitt linear, Volumenstrom ~ Querschnitt²).
+        // Drosselrückschlagventil: bidirektionaler Drossel; Rückschlag-Zweig wird
+        // hier (Schritt 1) noch nicht modelliert — Erweiterung geplant.
+        //
+        // Output: window._fluidPressures = { pneu: {node:bar}, hyd: {node:bar} }
+        // =========================================================
+        (function() {
+            // Welche Port-Paare sind im jeweiligen Ventilzustand intern verbunden?
+            const VALVE_INT_PNEU = {
+                // Konvention im Code: Port 2 = A-Seite (Ausfahr-Arbeitsanschluss),
+                // Port 4 = B-Seite (Einfahr-Arbeitsanschluss). In 'ext' (active)
+                // wird P→A geschaltet, B entlüftet via 5; in 'ret' P→B, A→3.
+                mono:   { ext:  [['1','2']],
+                          rest: [['2','3']] },
+                double: { ext:  [['1','2'],['4','5']],
+                          ret:  [['1','4'],['2','3']] },
+                triple: { ext:    [['1','2'],['4','5']],
+                          ret:    [['1','4'],['2','3']],
+                          center: [] }   // Sperrmittelstellung
+            };
+            const VALVE_INT_HYD = {
+                mono:   { ext:  [['P','A']],
+                          rest: [['A','T']] },
+                double: { ext:    [['P','A'],['B','T2']],
+                          ret:    [['P','B'],['A','T1']] },
+                triple: { ext:    [['P','A'],['B','T2']],
+                          ret:    [['P','B'],['A','T1']],
+                          center: [] }
+            };
+            function _vKind(v) { return v.isTriple ? 'triple' : v.isDouble ? 'double' : 'mono'; }
+            function _vState(v) {
+                if (v.isTriple) return v.valveState || 'center';
+                if (v.isDouble) return v.valveState || 'ret';
+                return v.isActive ? 'ext' : 'rest';
+            }
+
+            // Leitwerte (relative Einheiten — solver löst nur Verhältnisse)
+            const G_PIPE = 1.0;          // gerade Leitung
+            const G_VALVE_OPEN = 1.0;    // ventil-interner Pfad (offen)
+            const G_THROTTLE_MAX = 1.0;  // voll geöffnete Drossel
+
+            function _addNode(set, n) { set.add(n); }
+            function _addEdge(edges, a, b, g) {
+                if (g <= 0) return;
+                edges.push({ a, b, g });
+            }
+
+            function _buildFluidGraph(sys) {
+                const nodes = new Set();
+                const edges = [];
+                const sources = {};   // node -> druck (Dirichlet)
+
+                const isPneu = (sys === 'pneu');
+                const isHyd  = (sys === 'hyd');
+
+                for (let o of factoryObjects) {
+                    if (isPneu) {
+                        if (o.type === 'compressor') {
+                            let n = o.id+':1';
+                            _addNode(nodes, n);
+                            sources[n] = (o.pressure != null ? o.pressure : 6.0);
+                        } else if (o.type === 'manifold') {
+                            _addNode(nodes, o.id+':1');
+                        } else if (o.type === 'valve_pneu') {
+                            let kind = _vKind(o);
+                            let portIds = (kind === 'mono') ? ['1','2','3'] : ['1','2','3','4','5'];
+                            for (let pid of portIds) _addNode(nodes, o.id+':'+pid);
+                            // Entlüftungsanschlüsse → atmosphärisch (0 bar)
+                            if (kind === 'mono') sources[o.id+':3'] = 0;
+                            else { sources[o.id+':3'] = 0; sources[o.id+':5'] = 0; }
+                            // Interne Pfade je Zustand
+                            for (let [pa, pb] of (VALVE_INT_PNEU[kind][_vState(o)] || []))
+                                _addEdge(edges, o.id+':'+pa, o.id+':'+pb, G_VALVE_OPEN);
+                        } else if (o.type === 'throttle') {
+                            _addNode(nodes, o.id+':1'); _addNode(nodes, o.id+':2');
+                            let opening = (o.opening != null ? o.opening : 100);
+                            let g = G_THROTTLE_MAX * Math.pow(opening / 100, 2);
+                            _addEdge(edges, o.id+':1', o.id+':2', Math.max(g, 0.001));
+                        } else if (o.hasPneumatics && (o.type === 'zylinder_single' || o.type === 'zylinder_double' || o.type === 'gate_pneu')) {
+                            _addNode(nodes, o.id+':1');
+                            if (o.type !== 'zylinder_single') _addNode(nodes, o.id+':2');
+                        }
+                    } else if (isHyd) {
+                        if (o.type === 'hydraulic_unit') {
+                            _addNode(nodes, o.id+':P'); _addNode(nodes, o.id+':S');
+                            sources[o.id+':P'] = (o.pressure != null ? o.pressure : 100);
+                            sources[o.id+':S'] = 0;
+                        } else if (o.type === 'oil_tank') {
+                            _addNode(nodes, o.id+':S'); _addNode(nodes, o.id+':T');
+                            sources[o.id+':S'] = 0;
+                            sources[o.id+':T'] = 0;
+                        } else if (o.type === 'hydraulic_manifold') {
+                            let defs = (window._hydPortDefs && window._hydPortDefs(o)) || [];
+                            for (let pd of defs) _addNode(nodes, o.id+':'+pd.id);
+                            // P-Knoten ist mit allen Outlets niederohmig verbunden
+                            for (let pd of defs)
+                                if (pd.id !== 'P') _addEdge(edges, o.id+':P', o.id+':'+pd.id, G_PIPE);
+                        } else if (o.type === 'valve_hyd') {
+                            let kind = _vKind(o);
+                            let portIds = (kind === 'mono') ? ['P','A','T'] : ['P','A','B','T1','T2'];
+                            for (let pid of portIds) _addNode(nodes, o.id+':'+pid);
+                            if (kind === 'mono') sources[o.id+':T'] = 0;
+                            else { sources[o.id+':T1'] = 0; sources[o.id+':T2'] = 0; }
+                            for (let [pa, pb] of (VALVE_INT_HYD[kind][_vState(o)] || []))
+                                _addEdge(edges, o.id+':'+pa, o.id+':'+pb, G_VALVE_OPEN);
+                        } else if (o.type === 'throttle_hyd') {
+                            _addNode(nodes, o.id+':IN'); _addNode(nodes, o.id+':OUT');
+                            let opening = (o.opening != null ? o.opening : 100);
+                            let g = G_THROTTLE_MAX * Math.pow(opening / 100, 2);
+                            _addEdge(edges, o.id+':IN', o.id+':OUT', Math.max(g, 0.001));
+                        } else if (o.hasHydraulics && (o.type === 'zylinder_single' || o.type === 'zylinder_double' || o.type === 'gate_pneu')) {
+                            _addNode(nodes, o.id+':A');
+                            if (o.type !== 'zylinder_single') _addNode(nodes, o.id+':B');
+                        }
+                    }
+                }
+
+                // Externe Verbindungen (Schläuche/Rohre) — stale Einträge mit
+                // fehlendem Endpunkt werden übersprungen, damit gelöschte Objekte
+                // nicht als Phantom-Knoten im Solver-Output auftauchen.
+                let connList;
+                if (isPneu)      connList = (window.pneuConnections || []).filter(c => !c._broken);
+                else if (isHyd)  connList = (window.fluidPipeConnections || []).filter(c => c._sys === 'hyd' && !c._broken);
+                else connList = [];
+                const _objIds = new Set(factoryObjects.map(o => o.id));
+                for (let c of connList) {
+                    if (!_objIds.has(c.aObjId) || !_objIds.has(c.bObjId)) continue;
+                    let na = c.aObjId+':'+c.aPortId;
+                    let nb = c.bObjId+':'+c.bPortId;
+                    nodes.add(na); nodes.add(nb);
+                    _addEdge(edges, na, nb, G_PIPE);
+                }
+
+                return { nodes: Array.from(nodes), edges, sources };
+            }
+
+            function _solveFluidGraph(sys) {
+                const { nodes, edges, sources } = _buildFluidGraph(sys);
+                if (nodes.length === 0) return {};
+
+                // Adjazenz mit Leitwerten
+                const adj = {};
+                for (let n of nodes) adj[n] = [];
+                for (let e of edges) {
+                    if (!adj[e.a]) adj[e.a] = [];
+                    if (!adj[e.b]) adj[e.b] = [];
+                    adj[e.a].push({ n: e.b, g: e.g });
+                    adj[e.b].push({ n: e.a, g: e.g });
+                }
+
+                // Erreichbarkeits-Flood-Fill von allen Quell-/Senkenknoten —
+                // Knoten ohne Pfad zum Rand sind "eingeschlossen" (trapped).
+                const reachable = new Set(Object.keys(sources));
+                let frontier = [...reachable];
+                while (frontier.length) {
+                    let next = [];
+                    for (let n of frontier)
+                        for (let nb of (adj[n] || []))
+                            if (!reachable.has(nb.n) && nb.g > 1e-6) {
+                                reachable.add(nb.n);
+                                next.push(nb.n);
+                            }
+                    frontier = next;
+                }
+
+                // Druckkarte: Quellen fix, übrige starten beim Vorwert (Trapped behalten)
+                const prev = (window._fluidPressures && window._fluidPressures[sys]) || {};
+                const p = {};
+                for (let n of nodes) {
+                    if (n in sources) p[n] = sources[n];
+                    else p[n] = (prev[n] != null) ? prev[n] : 0;
+                }
+
+                // Gauss-Seidel-Relaxation: nur erreichbare, nicht-fixierte Knoten relaxieren
+                for (let iter = 0; iter < 80; iter++) {
+                    let maxDelta = 0;
+                    for (let n of nodes) {
+                        if (n in sources) continue;
+                        if (!reachable.has(n)) continue;
+                        let sumGV = 0, sumG = 0;
+                        for (let nb of adj[n]) {
+                            sumGV += nb.g * p[nb.n];
+                            sumG  += nb.g;
+                        }
+                        if (sumG > 1e-9) {
+                            let newP = sumGV / sumG;
+                            let d = Math.abs(newP - p[n]);
+                            if (d > maxDelta) maxDelta = d;
+                            p[n] = newP;
+                        }
+                    }
+                    if (maxDelta < 1e-4) break;
+                }
+
+                return p;
+            }
+
+            window._fluidPressures = window._fluidPressures || {};
+            window._buildFluidGraph = _buildFluidGraph;   // Inspektor / Tests
+            window._solveFluidGraph = _solveFluidGraph;
+
+            // Wird einmal pro factoryLoop-Tick aufgerufen.
+            window._stepFluidSolver = function() {
+                window._fluidPressures.pneu = _solveFluidGraph('pneu');
+                window._fluidPressures.hyd  = _solveFluidGraph('hyd');
+            };
+        })();
+        // =========================================================
+
+        // =========================================================
+        // PNEUMATIK-/HYDRAULIK-INSPEKTOR (geheimer Debug-Modal)
+        // ---------------------------------------------------------
+        // Tastenkombi:  Ctrl + Shift + Alt + P
+        // Zeigt: Komponenten, Roh-Verbindungen, inferierte Ziel-/Rollenzuordnungen,
+        // (später) Solver-Druckkarte. Gedacht als Werkzeug während der Solver-
+        // Entwicklung — bewusst nicht im Hauptmenü sichtbar.
+        // =========================================================
+        (function() {
+            const SYS_TITLE = { pneu: 'Pneumatik', hyd: 'Hydraulik', fluid: 'Wasser/Fluid' };
+            function _connList(sys) {
+                if (sys === 'pneu') return window.pneuConnections || [];
+                if (sys === 'hyd')  return (window.fluidPipeConnections || []).filter(c => c._sys === 'hyd');
+                return (window.fluidPipeConnections || []).filter(c => !c._sys || c._sys === 'fluid');
+            }
+            function _isPneuType(t) {
+                return t === 'valve_pneu' || t === 'throttle' || t === 'compressor' || t === 'manifold'
+                    || t === 'zylinder_single' || t === 'zylinder_double' || t === 'gate_pneu' || t === 'manometer';
+            }
+            function _isHydType(t) {
+                return t === 'valve_hyd' || t === 'throttle_hyd' || t === 'hydraulic_unit' || t === 'oil_tank'
+                    || t === 'hydraulic_manifold' || t === 'manometer_hyd';
+            }
+            function _objsForSys(sys) {
+                if (sys === 'pneu') return factoryObjects.filter(o => _isPneuType(o.type) && (o.hasPneumatics !== false));
+                if (sys === 'hyd')  return factoryObjects.filter(o => _isHydType(o.type) || o.hasHydraulics);
+                return factoryObjects.filter(o => o._sys === 'fluid' || o.type === 'fluid_spawner' || o.type === 'tank');
+            }
+            function _objSummary(o) {
+                let extra = [];
+                if (o.normLabel) extra.push(o.normLabel);
+                if (o.linkedVarExt) extra.push('ext='+o.linkedVarExt);
+                if (o.linkedVarRet) extra.push('ret='+o.linkedVarRet);
+                if (o.targetCylinderId) extra.push('→'+o.targetCylinderId);
+                if (o.role) extra.push('role='+o.role);
+                if (o.opening != null) extra.push('opening='+o.opening+'%');
+                if (o.valveState) extra.push('state='+o.valveState);
+                if (o.extension != null) extra.push('ext%='+(o.extension|0));
+                return `[${o.id}] ${o.type}${extra.length ? '  ('+extra.join(', ')+')' : ''}`;
+            }
+            function _connSummary(c) {
+                let flags = [];
+                if (c._auto)   flags.push('auto');
+                if (c._broken) flags.push('broken');
+                let f = flags.length ? ' {'+flags.join(',')+'}' : '';
+                return `  ${c.aObjId}:${c.aPortId}  ─  ${c.bObjId}:${c.bPortId}${f}`;
+            }
+            function _buildDump() {
+                let out = [];
+                out.push('═══ VALIS Pneumatik-/Hydraulik-Inspektor ═══');
+                out.push('Zeit: ' + new Date().toLocaleTimeString());
+                out.push('');
+                for (let sys of ['pneu', 'hyd', 'fluid']) {
+                    let objs = _objsForSys(sys);
+                    let conns = _connList(sys);
+                    if (objs.length === 0 && conns.length === 0) continue;
+                    out.push('━━━ ' + SYS_TITLE[sys] + ' ━━━');
+                    out.push('');
+                    out.push('Komponenten ('+objs.length+'):');
+                    if (objs.length) objs.forEach(o => out.push('  ' + _objSummary(o)));
+                    else             out.push('  (keine)');
+                    out.push('');
+                    out.push('Verbindungen ('+conns.length+'):');
+                    if (conns.length) conns.forEach(c => out.push(_connSummary(c)));
+                    else              out.push('  (keine)');
+                    out.push('');
+                    // Inferierte Ketten: Ventil → Zylinder, Drossel → Rolle
+                    let valveType = sys === 'pneu' ? 'valve_pneu' : sys === 'hyd' ? 'valve_hyd' : null;
+                    let throttleType = sys === 'pneu' ? 'throttle' : sys === 'hyd' ? 'throttle_hyd' : null;
+                    if (valveType) {
+                        let valves = factoryObjects.filter(o => o.type === valveType);
+                        let throttles = factoryObjects.filter(o => o.type === throttleType);
+                        out.push('Inferenz:');
+                        valves.forEach(v => {
+                            let cyl = factoryObjects.find(o => o.id === v.targetCylinderId);
+                            out.push('  Ventil ' + (v.normLabel||v.id) + ' → ' + (cyl ? (cyl.normLabel||cyl.id)+' ('+cyl.type+')' : '— kein Aktor —'));
+                        });
+                        throttles.forEach(t => {
+                            let cyl = factoryObjects.find(o => o.id === t.targetCylinderId);
+                            out.push('  Drossel '+ (t.normLabel||t.id) +' role='+ (t.role||'—') +' → '+ (cyl ? (cyl.normLabel||cyl.id) : '—'));
+                        });
+                        out.push('');
+                    }
+                }
+                // Solver-Output: numerischer Druck pro Knoten in bar.
+                if (typeof window._stepFluidSolver === 'function') {
+                    try { window._stepFluidSolver(); } catch(e) { out.push('Solver-Fehler: ' + e.message); }
+                }
+                if (window._fluidPressures) {
+                    out.push('━━━ Solver-Druckkarte (bar) ━━━');
+                    for (let sys of ['pneu', 'hyd']) {
+                        let m = window._fluidPressures[sys];
+                        if (!m) continue;
+                        let entries = Object.entries(m);
+                        if (entries.length === 0) continue;
+                        out.push((SYS_TITLE[sys] || sys) + ' ('+entries.length+' Knoten):');
+                        // Nach Objekt-ID gruppieren, damit Ports zusammenhängend stehen
+                        entries.sort((a, b) => a[0].localeCompare(b[0]));
+                        let lastObj = '';
+                        for (let [k, v] of entries) {
+                            let [oid, pid] = k.split(':');
+                            let obj = factoryObjects.find(o => o.id === oid);
+                            let label = obj ? (obj.normLabel || obj.id) + '(' + obj.type + ')' : oid;
+                            if (label !== lastObj) { out.push('  ' + label + ':'); lastObj = label; }
+                            out.push('    ' + pid.padEnd(4) + ' = ' + v.toFixed(3) + ' bar');
+                        }
+                        out.push('');
+                    }
+                }
+                out.push('SPS-Variablen (boolesche, true): ' +
+                    Object.keys(spsState||{}).filter(k => spsState[k] === true).join(', ') || '—');
+                return out.join('\n');
+            }
+            function _ensureModal() {
+                let m = document.getElementById('pneu-inspector');
+                if (m) return m;
+                m = document.createElement('div');
+                m.id = 'pneu-inspector';
+                m.style.cssText = 'position:fixed;top:5%;left:5%;width:90%;height:90%;background:#1a1a1a;color:#dcdcdc;border:2px solid #03a9f4;border-radius:6px;z-index:99999;font-family:Consolas,monospace;font-size:12px;display:none;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.6);';
+                m.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:#0d47a1;color:#fff;font-weight:bold;border-bottom:1px solid #03a9f4;">
+                        <span style="flex:1;">🔧 Pneumatik-/Hydraulik-Inspektor</span>
+                        <button id="pneu-insp-refresh" style="background:#1976d2;color:#fff;border:none;padding:4px 10px;cursor:pointer;font-family:inherit;">↻ Aktualisieren</button>
+                        <button id="pneu-insp-copy"    style="background:#388e3c;color:#fff;border:none;padding:4px 10px;cursor:pointer;font-family:inherit;">📋 Kopieren</button>
+                        <button id="pneu-insp-close"   style="background:#b71c1c;color:#fff;border:none;padding:4px 10px;cursor:pointer;font-family:inherit;">✕ Schließen</button>
+                    </div>
+                    <pre id="pneu-insp-body" style="flex:1;margin:0;padding:12px;overflow:auto;white-space:pre;color:#dcdcdc;"></pre>
+                    <div style="padding:4px 12px;background:#222;color:#888;font-size:10px;border-top:1px solid #333;">Hotkey: Ctrl+Shift+Alt+P • Live-Ansicht der Verbindungs-/Inferenz-Daten</div>
+                `;
+                document.body.appendChild(m);
+                m.querySelector('#pneu-insp-close').onclick   = () => { m.style.display = 'none'; };
+                m.querySelector('#pneu-insp-refresh').onclick = () => { m.querySelector('#pneu-insp-body').textContent = _buildDump(); };
+                m.querySelector('#pneu-insp-copy').onclick    = () => {
+                    let txt = m.querySelector('#pneu-insp-body').textContent;
+                    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => {
+                        let b = m.querySelector('#pneu-insp-copy'); let old = b.textContent;
+                        b.textContent = '✓ Kopiert'; setTimeout(() => b.textContent = old, 1200);
+                    });
+                };
+                return m;
+            }
+            window._togglePneuInspector = function() {
+                let m = _ensureModal();
+                if (m.style.display === 'none' || m.style.display === '') {
+                    m.querySelector('#pneu-insp-body').textContent = _buildDump();
+                    m.style.display = 'flex';
+                } else {
+                    m.style.display = 'none';
+                }
+            };
+            document.addEventListener('keydown', (e) => {
+                // Ctrl + Shift + Alt + P  — bewusst hohe Hürde, kein Konflikt mit Editoren.
+                if (e.ctrlKey && e.shiftKey && e.altKey && (e.key === 'P' || e.key === 'p')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window._togglePneuInspector();
+                }
+            }, true); // Capture-Phase, damit auch Eingabefeld-Fokus ihn nicht abfängt.
+        })();
         // =========================================================
 
         // 3. Engine zünden

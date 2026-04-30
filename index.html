@@ -30683,21 +30683,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _ensureNormPrefix(comp);
                 let refOptions = '';
                 if (isAux) {
-                    // Liste aller Hilfsrelais + Sensoren (durch ihren normPrefix identifiziert).
-                    // Anzeige: voller normLabel inkl. Strang-Ausdruck oder Variable in Klammern.
-                    // Bauteile OHNE varName (z.B. Hilfsrelais ohne SPS-Variable) bekommen
-                    // einen Hinweis, dass sie zuerst einen Variablennamen brauchen, damit
-                    // der Hilfskontakt im erzeugten Code eine echte Referenz hat.
-                    const refs = ST.components.filter(c =>
-                        (c.type === 'relais' || (CTYPES[c.type] && CTYPES[c.type].kind === 'sensor'))
-                        && c.normPrefix
-                    );
+                    // Liste aller Hilfsrelais (Spulen vom Typ 'relais'). Sensoren tauchen
+                    // hier bewusst NICHT auf — ein Hilfskontakt referenziert per
+                    // DIN/IEC-Konvention immer eine Spule. Sensor-Signale gelangen über
+                    // ihr Koppel-Hilfsrelais (-KF…) in den Strang.
+                    // Anzeige: voller normLabel inkl. Strang-Ausdruck oder Variable in
+                    // Klammern. Relais ohne varName sind erlaubt — ihre Strang-Logik
+                    // wird beim Code-Erzeugen inline expandiert (anonymes Hilfsrelais).
+                    const refs = ST.components.filter(c => c.type === 'relais' && c.normPrefix);
                     refOptions = refs.map(c => {
                         const sel = (c.normPrefix === comp.refNormPrefix) ? 'selected' : '';
                         const label = c.normLabel || c.normPrefix;
-                        const needsVar = !c.varName;
-                        const tag = needsVar ? `${label} ⚠ benötigt Variable` : label;
-                        return `<option value="${c.normPrefix}" ${sel}>${tag}</option>`;
+                        return `<option value="${c.normPrefix}" ${sel}>${label}</option>`;
                     }).join('');
                 }
                 const headerTxt = isCoil ? '🔵 Spule benennen'
@@ -30835,10 +30832,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     comp.refNormPrefix = null; // zerbrochen → neu auflösen
                 }
                 if (!comp.varName) return;
-                const ref = ST.components.find(c =>
-                    ((c.type === 'relais') || (CTYPES[c.type] && CTYPES[c.type].kind === 'sensor'))
-                    && c.varName === comp.varName
-                );
+                // Hilfskontakte referenzieren Spulen, nicht Sensoren — Sensor-Signale
+                // werden über ihr Koppel-Hilfsrelais (-KF…) in den Strang gebracht.
+                // Legacy-Aux-Kontakte mit Sensor-varName bleiben hier unaufgelöst und
+                // fallen in `_exprForCoil` über den varName-Fallback durch.
+                const ref = ST.components.find(c => c.type === 'relais' && c.varName === comp.varName);
                 if (ref) {
                     _ensureNormPrefix(ref);
                     comp.refNormPrefix = ref.normPrefix;

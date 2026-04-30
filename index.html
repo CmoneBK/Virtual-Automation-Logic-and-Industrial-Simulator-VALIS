@@ -1552,6 +1552,7 @@
                         <input type="checkbox" id="ced-livesync" checked onchange="window.cedToggleLiveSync()"> Live-Sync
                     </label>
                     <button id="ced-btn-generate" class="tool-btn" onclick="window.cedGenerateCode()" title="Code aus Schaltplan generieren" style="background:#ff9800;color:#fff;">⚙ Code generieren</button>
+                    <button id="ced-btn-from-code" class="tool-btn" onclick="window.cedGenerateFromCode()" title="Schaltplan aus VALIS-Code aufbauen (Boolesche Logik + RS/SR-FF)" style="background:#4caf50;color:#fff;">🪄 Aus Code</button>
                     <button class="tool-btn" onclick="window.cedAutoAlign()" title="Komponenten in Strängen vertikal ausrichten" style="background:#9c27b0;color:#fff;">⫯ Ausrichten</button>
                     <span style="display:inline-flex;gap:2px;margin-left:6px;border-left:1px solid #555;padding-left:6px;">
                         <button class="tool-btn" onclick="window.cedZoomOut()"   title="Verkleinern" style="background:#555;color:#fff;padding:3px 8px;">−</button>
@@ -4431,7 +4432,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 expressionStr = expressionStr
                     .replace(/!/g, '¬').replace(/\bNOT\b/gi, '¬').replace(/\bNICHT\b/gi, '¬')
                     .replace(/\bAND\b/gi, '&&').replace(/\bUND\b/gi, '&&').replace(/\^/g, '&&').replace(/∧/g, '&&')
-                    .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/gi, '||').replace(/∨/g, '||');
+                    .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/g, '||').replace(/∨/g, '||');
                 expressionStr = expressionStr.replace(/&&/g, '##AND##').replace(/&/g, '&&').replace(/##AND##/g, '&&');
                 expressionStr = expressionStr.replace(/\|\|/g, '##OR##').replace(/\|/g, '||').replace(/##OR##/g, '||');
                 // 🌟 FIX: [^,]+ erlaubt ab sofort alle Zeichen (inklusive ¬) vor dem Komma!
@@ -9639,6 +9640,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
                 }
             }
+            // 🪄 „Aus Code"-Button im Editor deaktivieren — verhindert, dass der
+            // Lerner den Schaltplan automatisch aus dem VALIS-Code generieren lässt
+            // statt von Hand zu verdrahten.
+            if (areas.disableFromCode) {
+                const btn = document.getElementById('ced-btn-from-code');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.4';
+                    btn.style.cursor = 'not-allowed';
+                    btn.title = 'In dieser Aufgabe deaktiviert — Schaltplan bitte von Hand aufbauen';
+                    btn.dataset.taskDisabled = '1';
+                }
+            }
             if (areas.factoryNewVars && !areas.factory2d) {
                 // Alle addFactoryDevice-Aufrufe blockieren
                 if (!window._origAddFactoryDevice) {
@@ -9680,6 +9694,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 el.classList.remove('task-device-hidden');
                 delete el.dataset.taskBlockHidden;
             });
+            // 🪄 „Aus Code"-Button wieder freigeben
+            const _fcBtn = document.getElementById('ced-btn-from-code');
+            if (_fcBtn && _fcBtn.dataset.taskDisabled === '1') {
+                _fcBtn.disabled = false;
+                _fcBtn.style.opacity = '';
+                _fcBtn.style.cursor = '';
+                _fcBtn.title = 'Schaltplan aus VALIS-Code aufbauen (Boolesche Logik + RS/SR-FF)';
+                delete _fcBtn.dataset.taskDisabled;
+            }
         }
 
         let _taskHideAreaFallback = null; // workspace-panel forced visible as fallback
@@ -10574,6 +10597,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 factory2d:       !!(document.getElementById('ted-block-2d') || {}).checked,
                 factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
                 excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
+                disableFromCode: !!(document.getElementById('ted-block-edit-no-fromcode') || {}).checked,
             };
             task.hideAreas = {
                 codeEditor:   !!(document.getElementById('ted-hide-code') || {}).checked,
@@ -10813,7 +10837,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 <td style="padding:4px 0;">${label}${hint?`<br><span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}</td>
                                 <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${blockId}" ${blockChk?'checked':''}></td>
                                 <td style="text-align:center;padding:4px 0;"><input type="checkbox" id="${hideId}" ${hideChk?'checked':''}></td>
-                            </tr>${key==='2d'?`
+                            </tr>${key==='edit'?`
+                            <tr>
+                                <td colspan="3" style="padding:2px 0 5px 16px;">
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                                        <input type="checkbox" id="ted-block-edit-no-fromcode" ${(task.blockAreas||{}).disableFromCode?'checked':''}>
+                                        <span>🪄 „Aus Code"-Button deaktivieren <span style="color:#607d8b;font-size:10px;">(verhindert automatische Generierung des Schaltplans aus dem VALIS-Code — Lerner muss von Hand verdrahten)</span></span>
+                                    </label>
+                                </td>
+                            </tr>`:''}${key==='2d'?`
                             <tr>
                                 <td colspan="3" style="padding:2px 0 5px 16px;">
                                     <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
@@ -28865,11 +28897,595 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _maybeSync();
             };
 
+            // ============================================================
+            // 🪄 Schaltplan aus VALIS-Code generieren
+            // ------------------------------------------------------------
+            // Liest den aktuellen Code-Editor-Inhalt, parst boolesche Zuweisungen
+            // (mit AND/OR/NOT/Klammern), erkennt RS/SR-Speicherglieder, und baut
+            // daraus eine Strompfad-Topologie mit Kontakten + Spulen + Drähten.
+            // Layout: pro Zuweisung eine Strang-Spalte zwischen L+ (oben) und L-
+            // (unten); innerhalb der Spalte Kontakte vertikal in Reihe (UND),
+            // parallele Zweige für ODER über Junctions, NOT als NC-Kontakt.
+            // Timer/Counter werden bewusst übersprungen (im Editor sind das
+            // spezielle Multi-Pin-Bausteine, deren Aufruf-Schnittstelle nicht
+            // 1:1 aus dem boolean-Graph ableitbar ist) — sie erscheinen als
+            // Kommentar-Hinweis-Spalte mit normLabel.
+            // ============================================================
+            window.cedGenerateFromCode = function() {
+                // Aufgaben-Lock: wenn der aktive Task „Aus Code" deaktiviert hat,
+                // bricht der Generator hart ab — auch wenn der Button per DevTools
+                // wieder aktiviert wurde.
+                if (typeof activeTask !== 'undefined' && activeTask &&
+                    activeTask.blockAreas && activeTask.blockAreas.disableFromCode) {
+                    alert('In dieser Aufgabe ist die automatische Schaltplan-Generierung aus Code deaktiviert. Bitte den Schaltplan von Hand aufbauen.');
+                    return;
+                }
+                if (typeof textarea === 'undefined' || !textarea) { alert('Code-Editor nicht erreichbar.'); return; }
+                if (ST.components.length > 0 || ST.wires.length > 0) {
+                    if (!confirm('Editor enthält bereits Komponenten/Leitungen. Inhalt durch Code-Generierung ersetzen?')) return;
+                }
+                const code = textarea.value;
+                const lines = code.split('\n');
+
+                // ---- Identifier-Pattern (Umlautunterstützung wie SCL-Export) ----
+                const ID_CHARS = 'A-Za-zÄÖÜäöüß0-9_';
+                const ID_RE_STR = '[A-Za-zÄÖÜäöüß_][' + ID_CHARS + ']*';
+                const ID_RE_GLOBAL = new RegExp('\\b' + ID_RE_STR + '\\b', 'g');
+                const NEG_VAR_RE   = new RegExp('¬(' + ID_RE_STR + ')', 'g');
+                const RESERVED = ['AND','OR','NOT','TON','TOF','TP','CTU','TRUE','FALSE'];
+
+                // VALIS-Operator → Standard-Notation für den Parser
+                function normalize(expr) {
+                    return expr
+                        .replace(/¬\(([^)]*)\)/g, 'NOT ($1)')
+                        .replace(NEG_VAR_RE, 'NOT $1')
+                        .replace(/&&/g, ' AND ')
+                        .replace(/\|\|/g, ' OR ')
+                        .trim();
+                }
+
+                // ---- Tokenizer ----
+                const TOK_RE = new RegExp('\\bAND\\b|\\bOR\\b|\\bNOT\\b|\\bTRUE\\b|\\bFALSE\\b|\\(|\\)|' + ID_RE_STR, 'g');
+                function tokenize(expr) {
+                    const toks = [];
+                    let m; TOK_RE.lastIndex = 0;
+                    while ((m = TOK_RE.exec(expr)) !== null) {
+                        const t = m[0];
+                        if (['AND','OR','NOT','(',')'].includes(t)) toks.push({kind:t});
+                        else if (t === 'TRUE' || t === 'FALSE') toks.push({kind:'CONST', value: t === 'TRUE'});
+                        else toks.push({kind:'IDENT', name: t});
+                    }
+                    return toks;
+                }
+                // ---- Parser ----
+                function parseExpr(expr) {
+                    const toks = tokenize(normalize(expr));
+                    let pos = 0;
+                    const peek = () => toks[pos];
+                    const eat = (k) => { if (!toks[pos] || toks[pos].kind !== k) throw new Error('expected '+k); return toks[pos++]; };
+                    function parseOr() {
+                        const ops = [parseAnd()];
+                        while (peek() && peek().kind === 'OR') { pos++; ops.push(parseAnd()); }
+                        return ops.length === 1 ? ops[0] : { type:'OR', operands: ops };
+                    }
+                    function parseAnd() {
+                        const ops = [parseNot()];
+                        while (peek() && peek().kind === 'AND') { pos++; ops.push(parseNot()); }
+                        return ops.length === 1 ? ops[0] : { type:'AND', operands: ops };
+                    }
+                    function parseNot() {
+                        if (peek() && peek().kind === 'NOT') { pos++; return { type:'NOT', operand: parseNot() }; }
+                        return parseAtom();
+                    }
+                    function parseAtom() {
+                        const t = peek(); if (!t) throw new Error('unexpected EOF');
+                        if (t.kind === '(') { pos++; const e = parseOr(); eat(')'); return e; }
+                        if (t.kind === 'CONST') { pos++; return { type:'CONST', value:t.value }; }
+                        if (t.kind === 'IDENT') { pos++; return { type:'IDENT', name:t.name }; }
+                        throw new Error('unexpected '+t.kind);
+                    }
+                    return parseOr();
+                }
+
+                // ---- VALIS-Code in Zuweisungen + FFs zerlegen ----
+                const assigns = [];     // [{ lhs, ast }]
+                const flipFlops = [];   // [{ num, isSR, setAst, resetAst, outVar }]
+                const ffMap = new Map();
+                const skipped = [];     // [{ lhs, reason }]
+                let hadTimerOrCounter = false;
+
+                for (let raw of lines) {
+                    const line = raw.replace(/\/\/.*/, '').trim();
+                    if (!line) continue;
+                    if (/^INPUT\s+/.test(line)) continue;
+                    let m;
+                    // FF: S1[_SR] := expr
+                    m = line.match(new RegExp('^([SR])(\\d+)(_SR)?\\s*:=\\s*(.+)$'));
+                    if (m) {
+                        const side = m[1], num = m[2], isSR = !!m[3], expr = m[4];
+                        if (!ffMap.has(num)) ffMap.set(num, { num, isSR, setAst: null, resetAst: null, outVar: null });
+                        const f = ffMap.get(num); f.isSR = isSR;
+                        try {
+                            if (side === 'S') f.setAst = parseExpr(expr);
+                            else              f.resetAst = parseExpr(expr);
+                        } catch(e) { skipped.push({ lhs: side+num, reason: 'Parse-Fehler: '+e.message }); }
+                        continue;
+                    }
+                    // Timer / Counter — nicht im Editor abbildbar
+                    if (/:=\s*(TON|TOF|TP|CTU)\(/.test(line)) {
+                        hadTimerOrCounter = true;
+                        const lhsMatch = line.match(new RegExp('^(' + ID_RE_STR + ')'));
+                        if (lhsMatch) skipped.push({ lhs: lhsMatch[1], reason: 'Timer/Zähler — manuell ergänzen' });
+                        continue;
+                    }
+                    // Normale Zuweisung
+                    m = line.match(new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*(.+)$'));
+                    if (m) {
+                        try {
+                            assigns.push({ lhs: m[1], ast: parseExpr(m[2]) });
+                        } catch(e) { skipped.push({ lhs: m[1], reason: 'Parse-Fehler: '+e.message }); }
+                    }
+                }
+                // FF-Output-Variablen: Qn_SR oder Qn ableiten
+                ffMap.forEach((f, num) => {
+                    // Suchen, wo Qn / Qn_SR auf einer RHS auftaucht — egal, nimm die Standard-Variante
+                    f.outVar = (assigns.some(a => /Q\d+_SR/.test(a.ast ? '' : '')) ? 'Q'+num+'_SR' : 'Q'+num);
+                });
+                ffMap.forEach(f => flipFlops.push(f));
+
+                if (assigns.length === 0 && flipFlops.length === 0) {
+                    alert('Keine erkannten Zuweisungen im VALIS-Code. Editor bleibt unverändert.');
+                    return;
+                }
+
+                // ---- Norm-Bezeichnungs-Counter (analog Auto-Schaltplan) ----
+                // SF = Steuerschalter/Taster/Sensor-Eingang allg.
+                // BG = Geber/Sensor (mit Vor-Strang)
+                // KF = Hilfsrelais (Helper Coil)
+                // P = Lampe / Stacklight / Display / HMI-Lampe
+                // M = Motor / Fan
+                // MB = Magnetventil (valve)
+                // H = Hupe / Sirene
+                // E = Heizelement
+                // K = Schütz / Contactor
+                const NORM = { sf:0, bg:0, kf:0, p:0, m:0, mb:0, h:0, e:0, k:0 };
+                // Cache: var → norm-Label-Komponenten (für Wiederverwendung beim
+                // mehrfachen Auftauchen einer Variable in verschiedenen Strängen)
+                const varNormLabel = {};        // SPS-Variable → Norm-Label-String
+                const varNormPrefix = {};       // SPS-Variable → reines Norm-Prefix (z.B. "-SF1")
+                function _nextSF(varForLabel) {
+                    if (varNormLabel[varForLabel]) return varNormLabel[varForLabel];
+                    NORM.sf++;
+                    const prefix = '-SF' + NORM.sf;
+                    varNormPrefix[varForLabel] = prefix;
+                    return (varNormLabel[varForLabel] = prefix + ' (' + varForLabel + ')');
+                }
+                function _coilNormLabelFor(coilType, varForLabel) {
+                    let prefix;
+                    if (coilType === 'led')         { NORM.p++;  prefix = '-P'  + NORM.p;  }
+                    else if (coilType === 'motor')  { NORM.m++;  prefix = '-M'  + NORM.m;  }
+                    else if (coilType === 'siren')  { NORM.h++;  prefix = '-H'  + NORM.h;  }
+                    else if (coilType === 'heater') { NORM.e++;  prefix = '-E'  + NORM.e;  }
+                    else if (coilType === 'valve')  { NORM.mb++; prefix = '-MB' + NORM.mb; }
+                    else                            { NORM.kf++; prefix = '-KF' + NORM.kf; }
+                    varNormPrefix[varForLabel] = prefix;
+                    return prefix + ' (' + varForLabel + ')';
+                }
+
+                // ---- Eigene Source-Klassifikation ----
+                // Eine Variable ist Hilfsrelais, wenn sie in einer ANDEREN RHS auftaucht
+                // (also als Eingang für eine spätere Zuweisung benutzt wird) ODER ein FF-
+                // Output (Q1/Q1_SR/...) ist. Wir verlassen uns NICHT auf das globale
+                // componentTypes — das wird beim Auto-Klassifizieren in runSimulationTick
+                // gesetzt und einmal als 'relais' markierte Variablen werden später nie
+                // mehr zurück auf 'led' geändert, auch wenn sie nicht mehr als Source
+                // verwendet werden. Eigene Berechnung ist deterministisch.
+                const _usedAsSource = new Set();
+                function _walkAst(n) {
+                    if (!n) return;
+                    if (n.type === 'IDENT') _usedAsSource.add(n.name);
+                    if (n.type === 'NOT') _walkAst(n.operand);
+                    if (n.operands) n.operands.forEach(_walkAst);
+                }
+                assigns.forEach(a => _walkAst(a.ast));
+                flipFlops.forEach(f => { _walkAst(f.setAst); _walkAst(f.resetAst); });
+
+                // ---- Layout & Komponenten-Erzeugung ----
+                ST.components = [];
+                ST.wires = [];
+                clearSelection();
+
+                // Layout-Konstanten — vertikale Hierarchie zwischen den Schienen:
+                //   RAIL_PLUS_Y ─────────── (+24V)
+                //         │ 30 px
+                //   topJunctionY  (OR-Knotenpunkte oben)
+                //         │ 30 px
+                //   TOP_Y         (erster Kontakt; bei Single-Strang direkt hier)
+                //         …Kontakte gestapelt…
+                //   botJunctionY  (OR-Knotenpunkte unten)
+                //         │ 50 px
+                //   BOT_Y         (Spule)
+                //         │ 60 px
+                //   RAIL_MINUS_Y ────────── (0V)
+                const COL_PITCH    = 140;                      // Spaltenabstand zwischen Strängen
+                const FIRST_X      = RAIL_X_MIN + 60;          // erste Spalte
+                const TOP_Y        = RAIL_PLUS_Y + 60;         // erster Kontakt 60 px unter L+
+                const topJunctionY = RAIL_PLUS_Y + 30;         // OR-Knoten oben — KLAR unter dem Rail
+                const BOT_Y        = RAIL_MINUS_Y - 100;       // Spule 100 px über L-
+                const botJunctionY = BOT_Y - 50;               // OR-Knoten 50 px über Spule
+                const CONTACT_H    = CTYPES.taster.h;          // 30
+                const COIL_H       = CTYPES.relais.h;          // 40
+                const VERTICAL_GAP = 10;                       // Pixel zwischen Bauteilen einer Reihe
+                let colX = FIRST_X;
+
+                // Helper: Komponente platzieren und ID zurückgeben.
+                function placeComp(type, x, y, varName) {
+                    const t = CTYPES[type];
+                    const id = nextId('c');
+                    ST.components.push({ id, type, x, y, varName: varName || '' });
+                    return id;
+                }
+                function placeWire(from, to) {
+                    ST.wires.push({ id: nextId('w'), from, to });
+                }
+                // Helper: Pin-Position eines Bauteils im absoluten Koordinatensystem.
+                function pinX(comp) {
+                    const t = CTYPES[comp.type]; return comp.x + t.cx;
+                }
+
+                // ---- Typ-Wahl: aus componentTypes der Variable ableiten ----
+                // WICHTIG: componentTypes ist `let` im Modul-Scope, NICHT auf window —
+                // direkter Zugriff (vorher: window.componentTypes → undefined → alles
+                // wurde Default 'relais', auch wenn die Variable als 'led'/'motor' etc.
+                // klassifiziert war).
+                function _ct(name) {
+                    return (typeof componentTypes !== 'undefined' && componentTypes[name]) || '';
+                }
+                function contactTypeFor(name, isNeg) {
+                    const ct = _ct(name);
+                    if (ct === 'nothalt')        return 'nothalt';
+                    if (ct === 'taster_nc')      return 'taster_nc';
+                    if (ct === 'taster')         return isNeg ? 'taster_nc' : 'taster';
+                    if (ct === 'schalter_nc')    return 'schalter_nc';
+                    if (ct === 'schalter')       return isNeg ? 'schalter_nc' : 'schalter';
+                    if (ct === 'light_curtain')  return 'light_curtain';
+                    if (ct === 'key_switch')     return 'key_switch';
+                    // Sensoren bekommen KEIN Sensor-Symbol im Strang — das wäre ein
+                    // 3-Pin-Bauteil (BN/BU/BK), das die +24V/0V-Schienenversorgung
+                    // mit der Strangverdrahtung vermischen würde. Stattdessen wird
+                    // der Sensor in einer eigenen Vor-Spalte plaziert (siehe
+                    // sensorVars-Loop weiter unten); im Strang erscheint hier nur
+                    // ein Hilfskontakt mit der Sensor-Variable.
+                    if (ct && ct.indexOf('sensor_') === 0) return isNeg ? 'relay_nc' : 'relay_no';
+                    // Interne Variablen / FF-Outputs / Aux-Relais
+                    return isNeg ? 'relay_nc' : 'relay_no';
+                }
+                function coilTypeFor(name) {
+                    // 1) FF-Output (Qn, Qn_SR) → Hilfsrelais
+                    if (/^Q\d+(_SR)?$/i.test(name)) return 'relais';
+                    // 2) Variable wird in einer anderen RHS als Source genutzt
+                    //    → ist ein Hilfsrelais (Aux), egal was componentTypes sagt
+                    if (_usedAsSource.has(name)) return 'relais';
+                    // 3) Echte Last/Output → componentTypes konsultieren
+                    const ct = _ct(name);
+                    if (ct === 'motor' || ct === 'fan')        return 'motor';
+                    if (ct === 'siren')                         return 'siren';
+                    if (ct === 'heater')                        return 'heater';
+                    if (ct === 'valve' || ct === 'valve_pneu')  return 'valve';
+                    // 'led', 'stacklight', 'display', 'hmi_lamp' und unklassifizierte
+                    // Outputs → LED-Spule (sinnvoller Default für „Last" im Lehr-Kontext;
+                    // User kann Bauteil-Typ nach Generierung manuell wechseln).
+                    return 'led';
+                }
+
+                // ---- Eine Strangspalte (eine Zuweisung) generieren ----
+                // Plaziert Kontakte vertikal zwischen L+ und Spule, gibt die obere und
+                // untere "Anker"-Pin-Info zurück (für Verdrahtung an Schienen).
+                // Liefert false, wenn der Ausdruck zu komplex zum automatischen Layout ist
+                // (in dem Fall: Strang skippen + skipped[] vermerken).
+                function buildRung(lhs, ast, x) {
+                    // Entscheide Geometrie: einfach, AND-Kette, ODER-Kette, gemischt
+                    // Strategie: wir reduzieren auf SOP (Sum of Products) für die OR-
+                    // Layoutebene. Jede Produktgruppe ist eine vertikale Reihe mit
+                    // Kontakten in Reihe; mehrere Produkte werden parallel mit
+                    // Junctions am oberen und unteren Ende verbunden.
+
+                    // ast → Liste von "Produkten" (= AND-Reihen)
+                    function flattenToProducts(node) {
+                        if (node.type === 'OR') {
+                            return node.operands.flatMap(flattenToProducts);
+                        }
+                        if (node.type === 'AND') {
+                            // Jeder Operand muss ein Atom (IDENT/NOT IDENT) sein, sonst zu komplex
+                            const atoms = [];
+                            for (const op of node.operands) {
+                                if (!isAtom(op)) return null;  // nested OR → zu komplex
+                                atoms.push(op);
+                            }
+                            return [atoms];
+                        }
+                        if (isAtom(node)) return [[node]];
+                        return null;  // CONST oder Unbekannt
+                    }
+                    function isAtom(n) {
+                        return n.type === 'IDENT' || (n.type === 'NOT' && n.operand && n.operand.type === 'IDENT');
+                    }
+                    const products = flattenToProducts(ast);
+                    if (!products) {
+                        skipped.push({ lhs, reason: 'Verschachtelte Klammern/OR — manuell ergänzen' });
+                        return;
+                    }
+
+                    const coilType = coilTypeFor(lhs);
+                    const coilT = CTYPES[coilType];
+                    const coilCx = coilT.cx;
+
+                    // Spulen-Position fest am unteren Ende der Spalte
+                    const coilX = x + (CTYPES.taster.cx - coilCx);  // Spule auf gleicher Pin-X wie Kontakte
+                    const coilY = BOT_Y;
+                    const coilId = placeComp(coilType, coilX, coilY, lhs);
+                    // Norm-Label je nach Coil-Typ: -P{n} (LED), -M{n} (Motor), -MB{n} (Ventil),
+                    // -H{n} (Sirene), -E{n} (Heizung), -KF{n} (Hilfsrelais).
+                    {
+                        const _coilLabel = _coilNormLabelFor(coilType, lhs);
+                        const _cc = ST.components.find(c => c.id === coilId);
+                        if (_cc) _cc.normLabel = _coilLabel;
+                    }
+
+                    // Berechne Pin-X-Position der Spalte (gleichbleibend für alle Kontakte)
+                    const pinAt = x + CTYPES.taster.cx;
+
+                    // Helper: Kontakt platzieren + passendes Norm-Label setzen.
+                    //   Kontakt für Sensor-Variable → varName ist auf Hilfsrelais umgemappt
+                    //                                  → Norm-Label = sensorInfo[orig].helperLabel
+                    //   Kontakt für reguläre Variable → -SF{n} (Original-Variable)
+                    function _placeContactWithLabel(cType, compX, curY, originalVar) {
+                        const placedVar = _resolveContactVar(originalVar);
+                        const id = placeComp(cType, compX, curY, placedVar);
+                        const comp = ST.components.find(c => c.id === id);
+                        if (comp) {
+                            if (sensorInfo[originalVar]) {
+                                // Aux-Kontakt für Sensor-Hilfsrelais
+                                comp.normLabel = sensorInfo[originalVar].helperLabel;
+                            } else if (varNormLabel[placedVar]) {
+                                // Vorab gecachtes Label (z.B. wenn Variable mehrfach im Code auftritt)
+                                comp.normLabel = varNormLabel[placedVar];
+                            } else {
+                                comp.normLabel = _nextSF(originalVar);
+                            }
+                        }
+                        return id;
+                    }
+
+                    // Ein einziges Produkt → reine vertikale Reihe (kein OR-Layout)
+                    if (products.length === 1) {
+                        const atoms = products[0];
+                        const ids = [];
+                        let curY = TOP_Y;
+                        for (const a of atoms) {
+                            const isNeg = a.type === 'NOT';
+                            const name = isNeg ? a.operand.name : a.name;
+                            const cType = contactTypeFor(name, isNeg);
+                            const cT = CTYPES[cType];
+                            const compX = x + (CTYPES.taster.cx - cT.cx);
+                            // Sensor-Variablen → Hilfsrelais-Mapping; reguläre Variablen
+                            // → -SF{n}-Norm-Label. Beides wird im Helper erledigt.
+                            ids.push(_placeContactWithLabel(cType, compX, curY, name));
+                            curY += cT.h + VERTICAL_GAP;
+                        }
+                        // Verdrahtung: L+ → erster in, dann in-Pin-Kette, letzter out → coil in, coil out → L-
+                        placeWire({ rail:'plus', x: pinAt }, { compId: ids[0], pin:'in' });
+                        for (let i = 0; i < ids.length - 1; i++)
+                            placeWire({ compId: ids[i], pin:'out' }, { compId: ids[i+1], pin:'in' });
+                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: coilId, pin:'in' });
+                        placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: x + coilCx + (CTYPES.taster.cx - coilCx) });
+                        return;
+                    }
+
+                    // Mehrere Produkte → parallel: pro Produkt eine eigene Sub-Spalte
+                    // mit eigenem X, oben und unten via Junction zusammengeführt.
+                    // Sub-Pins SYMMETRISCH um pinAt (= Spulen-Pin-X) zentriert.
+                    const SUB_PITCH = 100;
+                    const subPinAt = (i) => pinAt + (i - (products.length - 1) / 2) * SUB_PITCH;
+                    const topJunctions = [];
+                    const botJunctions = [];
+                    for (let i = 0; i < products.length; i++) {
+                        const px = subPinAt(i);
+                        const jt = placeComp('junction', px - CTYPES.junction.cx, topJunctionY, '');
+                        const jb = placeComp('junction', px - CTYPES.junction.cx, botJunctionY, '');
+                        topJunctions.push({ id: jt, x: px });
+                        botJunctions.push({ id: jb, x: px });
+                    }
+                    // Verkettung der Junctions inklusive Zentral-Junction bei pinAt:
+                    //   Bei ungerader Produkt-Zahl liegt eine Produkt-Junction direkt
+                    //   bei pinAt → diese wird wiederverwendet.
+                    //   Bei gerader Zahl wird eine ZUSÄTZLICHE Junction bei pinAt
+                    //   eingefügt, damit die Anbindung zur Spule garantiert vertikal
+                    //   ist (kein L-Knick zwischen Junction-Junction-Linie und Spule).
+                    function buildChain(junctions, jY) {
+                        // Existiert bereits eine Junction bei pinAt? → diese als Mitte nutzen.
+                        const existing = junctions.find(j => Math.abs(j.x - pinAt) < 1);
+                        if (existing) {
+                            for (let i = 0; i < junctions.length - 1; i++)
+                                placeWire({ compId: junctions[i].id, pin:'right' }, { compId: junctions[i+1].id, pin:'left' });
+                            return existing;
+                        }
+                        // Gerade Anzahl → Zentral-Junction bei pinAt einfügen
+                        const cj = { id: placeComp('junction', pinAt - CTYPES.junction.cx, jY, ''), x: pinAt };
+                        // Position des Einfüge-Punkts: nach der letzten Junction mit x < pinAt
+                        let insertAfter = -1;
+                        for (let i = 0; i < junctions.length; i++)
+                            if (junctions[i].x < pinAt) insertAfter = i;
+                        const chain = [];
+                        for (let i = 0; i < junctions.length; i++) {
+                            chain.push(junctions[i]);
+                            if (i === insertAfter) chain.push(cj);
+                        }
+                        for (let i = 0; i < chain.length - 1; i++)
+                            placeWire({ compId: chain[i].id, pin:'right' }, { compId: chain[i+1].id, pin:'left' });
+                        return cj;
+                    }
+                    const coilTopJ = buildChain(topJunctions, topJunctionY);
+                    const coilBotJ = buildChain(botJunctions, botJunctionY);
+                    // L+ → zentrale Top-Junction (vertikal, weil cj.x = pinAt)
+                    placeWire({ rail:'plus', x: pinAt }, { compId: coilTopJ.id, pin:'top' });
+                    // Zentrale Bot-Junction → Spule (vertikal — Hauptverbesserung gg. vorher)
+                    placeWire({ compId: coilBotJ.id, pin:'bottom' }, { compId: coilId, pin:'in' });
+                    // Coil out → L-
+                    placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: pinAt });
+                    // Pro Produkt: Kontakt-Reihe von Top-Junction (bottom) zu Bot-Junction (top)
+                    for (let i = 0; i < products.length; i++) {
+                        const atoms = products[i];
+                        const ids = [];
+                        let curY = TOP_Y;
+                        const px = subPinAt(i);
+                        for (const a of atoms) {
+                            const isNeg = a.type === 'NOT';
+                            const name = isNeg ? a.operand.name : a.name;
+                            const cType = contactTypeFor(name, isNeg);
+                            const cT = CTYPES[cType];
+                            const compX = px - cT.cx;   // Pin-Position = px → component.x = px - cx
+                            ids.push(_placeContactWithLabel(cType, compX, curY, name));
+                            curY += cT.h + VERTICAL_GAP;
+                        }
+                        placeWire({ compId: topJunctions[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
+                        for (let j = 0; j < ids.length - 1; j++)
+                            placeWire({ compId: ids[j], pin:'out' }, { compId: ids[j+1], pin:'in' });
+                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: botJunctions[i].id, pin:'top' });
+                    }
+                }
+
+                // FFs werden zu zwei separaten Strängen: ein Set-Strang und ein
+                // Reset-Strang, beide auf eine gemeinsame Hilfsrelais-Spule mit
+                // Set-/Reset-Anschluss. Da unser Editor keine eingebauten S/R-Coils
+                // hat, modellieren wir RS/SR als zwei normale Stränge mit dem
+                // gleichen LHS-Namen (TIA mappt das später zur RS/SR-Logik in der
+                // Steuerung). Vermerk im Skipped-Hinweis, dass das eine Annäherung ist.
+                flipFlops.forEach(f => {
+                    skipped.push({ lhs: 'Q'+f.num, reason: 'RS/SR-FF: Set- und Reset-Strang separat — bitte manuell zu einer Hilfsrelais-Spule mit Selbsthaltung verbinden' });
+                });
+
+                // ---- Sensor-Vor-Spalten mit norm-bezeichnetem Hilfsrelais ----
+                // Konvention wie im Auto-Schaltplan: jeder Sensor bekommt eine eigene
+                // Hilfsrelais-Spule mit DURCHNUMMERIERTEM Identifier (K_BG1, K_BG2, ...).
+                // Der Sensor selbst behält seinen SPS-Variablennamen (z.B. E_SENSOR_IND);
+                // die Hilfskontakte in den Hauptsträngen verweisen NICHT auf den
+                // Sensornamen, sondern auf den Hilfsrelais-Namen. Damit gibt es keine
+                // varName-Kollision im Editor und der Round-Trip funktioniert sauber.
+                //
+                //   +24V ─┬─────────┬──
+                //         │         │
+                //      [Sensor]     │
+                //       BN│ │BK───┐ │
+                //         │      └─[K_BG1] (Hilfsrelais — eigener Name)
+                //       BU│        │
+                //   0V ───┴────────┴──
+                //
+                // Generierter Code:
+                //   INPUT E_SENSOR_IND        (vom Sensor)
+                //   K_BG1 := E_SENSOR_IND     (vom Hilfsrelais; Sensor-Signal-Phantom-Kante)
+                //   A_LAMPE := E_TASTER && K_BG1   (Hauptstrang nutzt Hilfsrelais)
+                const sensorVars = new Set();
+                _usedAsSource.forEach(v => {
+                    const ct = _ct(v);
+                    if (ct && ct.indexOf('sensor_') === 0 && CTYPES[ct]) sensorVars.add(v);
+                });
+                // Sensor-Variable → Hilfsrelais-Info (eindeutig, durchnummeriert)
+                // sensorInfo[var] = { helperVar, helperLabel, sensorLabel }
+                //   helperVar    : varName des Hilfsrelais (z.B. K_BG1) — interne ID
+                //   helperLabel  : "-KF1 (-BG1)"
+                //   sensorLabel  : "-BG1 (E_SENSOR_IND)"
+                const sensorInfo = {};
+                sensorVars.forEach(v => {
+                    NORM.bg++;
+                    NORM.kf++;
+                    const bgPrefix = '-BG' + NORM.bg;
+                    const kfPrefix = '-KF' + NORM.kf;
+                    sensorInfo[v] = {
+                        helperVar:   'K_BG' + NORM.bg,
+                        helperLabel: kfPrefix + ' (' + bgPrefix + ')',
+                        sensorLabel: bgPrefix + ' (' + v + ')'
+                    };
+                    // Hilfskontakte mit dieser helperVar bekommen denselben helperLabel
+                    varNormLabel[sensorInfo[v].helperVar] = sensorInfo[v].helperLabel;
+                    varNormPrefix[sensorInfo[v].helperVar] = kfPrefix;
+                });
+
+                const SENSOR_GAP = 30;
+                const SENSOR_BLOCK_PAD = 30;
+                sensorVars.forEach(name => {
+                    const sType = _ct(name);
+                    const sT = CTYPES[sType];
+                    const cT = CTYPES.relais;
+                    const info = sensorInfo[name];
+                    // Sensor links — varName=SPS-Variable, normLabel="-BG1 (E_SENSOR_IND)"
+                    const sensorX = colX;
+                    const sensorPinX = sensorX + sT.cx;
+                    const sensorId = placeComp(sType, sensorX, TOP_Y, name);
+                    const sensorComp = ST.components.find(c => c.id === sensorId);
+                    if (sensorComp) sensorComp.normLabel = info.sensorLabel;
+                    placeWire({ rail:'plus',  x: sensorPinX }, { compId: sensorId, pin:'in'  });
+                    placeWire({ compId: sensorId, pin:'out' }, { rail:'minus', x: sensorPinX });
+                    // Hilfsrelais — varName=internal helperVar, normLabel="-KF1 (-BG1)"
+                    const coilX = sensorX + sT.w + SENSOR_GAP;
+                    const coilPinX = coilX + cT.cx;
+                    const coilY = TOP_Y + sT.cy;
+                    const coilId = placeComp('relais', coilX, coilY, info.helperVar);
+                    const coilComp = ST.components.find(c => c.id === coilId);
+                    if (coilComp) coilComp.normLabel = info.helperLabel;
+                    placeWire({ compId: sensorId, pin:'signal' }, { compId: coilId, pin:'in' });
+                    placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: coilPinX });
+                    colX = coilX + cT.w + SENSOR_BLOCK_PAD;
+                });
+
+                // Helper für Hauptstrang: Sensor-Variable wird beim Kontakt-Plazieren
+                // durch den Hilfsrelais-Namen ersetzt — die Hilfskontakte (relay_no/_nc)
+                // verweisen damit auf das Hilfsrelais, nicht auf den Sensor selbst.
+                const _resolveContactVar = (name) =>
+                    sensorInfo[name] ? sensorInfo[name].helperVar : name;
+
+                // Eigentliche Zuweisungen rendern — Spaltenabstand dynamisch je nach
+                // Strang-Breite (1-Produkt-Strang ist schmaler als 2-/3-Produkt-OR).
+                // Hilfsfunktion zum Vorab-Schätzen der OR-Produkt-Anzahl.
+                function _astProductCount(node) {
+                    if (!node) return 1;
+                    if (node.type === 'OR') return node.operands.length;
+                    return 1;
+                }
+                const SUB_PITCH_FOR_WIDTH = 100;
+                // Etwas Puffer zwischen Sensor-Block und erstem Strang
+                if (sensorVars.size > 0) colX += 40;
+                assigns.forEach(a => {
+                    const np = _astProductCount(a.ast);
+                    const rungW = np > 1 ? (np - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
+                    buildRung(a.lhs, a.ast, colX);
+                    colX += rungW + 40;  // 40 px Puffer zwischen Strängen
+                });
+
+                cedRender();
+                if (typeof _maybeSync === 'function') _maybeSync();
+
+                // Status-Hinweis
+                let msg = `${assigns.length} Strompfad${assigns.length===1?'':'e'} generiert.`;
+                if (skipped.length > 0) {
+                    msg += '\n\nNicht automatisch erzeugt:\n' + skipped.map(s => `  • ${s.lhs}: ${s.reason}`).join('\n');
+                }
+                if (hadTimerOrCounter) msg += '\n\nTimer/Zähler werden im Editor manuell ergänzt — die SCL-Quelle (Code-Editor) bleibt die Referenz.';
+                if (skipped.length > 0 || hadTimerOrCounter) alert(msg);
+                const stat = _d().getElementById('ced-status');
+                if (stat) { stat.textContent = '🪄 ' + assigns.length + ' Stränge generiert'; setTimeout(() => { if (stat.textContent.startsWith('🪄')) stat.textContent = ''; }, 3000); }
+            };
+
             // ---------- Render ----------
             // Auf window exponiert, damit z.B. toggleWechsler den Editor live neuzeichnen
             // kann, sobald sich die Pin-Konvention (NC=11/12 / NO=11/14 vs. 13/14) ändert.
             window.cedRender = cedRender;
             function cedRender() {
+                // Dynamische Norm-Labels (Klammer-Inhalt für Hilfsrelais aus dem
+                // Strang-Ausdruck) VOR dem eigentlichen Rendern aktualisieren.
+                if (typeof _refreshDynamicLabels === 'function') {
+                    try { _refreshDynamicLabels(); } catch(e) { /* still */ }
+                }
                 _refreshJunctionPins();
                 _renderRails();
                 _renderWires();
@@ -28991,6 +29607,24 @@ You must output exactly this JSON format. The logic code goes as a single string
             // des Original-Schaltplans (siehe Funktionen ab Zeile ~6639). Lokales Koordinatensystem:
             //   x ist der Symbol-Mittelpunkt (entspricht dem original `x`-Parameter der draw-Funktion)
             //   y ist die Symbol-Mitte (entspricht dem original `y`-Parameter)
+            // Zweizeiliges Label im Auto-Schaltplan-Stil: Norm-Bezeichnung fett oben,
+            // Variable in Klammern als zweite Zeile darunter. Wird verwendet wenn
+            // comp.normLabel das Format "-BG1 (E_SENSOR_IND)" hat (Klammer-Trennung).
+            // Ohne Klammer fällt es auf das einzeilige varName-Label zurück.
+            function _drawCompLabel(grp, x, y, comp, anchor) {
+                const text = comp.normLabel || comp.varName || '?';
+                const splitIdx = text.indexOf(' (');
+                const ank = anchor || 'start';
+                if (splitIdx !== -1) {
+                    const line1 = text.substring(0, splitIdx);
+                    const line2 = text.substring(splitIdx + 1);
+                    el('text', { x, y: y - 2, 'font-size': 11, 'font-weight': 'bold', fill: '#1976d2', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = line1;
+                    el('text', { x, y: y + 10, 'font-size': 10, fill: '#444', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = line2;
+                } else {
+                    el('text', { x, y, 'font-size': 11, 'font-weight': 'bold', fill: '#1976d2', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = text;
+                }
+            }
+
             function _renderIecSymbol(grp, comp) {
                 const t = CTYPES[comp.type];
                 if (!t) return;
@@ -29026,8 +29660,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     _drawPinLabel(grp, x - 4,  sBoxY - 2,         'BN', 'end');
                     _drawPinLabel(grp, x - 4,  sBoxY + 30 + 8,    'BU', 'end');
                     _drawPinLabel(grp, x + 18, sBoxY + 13,        'BK', 'start');
-                    // Variablen-Label oberhalb der Box (entspricht addLabelText(gSens, currX+20, sBoxY-5, ...))
-                    el('text', {x:x+20, y:sBoxY-5, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
+                    // Norm-Label + Variable oberhalb der Box (zweizeilig wenn normLabel "-BG1 (var)" Format hat)
+                    _drawCompLabel(grp, x + 20, sBoxY - 5, comp, 'start');
                     return;
                 }
                 if (t.kind === 'contact' || t.kind === 'aux') {
@@ -29082,8 +29716,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         _drawPinLabel(grp, x - 4, y - 10, _plC.top,    'end');
                         _drawPinLabel(grp, x - 4, y + 15, _plC.bottom, 'end');
                     }
-                    // Variablen-Label rechts neben dem Symbol (entspricht addLabelText(g, x+15, y))
-                    el('text', {x:x+18, y:y-2, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif'}, grp).textContent = labelText;
+                    // Norm-Label + Variable rechts neben dem Symbol (zweizeilig wenn normLabel gesetzt)
+                    _drawCompLabel(grp, x + 18, y, comp, 'start');
                 } else if (t.kind === 'coil') {
                     // === Identisch zu drawCoil/drawLED/drawSiren/drawMotor/drawHeater im Original ===
                     if (comp.type === 'led') {
@@ -29135,12 +29769,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                         _drawPinLabel(grp, x - 4, _topY, _plK.top,    'end');
                         _drawPinLabel(grp, x - 4, _botY, _plK.bottom, 'end');
                     }
-                    // Variablen-Label rechts (entspricht addLabelText(g, x+30, y) bzw. x+25 für LED/Motor)
+                    // Norm-Label + Variable rechts vom Spulen-Symbol (zweizeilig wenn normLabel gesetzt)
                     const lblX = (comp.type === 'led' || comp.type === 'motor' || comp.type === 'heater') ? x + 25
                                : (comp.type === 'siren') ? x + 20
                                : (comp.type === 'valve') ? x + 50  // Platz für Ventilandeutung
                                : x + 30;
-                    el('text', {x:lblX, y, 'font-size':11, 'font-weight':'bold', fill:'#1976d2', 'font-family':'Segoe UI, Tahoma, sans-serif', 'dominant-baseline':'middle'}, grp).textContent = labelText;
+                    _drawCompLabel(grp, lblX, y, comp, 'start');
                 } else if (t.kind === 'junction') {
                     el('circle', {cx:x, cy:y, r:5, fill:'#000'}, grp);
                 }
@@ -29481,6 +30115,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                         ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
                     }
                     ST.components.push(comp);
+                    // Auto-Norm-Prefix sofort zuteilen — der nächste freie Identifier
+                    // pro Bauteil-Prefix (-SF, -BG, -KF, -P, -M, -MB, -H, -E, -K).
+                    _ensureNormPrefix(comp);
+                    _computeNormLabel(comp);
+                    // Aux-Kontakte: wenn nur EIN passendes Hilfsrelais existiert, gleich
+                    // automatisch verknüpfen — User-Feedback per Statuszeile.
+                    if (CTYPES[comp.type] && CTYPES[comp.type].kind === 'aux') {
+                        const refs = ST.components.filter(c =>
+                            c.id !== comp.id &&
+                            (c.type === 'relais' || (CTYPES[c.type] && CTYPES[c.type].kind === 'sensor'))
+                            && c.normPrefix
+                        );
+                        if (refs.length === 1) {
+                            comp.refNormPrefix = refs[0].normPrefix;
+                            comp.varName = refs[0].varName || '';
+                            _computeNormLabel(comp);
+                            _setStatus('🔗 Auto-Verknüpft mit ' + refs[0].normPrefix + (refs[0].varName ? ' (' + refs[0].varName + ')' : ''));
+                        }
+                    }
                     if (_needsVar(type)) {
                         cedRender();
                         _showNamePopup(comp);
@@ -29551,7 +30204,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                             ST.clipboard.forEach(orig => {
                                 const c = { ...orig, id: nextId('c'), x: orig.x + off, y: orig.y + off };
                                 if (CTYPES[c.type]) c.y = _clampCompY(c.y, c.type);
+                                // Norm-Label resetten und neu vergeben — sonst gäbe es
+                                // Identifier-Kollisionen mit dem Original.
+                                c.normLabel = '';
                                 ST.components.push(c);
+                                _updateNormLabel(c);
                                 ST.selectedIds.add(c.id);
                             });
                             // Versatz im Clipboard mitführen, sodass mehrmaliges Strg+V kaskadiert einfügt.
@@ -30014,63 +30671,215 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             // ---------- Name Popup ----------
+            // Zwei Felder: Norm-Bezeichnung (primärer Identifier) + Variable (SPS-VarName).
+            // Bei Aux-Kontakten zusätzlich Dropdown mit allen verfügbaren Hilfsrelais
+            // bzw. Sensoren — Auswahl setzt den refNormPrefix.
             function _showNamePopup(comp, atClientX, atClientY) {
                 const pop = _d().getElementById('ced-name-popup');
                 if (!pop) return;
                 const t = CTYPES[comp.type];
                 const isAux = t.kind === 'aux';
                 const isCoil = t.kind === 'coil';
-                let coilOptions = '';
+                _ensureNormPrefix(comp);
+                let refOptions = '';
                 if (isAux) {
-                    // Hilfskontakte gibt es nur an Relais (nicht an LED/Motor/Sirene/etc.)
-                    const coils = ST.components.filter(c => c.type === 'relais' && c.varName);
-                    coilOptions = coils.map(c => `<option value="${c.varName}" ${c.varName === comp.varName ? 'selected' : ''}>${c.varName}</option>`).join('');
+                    // Liste aller Hilfsrelais + Sensoren (durch ihren normPrefix identifiziert).
+                    // Anzeige: voller normLabel inkl. Strang-Ausdruck oder Variable in Klammern.
+                    // Bauteile OHNE varName (z.B. Hilfsrelais ohne SPS-Variable) bekommen
+                    // einen Hinweis, dass sie zuerst einen Variablennamen brauchen, damit
+                    // der Hilfskontakt im erzeugten Code eine echte Referenz hat.
+                    const refs = ST.components.filter(c =>
+                        (c.type === 'relais' || (CTYPES[c.type] && CTYPES[c.type].kind === 'sensor'))
+                        && c.normPrefix
+                    );
+                    refOptions = refs.map(c => {
+                        const sel = (c.normPrefix === comp.refNormPrefix) ? 'selected' : '';
+                        const label = c.normLabel || c.normPrefix;
+                        const needsVar = !c.varName;
+                        const tag = needsVar ? `${label} ⚠ benötigt Variable` : label;
+                        return `<option value="${c.normPrefix}" ${sel}>${tag}</option>`;
+                    }).join('');
                 }
+                const headerTxt = isCoil ? '🔵 Spule benennen'
+                                : isAux  ? '🔗 Hilfskontakt referenziert'
+                                :          '🔌 Bauteil benennen';
                 pop.innerHTML = `
-                    <div style="color:#fff;font-size:11px;margin-bottom:6px;font-weight:bold;">
-                        ${isCoil ? '🔵 Spule benennen' : (isAux ? '🔗 Hilfskontakt → Spule' : '🔌 Variable zuweisen')}
-                    </div>
-                    ${isAux && coilOptions ? `
-                        <select id="ced-pop-sel" style="width:160px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;margin-bottom:4px;">
-                            <option value="">-- Spule wählen --</option>${coilOptions}
-                        </select><br>` : ''}
-                    <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:160px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
-                    <div style="margin-top:6px;display:flex;gap:4px;">
+                    <div style="color:#fff;font-size:11px;margin-bottom:8px;font-weight:bold;">${headerTxt}</div>
+                    ${isAux ? `
+                        <label style="display:block;color:#aaa;font-size:10px;margin-bottom:2px;">Referenziertes Bauteil:</label>
+                        <select id="ced-pop-ref" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;margin-bottom:8px;">
+                            <option value="">-- (kein) --</option>${refOptions}
+                        </select><br>
+                    ` : `
+                        <label style="display:block;color:#aaa;font-size:10px;margin-bottom:2px;">Norm-Bezeichnung:</label>
+                        <input id="ced-pop-norm" type="text" value="${(comp.normPrefix || '').replace(/"/g, '&quot;')}" placeholder="-SF1 / -BG1 / -KF1" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;margin-bottom:6px;"><br>
+                        <label style="display:block;color:#aaa;font-size:10px;margin-bottom:2px;">Variable (SPS):</label>
+                        <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
+                    `}
+                    <div style="margin-top:10px;display:flex;gap:4px;">
                         <button onclick="window._cedConfirmName('${comp.id}')" style="background:#4caf50;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">OK</button>
                         <button onclick="window._cedClosePopup()" style="background:#555;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">Abbrechen</button>
                     </div>
                 `;
-                // Wenn Client-Koordinaten übergeben (Rechtsklick) → direkt am Cursor öffnen
                 if (typeof atClientX === 'number' && typeof atClientY === 'number') {
-                    pop.style.left = Math.min(window.innerWidth - 220, atClientX + 4) + 'px';
-                    pop.style.top  = Math.min(window.innerHeight - 140, atClientY + 4) + 'px';
+                    pop.style.left = Math.min(window.innerWidth - 260, atClientX + 4) + 'px';
+                    pop.style.top  = Math.min(window.innerHeight - 180, atClientY + 4) + 'px';
                 } else {
                     const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
-                    pop.style.left = Math.min(window.innerWidth - 220, rect.left + comp.x + 70) + 'px';
+                    pop.style.left = Math.min(window.innerWidth - 260, rect.left + comp.x + 70) + 'px';
                     pop.style.top  = (rect.top + comp.y + 30) + 'px';
                 }
                 pop.style.display = 'block';
                 setTimeout(() => {
-                    const inp = _d().getElementById('ced-pop-input');
-                    if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') window._cedConfirmName(comp.id);
-                        if (e.key === 'Escape') pop.style.display = 'none';
-                    }); }
-                    const sel = _d().getElementById('ced-pop-sel');
-                    if (sel) sel.addEventListener('change', () => { _d().getElementById('ced-pop-input').value = sel.value; });
+                    const focusInput = _d().getElementById('ced-pop-input') || _d().getElementById('ced-pop-ref');
+                    if (focusInput) {
+                        focusInput.focus();
+                        if (focusInput.select) focusInput.select();
+                        focusInput.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') window._cedConfirmName(comp.id);
+                            if (e.key === 'Escape') pop.style.display = 'none';
+                        });
+                    }
                 }, 10);
             }
             window._cedConfirmName = function(id) {
                 const comp = ST.components.find(c => c.id === id);
                 if (!comp) return;
-                const inp = _d().getElementById('ced-pop-input');
-                const v = (inp && inp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
-                comp.varName = v;
+                const t = CTYPES[comp.type];
+                if (t && t.kind === 'aux') {
+                    const sel = _d().getElementById('ced-pop-ref');
+                    const newRef = sel ? sel.value : '';
+                    comp.refNormPrefix = newRef || null;
+                    // Aux-Kontakt erbt varName vom referenzierten Bauteil — relevant
+                    // für die Code-Generierung (Aux-Kontakt steht als this Variable
+                    // im erzeugten Ausdruck).
+                    if (newRef) {
+                        const ref = ST.components.find(c => c.normPrefix === newRef);
+                        if (ref) comp.varName = ref.varName || '';
+                    }
+                } else {
+                    const normInp = _d().getElementById('ced-pop-norm');
+                    const varInp  = _d().getElementById('ced-pop-input');
+                    const newNorm = (normInp && normInp.value || '').trim();
+                    const newVar  = (varInp && varInp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_ÄÖÜ]/g, '');
+                    if (newNorm) comp.normPrefix = newNorm;
+                    comp.varName = newVar;
+                }
+                _computeNormLabel(comp);
                 _d().getElementById('ced-name-popup').style.display = 'none';
                 cedRender();
                 _maybeSync();
             };
+
+            // ============================================================
+            // Norm-Label-System (Auto-Schaltplan-konform)
+            // ------------------------------------------------------------
+            // Datenmodell pro Komponente:
+            //   comp.normPrefix      "-SF1" / "-BG1" / "-KF1" / "-P1" — eindeutig
+            //                        pro Komponente, primärer IDENTIFIER
+            //   comp.varName         SPS-Variable (z.B. "E_TASTER", "V") —
+            //                        optional bei Hilfsrelais, Pflicht bei
+            //                        Sensoren / Tastern / Last-Spulen
+            //   comp.refNormPrefix   bei Aux-Kontakten: Norm-Prefix des
+            //                        referenzierten Hilfsrelais/Sensors
+            //   comp.normLabel       abgeleitete Anzeige "<prefix> (<inhalt>)"
+            //                        wird vor jedem Render neu berechnet
+            // ============================================================
+            function _normPrefixForType(type) {
+                if (!type) return null;
+                if (type.indexOf('sensor_') === 0) return 'BG';
+                if (['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','mech_sensor','light_curtain'].includes(type)) return 'SF';
+                if (['relais','relay_no','relay_nc'].includes(type)) return 'KF';
+                if (['led','stacklight','display','hmi_lamp'].includes(type)) return 'P';
+                if (['motor','fan'].includes(type)) return 'M';
+                if (['valve','valve_pneu'].includes(type)) return 'MB';
+                if (type === 'siren')   return 'H';
+                if (type === 'heater')  return 'E';
+                if (type === 'contactor') return 'K';
+                return null;
+            }
+            // Sucht die nächste freie Nummer für ein gegebenes Prefix.
+            function _allocateNormPrefix(prefix) {
+                const re = new RegExp('^-' + prefix + '(\\d+)$');
+                let maxN = 0;
+                ST.components.forEach(c => {
+                    if (!c.normPrefix) {
+                        // Legacy-Daten: normPrefix aus normLabel ableiten
+                        if (c.normLabel) {
+                            const lm = c.normLabel.match(/^(-[A-Z]+\d+)/);
+                            if (lm) c.normPrefix = lm[1];
+                        }
+                    }
+                    if (!c.normPrefix) return;
+                    const m = c.normPrefix.match(re);
+                    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+                });
+                return '-' + prefix + (maxN + 1);
+            }
+            // Stellt sicher, dass eine Komponente einen normPrefix hat.
+            function _ensureNormPrefix(comp) {
+                if (comp.normPrefix) return;
+                const prefix = _normPrefixForType(comp.type);
+                if (!prefix) return;
+                comp.normPrefix = _allocateNormPrefix(prefix);
+            }
+            // Aux-Kontakt: refNormPrefix ermitteln/verifizieren.
+            // Fallback bei Legacy-Daten: über varName eine passende Komponente suchen.
+            function _resolveAuxRef(comp) {
+                const t = CTYPES[comp.type];
+                if (!t || t.kind !== 'aux') return;
+                if (comp.refNormPrefix) {
+                    const ref = ST.components.find(c => c.normPrefix === comp.refNormPrefix);
+                    if (ref) return; // existiert noch → behalten
+                    comp.refNormPrefix = null; // zerbrochen → neu auflösen
+                }
+                if (!comp.varName) return;
+                const ref = ST.components.find(c =>
+                    ((c.type === 'relais') || (CTYPES[c.type] && CTYPES[c.type].kind === 'sensor'))
+                    && c.varName === comp.varName
+                );
+                if (ref) {
+                    _ensureNormPrefix(ref);
+                    comp.refNormPrefix = ref.normPrefix;
+                }
+            }
+            // Berechnet das Anzeige-normLabel aus normPrefix + (varName | expr).
+            // Aux-Kontakte spiegeln den Inhalt des referenzierten Bauteils.
+            function _computeNormLabel(comp) {
+                const t = CTYPES[comp.type];
+                if (!t) return;
+                _ensureNormPrefix(comp);
+                if (t.kind === 'aux') {
+                    _resolveAuxRef(comp);
+                    if (comp.refNormPrefix) {
+                        const ref = ST.components.find(c => c.normPrefix === comp.refNormPrefix);
+                        if (ref) {
+                            // Aux-Kontakt zeigt das Norm-Prefix des Relais oben + dessen Inhalt unten
+                            comp.normLabel = ref.normLabel || ref.normPrefix;
+                            return;
+                        }
+                    }
+                    comp.normLabel = comp.normPrefix || '';
+                    return;
+                }
+                if (!comp.normPrefix) { comp.normLabel = comp.varName || ''; return; }
+                let inner = '';
+                if (t.kind === 'coil' && comp.type === 'relais') {
+                    // Hilfsrelais — Klammer-Inhalt: bevorzugt Strang-Ausdruck (wie Auto-Schaltplan
+                    // bei configDetails===2). Fallback: varName, falls Strang nicht aufgelöst werden kann.
+                    try {
+                        const expr = _exprForCoil(comp);
+                        if (expr && expr !== 'TRUE') inner = expr;
+                    } catch(e) {}
+                    if (!inner && comp.varName) inner = comp.varName;
+                } else {
+                    inner = comp.varName || '';
+                }
+                comp.normLabel = comp.normPrefix + (inner ? ' (' + inner + ')' : '');
+            }
+            // Backward-compat-Wrapper für früheren Aufrufer-Code.
+            function _updateNormLabel(comp) { _computeNormLabel(comp); }
             window._cedClosePopup = function() {
                 const p = _d().getElementById('ced-name-popup');
                 if (p) p.style.display = 'none';
@@ -30083,6 +30892,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Pin-x-Position gezogen. Mehrfaches Anwenden lässt verbundene Stränge konvergieren.
             window.cedAutoAlign = function() {
                 const VERT_PINS = ['in','out','top','bottom'];
+                const isJunctionComp = (compId) => {
+                    const c = ST.components.find(x => x.id === compId);
+                    return c && c.type === 'junction';
+                };
                 const compPinX = (compId, pin) => {
                     const c = ST.components.find(x => x.id === compId);
                     if (!c) return null;
@@ -30104,15 +30917,30 @@ You must output exactly this JSON format. The logic code goes as a single string
                 for (let pass = 0; pass < 8; pass++) {
                     let changed = false;
                     ST.wires.forEach(w => {
-                        // Komponente ↔ Komponente (beide vertikale Pins): Mittelwert
+                        // Komponente ↔ Komponente (beide vertikale Pins).
+                        // Junctions wirken als ANKER für parallele Zweige — sie sind
+                        // bewusst auf einer Sub-X-Position platziert (z.B. von der
+                        // Auto-Generierung). Wenn eine Junction beteiligt ist, wird
+                        // die NICHT-Junction-Seite an die Junction-X gezogen, statt
+                        // den Mittelwert zu bilden. Sonst würden parallele Stränge
+                        // in den Hauptstrang kollabieren.
                         if (w.from.compId && w.to.compId) {
                             const xF = compPinX(w.from.compId, w.from.pin);
                             const xT = compPinX(w.to.compId,   w.to.pin);
                             if (xF == null || xT == null) return;
                             if (xF === xT) return;
-                            const target = Math.round((xF + xT) / 2 / GRID) * GRID;
-                            if (setCompPinX(w.from.compId, w.from.pin, target)) changed = true;
-                            if (setCompPinX(w.to.compId,   w.to.pin,   target)) changed = true;
+                            const fIsJ = isJunctionComp(w.from.compId);
+                            const tIsJ = isJunctionComp(w.to.compId);
+                            if (fIsJ && !tIsJ) {
+                                if (setCompPinX(w.to.compId, w.to.pin, xF)) changed = true;
+                            } else if (tIsJ && !fIsJ) {
+                                if (setCompPinX(w.from.compId, w.from.pin, xT)) changed = true;
+                            } else {
+                                // Keine Junction beteiligt → klassischer Mittelwert
+                                const target = Math.round((xF + xT) / 2 / GRID) * GRID;
+                                if (setCompPinX(w.from.compId, w.from.pin, target)) changed = true;
+                                if (setCompPinX(w.to.compId,   w.to.pin,   target)) changed = true;
+                            }
                             return;
                         }
                         // Komponente ↔ Schiene: Schienen-Endpunkt an Komponenten-cx ziehen (Schiene ist flexibel)
@@ -30233,6 +31061,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
                 try { localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes)); } catch(e) {}
             }
+            // Refresh aller dynamischen Norm-Labels.
+            // Pass 1: Nicht-Aux-Komponenten (Sensoren, Kontakte, Spulen) → setzt
+            //         normPrefix + normLabel. Hilfsrelais bekommen den aktuellen
+            //         Strang-Ausdruck als Klammer-Inhalt.
+            // Pass 2: Aux-Kontakte → spiegeln das Label des per refNormPrefix
+            //         referenzierten Hilfsrelais/Sensors.
+            function _refreshDynamicLabels() {
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || t.kind === 'aux') return;
+                    _computeNormLabel(c);
+                });
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || t.kind !== 'aux') return;
+                    _computeNormLabel(c);
+                });
+            }
             function _maybeSync() {
                 _saveStateToStorage();
                 if (ST.liveSync) cedGenerateCode();
@@ -30246,17 +31092,36 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             function _generateCode() {
+                // Norm-Prefix sicherstellen für alle Komponenten (Self-Healing
+                // bei Legacy-Daten ohne explizites normPrefix-Feld).
+                ST.components.forEach(c => _ensureNormPrefix(c));
+                // Nur Spulen MIT varName erzeugen Code-Zeilen. Hilfsrelais ohne
+                // varName sind „anonyme Helfer" — sie tauchen nur visuell auf,
+                // ihre Wirkung wird von Aux-Kontakten in andere Stränge inline
+                // substituiert (Stichwort Proxy-Map weiter unten).
                 const coilGroups = {};
                 ST.components.forEach(c => {
-                    if (CTYPES[c.type].kind === 'coil') {
-                        if (!c.varName) return;
-                        if (!coilGroups[c.varName]) coilGroups[c.varName] = [];
-                        coilGroups[c.varName].push(c);
-                    }
+                    if (!CTYPES[c.type] || CTYPES[c.type].kind !== 'coil') return;
+                    if (!c.varName) return;
+                    if (!coilGroups[c.varName]) coilGroups[c.varName] = [];
+                    coilGroups[c.varName].push(c);
                 });
+                // usedAsAux: jede Variable, deren Aux-Kontakt einen Strang nutzt.
+                // Wird sowohl über refNormPrefix (neu) als auch über varName (Legacy)
+                // ermittelt — Aux-Kontakte mit aufgelöstem Ref nehmen die varName
+                // des referenzierten Bauteils, der Rest fällt auf c.varName zurück.
                 const usedAsAux = new Set();
+                const _byPrefix = {};
+                ST.components.forEach(c => { if (c.normPrefix) _byPrefix[c.normPrefix] = c; });
                 ST.components.forEach(c => {
-                    if (CTYPES[c.type] && CTYPES[c.type].kind === 'aux' && c.varName) usedAsAux.add(c.varName);
+                    if (!CTYPES[c.type] || CTYPES[c.type].kind !== 'aux') return;
+                    let v = null;
+                    if (c.refNormPrefix && _byPrefix[c.refNormPrefix] && _byPrefix[c.refNormPrefix].varName) {
+                        v = _byPrefix[c.refNormPrefix].varName;
+                    } else if (c.varName) {
+                        v = c.varName;
+                    }
+                    if (v) usedAsAux.add(v);
                 });
                 // Sensor-Validierung: Warnung wenn Signal-Pin mit Versorgung kurzgeschlossen ist
                 const warnings = [];
@@ -30265,6 +31130,38 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t || t.kind !== 'sensor' || !c.varName) return;
                     if (_sensorSignalShorted(c)) warnings.push(`// ⚠ Sensor ${c.varName}: Signal-Pin mit Versorgung kurzgeschlossen — Signal wird ignoriert`);
                 });
+                // Pass 0: "Proxy-Relais" identifizieren — Hilfsrelais (Typ 'relais'),
+                // deren Strang nur eine einzelne Quellvariable 1:1 durchschaltet (z.B.
+                // Sensor → Hilfsrelais → Hilfskontakte im Hauptstrang). Diese werden
+                // beim Code-Generieren WEGGELASSEN; ihre Hilfskontakt-Referenzen werden
+                // durch die Quell-Variable ersetzt. Damit entsteht beim Round-Trip
+                // KEINE künstliche Indirektion `K_BG1 := E_SENSOR_IND` mehr — das
+                // Sensor-Hilfsrelais-Pattern bleibt visuell im Schaltplan, im Code
+                // aber sauber als `... && E_SENSOR_IND` ohne extra Hilfsvariable.
+                const proxyMap = {};
+                const SIMPLE_VAR_RE = /^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*$/;
+                Object.keys(coilGroups).forEach(coilVar => {
+                    const coil = coilGroups[coilVar][0];
+                    if (coil.type !== 'relais') return;
+                    if (!usedAsAux.has(coilVar)) return;
+                    const e = _exprForCoil(coil);
+                    if (e && SIMPLE_VAR_RE.test(e.trim())) {
+                        proxyMap[coilVar] = e.trim();
+                    }
+                });
+                // Substitutions-Helper: ersetzt Proxy-Variablen im Ausdruck rekursiv
+                // (für Ketten K1 → K2 → SENSOR; max. 10 Iterationen Schutz).
+                function _substituteProxies(expr) {
+                    if (!expr) return expr;
+                    let prev = expr;
+                    for (let iter = 0; iter < 10; iter++) {
+                        const cur = prev.replace(/\b([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)\b/g, (m) => proxyMap[m] || m);
+                        if (cur === prev) return cur;
+                        prev = cur;
+                    }
+                    return prev;
+                }
+
                 // Pass 1: Code-Items sammeln. Relais werden NICHT mehr inline substituiert,
                 // sondern als eigene Variable im Code geschrieben (analog zu klassischen Hilfsrelais).
                 // Hilfskontakte verweisen via Variablennamen darauf — beide Ansichten
@@ -30273,14 +31170,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const codeOps = [];
                 const selfRefRe = (v) => new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
                 Object.keys(coilGroups).forEach(coilVar => {
+                    // Proxy-Relais → kein Code (wird inline substituiert)
+                    if (proxyMap[coilVar]) return;
                     const coil = coilGroups[coilVar][0];
                     const isRelais = (coil.type === 'relais');
                     const isUsedAsAux = usedAsAux.has(coilVar);
-                    const expr = _exprForCoil(coil);
+                    let expr = _exprForCoil(coil);
                     if (expr === null) {
                         codeOps.push({ kind:'warn', msg:`// ⚠ ${coilVar}: Pfad zu L+ nicht erkannt` });
                         return;
                     }
+                    // Proxy-Variablen im Ausdruck durch ihre Quell-Variable ersetzen
+                    expr = _substituteProxies(expr);
                     // Relais ohne Hilfskontakt → tote Logik, kein Code, Warnung
                     if (isRelais && !isUsedAsAux) {
                         codeOps.push({ kind:'warn', msg:`// ⚠ Relais ${coilVar}: kein Hilfskontakt referenziert — Logik wird ignoriert` });
@@ -30290,7 +31191,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (rs) {
                         ssCounter.rs++;
                         const n = ssCounter.rs;
-                        codeOps.push({ kind:'rs', n, set: rs.set, reset: rs.reset, comment: `// Selbsthaltung erkannt für ${coilVar}` });
+                        codeOps.push({ kind:'rs', n, set: _substituteProxies(rs.set), reset: _substituteProxies(rs.reset), comment: `// Selbsthaltung erkannt für ${coilVar}` });
                         codeOps.push({ kind:'coil', name: coilVar, expr: `Q${n}` });
                         return;
                     }
@@ -30350,7 +31251,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Model: union-find on pin-nodes connected via wires; rails 'plus' and 'minus' are
             // virtual super-nodes. Contacts/Aux are edges (IN↔OUT) labeled with their (possibly
             // negated) variable. Coils contribute no edge — they are sinks.
-            function _exprForCoil(coil) {
+            function _exprForCoil(coil, visiting) {
+                // visiting: Set von Coil-IDs, deren Strang gerade rekursiv expandiert
+                // wird. Schützt vor Endlos-Rekursion bei Selbsthalteschaltungen
+                // (Coil-Aux verweist auf eigene Coil) oder zyklischen Helfer-Ketten.
+                if (!visiting) visiting = new Set();
+                if (visiting.has(coil.id)) return null;
                 const uf = _UnionFind();
                 const PLUS = '__PLUS__', MINUS = '__MINUS__';
                 const nodeOf = (id, pin) => id + ':' + pin;
@@ -30379,27 +31285,64 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const plus = uf.find(PLUS);
                 if (coilIn === plus) return 'TRUE'; // coil directly on +24V (no logic)
                 // Build edge list:
-                //   - Kontakte/Hilfskontakte: Edge in↔out mit Variable (negiert wenn NC)
-                //   - Sensoren: Phantom-Edge PLUS↔signal mit sensor.varName (Sensor wirkt als Quelle)
+                //   - Kontakte:    Edge in↔out mit Variable (NC/NO-Eigenschaft im Typ)
+                //   - Aux-Kontakte: Edge in↔out, Variable kommt aus dem referenzierten
+                //                   Bauteil (refNormPrefix). Hat das Ziel keine varName,
+                //                   wird sein eigener Strang-Ausdruck rekursiv eingesetzt
+                //                   (anonymes Hilfsrelais — wirkt rein visuell, im Code
+                //                   inline expandiert). Fallback: c.varName (Legacy).
+                //   - Sensoren:    Phantom-Edge PLUS↔signal mit sensor.varName
+                // Aux-Kontakte ohne aufgelösten Ref bekommen KEINE Edge (würden sonst
+                // mit unbestimmtem Wert in die Expression einfließen).
                 const edges = [];
+                // Quick-Lookup-Map: normPrefix → Komponente
+                const byPrefix = {};
+                ST.components.forEach(c => { if (c.normPrefix) byPrefix[c.normPrefix] = c; });
+                const nextVisiting = new Set(visiting);
+                nextVisiting.add(coil.id);
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
-                    if (!t || !c.varName) return;
+                    if (!t) return;
                     if (t.kind === 'contact') {
-                        // Eingangskontakt: NC/NO-Eigenschaft steckt im Variablen-Typ (componentTypes).
-                        // KEIN ¬ im Code — sonst doppelte Inversion (im Schaltplan zeigt der Kontakt sonst falsche Form).
+                        if (!c.varName) return;
                         edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: c.varName });
                     } else if (t.kind === 'aux') {
-                        // Hilfskontakt: Relais hat keine NC/NO-Eigenschaft → ¬ im Code für NC nötig
-                        let v = c.varName;
-                        if (t.nc) v = '¬' + v;
-                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: v });
+                        // Auflösung: refNormPrefix → Ziel-Bauteil.
+                        // 1) Ziel hat varName → nimm varName.
+                        // 2) Ziel ist Coil ohne varName → expandiere dessen Strang-Ausdruck rekursiv.
+                        // 3) Fallback: c.varName direkt (Legacy / noch nicht gepflegte Daten).
+                        let exprVar = null;
+                        let needsParen = false;
+                        if (c.refNormPrefix && byPrefix[c.refNormPrefix]) {
+                            const ref = byPrefix[c.refNormPrefix];
+                            if (ref.varName) {
+                                exprVar = ref.varName;
+                            } else if (CTYPES[ref.type] && CTYPES[ref.type].kind === 'coil' && !nextVisiting.has(ref.id)) {
+                                try {
+                                    const sub = _exprForCoil(ref, nextVisiting);
+                                    if (sub && sub !== 'TRUE') {
+                                        exprVar = sub;
+                                        needsParen = true;
+                                    }
+                                } catch(e) {}
+                            }
+                        }
+                        if (!exprVar && c.varName) exprVar = c.varName;
+                        if (!exprVar) return;
+                        if (t.nc) {
+                            // ¬ vor zusammengesetztem Ausdruck → klammern
+                            exprVar = '¬' + (needsParen ? '(' + exprVar + ')' : exprVar);
+                        } else if (needsParen) {
+                            // Im Strang sauber als (Sub-Ausdruck) einfügen, damit
+                            // Series/Parallel-Reduktion die Bindung korrekt behält.
+                            exprVar = '(' + exprVar + ')';
+                        }
+                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: exprVar });
                     } else if (t.kind === 'sensor') {
-                        // Signal-Pin = virtuelle Quelle mit Wert sensor.varName
+                        if (!c.varName) return;
                         const sigNode = uf.find(nodeOf(c.id, 'signal'));
                         const inNode  = uf.find(nodeOf(c.id, 'in'));
                         const outNode = uf.find(nodeOf(c.id, 'out'));
-                        // Schaltfehler: signal mit Versorgung kurzgeschlossen → Edge auslassen
                         if (sigNode === inNode || sigNode === outNode || sigNode === uf.find(PLUS) || sigNode === uf.find(MINUS)) {
                             return;
                         }

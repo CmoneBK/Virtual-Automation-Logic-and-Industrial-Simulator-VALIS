@@ -6694,6 +6694,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             return tNode.id;
         };
+        const _checkPowerCache = new Map();
         function drawCircuitPlan(graph, inputsList, outputsList, keepView = false) {
             let isFirstRun = !panZoomCircuitInstance;
             circuitContent.innerHTML = '';
@@ -7004,7 +7005,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 return g;
             };
             const setPower = (el, condStr) => {
-                if (el) el._checkPower = new Function('state', `return !!(${condStr || 'true'});`);
+                if (!el) return el;
+                const key = condStr || 'true';
+                let fn = _checkPowerCache.get(key);
+                if (!fn) {
+                    fn = new Function('state', `return !!(${key});`);
+                    _checkPowerCache.set(key, fn);
+                }
+                el._checkPower = fn;
                 return el;
             };
             const getCond = (edge) => edge ? ((edge.inverted ? "!" : "") + `state['${edge.sourceId}']`) : "false";

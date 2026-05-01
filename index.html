@@ -5146,7 +5146,21 @@ You must output exactly this JSON format. The logic code goes as a single string
 					window.fbsColorCounter = 0;
                     // Layout zuerst anwenden, damit Panel-Dimensionen final sind,
                     // bevor SVG-Pläne gezeichnet und panZoom kalibriert werden.
-                    if (newLayout) changeWorkspaceLayout(newLayout);
+                    if (newLayout) {
+                        // Stale Grid-Größen aus früheren Sessions löschen, sonst kann
+                        // ein gespeichertes --grid-row/col aus einem anderen Layout
+                        // (oder einer früheren Version) das Beispiel-Layout kollabieren.
+                        const _wc = document.getElementById('workspace-container');
+                        if (_wc) {
+                            ['--grid-col-1','--grid-col-2','--grid-row-1','--grid-row-2'].forEach(v => _wc.style.removeProperty(v));
+                        }
+                        // Auch Panel-Flex-Werte resetten, damit Beispiel sauber startet
+                        ['fbs-wrapper','circuit-wrapper','circuit-editor-wrapper','factory-wrapper'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) { el.style.flex = ''; el.style.width = ''; el.style.height = ''; }
+                        });
+                        changeWorkspaceLayout(newLayout);
+                    }
                     // Auf nächsten Frame warten, damit CSS-Layout committed ist
                     requestAnimationFrame(() => {
                         try {

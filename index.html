@@ -3802,7 +3802,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     {"id":"wall1","type":"wall","x":460,"y":340,"width":100,"rotation":90,"useCollision":true},
                     // Pneumatik-Anlage
                     {"id":"dmt85v8dr","type":"pneumatic_zone","x":20,"y":600,"width":400,"height":300,"rotation":0,"useCollision":false},
-                    {"id":"0krvrnwht","type":"compressor","x":40,"y":820,"width":100,"height":60,"rotation":0,"pressure":6,"maxFlow":200,"normLabel":"-GQA1","useCollision":false},
+                    {"id":"0krvrnwht","type":"compressor","x":40,"y":820,"width":100,"height":60,"rotation":0,"pressure":6,"maxFlow":20,"normLabel":"-GQA1","useCollision":false},
                     {"id":"wdy1qzvt8","type":"manifold","x":180,"y":865,"width":200,"height":15,"rotation":0,"normLabel":"-GQ1","useCollision":false},
                     {"id":"8mss82cb8","type":"valve_pneu","x":180,"y":810,"width":50,"height":40,"rotation":0,"targetCylinderId":"cyl1","isDouble":true,"normLabel":"-QM1","useCollision":false},
                     {"id":"c21m1zpxj","type":"throttle","x":170,"y":740,"width":40,"height":35,"rotation":0,"opening":6,"targetCylinderId":"cyl1","role":"ext","normLabel":"-RN1","useCollision":false},
@@ -11026,6 +11026,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // 🌟 FIX: Schaltplan IMMER (auch unsichtbar) generieren, damit die IEC-Namen für die Anlage aktuell sind!
                 drawCircuitPlan(parsed.graph, globalInputs, globalOutputs, true);
                 runSimulationTick();
+                // Editor-Schaltplan mit den aktuellen Eingangs-/Ausgangs-Typen
+                // synchronisieren — wechselt der User z.B. Schließer ↔ Öffner,
+                // werden alle entsprechenden Kontakte sofort umgezeichnet.
+                if (typeof window.cedSyncTypes === 'function') {
+                    try { window.cedSyncTypes(); } catch(e) {}
+                }
             } catch (e) {
                 console.warn("Warte auf korrekte Syntax...", e);
             }
@@ -27443,6 +27449,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
                 }
             });
+            // Keine Verbindungen für diese Drossel → nichts zu inferieren. Bestehende
+            // role/targetCylinderId-Werte (aus Beispieldaten, gespeichertem Zustand
+            // oder späterer Auto-Materialisierung im Hose-Renderer) bleiben erhalten.
+            // Vorher hat dieser Pfad die Felder auf null gesetzt — und damit beim
+            // Beispiel-Laden die explizit gesetzten Drossel-Rollen zerstört, sodass
+            // die Zylinder-Physik die Drossel nicht mehr fand und volle Geschwindigkeit
+            // lief.
+            if (endpoints.length === 0) return;
             if (endpoints.length !== 2) {
                 thr.targetCylinderId = null; thr.role = null;
                 return;
@@ -28865,6 +28879,62 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (ST._initialized) cedRender();
                 return true;
             };
+            // Synchronisiert die im Editor platzierten Bauteil-Symbole mit der
+            // aktuellen Eingangs-/Ausgangs-Definition (componentTypes). Wechselt
+            // der User z.B. einen Eingang von Schließer auf Öffner, werden alle
+            // Kontakte mit dieser Variable im Editor automatisch auf das passende
+            // Symbol umgestellt — nur innerhalb derselben Kategorie (Kontakt
+            // bleibt Kontakt, Spule bleibt Spule). Sensor-Wechsel (sensor_*)
+            // werden nicht automatisch konvertiert, weil das Sensor-Vorspalten-
+            // Layout neu aufgebaut werden müsste — der User muss dann erneut
+            // „Aus Code" auslösen.
+            window.cedSyncTypes = function() {
+                if (typeof componentTypes === 'undefined') return false;
+                // componentTypes-Wert → CTYPES-Schlüssel (1:1 wo möglich, sonst Mapping)
+                const _typeMap = {
+                    'taster':        'taster',
+                    'taster_nc':     'taster_nc',
+                    'schalter':      'schalter',
+                    'schalter_nc':   'schalter_nc',
+                    'nothalt':       'nothalt',
+                    'light_curtain': 'light_curtain',
+                    'key_switch':    'key_switch',
+                    'led':           'led',
+                    'valve':         'valve',
+                    'valve_pneu':    'valve',
+                    'motor':         'motor',
+                    'fan':           'motor',
+                    'siren':         'siren',
+                    'heater':        'heater',
+                    'contactor':     'relais',
+                    'relais':        'relais'
+                };
+                let changed = false;
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t) return;
+                    if (!c.varName) return;
+                    const ct = componentTypes[c.varName];
+                    if (!ct) return;
+                    const target = _typeMap[ct];
+                    if (!target) return; // sensor_* oder unbekannt — überspringen
+                    const targetT = CTYPES[target];
+                    if (!targetT) return;
+                    // Nur innerhalb derselben Kategorie tauschen (Kontakt↔Kontakt,
+                    // Spule↔Spule). Pin-Geometrie ist innerhalb einer Kategorie gleich,
+                    // sodass die Verdrahtung erhalten bleibt.
+                    if (targetT.kind !== t.kind) return;
+                    if (target !== c.type) {
+                        c.type = target;
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    _saveStateToStorage();
+                    if (ST._initialized) cedRender();
+                }
+                return changed;
+            };
 
             window.cedSetTool = function(t) {
                 ST.tool = t;
@@ -28922,7 +28992,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 if (typeof textarea === 'undefined' || !textarea) { alert('Code-Editor nicht erreichbar.'); return; }
                 if (ST.components.length > 0 || ST.wires.length > 0) {
-                    if (!confirm('Editor enthält bereits Komponenten/Leitungen. Inhalt durch Code-Generierung ersetzen?')) return;
+                    // Rückfrage nur, wenn der User seit der letzten Auto-Generierung
+                    // tatsächlich manuell etwas geändert hat. Fingerprint vergleichen:
+                    // wenn identisch, gibt es nichts zu verlieren — kein Dialog.
+                    const _currentFp = JSON.stringify({ c: ST.components, w: ST.wires });
+                    if (ST._lastGenFp !== _currentFp) {
+                        if (!confirm('Editor enthält bereits Komponenten/Leitungen. Inhalt durch Code-Generierung ersetzen?')) return;
+                    }
                 }
                 const code = textarea.value;
                 const lines = code.split('\n');
@@ -29529,8 +29605,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const numSetBranches = setProducts.length + 1;  // +1 für Selbsthalte-Zweig
                     const numResetBranches = restProducts.length;
                     const SUB_PITCH = 100;
-                    const setSubPinAt   = (i) => pinAt + (i - (numSetBranches   - 1) / 2) * SUB_PITCH;
-                    const resetSubPinAt = (i) => pinAt + (i - (numResetBranches - 1) / 2) * SUB_PITCH;
+                    // Asymmetrisches Layout: erster Zweig (i=0) sitzt direkt auf der
+                    // Spulenspalte (pinAt), die übrigen erstrecken sich nach rechts.
+                    // Dadurch entfällt eine Mittel-Junction, der erste Top-Junction liegt
+                    // automatisch auf pinAt (buildChain erkennt das via "existing"), und
+                    // der Strang bildet ein sauberes Rechteck: gerade Top-Linie zum
+                    // parallelen Pfad → vertikal runter → gerade Bottom-Linie zurück
+                    // zur Spulenspalte → vertikal zur Spule.
+                    const setSubPinAt   = (i) => pinAt + i * SUB_PITCH;
+                    const resetSubPinAt = (i) => pinAt + i * SUB_PITCH;
 
                     const maxSetH = Math.max(1, ...setProducts.map(p => p.length));
                     const setBlockH = maxSetH * (CTYPES.taster.h + VERTICAL_GAP);
@@ -29786,8 +29869,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // den klassischen buildRung mit SOP-Distribution zurückfallen.
                     const sh = _detectSelfholdAst(a.ast, a.lhs);
                     if (sh) {
+                        // Rung-Breite richtet sich nach maximaler Zweig-Anzahl auf
+                        // Set+Selfhold-Seite ODER Reset-Seite (asymmetrisches Layout
+                        // erstreckt sich vom pinAt nach rechts in beide Richtungen).
                         const setSOP = _toSOP(sh.setAst);
-                        const np = (setSOP.type === 'OR' ? setSOP.operands.length : 1) + 1;
+                        const setN = (setSOP.type === 'OR' ? setSOP.operands.length : 1) + 1;
+                        const restSOP = _toSOP(sh.restAst);
+                        const resetN = restSOP.type === 'OR' ? restSOP.operands.length : 1;
+                        const np = Math.max(setN, resetN);
                         const rungW = np > 1 ? (np - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
                         if (buildSelfholdRung(a.lhs, sh.setAst, sh.restAst, colX)) {
                             colX += rungW + 40;
@@ -29802,6 +29891,15 @@ You must output exactly this JSON format. The logic code goes as a single string
 
                 cedRender();
                 if (typeof _maybeSync === 'function') _maybeSync();
+                // Fingerprint des frisch generierten Zustands speichern, damit ein
+                // erneutes „Aus Code" ohne zwischenzeitliche manuelle Änderung
+                // ohne Rückfrage durchläuft (oben am Anfang der Funktion verglichen).
+                // WICHTIG: Erst NACH _maybeSync, da cedGenerateCode darin
+                // _ensureNormPrefix auf jeder Komponente aufruft und damit das
+                // normPrefix-Feld nachträglich an die Bauteile schreibt — sonst
+                // würde der danach erfasste Zustand nicht zum gerade gespeicherten
+                // Fingerprint passen und die Rückfrage immer wieder erscheinen.
+                ST._lastGenFp = JSON.stringify({ c: ST.components, w: ST.wires });
 
                 // Status-Hinweis
                 let msg = `${assigns.length} Strompfad${assigns.length===1?'':'e'} generiert.`;
@@ -30129,8 +30227,90 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Unsichtbarer dicker Path als Hitbox (cursor:pointer, klickbar)
                     const hit = el('path', { d, class:'ced-wire-hit', 'data-id': w.id }, g);
                     el('path', { d, class:'ced-wire' + (isSelected(w.id) ? ' ced-selected' : ''), 'data-id': w.id }, g);
+                    // Wire-Drag: Strang perpendikular verschieben
+                    //   horizontaler Wire (gleiche Y) → Y-Drag, alle Komponenten/Junctions
+                    //     auf dieser Y-Reihe bewegen sich gemeinsam
+                    //   vertikaler Wire (gleiche X) → X-Drag, alle Komponenten/Junctions
+                    //     auf dieser X-Spalte bewegen sich gemeinsam
+                    //   L+/L- Schienen-Anschlusspunkte gelten als Mit-Bewegende: deren
+                    //     `ref.x` (Tap-Position) wandert mit der Spalte mit
+                    //   Andere angeschlossene Wires (zu Nachbarspalten/-reihen) re-routen
+                    //     automatisch via Manhattan
+                    hit.addEventListener('mousedown', (e) => {
+                        if (e.button !== 0) return;
+                        if (ST.tool !== 'select') return;
+                        // Strang nur für gerade horizontale oder vertikale Wires
+                        const dxAbs = Math.abs(pa.x - pb.x);
+                        const dyAbs = Math.abs(pa.y - pb.y);
+                        const isPureH = dyAbs < 1 && dxAbs >= 1;
+                        const isPureV = dxAbs < 1 && dyAbs >= 1;
+                        if (!isPureH && !isPureV) return;
+                        const isHorizontal = isPureH;
+                        const axis = isHorizontal ? pa.y : pa.x;  // Y-Linie oder X-Spalte
+                        const TOL = 2;
+                        // Komponenten sammeln, deren relevante Pin-Achse auf dem Strang liegt
+                        const movingComps = [];
+                        ST.components.forEach(c => {
+                            const t = CTYPES[c.type];
+                            if (!t) return;
+                            const cAxis = isHorizontal ? (c.y + (t.cy || 0)) : (c.x + (t.cx || 0));
+                            if (Math.abs(cAxis - axis) <= TOL) movingComps.push(c);
+                        });
+                        // Schienen-Tap-Punkte sammeln (nur sinnvoll bei vertikalen Strängen,
+                        // die in eine horizontale Schiene münden — `ref.x` wandert mit)
+                        const railEnds = [];
+                        if (isHorizontal === false) {
+                            ST.wires.forEach(ww => {
+                                if (ww.from.rail && Math.abs(ww.from.x - axis) <= TOL) railEnds.push({ ref: ww.from });
+                                if (ww.to.rail   && Math.abs(ww.to.x   - axis) <= TOL) railEnds.push({ ref: ww.to });
+                            });
+                        }
+                        if (movingComps.length === 0 && railEnds.length === 0) return;
+                        e.stopPropagation();
+                        const startSvg = _clientToSvg(e.clientX, e.clientY);
+                        const compStart = new Map();
+                        movingComps.forEach(c => compStart.set(c.id, { x: c.x, y: c.y }));
+                        const railStart = railEnds.map(re => re.ref.x);
+                        const onMove = (ev) => {
+                            const cur = _clientToSvg(ev.clientX, ev.clientY);
+                            const ddx = cur.x - startSvg.x;
+                            const ddy = cur.y - startSvg.y;
+                            if (!ST._wireDragOccurred && Math.abs(ddx) + Math.abs(ddy) < 3) return;
+                            ST._wireDragOccurred = true;
+                            if (isHorizontal) {
+                                movingComps.forEach(c => {
+                                    const s = compStart.get(c.id);
+                                    c.y = snap(s.y + ddy);
+                                });
+                            } else {
+                                movingComps.forEach(c => {
+                                    const s = compStart.get(c.id);
+                                    c.x = snap(s.x + ddx);
+                                });
+                                railEnds.forEach((re, i) => {
+                                    re.ref.x = snap(railStart[i] + ddx);
+                                });
+                            }
+                            cedRender();
+                        };
+                        const onUp = () => {
+                            _d().removeEventListener('mousemove', onMove);
+                            _d().removeEventListener('mouseup', onUp);
+                            if (ST._wireDragOccurred) {
+                                _saveStateToStorage();
+                                _maybeSync();
+                            }
+                        };
+                        ST._wireDragOccurred = false;
+                        _d().addEventListener('mousemove', onMove);
+                        _d().addEventListener('mouseup', onUp);
+                    });
                     hit.addEventListener('click', (e) => {
                         e.stopPropagation();
+                        // Wenn der vorherige mousedown→up als Drag interpretiert wurde,
+                        // unterdrücke den Klick (sonst würde nach jedem Drag der Wire
+                        // versehentlich selektiert).
+                        if (ST._wireDragOccurred) { ST._wireDragOccurred = false; return; }
                         if (ST.tool === 'delete') { _deleteWire(w.id); return; }
                         if (e.shiftKey) toggleSelection(w.id); else setSelection(w.id);
                         cedRender();
@@ -30215,18 +30395,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!aH && !bH) {
                     if (sa.x === sb.x) {
                         // Direkte vertikale Linie — keine zusätzlichen Punkte nötig
-                    } else if (Math.abs(sa.x - sb.x) <= 30) {
-                        // Kleiner x-Versatz → L-Routing direkt nahe einem Pin (statt Z in der Mitte)
-                        // Knick beim oberen Pin: erst horizontal versetzen, dann gerade runter
+                    } else {
+                        // L-Routing mit EINEM Knick (kein Z mit Mittel-Steg). Knick liegt
+                        // beim oberen Stub: erst horizontal auf die Ziel-x-Position, dann
+                        // gerade runter (bzw. spiegelverkehrt bei umgekehrter y-Reihenfolge).
+                        // Damit bilden parallele Set/Selfhold-Zweige saubere Rechtecke.
                         if (sa.y < sb.y) pts.push({x:sb.x, y:sa.y});
                         else             pts.push({x:sa.x, y:sb.y});
-                    } else {
-                        const mY = Math.round((sa.y + sb.y) / 2 / GRID) * GRID;
-                        pts.push({x:sa.x, y:mY}, {x:sb.x, y:mY});
                     }
                 } else if (aH && bH) {
-                    const mX = Math.round((sa.x + sb.x) / 2 / GRID) * GRID;
-                    pts.push({x:mX, y:sa.y}, {x:mX, y:sb.y});
+                    if (sa.y === sb.y) {
+                        // Beide Stubs auf gleicher Höhe → durchgehende horizontale Linie
+                    } else {
+                        // L-Routing: erst horizontal raus, dann am linken Stub vertikal
+                        // auf Ziel-y, dann horizontal zum Ziel-Stub.
+                        if (sa.x < sb.x) pts.push({x:sb.x, y:sa.y});
+                        else             pts.push({x:sa.x, y:sb.y});
+                    }
                 } else if (aH && !bH) {
                     // Wenn Ziel auf der "Rück"-Seite des Stub liegt (z.B. Pin geht rechts raus
                     // aber Ziel ist links), einen vertikalen Umweg machen statt durch die Komponente
@@ -30848,29 +31033,62 @@ You must output exactly this JSON format. The logic code goes as a single string
                         fromPin = (pa.y <= target.y) ? 'top'    : 'bottom';
                         toPin   = (fromPin === 'top')  ? 'bottom' : 'top';
                     }
-                    // Neuer Wire: Pin am Junction nach Anflug-Richtung des wireStart wählen
-                    const wsPos = _pinPos(ST.wireStart);
-                    let newPin;
-                    if (segDir === 'h') {
-                        // Original-Wire ist horizontal → neuer Wire kommt von oben oder unten
-                        newPin = (wsPos.y < target.y) ? 'top' : 'bottom';
-                    } else {
-                        // Original-Wire ist vertikal → neuer Wire kommt von links oder rechts
-                        newPin = (wsPos.x < target.x) ? 'left' : 'right';
-                    }
+                    // Wenn der wireStart bereits einer der beiden Endpunkte des aufgeteilten
+                    // Wires ist, würde der dritte Wire (wireStart → Junction) genau über
+                    // dem aufgeteilten Segment liegen → kollineare Doppellinie. In dem Fall
+                    // splitten wir nur den Original-Wire (Junction in der Mitte) und
+                    // verzichten auf den dritten Wire — die bestehende Verbindung bleibt
+                    // erhalten, der Junction sitzt einfach mittendrin.
+                    const sameEndpoint = (a, b) =>
+                        a && b && !a.rail && !b.rail && a.compId === b.compId && a.pin === b.pin;
+                    const startIsEndpoint = sameEndpoint(ST.wireStart, original.from)
+                                         || sameEndpoint(ST.wireStart, original.to);
                     ST.wires = ST.wires.filter(w => w.id !== original.id);
                     ST.wires.push({ id: nextId('w'), from: original.from,                          to: { compId: junctionId, pin: fromPin } });
                     ST.wires.push({ id: nextId('w'), from: { compId: junctionId, pin: toPin },     to: original.to });
-                    ST.wires.push({ id: nextId('w'), from: ST.wireStart,                           to: { compId: junctionId, pin: newPin } });
+                    if (!startIsEndpoint) {
+                        // Neuer Wire: Pin am Junction nach Anflug-Richtung des wireStart wählen
+                        const wsPos = _pinPos(ST.wireStart);
+                        let newPin;
+                        if (segDir === 'h') {
+                            // Original-Wire ist horizontal → neuer Wire kommt von oben oder unten
+                            newPin = (wsPos.y < target.y) ? 'top' : 'bottom';
+                        } else {
+                            // Original-Wire ist vertikal → neuer Wire kommt von links oder rechts
+                            newPin = (wsPos.x < target.x) ? 'left' : 'right';
+                        }
+                        ST.wires.push({ id: nextId('w'), from: ST.wireStart, to: { compId: junctionId, pin: newPin } });
+                    }
+                    _dedupWires();
                     ST.wireStart = null;
                     cedRender();
                     _maybeSync();
                     return;
                 }
                 ST.wires.push({ id: nextId('w'), from: ST.wireStart, to: target });
+                _dedupWires();
                 ST.wireStart = null;
                 cedRender();
                 _maybeSync();
+            }
+            // Entfernt strukturell identische Wires (gleiche from/to Endpunkte, beide
+            // Richtungen). Schützt vor kollinearen Doppellinien, wenn ein Drop genau
+            // dort landet, wo bereits ein Wire endet — und auch vor versehentlich
+            // doppelten Verdrahtungen aus anderen Quellen.
+            function _dedupWires() {
+                const _ep = (e) => e.rail
+                    ? ('rail:' + e.rail + ':' + (e.x ?? ''))
+                    : ('comp:' + e.compId + ':' + e.pin);
+                const seen = new Set();
+                ST.wires = ST.wires.filter(w => {
+                    const a = _ep(w.from), b = _ep(w.to);
+                    if (a === b) return false; // selbstreferenziell — auch raus
+                    const k1 = a + '|' + b;
+                    const k2 = b + '|' + a;
+                    if (seen.has(k1) || seen.has(k2)) return false;
+                    seen.add(k1);
+                    return true;
+                });
             }
             function _updateWirePreview(clientX, clientY) {
                 if (!ST.wireStart) return;

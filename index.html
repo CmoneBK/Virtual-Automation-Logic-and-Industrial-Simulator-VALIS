@@ -271,28 +271,34 @@
         #workspace-container.layout-grid .workspace-panel {
             flex: none !important; display: flex !important; margin: 0 !important;
         }
+        /* Editor ist nicht Teil des 3er-Rasters — sonst landet er ohne grid-area in
+           einem impliziten Row-Track und kollabiert die expliziten 1fr-Tracks. */
+        #workspace-container.layout-grid > #circuit-editor-wrapper,
+        #workspace-container.layout-grid > #ws-resizer-iec-edit {
+            display: none !important;
+        }
         #workspace-container.layout-grid .workspace-resizer {
             display: block !important; /* Sichtbar lassen für Anpassungen im Grid! */
         }
         .grid-sim-bottom {
             grid-template-areas: "fbs r1 iec" "r2  r2 r2" "sim sim sim";
-            grid-template-columns: var(--grid-col-1, 1fr) 6px var(--grid-col-2, 1fr);
-            grid-template-rows: var(--grid-row-1, 1fr) 6px var(--grid-row-2, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-top {
             grid-template-areas: "sim sim sim" "r2  r2  r2" "fbs r1 iec";
-            grid-template-columns: var(--grid-col-1, 1fr) 6px var(--grid-col-2, 1fr);
-            grid-template-rows: var(--grid-row-1, 1fr) 6px var(--grid-row-2, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-right {
             grid-template-areas: "fbs r2 sim" "r1  r2 sim" "iec r2 sim";
-            grid-template-columns: var(--grid-col-1, 1fr) 6px var(--grid-col-2, 1fr);
-            grid-template-rows: var(--grid-row-1, 1fr) 6px var(--grid-row-2, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-left {
             grid-template-areas: "sim r2 fbs" "sim r2 r1" "sim r2 iec";
-            grid-template-columns: var(--grid-col-1, 1fr) 6px var(--grid-col-2, 1fr);
-            grid-template-rows: var(--grid-row-1, 1fr) 6px var(--grid-row-2, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .view-btn { background-color: #555; transition: background 0.2s; }
         .view-btn.active { background-color: #f58231; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
@@ -5144,41 +5150,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                     spsState = {};
 					window.fbsNodeColors = {};
 					window.fbsColorCounter = 0;
-                    // Layout zuerst anwenden, damit Panel-Dimensionen final sind,
-                    // bevor SVG-Pläne gezeichnet und panZoom kalibriert werden.
-                    if (newLayout) {
-                        // Stale Grid-Größen aus früheren Sessions löschen, sonst kann
-                        // ein gespeichertes --grid-row/col aus einem anderen Layout
-                        // (oder einer früheren Version) das Beispiel-Layout kollabieren.
-                        const _wc = document.getElementById('workspace-container');
-                        if (_wc) {
-                            ['--grid-col-1','--grid-col-2','--grid-row-1','--grid-row-2'].forEach(v => _wc.style.removeProperty(v));
-                        }
-                        // Auch Panel-Flex-Werte resetten, damit Beispiel sauber startet
-                        ['fbs-wrapper','circuit-wrapper','circuit-editor-wrapper','factory-wrapper'].forEach(id => {
-                            const el = document.getElementById(id);
-                            if (el) { el.style.flex = ''; el.style.width = ''; el.style.height = ''; }
-                        });
-                        changeWorkspaceLayout(newLayout);
+                    updateHighlighting();
+                    updateEditor();
+                    saveToStorage();
+                    // Layout anwenden falls im Beispiel definiert
+                    if (newLayout) changeWorkspaceLayout(newLayout);
+                    // Anlage aufbauen und Physik vorbereiten
+                    if (newFactory) {
+                        newFactory.globalViewMode = 'side';
+                        localStorage.setItem('logikFactoryState', JSON.stringify(newFactory));
+                        loadFactoryState();
+                    } else {
+                        clearFactory(true);
                     }
-                    // Auf nächsten Frame warten, damit CSS-Layout committed ist
-                    requestAnimationFrame(() => {
-                        try {
-                            updateHighlighting();
-                            updateEditor();
-                            saveToStorage();
-                            if (newFactory) {
-                                newFactory.globalViewMode = 'side';
-                                localStorage.setItem('logikFactoryState', JSON.stringify(newFactory));
-                                loadFactoryState();
-                            } else {
-                                clearFactory(true);
-                            }
-                        } catch (e) {
-                            console.error("Fehler beim Laden des Beispiels:", e);
-                            alert("Fehler beim Laden: " + e.message);
-                        }
-                    });
                 } catch (e) {
                     console.error("Fehler beim Laden des Beispiels:", e);
                     alert("Fehler beim Laden: " + e.message);
@@ -6221,8 +6205,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             updateBtn('btn-view-iec-edit', cedit, pE);
             updateBtn('btn-view-fac', fac, p2);
             requestAnimationFrame(() => {
-                if (fbs.isMainVisible && panZoomInstance && fbs.el.offsetWidth > 0 && fbs.el.offsetHeight > 0) { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); }
-                if (circ.isMainVisible && panZoomCircuitInstance && circ.el.offsetWidth > 0 && circ.el.offsetHeight > 0) { panZoomCircuitInstance.resize(); panZoomCircuitInstance.fit(); panZoomCircuitInstance.center(); }
+                if (fbs.isMainVisible && panZoomInstance && fbs.el.offsetWidth > 0 && fbs.el.offsetHeight > 0) {
+                    try { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); } catch(e) {}
+                }
+                if (circ.isMainVisible && panZoomCircuitInstance && circ.el.offsetWidth > 0 && circ.el.offsetHeight > 0) {
+                    try { panZoomCircuitInstance.resize(); panZoomCircuitInstance.fit(); panZoomCircuitInstance.center(); } catch(e) {}
+                }
             });
         }
         function _saveViewState() {

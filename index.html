@@ -28987,6 +28987,84 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return parseOr();
                 }
 
+                // ---- AST-Helfer ----
+                // Sucht eine Identifier-Referenz mit gegebenem Namen rekursiv im AST.
+                function _astHasIdent(ast, name) {
+                    if (!ast) return false;
+                    if (ast.type === 'IDENT') return ast.name === name;
+                    if (ast.type === 'NOT') return _astHasIdent(ast.operand, name);
+                    if (ast.operands) return ast.operands.some(o => _astHasIdent(o, name));
+                    return false;
+                }
+                // Konvertiert einen booleschen AST in disjunktive Normalform (SOP).
+                // Distributiert AND über OR und schiebt NOT per De Morgan nach innen.
+                // Damit kann buildRung jede Klammerung rendern (vorher: nur bereits SOP).
+                function _toSOP(node) {
+                    if (!node) return node;
+                    if (node.type === 'IDENT' || node.type === 'CONST') return node;
+                    if (node.type === 'NOT') {
+                        const inner = _toSOP(node.operand);
+                        if (inner.type === 'NOT') return inner.operand;
+                        if (inner.type === 'AND')
+                            return _toSOP({ type:'OR', operands: inner.operands.map(o => ({ type:'NOT', operand: o })) });
+                        if (inner.type === 'OR')
+                            return _toSOP({ type:'AND', operands: inner.operands.map(o => ({ type:'NOT', operand: o })) });
+                        return { type:'NOT', operand: inner };
+                    }
+                    if (node.type === 'OR') {
+                        const flat = [];
+                        node.operands.forEach(op => {
+                            const n = _toSOP(op);
+                            if (n.type === 'OR') flat.push(...n.operands);
+                            else flat.push(n);
+                        });
+                        return flat.length === 1 ? flat[0] : { type:'OR', operands: flat };
+                    }
+                    if (node.type === 'AND') {
+                        const ops = node.operands.map(_toSOP);
+                        const orIdx = ops.findIndex(o => o.type === 'OR');
+                        if (orIdx === -1) {
+                            const flat = [];
+                            ops.forEach(o => {
+                                if (o.type === 'AND') flat.push(...o.operands);
+                                else flat.push(o);
+                            });
+                            return flat.length === 1 ? flat[0] : { type:'AND', operands: flat };
+                        }
+                        // Distribuieren: (X || Y) && rest → (X && rest) || (Y && rest)
+                        const orNode = ops[orIdx];
+                        const rest = ops.filter((_, i) => i !== orIdx);
+                        const distributed = orNode.operands.map(orOp =>
+                            _toSOP({ type:'AND', operands: [orOp, ...rest] })
+                        );
+                        return _toSOP({ type:'OR', operands: distributed });
+                    }
+                    return node;
+                }
+                // Erkennt ein Selbsthalte-Pattern in einem AND-AST:
+                //   AND( OR(set_terms…, IDENT(lhs)), rest_terms… )
+                // Liefert { setAst, restAst } für die faktorisierte Darstellung
+                // (Set-Bedingungen parallel mit Selbst-Aux, danach Rest in Reihe).
+                // Sonst null (kein Selbsthalte-Pattern oder degeneriert).
+                function _detectSelfholdAst(ast, lhs) {
+                    if (!ast || ast.type !== 'AND' || !ast.operands) return null;
+                    let orIdx = -1, orNode = null;
+                    for (let i = 0; i < ast.operands.length; i++) {
+                        const op = ast.operands[i];
+                        if (op.type === 'OR' && op.operands.some(o => o.type === 'IDENT' && o.name === lhs)) {
+                            orIdx = i; orNode = op; break;
+                        }
+                    }
+                    if (orIdx === -1) return null;
+                    const setOps = orNode.operands.filter(o => !(o.type === 'IDENT' && o.name === lhs));
+                    if (setOps.length === 0) return null;
+                    const restOps = ast.operands.filter((_, i) => i !== orIdx);
+                    if (restOps.length === 0) return null;
+                    const setAst  = setOps.length === 1  ? setOps[0]  : { type:'OR',  operands: setOps  };
+                    const restAst = restOps.length === 1 ? restOps[0] : { type:'AND', operands: restOps };
+                    return { setAst, restAst };
+                }
+
                 // ---- VALIS-Code in Zuweisungen + FFs zerlegen ----
                 const assigns = [];     // [{ lhs, ast }]
                 const flipFlops = [];   // [{ num, isSR, setAst, resetAst, outVar }]
@@ -29026,12 +29104,57 @@ You must output exactly this JSON format. The logic code goes as a single string
                         } catch(e) { skipped.push({ lhs: m[1], reason: 'Parse-Fehler: '+e.message }); }
                     }
                 }
-                // FF-Output-Variablen: Qn_SR oder Qn ableiten
+                // FF-Output-Variablen: Qn_SR bevorzugt sobald die FF-Definition
+                // selbst _SR-Suffix trug (set-dominant), oder die Qn_SR-Variante
+                // in einer Assign-RHS auftaucht. Sonst Standard Qn (RS/reset-dom).
                 ffMap.forEach((f, num) => {
-                    // Suchen, wo Qn / Qn_SR auf einer RHS auftaucht — egal, nimm die Standard-Variante
-                    f.outVar = (assigns.some(a => /Q\d+_SR/.test(a.ast ? '' : '')) ? 'Q'+num+'_SR' : 'Q'+num);
+                    const sr = 'Q' + num + '_SR';
+                    const norm = 'Q' + num;
+                    const wantSR = f.isSR || assigns.some(a => _astHasIdent(a.ast, sr));
+                    f.outVar = wantSR ? sr : norm;
                 });
                 ffMap.forEach(f => flipFlops.push(f));
+
+                // Selbsthalte-Synthese — analog zum Auto-Schaltplan: jeder FF mit
+                // Konsument bekommt einen EIGENEN Strang mit anonymem Hilfsrelais
+                // (varName="Q<n>", entspricht dem FF-Output-Alias). Der Konsument
+                // (z.B. `C := Q1`) bleibt unverändert und wird als zweiter Strang
+                // gezeichnet — ein Q1-Hilfskontakt vor der C-Spule.
+                //
+                //   Strang 1:  +24V ─┬─ A ─┐                         ← Set
+                //                    │     │
+                //                    └─Q1──┘─ B ─[Q1-Spule]─ 0V      ← Selfhold + Reset
+                //
+                //   Strang 2:  +24V ─ Q1 ─[C-Spule]─ 0V              ← Konsument
+                //
+                // Beim Re-Generieren erkennt _detectRS am Q1-Coil das SR-Pattern
+                // und schreibt `S1 := A; R1 := ¬B`; der C-Strang gibt `C := Q1`.
+                // Hilfsrelais wird IMMER erzeugt sobald Set+Reset definiert sind —
+                // auch ohne expliziten Konsumenten. So liefert `S1:=A; R1:=¬B`
+                // genau einen Strang (das SR-Hilfsrelais Q1), und ein zusätzliches
+                // `C:=Q1` ergänzt nur den Konsumenten-Strang.
+                //
+                // Layout-Konvention (analog Auto-Schaltplan im Wirtschaftlich-Modus):
+                //   helperAst = (setAst || helperVar) && resetAst
+                // — Reset-AST wird LITERAL als zweiter AND-Operand verwendet, OHNE
+                // NOT-Wrap. Damit wird `R:=B&&C&&D` zu Reihen-Kontakten, `R:=B||C||D`
+                // zu parallelen Zweigen, jeweils mit den vom User konfigurierten
+                // Tastersymbolen. _detectRS erkennt das Pattern strukturell und
+                // emittiert den Reset-Term literal, ohne Smart-Inverter.
+                const _ffConsumed = new Set();
+                flipFlops.forEach(f => {
+                    if (!f.setAst || !f.resetAst) return;
+                    const helperVar = f.outVar || ('Q' + f.num);
+                    const helperAst = {
+                        type: 'AND',
+                        operands: [
+                            { type: 'OR', operands: [f.setAst, { type:'IDENT', name: helperVar }] },
+                            f.resetAst
+                        ]
+                    };
+                    assigns.unshift({ lhs: helperVar, ast: helperAst });
+                    _ffConsumed.add(f.num);
+                });
 
                 if (assigns.length === 0 && flipFlops.length === 0) {
                     alert('Keine erkannten Zuweisungen im VALIS-Code. Editor bleibt unverändert.');
@@ -29142,12 +29265,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return (typeof componentTypes !== 'undefined' && componentTypes[name]) || '';
                 }
                 function contactTypeFor(name, isNeg) {
+                    // STRIKT: Der konfigurierte physikalische Typ der Variable bleibt
+                    // unverändert. Der User entscheidet allein über Öffner/Schließer
+                    // — der Auto-Generator schaltet niemals NO↔NC um, auch nicht bei
+                    // negierten Atomen. Die Logik-Polarität wird über die Layout-
+                    // Topologie (AND→Reihe, OR→Parallel) ausgedrückt; ein verlorenes
+                    // ¬ ist als User-Fehler in der Variablen-Konfiguration sichtbar.
+                    // isNeg wirkt nur auf Sensoren und interne/unbekannte Variablen,
+                    // die keinen physikalischen Knopfkörper haben — dort entscheidet
+                    // es zwischen relay_no und relay_nc.
                     const ct = _ct(name);
                     if (ct === 'nothalt')        return 'nothalt';
                     if (ct === 'taster_nc')      return 'taster_nc';
-                    if (ct === 'taster')         return isNeg ? 'taster_nc' : 'taster';
+                    if (ct === 'taster')         return 'taster';
                     if (ct === 'schalter_nc')    return 'schalter_nc';
-                    if (ct === 'schalter')       return isNeg ? 'schalter_nc' : 'schalter';
+                    if (ct === 'schalter')       return 'schalter';
                     if (ct === 'light_curtain')  return 'light_curtain';
                     if (ct === 'key_switch')     return 'key_switch';
                     // Sensoren bekommen KEIN Sensor-Symbol im Strang — das wäre ein
@@ -29157,7 +29289,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // sensorVars-Loop weiter unten); im Strang erscheint hier nur
                     // ein Hilfskontakt mit der Sensor-Variable.
                     if (ct && ct.indexOf('sensor_') === 0) return isNeg ? 'relay_nc' : 'relay_no';
-                    // Interne Variablen / FF-Outputs / Aux-Relais
+                    // Interne Variablen / FF-Outputs / unbekannt: Hilfskontakte
                     return isNeg ? 'relay_nc' : 'relay_no';
                 }
                 function coilTypeFor(name) {
@@ -29210,7 +29342,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     function isAtom(n) {
                         return n.type === 'IDENT' || (n.type === 'NOT' && n.operand && n.operand.type === 'IDENT');
                     }
-                    const products = flattenToProducts(ast);
+                    // SOP-Normalisierung — verschachtelte Klammern werden distributiert,
+                    // damit auch Ausdrücke wie `(A || B) && C` oder die Selbsthalte-
+                    // Synthese aus FFs `(X || Z) && ¬Y` als Sum-of-Products gerendert
+                    // werden können (sonst skip wegen "Verschachtelte Klammern/OR").
+                    const sopAst = _toSOP(ast);
+                    const products = flattenToProducts(sopAst);
                     if (!products) {
                         skipped.push({ lhs, reason: 'Verschachtelte Klammern/OR — manuell ergänzen' });
                         return;
@@ -29355,14 +29492,201 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
                 }
 
-                // FFs werden zu zwei separaten Strängen: ein Set-Strang und ein
-                // Reset-Strang, beide auf eine gemeinsame Hilfsrelais-Spule mit
-                // Set-/Reset-Anschluss. Da unser Editor keine eingebauten S/R-Coils
-                // hat, modellieren wir RS/SR als zwei normale Stränge mit dem
-                // gleichen LHS-Namen (TIA mappt das später zur RS/SR-Logik in der
-                // Steuerung). Vermerk im Skipped-Hinweis, dass das eine Annäherung ist.
+                // Faktorisiertes Selbsthalte-Rendering: Set-Bedingungen parallel
+                // (jedes SOP-Produkt eine eigene Sub-Spalte), zusätzliche Sub-Spalte
+                // mit Selbst-NO-Aux, dann unter dem Bot-Junction der Rest-AST in
+                // Serie zur Spule. Liefert true bei Erfolg, false wenn die Geometrie
+                // nicht abbildbar ist (Caller fällt dann auf buildRung zurück).
+                function buildSelfholdRung(lhs, setAst, restAst, x) {
+                    function _isAtom(n) {
+                        return n.type === 'IDENT' || (n.type === 'NOT' && n.operand && n.operand.type === 'IDENT');
+                    }
+                    function _flatten(node) {
+                        if (node.type === 'OR') return node.operands.flatMap(_flatten);
+                        if (node.type === 'AND') {
+                            const atoms = [];
+                            for (const op of node.operands) {
+                                if (!_isAtom(op)) return null;
+                                atoms.push(op);
+                            }
+                            return [atoms];
+                        }
+                        if (_isAtom(node)) return [[node]];
+                        return null;
+                    }
+                    const setProducts = _flatten(_toSOP(setAst));
+                    if (!setProducts) return false;
+                    const restProducts = _flatten(_toSOP(restAst));
+                    if (!restProducts || restProducts.length === 0) return false;
+                    if (restProducts.some(p => p.length === 0)) return false;
+
+                    const coilType = coilTypeFor(lhs);
+                    const coilT = CTYPES[coilType];
+                    const coilCx = coilT.cx;
+                    const pinAt = x + CTYPES.taster.cx;
+                    const coilX = x + (CTYPES.taster.cx - coilCx);
+
+                    const numSetBranches = setProducts.length + 1;  // +1 für Selbsthalte-Zweig
+                    const numResetBranches = restProducts.length;
+                    const SUB_PITCH = 100;
+                    const setSubPinAt   = (i) => pinAt + (i - (numSetBranches   - 1) / 2) * SUB_PITCH;
+                    const resetSubPinAt = (i) => pinAt + (i - (numResetBranches - 1) / 2) * SUB_PITCH;
+
+                    const maxSetH = Math.max(1, ...setProducts.map(p => p.length));
+                    const setBlockH = maxSetH * (CTYPES.taster.h + VERTICAL_GAP);
+                    const setBotJunctionY = TOP_Y + setBlockH + 20;
+
+                    // Reset-Sektion unter dem Set-Bot-Junction. Bei mehreren
+                    // Reset-Produkten (z.B. R1:=B&&C → SOP ¬B || ¬C) entstehen
+                    // parallele Reset-Pfade, jeder mit eigenen Top/Bot-Junctions.
+                    const resetTopJunctionY = setBotJunctionY + (numResetBranches > 1 ? 30 : 0);
+                    const resetTopContactY  = resetTopJunctionY + (numResetBranches > 1 ? 20 : 40);
+                    const maxResetH = Math.max(1, ...restProducts.map(p => p.length));
+                    const resetBlockH = maxResetH * (CTYPES.taster.h + VERTICAL_GAP);
+                    const resetBotJunctionY = resetTopContactY + resetBlockH;
+                    const localCoilY = Math.max(BOT_Y, resetBotJunctionY + (numResetBranches > 1 ? 30 : 10));
+
+                    const coilId = placeComp(coilType, coilX, localCoilY, lhs);
+                    {
+                        const _coilLabel = _coilNormLabelFor(coilType, lhs);
+                        const _cc = ST.components.find(c => c.id === coilId);
+                        if (_cc) _cc.normLabel = _coilLabel;
+                    }
+
+                    function buildChain(junctions, jY) {
+                        const existing = junctions.find(j => Math.abs(j.x - pinAt) < 1);
+                        if (existing) {
+                            for (let i = 0; i < junctions.length - 1; i++)
+                                placeWire({ compId: junctions[i].id, pin:'right' }, { compId: junctions[i+1].id, pin:'left' });
+                            return existing;
+                        }
+                        const cj = { id: placeComp('junction', pinAt - CTYPES.junction.cx, jY, ''), x: pinAt };
+                        let insertAfter = -1;
+                        for (let i = 0; i < junctions.length; i++)
+                            if (junctions[i].x < pinAt) insertAfter = i;
+                        const chain = [];
+                        for (let i = 0; i < junctions.length; i++) {
+                            chain.push(junctions[i]);
+                            if (i === insertAfter) chain.push(cj);
+                        }
+                        for (let i = 0; i < chain.length - 1; i++)
+                            placeWire({ compId: chain[i].id, pin:'right' }, { compId: chain[i+1].id, pin:'left' });
+                        return cj;
+                    }
+
+                    function _placeContact(cType, compX, curY, originalVar) {
+                        const placedVar = _resolveContactVar(originalVar);
+                        const id = placeComp(cType, compX, curY, placedVar);
+                        const comp = ST.components.find(c => c.id === id);
+                        if (comp) {
+                            if (sensorInfo[originalVar]) comp.normLabel = sensorInfo[originalVar].helperLabel;
+                            else if (varNormLabel[placedVar]) comp.normLabel = varNormLabel[placedVar];
+                            else comp.normLabel = _nextSF(originalVar);
+                        }
+                        return id;
+                    }
+
+                    // ---------- Set-Sektion ----------
+                    const setTopJ = [], setBotJ = [];
+                    for (let i = 0; i < numSetBranches; i++) {
+                        const px = setSubPinAt(i);
+                        setTopJ.push({ id: placeComp('junction', px - CTYPES.junction.cx, topJunctionY, ''), x: px });
+                        setBotJ.push({ id: placeComp('junction', px - CTYPES.junction.cx, setBotJunctionY, ''), x: px });
+                    }
+                    const setTopCJ = buildChain(setTopJ, topJunctionY);
+                    const setBotCJ = buildChain(setBotJ, setBotJunctionY);
+                    placeWire({ rail:'plus', x: pinAt }, { compId: setTopCJ.id, pin:'top' });
+
+                    for (let i = 0; i < setProducts.length; i++) {
+                        const atoms = setProducts[i];
+                        const px = setSubPinAt(i);
+                        const ids = [];
+                        let curY = TOP_Y;
+                        for (const a of atoms) {
+                            const isNeg = a.type === 'NOT';
+                            const name = isNeg ? a.operand.name : a.name;
+                            const cType = contactTypeFor(name, isNeg);
+                            const cT = CTYPES[cType];
+                            ids.push(_placeContact(cType, px - cT.cx, curY, name));
+                            curY += cT.h + VERTICAL_GAP;
+                        }
+                        placeWire({ compId: setTopJ[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
+                        for (let j = 0; j < ids.length - 1; j++)
+                            placeWire({ compId: ids[j], pin:'out' }, { compId: ids[j+1], pin:'in' });
+                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: setBotJ[i].id, pin:'top' });
+                    }
+                    // Selbsthalte-Zweig (rechts): NO-Aux auf eigene Spule
+                    {
+                        const i = numSetBranches - 1;
+                        const px = setSubPinAt(i);
+                        const cType = contactTypeFor(lhs, false);
+                        const cT = CTYPES[cType];
+                        const id = _placeContact(cType, px - cT.cx, TOP_Y, lhs);
+                        placeWire({ compId: setTopJ[i].id, pin:'bottom' }, { compId: id, pin:'in' });
+                        placeWire({ compId: id, pin:'out' }, { compId: setBotJ[i].id, pin:'top' });
+                    }
+
+                    // ---------- Reset-Sektion ----------
+                    if (numResetBranches === 1) {
+                        // Single-Produkt: schlichte Serie unter dem Set-Bot-Junction
+                        const atoms = restProducts[0];
+                        const ids = [];
+                        let curY = resetTopContactY;
+                        for (const a of atoms) {
+                            const isNeg = a.type === 'NOT';
+                            const name = isNeg ? a.operand.name : a.name;
+                            const cType = contactTypeFor(name, isNeg);
+                            const cT = CTYPES[cType];
+                            ids.push(_placeContact(cType, pinAt - cT.cx, curY, name));
+                            curY += cT.h + VERTICAL_GAP;
+                        }
+                        placeWire({ compId: setBotCJ.id, pin:'bottom' }, { compId: ids[0], pin:'in' });
+                        for (let i = 0; i < ids.length - 1; i++)
+                            placeWire({ compId: ids[i], pin:'out' }, { compId: ids[i+1], pin:'in' });
+                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: coilId, pin:'in' });
+                    } else {
+                        // Multi-Produkt-Reset: parallele Pfade mit eigenen Top/Bot-Junctions.
+                        // _exprForCoil sieht das als (set || self) && (¬X || ¬Y …) → _detectRS
+                        // wendet De Morgan an und gibt R := X && Y … zurück (sauberer Round-Trip).
+                        const resetTopJ = [], resetBotJ = [];
+                        for (let i = 0; i < numResetBranches; i++) {
+                            const px = resetSubPinAt(i);
+                            resetTopJ.push({ id: placeComp('junction', px - CTYPES.junction.cx, resetTopJunctionY, ''), x: px });
+                            resetBotJ.push({ id: placeComp('junction', px - CTYPES.junction.cx, resetBotJunctionY, ''), x: px });
+                        }
+                        const resetTopCJ = buildChain(resetTopJ, resetTopJunctionY);
+                        const resetBotCJ = buildChain(resetBotJ, resetBotJunctionY);
+                        placeWire({ compId: setBotCJ.id, pin:'bottom' }, { compId: resetTopCJ.id, pin:'top' });
+                        for (let i = 0; i < restProducts.length; i++) {
+                            const atoms = restProducts[i];
+                            const px = resetSubPinAt(i);
+                            const ids = [];
+                            let curY = resetTopContactY;
+                            for (const a of atoms) {
+                                const isNeg = a.type === 'NOT';
+                                const name = isNeg ? a.operand.name : a.name;
+                                const cType = contactTypeFor(name, isNeg);
+                                const cT = CTYPES[cType];
+                                ids.push(_placeContact(cType, px - cT.cx, curY, name));
+                                curY += cT.h + VERTICAL_GAP;
+                            }
+                            placeWire({ compId: resetTopJ[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
+                            for (let j = 0; j < ids.length - 1; j++)
+                                placeWire({ compId: ids[j], pin:'out' }, { compId: ids[j+1], pin:'in' });
+                            placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: resetBotJ[i].id, pin:'top' });
+                        }
+                        placeWire({ compId: resetBotCJ.id, pin:'bottom' }, { compId: coilId, pin:'in' });
+                    }
+                    placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: pinAt });
+                    return true;
+                }
+
+                // FFs MIT Konsument (Z := Qn) wurden bereits oben zur Selbsthalte-
+                // Zuweisung umgewandelt. FFs ohne Konsument können wir nicht zeichnen
+                // — sie bekommen einen Skip-Hinweis.
                 flipFlops.forEach(f => {
-                    skipped.push({ lhs: 'Q'+f.num, reason: 'RS/SR-FF: Set- und Reset-Strang separat — bitte manuell zu einer Hilfsrelais-Spule mit Selbsthaltung verbinden' });
+                    if (_ffConsumed.has(f.num)) return;
+                    skipped.push({ lhs: 'Q'+f.num, reason: 'RS/SR-FF: Set- oder Reset-Bedingung fehlt — beide Sn:= und Rn:= angeben' });
                 });
 
                 // ---- Sensor-Vor-Spalten mit norm-bezeichnetem Hilfsrelais ----
@@ -29456,6 +29780,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Etwas Puffer zwischen Sensor-Block und erstem Strang
                 if (sensorVars.size > 0) colX += 40;
                 assigns.forEach(a => {
+                    // Selbsthalte-Pattern (auch nach FF-Synthese) faktorisiert rendern,
+                    // damit der Round-Trip via _exprForCoil/_detectRS das Pattern
+                    // wiedererkennt. Bei Misserfolg (z.B. Multi-Produkt-Reset) auf
+                    // den klassischen buildRung mit SOP-Distribution zurückfallen.
+                    const sh = _detectSelfholdAst(a.ast, a.lhs);
+                    if (sh) {
+                        const setSOP = _toSOP(sh.setAst);
+                        const np = (setSOP.type === 'OR' ? setSOP.operands.length : 1) + 1;
+                        const rungW = np > 1 ? (np - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
+                        if (buildSelfholdRung(a.lhs, sh.setAst, sh.restAst, colX)) {
+                            colX += rungW + 40;
+                            return;
+                        }
+                    }
                     const np = _astProductCount(a.ast);
                     const rungW = np > 1 ? (np - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
                     buildRung(a.lhs, a.ast, colX);
@@ -31093,6 +31431,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Norm-Prefix sicherstellen für alle Komponenten (Self-Healing
                 // bei Legacy-Daten ohne explizites normPrefix-Feld).
                 ST.components.forEach(c => _ensureNormPrefix(c));
+                // KEINE Auto-Promotion: anonyme Hilfsrelais (Spulen ohne varName)
+                // bleiben anonym und tauchen NICHT im Code auf — der User entscheidet
+                // allein, ob ein Hilfsrelais eine SPS-Variable bekommt. Das SR-Pattern
+                // einer anonymen Selbsthaltung wird transparent auf den benannten
+                // Konsumenten übertragen: in `_exprForCoil` ersetzt der Selbsthalte-
+                // Zyklus den Norm-Prefix-Platzhalter durch den AUSSEN-Coil-Namen
+                // (Parameter `outerCoilName`), sodass der Konsument-Strang die SR-
+                // Logik direkt erbt und `_detectRS` ihn als SR-Coil erkennt.
                 // Nur Spulen MIT varName erzeugen Code-Zeilen. Hilfsrelais ohne
                 // varName sind „anonyme Helfer" — sie tauchen nur visuell auf,
                 // ihre Wirkung wird von Aux-Kontakten in andere Stränge inline
@@ -31187,10 +31533,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
                     const rs = _detectRS(coil, expr);
                     if (rs) {
-                        ssCounter.rs++;
-                        const n = ssCounter.rs;
-                        codeOps.push({ kind:'rs', n, set: _substituteProxies(rs.set), reset: _substituteProxies(rs.reset), comment: `// Selbsthaltung erkannt für ${coilVar}` });
-                        codeOps.push({ kind:'coil', name: coilVar, expr: `Q${n}` });
+                        // Wenn die Spule selbst schon Q<n>(_SR) heißt, behalten wir
+                        // ihre Nummer und den _SR-Suffix — sonst läuft der ssCounter
+                        // weiter, benannte FF-Outputs verlieren ihre ursprüngliche
+                        // Nummerierung beim Round-Trip, und SR (set-dominant) würde
+                        // beim Re-Export zu RS (reset-dominant) entarten. Außerdem
+                        // wäre `Q1 := Q1` nur leerer Lärm und wird unterdrückt,
+                        // der Konsument referenziert Q<n>(_SR) direkt.
+                        const qMatch = coilVar.match(/^Q(\d+)(_SR)?$/);
+                        const n = qMatch ? parseInt(qMatch[1], 10) : ++ssCounter.rs;
+                        const isSR = !!(qMatch && qMatch[2]);
+                        const qSuffix = isSR ? '_SR' : '';
+                        codeOps.push({ kind:'rs', n, isSR, set: _substituteProxies(rs.set), reset: _substituteProxies(rs.reset), comment: `// Selbsthaltung erkannt für ${coilVar}` });
+                        if (coilVar !== `Q${n}${qSuffix}`) {
+                            codeOps.push({ kind:'coil', name: coilVar, expr: `Q${n}${qSuffix}` });
+                        }
                         return;
                     }
                     if (selfRefRe(coilVar).test(expr)) {
@@ -31206,8 +31563,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (op.kind === 'warn') { lines.push(op.msg); return; }
                     if (op.kind === 'rs') {
                         if (op.comment) lines.push(op.comment);
-                        lines.push(`S${op.n} := ${op.set}`);
-                        lines.push(`R${op.n} := ${op.reset}`);
+                        const sfx = op.isSR ? '_SR' : '';
+                        lines.push(`S${op.n}${sfx} := ${op.set}`);
+                        lines.push(`R${op.n}${sfx} := ${op.reset}`);
                         return;
                     }
                     if (op.kind === 'coil') {
@@ -31249,12 +31607,25 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Model: union-find on pin-nodes connected via wires; rails 'plus' and 'minus' are
             // virtual super-nodes. Contacts/Aux are edges (IN↔OUT) labeled with their (possibly
             // negated) variable. Coils contribute no edge — they are sinks.
-            function _exprForCoil(coil, visiting) {
+            function _exprForCoil(coil, visiting, outerCoilName) {
                 // visiting: Set von Coil-IDs, deren Strang gerade rekursiv expandiert
                 // wird. Schützt vor Endlos-Rekursion bei Selbsthalteschaltungen
                 // (Coil-Aux verweist auf eigene Coil) oder zyklischen Helfer-Ketten.
+                // outerCoilName: Name des AUSSERSTEN Coils, für den der Strang gerade
+                // berechnet wird. Bei einem Selbsthalte-Zyklus innerhalb eines anonymen
+                // Hilfsrelais wird dieser Name als Selbst-Referenz-Platzhalter benutzt
+                // (statt des Norm-Prefix), damit das SR-Pattern transparent vom anonymen
+                // Helfer auf den benannten Konsumenten übergeht und _detectRS dort
+                // anschlägt — ohne KF-Auto-Promotion und ohne KF := Q1-Zwischenzeile.
                 if (!visiting) visiting = new Set();
                 if (visiting.has(coil.id)) return null;
+                if (outerCoilName === undefined) {
+                    // Beim erstmaligen Aufruf: AUSSEN-Name = varName des Coils, falls
+                    // benannt; sonst Norm-Prefix-Platzhalter (anonyme Coil ohne
+                    // benannten Konsumenten — SR-Pattern bleibt unsichtbar im Code,
+                    // wie vom User gewünscht).
+                    outerCoilName = coil.varName || (coil.normPrefix || '').replace(/^-/, '') || null;
+                }
                 const uf = _UnionFind();
                 const PLUS = '__PLUS__', MINUS = '__MINUS__';
                 const nodeOf = (id, pin) => id + ':' + pin;
@@ -31303,26 +31674,48 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t) return;
                     if (t.kind === 'contact') {
                         if (!c.varName) return;
+                        // Physikalische Kontakte (taster/schalter/nothalt/...) tragen
+                        // ihre Variable IMMER positiv zur Strang-Boolean bei — VALIS-
+                        // Konvention: Variable = Kontakt-Zustand. NC/NO-Symbol ist
+                        // visuelle User-Wahl, nicht Boolean-Polarität. Smart-Inverter
+                        // ist ausgebaut: Reset-Bedingung wird literal aus dem Layout
+                        // gelesen (AND→Reihe, OR→Parallel) wie im Auto-Plan.
                         edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: c.varName });
                     } else if (t.kind === 'aux') {
                         // Auflösung: refNormPrefix → Ziel-Bauteil.
                         // 1) Ziel hat varName → nimm varName.
-                        // 2) Ziel ist Coil ohne varName → expandiere dessen Strang-Ausdruck rekursiv.
-                        // 3) Fallback: c.varName direkt (Legacy / noch nicht gepflegte Daten).
+                        // 2) Ziel ist Coil ohne varName, kein Zyklus → expandiere dessen
+                        //    Strang-Ausdruck rekursiv (anonymes Hilfsrelais inline).
+                        //    `outerCoilName` wird durchgereicht, damit ein Selbsthalte-
+                        //    Zyklus tief in der Rekursion den AUSSERSTEN Coil-Namen
+                        //    als Selbst-Platzhalter nutzt — so wandert das SR-Pattern
+                        //    eines anonymen Helfers auf den benannten Konsumenten und
+                        //    erscheint im Code als dessen SR (kein KF := Q1-Zwischen-
+                        //    schritt).
+                        // 3) Ziel ist Coil ohne varName UND Zyklus (Selbsthaltung) →
+                        //    `outerCoilName` als Selbst-Bezeichner; falls auch der
+                        //    Aussen-Coil anonym ist, fällt's auf das Norm-Prefix
+                        //    zurück (orphane Selbsthaltung — bewusst unsichtbar im
+                        //    Code, der User muss eine Variable vergeben).
+                        // 4) Fallback: c.varName direkt (Legacy / noch nicht gepflegte Daten).
                         let exprVar = null;
                         let needsParen = false;
                         if (c.refNormPrefix && byPrefix[c.refNormPrefix]) {
                             const ref = byPrefix[c.refNormPrefix];
                             if (ref.varName) {
                                 exprVar = ref.varName;
-                            } else if (CTYPES[ref.type] && CTYPES[ref.type].kind === 'coil' && !nextVisiting.has(ref.id)) {
-                                try {
-                                    const sub = _exprForCoil(ref, nextVisiting);
-                                    if (sub && sub !== 'TRUE') {
-                                        exprVar = sub;
-                                        needsParen = true;
-                                    }
-                                } catch(e) {}
+                            } else if (CTYPES[ref.type] && CTYPES[ref.type].kind === 'coil') {
+                                if (nextVisiting.has(ref.id)) {
+                                    exprVar = outerCoilName || (ref.normPrefix || '').replace(/^-/, '') || null;
+                                } else {
+                                    try {
+                                        const sub = _exprForCoil(ref, nextVisiting, outerCoilName);
+                                        if (sub && sub !== 'TRUE') {
+                                            exprVar = sub;
+                                            needsParen = true;
+                                        }
+                                    } catch(e) {}
+                                }
                             }
                         }
                         if (!exprVar && c.varName) exprVar = c.varName;
@@ -31365,7 +31758,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Series-Parallel reduction. Reduces edges between source and sink iteratively.
             function _seriesParallel(edges, source, sink) {
                 let E = edges.slice();
-                const wrap = (s) => (s.includes('||') ? '(' + s + ')' : s);
+                // Beim Verbinden mit '||' müssen Untersausdrücke geklammert werden,
+                // wenn sie '&&' enthalten — sonst zerlegt _flattenAndTerms beim
+                // Re-Export "A && X || Q1" fälschlich in 3 Top-Level-AND-Terme
+                // ("A", "X || Q1", ...) und SR-Erkennung schlägt fehl. Wir
+                // klammern auch bereits geklammerte ||-Untersausdrücke; doppelte
+                // Klammern sind harmlos für Parser, fehlende Klammern wären es nicht.
+                const wrap = (s) => (s.includes('&&') || s.includes('||') ? '(' + s + ')' : s);
                 let changed = true;
                 let iter = 0;
                 while (changed && iter < 200) {
@@ -31477,17 +31876,27 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
 
             // RS-Pattern: sucht in den (geflatteten) AND-Termen nach einem OR-Block der die eigene
-            // Coil-Variable enthält. Funktioniert mit beliebig verschachtelten AND-Klammerungen.
+            // Coil-Variable (oder bei anonymen Hilfsrelais das Norm-Prefix) enthält.
+            // Funktioniert mit beliebig verschachtelten AND-Klammerungen.
             function _detectRS(coil, expr) {
-                if (!expr || !coil.varName) return null;
-                const v = coil.varName;
+                if (!expr) return null;
+                // Selbst-Bezeichner: bevorzugt varName, sonst Norm-Prefix ohne führendes '-'.
+                // Letzteres deckt Selbsthalte-Schaltungen mit anonymen Hilfsrelais ab,
+                // bei denen _exprForCoil das Norm-Prefix als Platzhalter eingesetzt hat.
+                const selfTokens = [];
+                if (coil.varName) selfTokens.push(coil.varName);
+                if (coil.normPrefix) {
+                    const sym = coil.normPrefix.replace(/^-/, '');
+                    if (sym && !selfTokens.includes(sym)) selfTokens.push(sym);
+                }
+                if (selfTokens.length === 0) return null;
                 const andTerms = _flattenAndTerms(expr);
                 let setOrTerms = null;     // restliche OR-Terme im Set-Block (nach Entfernen der Coil)
                 const resetTerms = [];     // AND-Terme die zum Reset-Block gehören
                 for (const term of andTerms) {
                     const inner = _stripOuterParens(term);
                     const orParts = _splitTopLevel(inner, '||');
-                    const coilIdx = orParts.findIndex(p => p.trim() === v);
+                    const coilIdx = orParts.findIndex(p => selfTokens.includes(p.trim()));
                     if (setOrTerms === null && coilIdx >= 0) {
                         // Set-Block gefunden — Coil entfernen, Rest sind Set-Trigger
                         setOrTerms = orParts.filter((_, i) => i !== coilIdx).map(s => s.trim()).filter(Boolean);
@@ -31497,23 +31906,24 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 if (setOrTerms === null || setOrTerms.length === 0) return null;
                 if (resetTerms.length === 0) return null;
+                // Single-Term-Set: äußere Klammern abstreifen damit `S1 := A && X`
+                // statt `S1 := (A && X)` rauskommt — die wrap-Klammern aus
+                // _seriesParallel sind nach _detectRS nicht mehr nötig.
                 const setExpr = setOrTerms.length === 1
-                    ? setOrTerms[0]
+                    ? _stripOuterParens(setOrTerms[0])
                     : setOrTerms.map(s => s.includes('&&') ? '(' + s + ')' : s).join(' || ');
                 const resetCombined = resetTerms.length === 1
                     ? _stripOuterParens(resetTerms[0])
                     : resetTerms.map(t => _stripOuterParens(t)).map(t => t.includes('||') ? '(' + t + ')' : t).join(' && ');
-                // Smart-Inversion: kompakteste äquivalente Form für ¬resetCombined
-                const t = resetCombined.trim();
-                let rExpr;
-                if (/^¬\s*[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
-                    rExpr = t.replace(/^¬\s*/, '');
-                } else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) {
-                    rExpr = '¬' + t;
-                } else {
-                    rExpr = '¬(' + t + ')';
-                }
-                return { set: setExpr, reset: rExpr };
+                // Reset-Term wird LITERAL aus dem Strang ausgelesen — ohne Smart-
+                // Inversion oder De-Morgan-Akrobatik. Das spiegelt das Auto-Plan-
+                // Verhalten: der Schaltplan zeigt R-Bedingung direkt als Reihe/
+                // Parallel-Layout, der Code-Pfad emittiert ebenso direkt zurück.
+                // Wenn der User einen logischen Fehler macht (z.B. `R:=¬X` mit X
+                // als Öffner-Variable, wo das Inversions-Bit beim Rendern verloren
+                // geht), bleibt das im Code als User-Fehler sichtbar — kein Auto-
+                // Korrektur-Magic.
+                return { set: setExpr, reset: resetCombined.trim() };
             }
 
         })();

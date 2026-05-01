@@ -5142,21 +5142,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                     window.inputKeyBindings = { ...newKeys };
                     localStorage.setItem('valisKeyBindings', JSON.stringify(window.inputKeyBindings));
                     spsState = {};
-					window.fbsNodeColors = {}; 
+					window.fbsNodeColors = {};
 					window.fbsColorCounter = 0;
-                    updateHighlighting(); 
-                    updateEditor(); 
-                    saveToStorage();
-                    // Layout anwenden falls im Beispiel definiert
+                    // Layout zuerst anwenden, damit Panel-Dimensionen final sind,
+                    // bevor SVG-Pläne gezeichnet und panZoom kalibriert werden.
                     if (newLayout) changeWorkspaceLayout(newLayout);
-                    // Anlage aufbauen und Physik vorbereiten
-                    if (newFactory) {
-                        newFactory.globalViewMode = 'side';
-                        localStorage.setItem('logikFactoryState', JSON.stringify(newFactory));
-                        loadFactoryState();
-                    } else {
-                        clearFactory(true);
-                    }
+                    // Auf nächsten Frame warten, damit CSS-Layout committed ist
+                    requestAnimationFrame(() => {
+                        try {
+                            updateHighlighting();
+                            updateEditor();
+                            saveToStorage();
+                            if (newFactory) {
+                                newFactory.globalViewMode = 'side';
+                                localStorage.setItem('logikFactoryState', JSON.stringify(newFactory));
+                                loadFactoryState();
+                            } else {
+                                clearFactory(true);
+                            }
+                        } catch (e) {
+                            console.error("Fehler beim Laden des Beispiels:", e);
+                            alert("Fehler beim Laden: " + e.message);
+                        }
+                    });
                 } catch (e) {
                     console.error("Fehler beim Laden des Beispiels:", e);
                     alert("Fehler beim Laden: " + e.message);

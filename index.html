@@ -271,18 +271,26 @@
         #workspace-container.layout-grid .workspace-panel {
             flex: none !important; display: flex !important; margin: 0 !important;
         }
-        /* Editor ist nicht Teil des 3er-Rasters — sonst landet er ohne grid-area in
-           einem impliziten Row-Track und kollabiert die expliziten 1fr-Tracks. */
-        #workspace-container.layout-grid > #circuit-editor-wrapper,
-        #workspace-container.layout-grid > #ws-resizer-iec-edit {
-            display: none !important;
-        }
         #workspace-container.layout-grid .workspace-resizer {
             display: block !important; /* Sichtbar lassen für Anpassungen im Grid! */
         }
+        /* Im Grid-Mode sind Editor und Editor-Resizer ohne aktive .has-editor-Variante
+           ohne Platz — sonst landen sie in einem impliziten Track und kollabieren
+           die 1fr-Tracks. .has-editor unten gibt ihnen explizite grid-areas. */
+        #workspace-container.layout-grid:not(.has-editor) > #circuit-editor-wrapper,
+        #workspace-container.layout-grid:not(.has-editor) > #ws-resizer-iec-edit {
+            display: none !important;
+        }
+        #workspace-container.layout-grid.has-editor > #circuit-editor-wrapper { grid-area: ced; }
+        #workspace-container.layout-grid.has-editor > #ws-resizer-iec-edit { grid-area: re; }
         .grid-sim-bottom {
             grid-template-areas: "fbs r1 iec" "r2  r2 r2" "sim sim sim";
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
+        }
+        .grid-sim-bottom.has-editor {
+            grid-template-areas: "fbs r1 iec re ced" "r2 r2 r2 r2 r2" "sim sim sim sim sim";
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-top {
@@ -290,15 +298,30 @@
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
+        .grid-sim-top.has-editor {
+            grid-template-areas: "sim sim sim sim sim" "r2 r2 r2 r2 r2" "fbs r1 iec re ced";
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr));
+            grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
+        }
         .grid-sim-right {
             grid-template-areas: "fbs r2 sim" "r1  r2 sim" "iec r2 sim";
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
+        .grid-sim-right.has-editor {
+            grid-template-areas: "fbs r2 sim" "r1 r2 sim" "iec r2 sim" "re r2 sim" "ced r2 sim";
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+        }
         .grid-sim-left {
             grid-template-areas: "sim r2 fbs" "sim r2 r1" "sim r2 iec";
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
+        }
+        .grid-sim-left.has-editor {
+            grid-template-areas: "sim r2 fbs" "sim r2 r1" "sim r2 iec" "sim r2 re" "sim r2 ced";
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
+            grid-template-rows: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
         }
         .view-btn { background-color: #555; transition: background 0.2s; }
         .view-btn.active { background-color: #f58231; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
@@ -1554,8 +1577,13 @@
                     <button id="ced-tool-wire" class="tool-btn" onclick="window.cedSetTool('wire')" title="Leitung zeichnen (Pin-zu-Pin oder Pin-zur-Schiene)" style="background:#555;color:#fff;">↯ Leitung</button>
                     <button id="ced-tool-delete" class="tool-btn" onclick="window.cedSetTool('delete')" title="Löschen" style="background:#555;color:#fff;">🗑 Löschen</button>
                     <span style="color:#666;font-size:11px;margin-left:6px;">|</span>
-                    <label style="color:#fff;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;">
-                        <input type="checkbox" id="ced-livesync" checked onchange="window.cedToggleLiveSync()"> Live-Sync
+                    <label id="ced-livesync-wrap" style="color:#fff;font-size:11px;display:flex;align-items:center;gap:4px;" title="Wann Editor & Code automatisch synchronisiert werden">
+                        Live-Sync:
+                        <select id="ced-livesync-mode" onchange="window.cedSetLiveSyncMode(this.value)" style="background:#2d2d30;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;padding:2px 4px;">
+                            <option value="off">Aus</option>
+                            <option value="editor-to-code" selected>Editor → Code</option>
+                            <option value="both">Editor ↔ Code</option>
+                        </select>
                     </label>
                     <button id="ced-btn-generate" class="tool-btn" onclick="window.cedGenerateCode()" title="Code aus Schaltplan generieren" style="background:#ff9800;color:#fff;">⚙ Code generieren</button>
                     <button id="ced-btn-from-code" class="tool-btn" onclick="window.cedGenerateFromCode()" title="Schaltplan aus VALIS-Code aufbauen (Boolesche Logik + RS/SR-FF)" style="background:#4caf50;color:#fff;">🪄 Aus Code</button>
@@ -1564,6 +1592,7 @@
                         <button class="tool-btn" onclick="window.cedZoomOut()"   title="Verkleinern" style="background:#555;color:#fff;padding:3px 8px;">−</button>
                         <button class="tool-btn" onclick="window.cedZoomReset()" title="Zoom zurücksetzen (100%)" style="background:#555;color:#fff;padding:3px 8px;">⟲</button>
                         <button class="tool-btn" onclick="window.cedZoomIn()"    title="Vergrößern" style="background:#555;color:#fff;padding:3px 8px;">+</button>
+                        <button class="tool-btn" onclick="window.cedZoomFit()"   title="An Panel anpassen" style="background:#555;color:#fff;padding:3px 8px;">⇲</button>
                     </span>
                     <button class="tool-btn" onclick="window.cedClear()" title="Alles löschen" style="background:#777;color:#fff;">♻ Reset</button>
                     <span id="ced-status" style="color:#81c784;font-size:11px;margin-left:8px;"></span>
@@ -6180,8 +6209,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             const isGrid = currentLayout.startsWith('grid-');
             let p0 = fbs.isMainVisible || isGrid;
             let p1 = circ.isMainVisible || isGrid;
-            let pE = cedit.isMainVisible; // Editor ist NICHT Teil des Grid-Layouts
+            let pE = cedit.isMainVisible; // Editor optional auch im Grid (siehe .has-editor)
             let p2 = fac.isMainVisible || isGrid;
+            // Editor in Grid einsortieren (neben fbs+iec) wenn aktiv — andernfalls .has-editor entfernen
+            const _wcEl = document.getElementById('workspace-container');
+            if (_wcEl) _wcEl.classList.toggle('has-editor', isGrid && pE);
             if (isGrid) {
                 if (resizer1) resizer1.style.display = 'none';
                 if (resizer2) resizer2.style.display = 'none';
@@ -6249,7 +6281,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Letztes aktives Fenster auf dem Hauptmonitor darf nicht geschlossen werden!
             if (mainVisibleCount <= 1 && panel.style.display !== 'none') return;
             // 4. Grid-Layout auflösen, wenn man manuell Fenster schließt
-            if (currentLayout.startsWith('grid-') && panel.style.display !== 'none') {
+            //    Ausnahme: Editor — der wird im Grid optional zugeschaltet (siehe .has-editor),
+            //    sein Schließen darf das Grid nicht aufbrechen.
+            if (currentLayout.startsWith('grid-') && panel.style.display !== 'none' && panelId !== 'circuit-editor-wrapper') {
                 document.getElementById('btn-layout-text').textContent = 'Layout: ◫';
                 currentLayout = 'flex-row';
                 localStorage.setItem('valisLayout', 'flex-row');
@@ -9660,7 +9694,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             // 🪄 „Aus Code"-Button im Editor deaktivieren — verhindert, dass der
             // Lerner den Schaltplan automatisch aus dem VALIS-Code generieren lässt
-            // statt von Hand zu verdrahten.
+            // statt von Hand zu verdrahten. Sperrt auch den bidirektionalen Live-Sync.
             if (areas.disableFromCode) {
                 const btn = document.getElementById('ced-btn-from-code');
                 if (btn) {
@@ -9669,6 +9703,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                     btn.style.cursor = 'not-allowed';
                     btn.title = 'In dieser Aufgabe deaktiviert — Schaltplan bitte von Hand aufbauen';
                     btn.dataset.taskDisabled = '1';
+                }
+                // 'both'-Modus aus dem Live-Sync-Dropdown entfernen, ggf. herunterstufen
+                const sel = document.getElementById('ced-livesync-mode');
+                if (sel) {
+                    const both = sel.querySelector('option[value="both"]');
+                    if (both) both.disabled = true;
+                    if (sel.value === 'both' && typeof window.cedSetLiveSyncMode === 'function') {
+                        window.cedSetLiveSyncMode('editor-to-code');
+                    }
+                }
+            }
+            // 🔄 Live-Sync komplett sperren — Modus 'off' erzwingen, Dropdown deaktivieren
+            if (areas.disableLiveSync) {
+                if (typeof window.cedSetLiveSyncMode === 'function') window.cedSetLiveSyncMode('off');
+                const sel = document.getElementById('ced-livesync-mode');
+                if (sel) {
+                    sel.disabled = true;
+                    sel.title = 'In dieser Aufgabe deaktiviert';
+                    sel.dataset.taskDisabled = '1';
                 }
             }
             if (areas.factoryNewVars && !areas.factory2d) {
@@ -9720,6 +9773,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _fcBtn.style.cursor = '';
                 _fcBtn.title = 'Schaltplan aus VALIS-Code aufbauen (Boolesche Logik + RS/SR-FF)';
                 delete _fcBtn.dataset.taskDisabled;
+            }
+            // 🔄 Live-Sync-Dropdown wieder freigeben
+            const _lsSel = document.getElementById('ced-livesync-mode');
+            if (_lsSel && _lsSel.dataset.taskDisabled === '1') {
+                _lsSel.disabled = false;
+                _lsSel.title = 'Wann Editor & Code automatisch synchronisiert werden';
+                delete _lsSel.dataset.taskDisabled;
+            }
+            if (_lsSel) {
+                const both = _lsSel.querySelector('option[value="both"]');
+                if (both) both.disabled = false;
             }
         }
 
@@ -10616,6 +10680,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
                 excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
                 disableFromCode: !!(document.getElementById('ted-block-edit-no-fromcode') || {}).checked,
+                disableLiveSync: !!(document.getElementById('ted-block-edit-no-livesync') || {}).checked,
             };
             task.hideAreas = {
                 codeEditor:   !!(document.getElementById('ted-hide-code') || {}).checked,
@@ -10860,7 +10925,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 <td colspan="3" style="padding:2px 0 5px 16px;">
                                     <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
                                         <input type="checkbox" id="ted-block-edit-no-fromcode" ${(task.blockAreas||{}).disableFromCode?'checked':''}>
-                                        <span>🪄 „Aus Code"-Button deaktivieren <span style="color:#607d8b;font-size:10px;">(verhindert automatische Generierung des Schaltplans aus dem VALIS-Code — Lerner muss von Hand verdrahten)</span></span>
+                                        <span>🪄 „Aus Code"-Button + Code↔Editor-Live-Sync deaktivieren <span style="color:#607d8b;font-size:10px;">(verhindert automatische Generierung des Schaltplans aus dem VALIS-Code — Lerner muss von Hand verdrahten; bidirektionaler Live-Sync ist damit ebenfalls aus)</span></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" style="padding:2px 0 5px 16px;">
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                                        <input type="checkbox" id="ted-block-edit-no-livesync" ${(task.blockAreas||{}).disableLiveSync?'checked':''}>
+                                        <span>🔄 Live-Sync komplett deaktivieren <span style="color:#607d8b;font-size:10px;">(zwingt Modus „Aus" — Lerner muss „Code generieren" / „Aus Code" manuell drücken)</span></span>
                                     </label>
                                 </td>
                             </tr>`:''}${key==='2d'?`
@@ -28777,7 +28850,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Wire endpoints: { compId, pin } OR { rail:'plus'|'minus', x }
                 wires: [],          // [{id, from, to}]
                 tool: 'select',
-                liveSync: true,
+                liveSync: true,             // Legacy-Alias, gleichbedeutend mit liveSyncMode !== 'off'
+                liveSyncMode: 'editor-to-code', // 'off' | 'editor-to-code' | 'both'
                 selectedIds: new Set(),
                 wireStart: null,    // active wire endpoint
                 dragInfo: null,
@@ -28805,6 +28879,38 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const z = ST.zoom || 1;
                 return { x: (clientX - rect.left) / z, y: (clientY - rect.top) / z };
             }
+            // Aktualisiert SVG-Größe (width/height-Attribute) anhand Zoom + Inhalt.
+            // viewBox bleibt konstant — width/height bestimmen das Layout-Box,
+            // sodass Scrollbars den gezoomten Inhalt korrekt abdecken.
+            function _applyCedSize() {
+                const svg = _d().getElementById('ced-svg');
+                if (!svg) return;
+                const zoom = ST.zoom || 1;
+                // Inhaltsbreite: von Komponenten + Sicherheitsabstand, mind. RAIL_X_MAX
+                let maxX = RAIL_X_MAX;
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t) return;
+                    const right = c.x + t.w;
+                    if (right > maxX) maxX = right;
+                });
+                const baseW = Math.max(2400, maxX + 60);
+                const baseH = RAIL_MINUS_Y + 60;
+                const renderedW = Math.round(baseW * zoom);
+                const renderedH = Math.round(baseH * zoom);
+                svg.setAttribute('viewBox', `0 0 ${baseW} ${baseH}`);
+                // Sowohl Attribute (intrinsisch) als auch inline CSS — CSS gewinnt gegen
+                // Flex-/Block-Defaults, die SVG sonst auf Container-Breite zwingen würden.
+                svg.setAttribute('width',  renderedW);
+                svg.setAttribute('height', renderedH);
+                svg.style.width  = renderedW + 'px';
+                svg.style.height = renderedH + 'px';
+                svg.style.minWidth  = renderedW + 'px';
+                svg.style.minHeight = renderedH + 'px';
+                svg.style.maxWidth  = renderedW + 'px';
+                svg.style.maxHeight = renderedH + 'px';
+                svg.style.flex = 'none';
+            }
             // Zoom-Helper. Wenn anchorClientX/Y gegeben, bleibt die Stelle unter dem Anker stabil;
             // sonst wird zur Mitte des sichtbaren Canvas-Bereichs gezoomt.
             function _zoomBy(factor, anchorClientX, anchorClientY) {
@@ -28814,27 +28920,49 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const svg = _d().getElementById('ced-svg');
                 const area = _d().getElementById('ced-canvas-area');
                 if (!svg || !area) return;
-                const rect = svg.getBoundingClientRect();
                 const aRect = area.getBoundingClientRect();
                 const cx = (typeof anchorClientX === 'number') ? anchorClientX : (aRect.left + aRect.width  / 2);
                 const cy = (typeof anchorClientY === 'number') ? anchorClientY : (aRect.top  + aRect.height / 2);
-                const cursorAbsX = cx - rect.left + area.scrollLeft;
-                const cursorAbsY = cy - rect.top  + area.scrollTop;
-                const ratio = newZoom / oldZoom;
+                // Position des Cursors im aktuellen, gerenderten Inhalt (in Pixeln vom Inhaltsursprung)
+                const offsetX = (cx - aRect.left) + area.scrollLeft;
+                const offsetY = (cy - aRect.top)  + area.scrollTop;
                 ST.zoom = newZoom;
-                svg.style.transformOrigin = '0 0';
-                svg.style.transform = `scale(${newZoom})`;
-                area.scrollLeft = cursorAbsX * ratio - (cx - rect.left);
-                area.scrollTop  = cursorAbsY * ratio - (cy - rect.top);
+                _applyCedSize();
+                // Nach Zoom: gleicher Inhalts-Punkt soll wieder unter Cursor liegen
+                const ratio = newZoom / oldZoom;
+                area.scrollLeft = offsetX * ratio - (cx - aRect.left);
+                area.scrollTop  = offsetY * ratio - (cy - aRect.top);
             }
             window.cedZoomIn    = () => _zoomBy(1.2);
             window.cedZoomOut   = () => _zoomBy(1/1.2);
             window.cedZoomReset = () => {
                 const svg = _d().getElementById('ced-svg');
                 const area = _d().getElementById('ced-canvas-area');
-                if (svg) { svg.style.transform = ''; svg.style.transformOrigin = ''; }
-                if (area) { area.scrollLeft = 0; area.scrollTop = 0; }
                 ST.zoom = 1;
+                if (svg) { svg.style.transform = ''; svg.style.transformOrigin = ''; }
+                _applyCedSize();
+                if (area) { area.scrollLeft = 0; area.scrollTop = 0; }
+            };
+            // Zoom-to-Fit: skaliert auf Panel-Breite + Höhe
+            window.cedZoomFit = () => {
+                const svg = _d().getElementById('ced-svg');
+                const area = _d().getElementById('ced-canvas-area');
+                if (!svg || !area) return;
+                let maxX = RAIL_X_MAX;
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t) return;
+                    const right = c.x + t.w;
+                    if (right > maxX) maxX = right;
+                });
+                const baseW = Math.max(2400, maxX + 60);
+                const baseH = RAIL_MINUS_Y + 60;
+                const fitX = (area.clientWidth  - 4) / baseW;
+                const fitY = (area.clientHeight - 4) / baseH;
+                ST.zoom = Math.max(0.25, Math.min(3.0, Math.min(fitX, fitY)));
+                if (svg) { svg.style.transform = ''; svg.style.transformOrigin = ''; }
+                _applyCedSize();
+                area.scrollLeft = 0; area.scrollTop = 0;
             };
 
             // Selection-Helper
@@ -28860,8 +28988,34 @@ You must output exactly this JSON format. The logic code goes as a single string
                 _loadStateFromStorage();
                 _bindPalette();
                 _bindCanvas();
+                _bindCodeListener();
                 cedRender();
             };
+            // Hört auf Änderungen am Code-Textarea und schiebt sie — sofern
+            // liveSyncMode === 'both' und nicht durch Task-Lock blockiert — in den
+            // Editor zurück (Code → Editor). Schutz gegen Endlos-Schleife: jede
+            // unsererseits ausgelöste Code-Änderung wird in ST.lastGeneratedCode
+            // gespiegelt; Inputs mit identischem Inhalt werden ignoriert.
+            function _bindCodeListener() {
+                const ta = document.getElementById('code');
+                if (!ta || ta._cedListenerBound) return;
+                ta._cedListenerBound = true;
+                let _t;
+                ta.addEventListener('input', () => {
+                    if (ST.liveSyncMode !== 'both') return;
+                    if (typeof activeTask !== 'undefined' && activeTask && activeTask.blockAreas &&
+                        (activeTask.blockAreas.disableFromCode || activeTask.blockAreas.disableLiveSync)) return;
+                    if (ST.lastGeneratedCode != null && ta.value === ST.lastGeneratedCode) return;
+                    clearTimeout(_t);
+                    _t = setTimeout(() => {
+                        try {
+                            ST._suppressFromCodeConfirm = true;
+                            window.cedGenerateFromCode();
+                        } catch(e) { /* still */ }
+                        finally { ST._suppressFromCodeConfirm = false; }
+                    }, 250);
+                });
+            }
             // Persistenz: State in/aus localStorage und als JSON-Objekt für Save-Load-Modal
             function _serializeState() {
                 return {
@@ -28972,9 +29126,30 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             };
 
+            // Live-Sync-Modus setzen. Mögliche Werte:
+            //   'off'             — keine automatische Synchronisation
+            //   'editor-to-code'  — Editor-Änderungen aktualisieren den Code (Standard)
+            //   'both'            — zusätzlich werden Code-Änderungen in den Editor geschoben
+            // Aufgaben-Locks: blockAreas.disableLiveSync erzwingt 'off';
+            //                 blockAreas.disableFromCode verhindert 'both' (würde
+            //                 Schaltplan automatisch aus Code regenerieren).
+            window.cedSetLiveSyncMode = function(mode) {
+                if (!['off','editor-to-code','both'].includes(mode)) mode = 'editor-to-code';
+                // Task-Lock anwenden: nicht erlaubte Modi auf den nächst-erlaubten reduzieren
+                if (typeof activeTask !== 'undefined' && activeTask && activeTask.blockAreas) {
+                    if (activeTask.blockAreas.disableLiveSync) mode = 'off';
+                    if (mode === 'both' && activeTask.blockAreas.disableFromCode) mode = 'editor-to-code';
+                }
+                ST.liveSyncMode = mode;
+                ST.liveSync = (mode !== 'off');
+                const sel = _d().getElementById('ced-livesync-mode');
+                if (sel && sel.value !== mode) sel.value = mode;
+                if (mode !== 'off') cedGenerateCode();
+            };
+            // Legacy-API: alte Aufrufer / Tutorials können noch cedToggleLiveSync verwenden
             window.cedToggleLiveSync = function() {
-                ST.liveSync = _d().getElementById('ced-livesync').checked;
-                if (ST.liveSync) cedGenerateCode();
+                const sel = _d().getElementById('ced-livesync-mode');
+                window.cedSetLiveSyncMode(sel ? sel.value : ST.liveSyncMode);
             };
 
             window.cedClear = function() {
@@ -29014,8 +29189,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Rückfrage nur, wenn der User seit der letzten Auto-Generierung
                     // tatsächlich manuell etwas geändert hat. Fingerprint vergleichen:
                     // wenn identisch, gibt es nichts zu verlieren — kein Dialog.
+                    // Bidirektionaler Live-Sync setzt _suppressFromCodeConfirm — dann
+                    // wird ohne Rückfrage neu generiert, da der User explizit den
+                    // 'both'-Modus aktiviert hat.
                     const _currentFp = JSON.stringify({ c: ST.components, w: ST.wires });
-                    if (ST._lastGenFp !== _currentFp) {
+                    if (ST._lastGenFp !== _currentFp && !ST._suppressFromCodeConfirm) {
                         if (!confirm('Editor enthält bereits Komponenten/Leitungen. Inhalt durch Code-Generierung ersetzen?')) return;
                     }
                 }
@@ -29360,23 +29538,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return (typeof componentTypes !== 'undefined' && componentTypes[name]) || '';
                 }
                 function contactTypeFor(name, isNeg) {
-                    // STRIKT: Der konfigurierte physikalische Typ der Variable bleibt
-                    // unverändert. Der User entscheidet allein über Öffner/Schließer
-                    // — der Auto-Generator schaltet niemals NO↔NC um, auch nicht bei
-                    // negierten Atomen. Die Logik-Polarität wird über die Layout-
-                    // Topologie (AND→Reihe, OR→Parallel) ausgedrückt; ein verlorenes
-                    // ¬ ist als User-Fehler in der Variablen-Konfiguration sichtbar.
-                    // isNeg wirkt nur auf Sensoren und interne/unbekannte Variablen,
-                    // die keinen physikalischen Knopfkörper haben — dort entscheidet
-                    // es zwischen relay_no und relay_nc.
+                    // Symbol = SCL-Polarität (Option A, literal): NC-Symbol bedeutet
+                    // ¬var, NO-Symbol bedeutet var. Damit ist der Round-Trip
+                    // Code↔Editor verlustfrei. Innerhalb einer Hardware-Familie
+                    // (taster/schalter) wechseln wir zwischen NO und NC je nach
+                    // isNeg — die Hardware-Identität (Öffner/Schließer) bleibt
+                    // über die Variablen-Konfiguration (componentTypes) erhalten.
                     const ct = _ct(name);
-                    if (ct === 'nothalt')        return 'nothalt';
-                    if (ct === 'taster_nc')      return 'taster_nc';
-                    if (ct === 'taster')         return 'taster';
-                    if (ct === 'schalter_nc')    return 'schalter_nc';
-                    if (ct === 'schalter')       return 'schalter';
-                    if (ct === 'light_curtain')  return 'light_curtain';
-                    if (ct === 'key_switch')     return 'key_switch';
+                    if (ct === 'taster' || ct === 'taster_nc') return isNeg ? 'taster_nc' : 'taster';
+                    if (ct === 'schalter' || ct === 'schalter_nc') return isNeg ? 'schalter_nc' : 'schalter';
+                    // Spezial-Hardware nur als NC verfügbar: bei isNeg=true natives
+                    // NC-Symbol nehmen, sonst auf taster (NO) ausweichen, damit
+                    // ein nicht-negiertes Atom auch wirklich als var im Code landet.
+                    if (ct === 'nothalt')        return isNeg ? 'nothalt'       : 'taster';
+                    if (ct === 'light_curtain')  return isNeg ? 'light_curtain' : 'taster';
+                    // Spezial-Hardware nur als NO verfügbar: umgekehrte Logik.
+                    if (ct === 'key_switch')     return isNeg ? 'taster_nc'     : 'key_switch';
+                    if (ct === 'mech_sensor')    return isNeg ? 'taster_nc'     : 'mech_sensor';
                     // Sensoren bekommen KEIN Sensor-Symbol im Strang — das wäre ein
                     // 3-Pin-Bauteil (BN/BU/BK), das die +24V/0V-Schienenversorgung
                     // mit der Strangverdrahtung vermischen würde. Stattdessen wird
@@ -29979,18 +30157,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const g = _d().getElementById('ced-rails');
                 if (!g) return;
                 clear(g);
+                // Schienen-Endpunkt zieht bis zum rechten Rand des aktuellen Inhalts
+                let railEndX = RAIL_X_MAX;
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t) return;
+                    const right = c.x + t.w;
+                    if (right > railEndX) railEndX = right;
+                });
+                railEndX += 60; // kleiner Puffer rechts
                 // Hitbox-Linien (transparent, dick) für komfortables Klicken
-                const hitPlus = el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: RAIL_X_MAX, y2: RAIL_PLUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'plus' }, g);
-                const hitMinus = el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: RAIL_X_MAX, y2: RAIL_MINUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'minus' }, g);
+                const hitPlus = el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: railEndX, y2: RAIL_PLUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'plus' }, g);
+                const hitMinus = el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: railEndX, y2: RAIL_MINUS_Y, stroke:'transparent', 'stroke-width':18, 'pointer-events':'stroke', class:'ced-rail-hit', 'data-rail':'minus' }, g);
                 hitPlus.style.cursor = 'crosshair';
                 hitMinus.style.cursor = 'crosshair';
                 // Sichtbare Schienen
-                el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: RAIL_X_MAX, y2: RAIL_PLUS_Y, stroke:'#d32f2f', 'stroke-width':3, 'pointer-events':'none' }, g);
+                el('line', { x1: RAIL_X_MIN, y1: RAIL_PLUS_Y, x2: railEndX, y2: RAIL_PLUS_Y, stroke:'#d32f2f', 'stroke-width':3, 'pointer-events':'none' }, g);
                 el('text', { x: RAIL_X_MIN - 6, y: RAIL_PLUS_Y - 6, 'font-size':12, 'font-weight':'bold', fill:'#d32f2f', 'text-anchor':'end' }, g).textContent = '+24V';
-                el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: RAIL_X_MAX, y2: RAIL_MINUS_Y, stroke:'#1976d2', 'stroke-width':3, 'pointer-events':'none' }, g);
+                el('line', { x1: RAIL_X_MIN, y1: RAIL_MINUS_Y, x2: railEndX, y2: RAIL_MINUS_Y, stroke:'#1976d2', 'stroke-width':3, 'pointer-events':'none' }, g);
                 el('text', { x: RAIL_X_MIN - 6, y: RAIL_MINUS_Y + 16, 'font-size':12, 'font-weight':'bold', fill:'#1976d2', 'text-anchor':'end' }, g).textContent = '0V';
-                const svg = _d().getElementById('ced-svg');
-                if (svg) svg.setAttribute('height', RAIL_MINUS_Y + 60);
+                _applyCedSize();
             }
 
             function _renderComponents() {
@@ -30598,6 +30784,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const factor = e.deltaY > 0 ? 0.9 : 1.1;
                     _zoomBy(factor, e.clientX, e.clientY);
                 }, { passive: false });
+                // Mittel-Maustaste gedrückt halten → Pannen (Verschieben des sichtbaren Bereichs)
+                let _midPan = null;
+                area.addEventListener('mousedown', (e) => {
+                    if (e.button !== 1) return; // 1 = Mittlere Taste
+                    e.preventDefault();
+                    _midPan = { startX: e.clientX, startY: e.clientY, scrollLeft: area.scrollLeft, scrollTop: area.scrollTop };
+                    area.style.cursor = 'grabbing';
+                });
+                _d().addEventListener('mousemove', (e) => {
+                    if (!_midPan) return;
+                    area.scrollLeft = _midPan.scrollLeft - (e.clientX - _midPan.startX);
+                    area.scrollTop  = _midPan.scrollTop  - (e.clientY - _midPan.startY);
+                });
+                _d().addEventListener('mouseup', (e) => {
+                    if (!_midPan || e.button !== 1) return;
+                    _midPan = null;
+                    area.style.cursor = '';
+                });
+                // Auto-Scroll des Browsers bei Klick mit der mittleren Taste unterdrücken
+                area.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
                 area.addEventListener('dragover', (e) => {
                     if (e.dataTransfer.types.indexOf('text/x-ced-type') >= 0) {
                         e.preventDefault();
@@ -31570,8 +31776,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 () => {  // Abbrechen → Live-Sync deaktivieren
                                     ST.warningOpen = false;
                                     ST.liveSync = false;
-                                    const cb = _d().getElementById('ced-livesync');
-                                    if (cb) cb.checked = false;
+                                    ST.liveSyncMode = 'off';
+                                    const sel = _d().getElementById('ced-livesync-mode');
+                                    if (sel) sel.value = 'off';
                                     _setStatus('⚠ Code nicht überschrieben — Live-Sync deaktiviert');
                                 }
                             );
@@ -31911,13 +32118,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t) return;
                     if (t.kind === 'contact') {
                         if (!c.varName) return;
-                        // Physikalische Kontakte (taster/schalter/nothalt/...) tragen
-                        // ihre Variable IMMER positiv zur Strang-Boolean bei — VALIS-
-                        // Konvention: Variable = Kontakt-Zustand. NC/NO-Symbol ist
-                        // visuelle User-Wahl, nicht Boolean-Polarität. Smart-Inverter
-                        // ist ausgebaut: Reset-Bedingung wird literal aus dem Layout
-                        // gelesen (AND→Reihe, OR→Parallel) wie im Auto-Plan.
-                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr: c.varName });
+                        // Physikalische Kontakte respektieren das Symbol literal:
+                        //   NO (Schließer, nc:false) → c.varName
+                        //   NC (Öffner,    nc:true)  → ¬c.varName
+                        // Damit ist der Round-Trip Code↔Editor verlustfrei: ein
+                        // ¬STOP im Code wird als NC-Symbol gezeichnet und beim
+                        // Re-Generieren wieder als ¬STOP herausgeschrieben.
+                        const expr = t.nc ? ('¬' + c.varName) : c.varName;
+                        edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr });
                     } else if (t.kind === 'aux') {
                         // Auflösung: refNormPrefix → Ziel-Bauteil.
                         // 1) Ziel hat varName → nimm varName.

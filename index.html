@@ -29083,19 +29083,49 @@ You must output exactly this JSON format. The logic code goes as a single string
                     'relais':        'relais'
                 };
                 let changed = false;
+                // Helper: berechnet das gewünschte Editor-Symbol für eine Variable
+                // unter Beibehaltung der gespeicherten SCL-Polarität. Spiegelt die
+                // Logik aus contactTypeFor in cedGenerateFromCode.
+                const _contactSymbolFor = (varName, isNeg) => {
+                    const ct = componentTypes[varName];
+                    if (!ct) return null;
+                    const isHwNC = (ct === 'taster_nc' || ct === 'schalter_nc' || ct === 'nothalt' || ct === 'light_curtain');
+                    const effectiveNC = isHwNC ? !isNeg : isNeg;
+                    if (ct === 'taster' || ct === 'taster_nc')     return effectiveNC ? 'taster_nc'   : 'taster';
+                    if (ct === 'schalter' || ct === 'schalter_nc') return effectiveNC ? 'schalter_nc' : 'schalter';
+                    if (ct === 'nothalt')       return effectiveNC ? 'nothalt'       : 'taster';
+                    if (ct === 'light_curtain') return effectiveNC ? 'light_curtain' : 'taster';
+                    if (ct === 'key_switch')    return effectiveNC ? 'taster_nc'     : 'key_switch';
+                    if (ct === 'mech_sensor')   return effectiveNC ? 'taster_nc'     : 'mech_sensor';
+                    return null; // Sensor / Hilfsrelais / unbekannt — kein Hardware-Wechsel-Sync
+                };
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
                     if (!t) return;
                     if (!c.varName) return;
+                    // Physische Kontakte: nur sync wenn Polarität explizit gespeichert
+                    // (sonst können wir nicht sicher unterscheiden ob ein Symbol-Wechsel
+                    // gewünscht oder ein bewusster manueller Userwunsch war).
+                    if (t.kind === 'contact') {
+                        if (typeof c._isNeg !== 'boolean') return;
+                        const target = _contactSymbolFor(c.varName, c._isNeg);
+                        if (!target) return;
+                        const targetT = CTYPES[target];
+                        if (!targetT || targetT.kind !== 'contact') return;
+                        if (target !== c.type) {
+                            c.type = target;
+                            changed = true;
+                        }
+                        return;
+                    }
+                    // Spulen / Sensoren: direkt aus Hardware-Typ ableiten.
                     const ct = componentTypes[c.varName];
                     if (!ct) return;
                     const target = _typeMap[ct];
                     if (!target) return; // sensor_* oder unbekannt — überspringen
                     const targetT = CTYPES[target];
                     if (!targetT) return;
-                    // Nur innerhalb derselben Kategorie tauschen (Kontakt↔Kontakt,
-                    // Spule↔Spule). Pin-Geometrie ist innerhalb einer Kategorie gleich,
-                    // sodass die Verdrahtung erhalten bleibt.
+                    // Nur innerhalb derselben Kategorie tauschen (Spule↔Spule, Sensor↔Sensor).
                     if (targetT.kind !== t.kind) return;
                     if (target !== c.type) {
                         c.type = target;
@@ -29538,23 +29568,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return (typeof componentTypes !== 'undefined' && componentTypes[name]) || '';
                 }
                 function contactTypeFor(name, isNeg) {
-                    // Symbol = SCL-Polarität (Option A, literal): NC-Symbol bedeutet
-                    // ¬var, NO-Symbol bedeutet var. Damit ist der Round-Trip
-                    // Code↔Editor verlustfrei. Innerhalb einer Hardware-Familie
-                    // (taster/schalter) wechseln wir zwischen NO und NC je nach
-                    // isNeg — die Hardware-Identität (Öffner/Schließer) bleibt
-                    // über die Variablen-Konfiguration (componentTypes) erhalten.
+                    // Hardware-treu (entspricht auto-Schaltplan getContactNC):
+                    // Das gezeichnete Symbol entspricht dem Ruhe-Zustand des Strangs:
+                    //   NC-Symbol = Kontakt im Ruhezustand geschlossen (Strang führt Strom)
+                    //   NO-Symbol = Kontakt im Ruhezustand offen
+                    // Bei NC-Hardware (taster_nc, nothalt, schalter_nc, light_curtain)
+                    // ist die Variable im Ruhezustand 1, also ist das positive Atom
+                    // im Strang als NC-Symbol darzustellen; ein ¬X kehrt das um.
+                    // Bei NO-Hardware ist es umgekehrt.
+                    // Die ¬-Information geht NICHT verloren — sie ist im Editor-Typ
+                    // (taster vs taster_nc) gegenüber der Hardware-Konfiguration
+                    // implizit kodiert und wird in _exprForCoil rekonstruiert.
                     const ct = _ct(name);
-                    if (ct === 'taster' || ct === 'taster_nc') return isNeg ? 'taster_nc' : 'taster';
-                    if (ct === 'schalter' || ct === 'schalter_nc') return isNeg ? 'schalter_nc' : 'schalter';
-                    // Spezial-Hardware nur als NC verfügbar: bei isNeg=true natives
-                    // NC-Symbol nehmen, sonst auf taster (NO) ausweichen, damit
-                    // ein nicht-negiertes Atom auch wirklich als var im Code landet.
-                    if (ct === 'nothalt')        return isNeg ? 'nothalt'       : 'taster';
-                    if (ct === 'light_curtain')  return isNeg ? 'light_curtain' : 'taster';
-                    // Spezial-Hardware nur als NO verfügbar: umgekehrte Logik.
-                    if (ct === 'key_switch')     return isNeg ? 'taster_nc'     : 'key_switch';
-                    if (ct === 'mech_sensor')    return isNeg ? 'taster_nc'     : 'mech_sensor';
+                    const isHwNC = (ct === 'taster_nc' || ct === 'schalter_nc' || ct === 'nothalt' || ct === 'light_curtain');
+                    const effectiveNC = isHwNC ? !isNeg : isNeg;
+                    // Hardware-Familien mit beiden Varianten
+                    if (ct === 'taster' || ct === 'taster_nc')     return effectiveNC ? 'taster_nc'   : 'taster';
+                    if (ct === 'schalter' || ct === 'schalter_nc') return effectiveNC ? 'schalter_nc' : 'schalter';
+                    // NC-only Spezial-Hardware: NC-Variante behalten, sonst NO-Fallback (taster)
+                    if (ct === 'nothalt')       return effectiveNC ? 'nothalt'       : 'taster';
+                    if (ct === 'light_curtain') return effectiveNC ? 'light_curtain' : 'taster';
+                    // NO-only Spezial-Hardware: native NO-Variante, sonst NC-Fallback (taster_nc)
+                    if (ct === 'key_switch')    return effectiveNC ? 'taster_nc'     : 'key_switch';
+                    if (ct === 'mech_sensor')   return effectiveNC ? 'taster_nc'     : 'mech_sensor';
                     // Sensoren bekommen KEIN Sensor-Symbol im Strang — das wäre ein
                     // 3-Pin-Bauteil (BN/BU/BK), das die +24V/0V-Schienenversorgung
                     // mit der Strangverdrahtung vermischen würde. Stattdessen wird
@@ -29649,11 +29685,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     //   Kontakt für Sensor-Variable → varName ist auf Hilfsrelais umgemappt
                     //                                  → Norm-Label = sensorInfo[orig].helperLabel
                     //   Kontakt für reguläre Variable → -SF{n} (Original-Variable)
-                    function _placeContactWithLabel(cType, compX, curY, originalVar) {
+                    function _placeContactWithLabel(cType, compX, curY, originalVar, isNeg) {
                         const placedVar = _resolveContactVar(originalVar);
                         const id = placeComp(cType, compX, curY, placedVar);
                         const comp = ST.components.find(c => c.id === id);
                         if (comp) {
+                            // SCL-Polarität explizit speichern, damit cedSyncTypes bei
+                            // späterem Hardware-Wechsel den Symbol-Typ unter Beibehaltung
+                            // der Polarität neu berechnen kann.
+                            if (isNeg !== undefined) comp._isNeg = !!isNeg;
                             if (sensorInfo[originalVar]) {
                                 // Aux-Kontakt für Sensor-Hilfsrelais
                                 comp.normLabel = sensorInfo[originalVar].helperLabel;
@@ -29680,7 +29720,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             const compX = x + (CTYPES.taster.cx - cT.cx);
                             // Sensor-Variablen → Hilfsrelais-Mapping; reguläre Variablen
                             // → -SF{n}-Norm-Label. Beides wird im Helper erledigt.
-                            ids.push(_placeContactWithLabel(cType, compX, curY, name));
+                            ids.push(_placeContactWithLabel(cType, compX, curY, name, isNeg));
                             curY += cT.h + VERTICAL_GAP;
                         }
                         // Verdrahtung: L+ → erster in, dann in-Pin-Kette, letzter out → coil in, coil out → L-
@@ -29755,7 +29795,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             const cType = contactTypeFor(name, isNeg);
                             const cT = CTYPES[cType];
                             const compX = px - cT.cx;   // Pin-Position = px → component.x = px - cx
-                            ids.push(_placeContactWithLabel(cType, compX, curY, name));
+                            ids.push(_placeContactWithLabel(cType, compX, curY, name, isNeg));
                             curY += cT.h + VERTICAL_GAP;
                         }
                         placeWire({ compId: topJunctions[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
@@ -29854,11 +29894,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         return cj;
                     }
 
-                    function _placeContact(cType, compX, curY, originalVar) {
+                    function _placeContact(cType, compX, curY, originalVar, isNeg) {
                         const placedVar = _resolveContactVar(originalVar);
                         const id = placeComp(cType, compX, curY, placedVar);
                         const comp = ST.components.find(c => c.id === id);
                         if (comp) {
+                            // SCL-Polarität für Hardware-Wechsel-Sync ablegen (siehe cedSyncTypes)
+                            if (isNeg !== undefined) comp._isNeg = !!isNeg;
                             if (sensorInfo[originalVar]) comp.normLabel = sensorInfo[originalVar].helperLabel;
                             else if (varNormLabel[placedVar]) comp.normLabel = varNormLabel[placedVar];
                             else comp.normLabel = _nextSF(originalVar);
@@ -29887,7 +29929,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             const name = isNeg ? a.operand.name : a.name;
                             const cType = contactTypeFor(name, isNeg);
                             const cT = CTYPES[cType];
-                            ids.push(_placeContact(cType, px - cT.cx, curY, name));
+                            ids.push(_placeContact(cType, px - cT.cx, curY, name, isNeg));
                             curY += cT.h + VERTICAL_GAP;
                         }
                         placeWire({ compId: setTopJ[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
@@ -29901,7 +29943,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         const px = setSubPinAt(i);
                         const cType = contactTypeFor(lhs, false);
                         const cT = CTYPES[cType];
-                        const id = _placeContact(cType, px - cT.cx, TOP_Y, lhs);
+                        const id = _placeContact(cType, px - cT.cx, TOP_Y, lhs, false);
                         placeWire({ compId: setTopJ[i].id, pin:'bottom' }, { compId: id, pin:'in' });
                         placeWire({ compId: id, pin:'out' }, { compId: setBotJ[i].id, pin:'top' });
                     }
@@ -29917,7 +29959,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             const name = isNeg ? a.operand.name : a.name;
                             const cType = contactTypeFor(name, isNeg);
                             const cT = CTYPES[cType];
-                            ids.push(_placeContact(cType, pinAt - cT.cx, curY, name));
+                            ids.push(_placeContact(cType, pinAt - cT.cx, curY, name, isNeg));
                             curY += cT.h + VERTICAL_GAP;
                         }
                         placeWire({ compId: setBotCJ.id, pin:'bottom' }, { compId: ids[0], pin:'in' });
@@ -29947,7 +29989,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 const name = isNeg ? a.operand.name : a.name;
                                 const cType = contactTypeFor(name, isNeg);
                                 const cT = CTYPES[cType];
-                                ids.push(_placeContact(cType, px - cT.cx, curY, name));
+                                ids.push(_placeContact(cType, px - cT.cx, curY, name, isNeg));
                                 curY += cT.h + VERTICAL_GAP;
                             }
                             placeWire({ compId: resetTopJ[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
@@ -30031,9 +30073,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     placeWire({ rail:'plus',  x: sensorPinX }, { compId: sensorId, pin:'in'  });
                     placeWire({ compId: sensorId, pin:'out' }, { rail:'minus', x: sensorPinX });
                     // Hilfsrelais — varName=internal helperVar, normLabel="-KF1 (-BG1)"
+                    // Spule auf BOT_Y (analog zu allen anderen Coils im Plan), Sensor-
+                    // Signal läuft per langer vertikaler Leitung von oben nach unten.
                     const coilX = sensorX + sT.w + SENSOR_GAP;
                     const coilPinX = coilX + cT.cx;
-                    const coilY = TOP_Y + sT.cy;
+                    const coilY = BOT_Y;
                     const coilId = placeComp('relais', coilX, coilY, info.helperVar);
                     const coilComp = ST.components.find(c => c.id === coilId);
                     if (coilComp) coilComp.normLabel = info.helperLabel;
@@ -30252,17 +30296,104 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Variable in Klammern als zweite Zeile darunter. Wird verwendet wenn
             // comp.normLabel das Format "-BG1 (E_SENSOR_IND)" hat (Klammer-Trennung).
             // Ohne Klammer fällt es auf das einzeilige varName-Label zurück.
+            // Wickelt einen Klammer-Inhalt wie "(SYS_ON && ¬STAMP && ¬BOX)" in
+            // mehrere Zeilen ≤ maxChars um. Bricht bevorzugt an logischen Trennstellen
+            // (&&, ||, ,) — fällt nur in Notfall auf harte Zeichen-Trennung zurück.
+            function _wrapParens(content, maxChars) {
+                if (content.length <= maxChars) return [content];
+                let inner = content, lp = '', rp = '';
+                if (content.startsWith('(') && content.endsWith(')')) {
+                    inner = content.slice(1, -1); lp = '('; rp = ')';
+                }
+                const innerMax = Math.max(6, maxChars - lp.length - rp.length);
+                // Trennzeichen mit-erhalten: || && , — split mit capture group
+                const parts = inner.split(/(\s*(?:&&|\|\|)\s*|\s*,\s*)/g).filter(p => p !== '');
+                const lines = [];
+                let cur = '';
+                for (const p of parts) {
+                    if (cur && (cur + p).length > innerMax) {
+                        lines.push(cur);
+                        cur = p.replace(/^\s+/, '');
+                    } else {
+                        cur += p;
+                    }
+                }
+                if (cur) lines.push(cur);
+                // Falls ein Token allein länger als das Limit ist (riesige Variable):
+                // hart auf Zeichenebene weiter umbrechen.
+                const final = [];
+                for (let line of lines) {
+                    while (line.length > innerMax) {
+                        final.push(line.substring(0, innerMax));
+                        line = line.substring(innerMax);
+                    }
+                    if (line) final.push(line);
+                }
+                if (lp) {
+                    final[0] = lp + final[0];
+                    final[final.length - 1] = final[final.length - 1] + rp;
+                }
+                return final;
+            }
             function _drawCompLabel(grp, x, y, comp, anchor) {
                 const text = comp.normLabel || comp.varName || '?';
                 const splitIdx = text.indexOf(' (');
                 const ank = anchor || 'start';
+                const kind = (CTYPES[comp.type] || {}).kind;
+                // Heuristik: ~5.5px pro Zeichen bei font-size 10/11.
+                // MAX_CHARS richtet sich nach dem typischen Strangabstand (COL_PITCH=140
+                // im Editor) — so wandert kein Klammer-Inhalt mehr in den Nachbarstrang.
+                const MAX_LINE2_CHARS = 18;
+                const MAX_LINE1_CHARS = 16;
+                const CHAR_W = 5.5;
+                // Coils stehen am unteren Schienenende und haben viel Platz bis 0V →
+                // mehrzeilige Klammer-Zeilen erlaubt.
+                // Sensoren/Kontakte sitzen eng zwischen Schiene und Nachbar-Bauteil →
+                // dort einzeilig mit „…"-Truncate.
+                const allowWrap = (kind === 'coil');
+                const _truncate = (s, max) => s.length > max ? (s.substring(0, max - 1) + '…') : s;
+                const _bgRect = (xx, yy, w, h) => {
+                    const xr = ank === 'end' ? (xx - w) : (ank === 'middle' ? (xx - w/2) : xx);
+                    el('rect', { x: xr - 2, y: yy, width: w + 4, height: h, fill: '#fafafa', stroke: 'none', 'pointer-events': 'none' }, grp);
+                };
+                const _drawTextLine = (xx, yy, txt, big) => {
+                    const attrs = big
+                        ? { x: xx, y: yy, 'font-size': 11, 'font-weight': 'bold', fill: '#1976d2', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }
+                        : { x: xx, y: yy, 'font-size': 10, fill: '#444', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank };
+                    el('text', attrs, grp).textContent = txt;
+                };
                 if (splitIdx !== -1) {
-                    const line1 = text.substring(0, splitIdx);
-                    const line2 = text.substring(splitIdx + 1);
-                    el('text', { x, y: y - 2, 'font-size': 11, 'font-weight': 'bold', fill: '#1976d2', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = line1;
-                    el('text', { x, y: y + 10, 'font-size': 10, fill: '#444', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = line2;
+                    const line1Disp = _truncate(text.substring(0, splitIdx), MAX_LINE1_CHARS);
+                    const line2Raw  = text.substring(splitIdx + 1);
+                    let parensLines;
+                    if (allowWrap) {
+                        parensLines = _wrapParens(line2Raw, MAX_LINE2_CHARS);
+                    } else {
+                        // Single-line, mit Truncate
+                        let l2 = line2Raw;
+                        if (line2Raw.length > MAX_LINE2_CHARS && line2Raw.startsWith('(') && line2Raw.endsWith(')')) {
+                            const inner = line2Raw.slice(1, -1);
+                            l2 = '(' + inner.substring(0, MAX_LINE2_CHARS - 3) + '…)';
+                        } else if (line2Raw.length > MAX_LINE2_CHARS) {
+                            l2 = line2Raw.substring(0, MAX_LINE2_CHARS - 1) + '…';
+                        }
+                        parensLines = [l2];
+                    }
+                    // Erste Zeile (Norm-Bezeichnung)
+                    _bgRect(x, y - 12, line1Disp.length * CHAR_W, 12);
+                    _drawTextLine(x, y - 2, line1Disp, true);
+                    // Klammer-Zeilen darunter stapeln
+                    parensLines.forEach((ln, i) => {
+                        const yy = y + 10 + i * 12;
+                        _bgRect(x, yy - 10, ln.length * CHAR_W, 12);
+                        _drawTextLine(x, yy, ln, false);
+                    });
+                    el('title', {}, grp).textContent = text;
                 } else {
-                    el('text', { x, y, 'font-size': 11, 'font-weight': 'bold', fill: '#1976d2', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': ank }, grp).textContent = text;
+                    const disp = _truncate(text, MAX_LINE1_CHARS);
+                    _bgRect(x, y - 6, disp.length * CHAR_W, 12);
+                    _drawTextLine(x, y, disp, true);
+                    if (disp !== text) el('title', {}, grp).textContent = text;
                 }
             }
 
@@ -31829,8 +31960,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
                     if (!t || !c.varName) return;
-                    if (t.kind === 'contact' || t.kind === 'sensor') {
-                        // Eingangskontakte und Sensoren: c.type entspricht direkt dem Sim-Typ
+                    if (t.kind === 'contact') {
+                        // Hardware-Typ NICHT aus dem Editor-Symbol ableiten, weil
+                        // das Symbol jetzt aus Hardware-Typ + Polarität (¬) kombiniert
+                        // ist. Würden wir bei ¬STOP das Editor-Symbol 'taster' nach
+                        // componentTypes schreiben, würde STOP von Öffner auf Schließer
+                        // umkonfiguriert. Deshalb nur SETZEN wenn noch unkonfiguriert
+                        // (erstmalig per Editor angelegte Variable).
+                        if (!componentTypes[c.varName]) componentTypes[c.varName] = c.type;
+                    } else if (t.kind === 'sensor') {
+                        // Sensoren haben nur eine Variante (kind:'sensor', keine NC/NO-Achse)
                         componentTypes[c.varName] = c.type;
                     } else if (t.kind === 'coil') {
                         // Relais → 'relais' (Simulator zeigt es als Hilfsrelais-Label)
@@ -32118,13 +32257,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (!t) return;
                     if (t.kind === 'contact') {
                         if (!c.varName) return;
-                        // Physikalische Kontakte respektieren das Symbol literal:
-                        //   NO (Schließer, nc:false) → c.varName
-                        //   NC (Öffner,    nc:true)  → ¬c.varName
-                        // Damit ist der Round-Trip Code↔Editor verlustfrei: ein
-                        // ¬STOP im Code wird als NC-Symbol gezeichnet und beim
-                        // Re-Generieren wieder als ¬STOP herausgeschrieben.
-                        const expr = t.nc ? ('¬' + c.varName) : c.varName;
+                        // Hardware-treues Modell (deckungsgleich mit auto-Schaltplan):
+                        // Das Editor-Symbol kodiert den Ruhe-Zustand (NC=geschlossen,
+                        // NO=offen).
+                        // Bevorzugt wird die explizit gespeicherte Polarität c._isNeg
+                        // (gesetzt beim Aus-Code-Generieren). Fehlt sie (Legacy-Daten
+                        // oder manuell platziert), rekonstruieren wir aus Symbol+Hardware:
+                        //   ¬ ⇔ Symbol-NC und Hardware-NO sind unterschiedlich.
+                        let isNeg;
+                        if (typeof c._isNeg === 'boolean') {
+                            isNeg = c._isNeg;
+                        } else {
+                            const hwType = (typeof componentTypes !== 'undefined') ? componentTypes[c.varName] : null;
+                            const hwIsNC = (hwType === 'taster_nc' || hwType === 'schalter_nc' || hwType === 'nothalt' || hwType === 'light_curtain');
+                            const symIsNC = !!t.nc;
+                            isNeg = (symIsNC !== hwIsNC);
+                        }
+                        const expr = isNeg ? ('¬' + c.varName) : c.varName;
                         edges.push({ a: uf.find(nodeOf(c.id, 'in')), b: uf.find(nodeOf(c.id, 'out')), expr });
                     } else if (t.kind === 'aux') {
                         // Auflösung: refNormPrefix → Ziel-Bauteil.

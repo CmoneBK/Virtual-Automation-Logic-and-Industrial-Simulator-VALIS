@@ -29670,184 +29670,210 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // Liefert false, wenn der Ausdruck zu komplex zum automatischen Layout ist
                 // (in dem Fall: Strang skippen + skipped[] vermerken).
                 function buildRung(lhs, ast, x) {
-                    // Entscheide Geometrie: einfach, AND-Kette, ODER-Kette, gemischt
-                    // Strategie: wir reduzieren auf SOP (Sum of Products) für die OR-
-                    // Layoutebene. Jede Produktgruppe ist eine vertikale Reihe mit
-                    // Kontakten in Reihe; mehrere Produkte werden parallel mit
-                    // Junctions am oberen und unteren Ende verbunden.
-
-                    // ast → Liste von "Produkten" (= AND-Reihen)
-                    function flattenToProducts(node) {
-                        if (node.type === 'OR') {
-                            return node.operands.flatMap(flattenToProducts);
-                        }
-                        if (node.type === 'AND') {
-                            // Jeder Operand muss ein Atom (IDENT/NOT IDENT) sein, sonst zu komplex
-                            const atoms = [];
-                            for (const op of node.operands) {
-                                if (!isAtom(op)) return null;  // nested OR → zu komplex
-                                atoms.push(op);
-                            }
-                            return [atoms];
-                        }
-                        if (isAtom(node)) return [[node]];
-                        return null;  // CONST oder Unbekannt
-                    }
+                    // AST-Tree-Renderer: spiegelt die Boolean-Struktur aus dem Code
+                    // direkt im Layout wider, OHNE SOP-Distribution. Beispiel:
+                    //   (A || B) && C  →  OR-Block (A,B parallel) → C in Reihe → Spule
+                    //                     statt SOP zwei Stränge mit C dupliziert.
+                    // AND-Knoten erzeugen vertikale Reihen, OR-Knoten parallele Spalten.
                     function isAtom(n) {
                         return n.type === 'IDENT' || (n.type === 'NOT' && n.operand && n.operand.type === 'IDENT');
                     }
-                    // SOP-Normalisierung — verschachtelte Klammern werden distributiert,
-                    // damit auch Ausdrücke wie `(A || B) && C` oder die Selbsthalte-
-                    // Synthese aus FFs `(X || Z) && ¬Y` als Sum-of-Products gerendert
-                    // werden können (sonst skip wegen "Verschachtelte Klammern/OR").
-                    const sopAst = _toSOP(ast);
-                    const products = flattenToProducts(sopAst);
-                    if (!products) {
-                        skipped.push({ lhs, reason: 'Verschachtelte Klammern/OR — manuell ergänzen' });
-                        return;
+                    function _calcSize(node) {
+                        if (isAtom(node)) return { cols: 1, rows: 1 };
+                        if (node.type === 'AND') {
+                            const sizes = node.operands.map(_calcSize);
+                            if (sizes.some(s => !s)) return null;
+                            return {
+                                cols: Math.max(...sizes.map(s => s.cols)),
+                                rows: sizes.reduce((sum, s) => sum + s.rows, 0)
+                            };
+                        }
+                        if (node.type === 'OR') {
+                            const sizes = node.operands.map(_calcSize);
+                            if (sizes.some(s => !s)) return null;
+                            return {
+                                cols: sizes.reduce((sum, s) => sum + s.cols, 0),
+                                rows: Math.max(...sizes.map(s => s.rows))
+                            };
+                        }
+                        return null; // CONST oder unbekannt
                     }
+                    const size = _calcSize(ast);
+                    if (!size) {
+                        skipped.push({ lhs, reason: 'Konstante/Unbekannter AST-Knoten' });
+                        return null;
+                    }
+                    const SUB_PITCH = 100;
+                    const ROW_H = CTYPES.taster.h + VERTICAL_GAP;
 
                     const coilType = coilTypeFor(lhs);
                     const coilT = CTYPES[coilType];
                     const coilCx = coilT.cx;
+                    const pinAt = x + CTYPES.taster.cx;
+                    const coilX = x + (CTYPES.taster.cx - coilCx);
 
-                    // Spulen-Position fest am unteren Ende der Spalte
-                    const coilX = x + (CTYPES.taster.cx - coilCx);  // Spule auf gleicher Pin-X wie Kontakte
-                    const coilY = BOT_Y;
-                    const coilId = placeComp(coilType, coilX, coilY, lhs);
-                    // Norm-Label je nach Coil-Typ: -P{n} (LED), -M{n} (Motor), -MB{n} (Ventil),
-                    // -H{n} (Sirene), -E{n} (Heizung), -KF{n} (Hilfsrelais).
-                    {
-                        const _coilLabel = _coilNormLabelFor(coilType, lhs);
-                        const _cc = ST.components.find(c => c.id === coilId);
-                        if (_cc) _cc.normLabel = _coilLabel;
+                    // Spaltenpositionen — symmetrisch um pinAt zentriert
+                    const totalCols = size.cols;
+                    const colXs = [];
+                    for (let i = 0; i < totalCols; i++) {
+                        colXs.push(pinAt + (i - (totalCols - 1) / 2) * SUB_PITCH);
                     }
 
-                    // Berechne Pin-X-Position der Spalte (gleichbleibend für alle Kontakte)
-                    const pinAt = x + CTYPES.taster.cx;
+                    // Spule wird nach dem Tree-Render platziert (Position richtet sich
+                    // nach result.bottomY — schließt OR-Buffer und sonstige Strukturen ein).
 
-                    // Helper: Kontakt platzieren + passendes Norm-Label setzen.
-                    //   Kontakt für Sensor-Variable → varName ist auf Hilfsrelais umgemappt
-                    //                                  → Norm-Label = sensorInfo[orig].helperLabel
-                    //   Kontakt für reguläre Variable → -SF{n} (Original-Variable)
                     function _placeContactWithLabel(cType, compX, curY, originalVar, isNeg) {
                         const placedVar = _resolveContactVar(originalVar);
                         const id = placeComp(cType, compX, curY, placedVar);
                         const comp = ST.components.find(c => c.id === id);
                         if (comp) {
-                            // SCL-Polarität explizit speichern, damit cedSyncTypes bei
-                            // späterem Hardware-Wechsel den Symbol-Typ unter Beibehaltung
-                            // der Polarität neu berechnen kann.
                             if (isNeg !== undefined) comp._isNeg = !!isNeg;
-                            if (sensorInfo[originalVar]) {
-                                // Aux-Kontakt für Sensor-Hilfsrelais
-                                comp.normLabel = sensorInfo[originalVar].helperLabel;
-                            } else if (varNormLabel[placedVar]) {
-                                // Vorab gecachtes Label (z.B. wenn Variable mehrfach im Code auftritt)
-                                comp.normLabel = varNormLabel[placedVar];
-                            } else {
-                                comp.normLabel = _nextSF(originalVar);
-                            }
+                            if (sensorInfo[originalVar]) comp.normLabel = sensorInfo[originalVar].helperLabel;
+                            else if (varNormLabel[placedVar]) comp.normLabel = varNormLabel[placedVar];
+                            else comp.normLabel = _nextSF(originalVar);
                         }
                         return id;
                     }
 
-                    // Ein einziges Produkt → reine vertikale Reihe (kein OR-Layout)
-                    if (products.length === 1) {
-                        const atoms = products[0];
-                        const ids = [];
-                        let curY = TOP_Y;
-                        for (const a of atoms) {
-                            const isNeg = a.type === 'NOT';
-                            const name = isNeg ? a.operand.name : a.name;
+                    // Rekursiver Tree-Renderer:
+                    //   x_center: x-Koordinate, auf der dieser Sub-Tree zentriert wird
+                    //   leftCol/rightCol: Index-Bereich der zugewiesenen Spalten
+                    //   topY: Anfangs-Y für diesen Knoten
+                    //   topInlet: { rail|compId, pin } — Drahteingang von oben
+                    // Liefert { bottomOutlet, bottomY }.
+                    function _renderTree(node, x_center, leftCol, rightCol, topY, topInlet) {
+                        if (isAtom(node)) {
+                            const isNeg = node.type === 'NOT';
+                            const name = isNeg ? node.operand.name : node.name;
                             const cType = contactTypeFor(name, isNeg);
                             const cT = CTYPES[cType];
-                            const compX = x + (CTYPES.taster.cx - cT.cx);
-                            // Sensor-Variablen → Hilfsrelais-Mapping; reguläre Variablen
-                            // → -SF{n}-Norm-Label. Beides wird im Helper erledigt.
-                            ids.push(_placeContactWithLabel(cType, compX, curY, name, isNeg));
-                            curY += cT.h + VERTICAL_GAP;
+                            const compX = x_center - cT.cx;
+                            const id = _placeContactWithLabel(cType, compX, topY, name, isNeg);
+                            placeWire(topInlet, { compId: id, pin: 'in' });
+                            return {
+                                bottomOutlet: { compId: id, pin: 'out' },
+                                bottomY: topY + ROW_H
+                            };
                         }
-                        // Verdrahtung: L+ → erster in, dann in-Pin-Kette, letzter out → coil in, coil out → L-
-                        placeWire({ rail:'plus', x: pinAt }, { compId: ids[0], pin:'in' });
-                        for (let i = 0; i < ids.length - 1; i++)
-                            placeWire({ compId: ids[i], pin:'out' }, { compId: ids[i+1], pin:'in' });
-                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: coilId, pin:'in' });
-                        placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: x + coilCx + (CTYPES.taster.cx - coilCx) });
-                        return;
+                        if (node.type === 'AND') {
+                            // Operanden vertikal verkettet, alle teilen die volle Spaltenbreite
+                            let curInlet = topInlet;
+                            let curY = topY;
+                            for (const op of node.operands) {
+                                const result = _renderTree(op, x_center, leftCol, rightCol, curY, curInlet);
+                                curInlet = result.bottomOutlet;
+                                curY = result.bottomY;
+                            }
+                            return { bottomOutlet: curInlet, bottomY: curY };
+                        }
+                        if (node.type === 'OR') {
+                            const sizes = node.operands.map(_calcSize);
+                            // Padding-Konstanten:
+                            //   PAD_TOP    — Abstand zwischen Top-Junctions und ersten Atomen
+                            //                (sonst überlappen Junction-Marker mit Pin-Marker).
+                            //   PAD_AFTER  — Abstand zwischen Bot-Junctions und nachfolgendem
+                            //                Bauteil im AND-Strang (verhindert Überlappung).
+                            const PAD_TOP = 15;
+                            const PAD_AFTER = 15;
+                            const branchTopY = topY;
+                            const contentTopY = branchTopY + PAD_TOP;
+                            // Branches auf Spalten verteilen
+                            const branches = [];
+                            let curCol = leftCol;
+                            for (let i = 0; i < node.operands.length; i++) {
+                                const opSize = sizes[i];
+                                const opCols = opSize.cols;
+                                const branchLeftCol = curCol;
+                                const branchRightCol = curCol + opCols - 1;
+                                const branchCenterX = (colXs[branchLeftCol] + colXs[branchRightCol]) / 2;
+                                branches.push({
+                                    op: node.operands[i],
+                                    leftCol: branchLeftCol,
+                                    rightCol: branchRightCol,
+                                    x: branchCenterX
+                                });
+                                curCol += opCols;
+                            }
+                            // Top-Junctions an branchTopY
+                            const topJ = branches.map(b => ({
+                                id: placeComp('junction', b.x - CTYPES.junction.cx, branchTopY, ''),
+                                x: b.x
+                            }));
+                            let topCenterJ = topJ.find(j => Math.abs(j.x - x_center) < 1);
+                            if (!topCenterJ) {
+                                topCenterJ = {
+                                    id: placeComp('junction', x_center - CTYPES.junction.cx, branchTopY, ''),
+                                    x: x_center
+                                };
+                                let idx = topJ.findIndex(j => j.x > x_center);
+                                if (idx === -1) idx = topJ.length;
+                                topJ.splice(idx, 0, topCenterJ);
+                            }
+                            topJ.sort((a, b) => a.x - b.x);
+                            for (let i = 0; i < topJ.length - 1; i++) {
+                                placeWire({ compId: topJ[i].id, pin: 'right' }, { compId: topJ[i+1].id, pin: 'left' });
+                            }
+                            placeWire(topInlet, { compId: topCenterJ.id, pin: 'top' });
+                            // Branches rendern (ab contentTopY — 15 px Luft zu Top-Junctions)
+                            const branchResults = [];
+                            let maxBranchBottomY = contentTopY;
+                            for (const b of branches) {
+                                const branchTopJ = topJ.find(j => Math.abs(j.x - b.x) < 1);
+                                const branchInlet = { compId: branchTopJ.id, pin: 'bottom' };
+                                const result = _renderTree(b.op, b.x, b.leftCol, b.rightCol, contentTopY, branchInlet);
+                                branchResults.push(result);
+                                if (result.bottomY > maxBranchBottomY) maxBranchBottomY = result.bottomY;
+                            }
+                            // Bot-Junctions an der natürlich resultierenden gemeinsamen Y-Linie
+                            const branchBotY = maxBranchBottomY;
+                            const botJ = branches.map(b => ({
+                                id: placeComp('junction', b.x - CTYPES.junction.cx, branchBotY, ''),
+                                x: b.x
+                            }));
+                            let botCenterJ = botJ.find(j => Math.abs(j.x - x_center) < 1);
+                            if (!botCenterJ) {
+                                botCenterJ = {
+                                    id: placeComp('junction', x_center - CTYPES.junction.cx, branchBotY, ''),
+                                    x: x_center
+                                };
+                                let idx = botJ.findIndex(j => j.x > x_center);
+                                if (idx === -1) idx = botJ.length;
+                                botJ.splice(idx, 0, botCenterJ);
+                            }
+                            botJ.sort((a, b) => a.x - b.x);
+                            for (let i = 0; i < botJ.length - 1; i++) {
+                                placeWire({ compId: botJ[i].id, pin: 'right' }, { compId: botJ[i+1].id, pin: 'left' });
+                            }
+                            // Branch-Outlets in ihre Bot-Junctions verdrahten
+                            for (let i = 0; i < branches.length; i++) {
+                                const branchBotJ = botJ.find(j => Math.abs(j.x - branches[i].x) < 1);
+                                placeWire(branchResults[i].bottomOutlet, { compId: branchBotJ.id, pin: 'top' });
+                            }
+                            return {
+                                bottomOutlet: { compId: botCenterJ.id, pin: 'bottom' },
+                                bottomY: branchBotY + PAD_AFTER
+                            };
+                        }
+                        return null;
                     }
 
-                    // Mehrere Produkte → parallel: pro Produkt eine eigene Sub-Spalte
-                    // mit eigenem X, oben und unten via Junction zusammengeführt.
-                    // Sub-Pins SYMMETRISCH um pinAt (= Spulen-Pin-X) zentriert.
-                    const SUB_PITCH = 100;
-                    const subPinAt = (i) => pinAt + (i - (products.length - 1) / 2) * SUB_PITCH;
-                    const topJunctions = [];
-                    const botJunctions = [];
-                    for (let i = 0; i < products.length; i++) {
-                        const px = subPinAt(i);
-                        const jt = placeComp('junction', px - CTYPES.junction.cx, topJunctionY, '');
-                        const jb = placeComp('junction', px - CTYPES.junction.cx, botJunctionY, '');
-                        topJunctions.push({ id: jt, x: px });
-                        botJunctions.push({ id: jb, x: px });
+                    const topInlet = { rail: 'plus', x: pinAt };
+                    const result = _renderTree(ast, pinAt, 0, totalCols - 1, TOP_Y, topInlet);
+                    if (!result) {
+                        skipped.push({ lhs, reason: 'AST-Rendering fehlgeschlagen' });
+                        return null;
                     }
-                    // Verkettung der Junctions inklusive Zentral-Junction bei pinAt:
-                    //   Bei ungerader Produkt-Zahl liegt eine Produkt-Junction direkt
-                    //   bei pinAt → diese wird wiederverwendet.
-                    //   Bei gerader Zahl wird eine ZUSÄTZLICHE Junction bei pinAt
-                    //   eingefügt, damit die Anbindung zur Spule garantiert vertikal
-                    //   ist (kein L-Knick zwischen Junction-Junction-Linie und Spule).
-                    function buildChain(junctions, jY) {
-                        // Existiert bereits eine Junction bei pinAt? → diese als Mitte nutzen.
-                        const existing = junctions.find(j => Math.abs(j.x - pinAt) < 1);
-                        if (existing) {
-                            for (let i = 0; i < junctions.length - 1; i++)
-                                placeWire({ compId: junctions[i].id, pin:'right' }, { compId: junctions[i+1].id, pin:'left' });
-                            return existing;
-                        }
-                        // Gerade Anzahl → Zentral-Junction bei pinAt einfügen
-                        const cj = { id: placeComp('junction', pinAt - CTYPES.junction.cx, jY, ''), x: pinAt };
-                        // Position des Einfüge-Punkts: nach der letzten Junction mit x < pinAt
-                        let insertAfter = -1;
-                        for (let i = 0; i < junctions.length; i++)
-                            if (junctions[i].x < pinAt) insertAfter = i;
-                        const chain = [];
-                        for (let i = 0; i < junctions.length; i++) {
-                            chain.push(junctions[i]);
-                            if (i === insertAfter) chain.push(cj);
-                        }
-                        for (let i = 0; i < chain.length - 1; i++)
-                            placeWire({ compId: chain[i].id, pin:'right' }, { compId: chain[i+1].id, pin:'left' });
-                        return cj;
+                    // Spule unterhalb der tatsächlich genutzten Tree-Höhe platzieren
+                    const coilY = Math.max(BOT_Y, result.bottomY + 30);
+                    const coilId = placeComp(coilType, coilX, coilY, lhs);
+                    {
+                        const _coilLabel = _coilNormLabelFor(coilType, lhs);
+                        const _cc = ST.components.find(c => c.id === coilId);
+                        if (_cc) _cc.normLabel = _coilLabel;
                     }
-                    const coilTopJ = buildChain(topJunctions, topJunctionY);
-                    const coilBotJ = buildChain(botJunctions, botJunctionY);
-                    // L+ → zentrale Top-Junction (vertikal, weil cj.x = pinAt)
-                    placeWire({ rail:'plus', x: pinAt }, { compId: coilTopJ.id, pin:'top' });
-                    // Zentrale Bot-Junction → Spule (vertikal — Hauptverbesserung gg. vorher)
-                    placeWire({ compId: coilBotJ.id, pin:'bottom' }, { compId: coilId, pin:'in' });
-                    // Coil out → L-
-                    placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: pinAt });
-                    // Pro Produkt: Kontakt-Reihe von Top-Junction (bottom) zu Bot-Junction (top)
-                    for (let i = 0; i < products.length; i++) {
-                        const atoms = products[i];
-                        const ids = [];
-                        let curY = TOP_Y;
-                        const px = subPinAt(i);
-                        for (const a of atoms) {
-                            const isNeg = a.type === 'NOT';
-                            const name = isNeg ? a.operand.name : a.name;
-                            const cType = contactTypeFor(name, isNeg);
-                            const cT = CTYPES[cType];
-                            const compX = px - cT.cx;   // Pin-Position = px → component.x = px - cx
-                            ids.push(_placeContactWithLabel(cType, compX, curY, name, isNeg));
-                            curY += cT.h + VERTICAL_GAP;
-                        }
-                        placeWire({ compId: topJunctions[i].id, pin:'bottom' }, { compId: ids[0], pin:'in' });
-                        for (let j = 0; j < ids.length - 1; j++)
-                            placeWire({ compId: ids[j], pin:'out' }, { compId: ids[j+1], pin:'in' });
-                        placeWire({ compId: ids[ids.length-1], pin:'out' }, { compId: botJunctions[i].id, pin:'top' });
-                    }
+                    placeWire(result.bottomOutlet, { compId: coilId, pin: 'in' });
+                    placeWire({ compId: coilId, pin: 'out' }, { rail: 'minus', x: pinAt });
+                    return size;
                 }
 
                 // Faktorisiertes Selbsthalte-Rendering: Set-Bedingungen parallel
@@ -30338,9 +30364,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                             return;
                         }
                     }
-                    const np = _astProductCount(a.ast);
-                    const rungW = np > 1 ? (np - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
-                    buildRung(a.lhs, a.ast, colX);
+                    // buildRung liefert die tatsächlich benötigte Größe ({cols, rows})
+                    // anhand der AST-Tree-Struktur — damit wird die Spaltenbreite
+                    // exakt für verschachtelte Klammerausdrücke wie `(A||B) && C`
+                    // korrekt vergeben (sonst würde der nächste Strang reinrutschen).
+                    const sz = buildRung(a.lhs, a.ast, colX);
+                    const cols = sz ? sz.cols : 1;
+                    const rungW = cols > 1 ? (cols - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
                     colX += rungW + 40;  // 40 px Puffer zwischen Strängen
                 });
 

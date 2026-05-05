@@ -29487,38 +29487,43 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // genau einen Strang (das SR-Hilfsrelais Q1), und ein zusätzliches
                 // `C:=Q1` ergänzt nur den Konsumenten-Strang.
                 //
-                // Layout-Konvention (analog Auto-Schaltplan im Wirtschaftlich-Modus):
-                //   RS (reset-dominant):  helperAst = (setAst || helperVar) && resetAst
-                //   SR (set-dominant):    helperAst = setAst || (helperVar && resetAst)
-                // Reset-AST wird in beiden Fällen LITERAL eingebettet (kein NOT-Wrap).
-                // Layout-Regeln: AND→Reihe, OR→Parallel, IDENT(lhs)→Selbsthalt-Aux.
+                // Layout-Konvention (analog Auto-Schaltplan im Wirtschaftlich-Modus
+                // mit De-Morgan-Inversion am Reset):
+                //   RS (reset-dominant):  helperAst = (setAst || helperVar) && ¬resetAst
+                //   SR (set-dominant):    helperAst = setAst || (helperVar && ¬resetAst)
+                // Reset-AST wird in NOT gewickelt — _toSOP in buildSelfholdRung/-SR
+                // distribuiert die Negation automatisch (¬(A&&B) → ¬A || ¬B etc.).
+                // Beim Round-Trip negiert _negateExpr in _detectRS/_detectSR den
+                // extrahierten Strang-Ausdruck wieder zurück, damit `R := <original>`
+                // herauskommt — nicht der De-Morgan'd Form.
                 // _detectSelfholdAst (RS) und _detectSelfholdSRAst (SR) erkennen die
-                // Pattern beim Round-Trip strukturell und emittieren S/R-Zuweisungen
-                // mit dem korrekten _SR-Suffix.
+                // Pattern strukturell und emittieren S/R-Zuweisungen mit dem
+                // korrekten _SR-Suffix.
                 const _ffConsumed = new Set();
                 flipFlops.forEach(f => {
                     if (!f.setAst || !f.resetAst) return;
                     const helperVar = f.outVar || ('Q' + f.num + (f.isSR ? '_SR' : ''));
+                    const negResetAst = { type: 'NOT', operand: f.resetAst };
                     let helperAst;
                     if (f.isSR) {
-                        // SR (set-dominant): Set-Pfad parallel zur Self-AND-Reset-Kette
+                        // SR (set-dominant): Set-Pfad parallel zur Self-AND-¬Reset-Kette
                         helperAst = {
                             type: 'OR',
                             operands: [
                                 f.setAst,
                                 { type: 'AND', operands: [
                                     { type:'IDENT', name: helperVar },
-                                    f.resetAst
+                                    negResetAst
                                 ]}
                             ]
                         };
                     } else {
-                        // RS (reset-dominant): Set/Self-OR in Reihe mit Reset-Pfad
+                        // RS (reset-dominant): Set/Self-OR in Reihe mit ¬Reset-Pfad
                         helperAst = {
                             type: 'AND',
                             operands: [
                                 { type: 'OR', operands: [f.setAst, { type:'IDENT', name: helperVar }] },
-                                f.resetAst
+                                negResetAst
                             ]
                         };
                     }
@@ -29705,8 +29710,33 @@ You must output exactly this JSON format. The logic code goes as a single string
                     function isAtom(n) {
                         return n.type === 'IDENT' || (n.type === 'NOT' && n.operand && n.operand.type === 'IDENT');
                     }
+                    // De-Morgan-Push: schiebt NOTs durch GATE-Knoten zu den Atomen
+                    // hinunter. Damit muss _renderTree nur AND/OR/Atom kennen, nicht
+                    // NOT-um-GATE. ¬(A&&B) → ¬A||¬B; ¬(A||B) → ¬A&&¬B; ¬¬X → X.
+                    function _pushNots(node) {
+                        if (!node) return node;
+                        if (node.type === 'NOT') {
+                            const inner = _pushNots(node.operand);
+                            if (!inner) return null;
+                            if (inner.type === 'NOT') return inner.operand; // ¬¬X → X
+                            if (inner.type === 'AND') return { type: 'OR', operands: inner.operands.map(o => _pushNots({ type: 'NOT', operand: o })) };
+                            if (inner.type === 'OR')  return { type: 'AND', operands: inner.operands.map(o => _pushNots({ type: 'NOT', operand: o })) };
+                            if (inner.type === 'CONST') return { type:'CONST', value: !inner.value };
+                            return { type: 'NOT', operand: inner };
+                        }
+                        if (node.type === 'AND' || node.type === 'OR') {
+                            return { type: node.type, operands: node.operands.map(_pushNots) };
+                        }
+                        return node;
+                    }
+                    ast = _pushNots(ast);
                     function _calcSize(node) {
                         if (isAtom(node)) return { cols: 1, rows: 1 };
+                        // CONST.true → 1 Zeile/Spalte (wird als Junction-Passthrough gerendert)
+                        // CONST.false → wir geben null zurück → Strang wird geskippt
+                        if (node.type === 'CONST') {
+                            return node.value ? { cols: 1, rows: 1 } : null;
+                        }
                         if (node.type === 'AND') {
                             const sizes = node.operands.map(_calcSize);
                             if (sizes.some(s => !s)) return null;
@@ -29723,11 +29753,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 rows: Math.max(...sizes.map(s => s.rows))
                             };
                         }
-                        return null; // CONST oder unbekannt
+                        return null; // unbekannt
                     }
                     const size = _calcSize(ast);
                     if (!size) {
-                        skipped.push({ lhs, reason: 'Konstante/Unbekannter AST-Knoten' });
+                        skipped.push({ lhs, reason: 'FALSE oder unbekannter AST-Knoten' });
                         return null;
                     }
                     const SUB_PITCH = 100;
@@ -29779,6 +29809,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                             placeWire(topInlet, { compId: id, pin: 'in' });
                             return {
                                 bottomOutlet: { compId: id, pin: 'out' },
+                                bottomY: topY + ROW_H
+                            };
+                        }
+                        // CONST.true → Junction-Passthrough (analog zu Auto-Schaltplan,
+                        // der TRUE als durchgehende Linie zeichnet). FALSE wird vorher
+                        // in _calcSize abgefangen (Strang skipped).
+                        if (node.type === 'CONST' && node.value === true) {
+                            const jId = placeComp('junction', x_center - CTYPES.junction.cx, topY, '');
+                            placeWire(topInlet, { compId: jId, pin: 'top' });
+                            return {
+                                bottomOutlet: { compId: jId, pin: 'bottom' },
                                 bottomY: topY + ROW_H
                             };
                         }
@@ -32745,6 +32786,43 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 return result;
             }
+            // Negiert einen Boolean-Ausdruck String-basiert mit De-Morgan-Distribution.
+            // Wird in _detectRS/_detectSR genutzt, um den aus dem Editor-Strang
+            // extrahierten ¬R-Layout-Ausdruck wieder zur Original-SCL-Form zurück
+            // zu negieren (R := A && B → Strang zeigt ¬A || ¬B → Round-Trip ergibt A && B).
+            function _negateExpr(expr) {
+                if (!expr) return 'true';
+                expr = expr.trim();
+                // Rekursiv überflüssige äußere Klammern entfernen
+                let prev = expr;
+                let stripped = _stripOuterParens(expr);
+                while (stripped !== prev) {
+                    prev = stripped;
+                    stripped = _stripOuterParens(prev);
+                }
+                expr = stripped;
+                // Top-Level-OR (niedrigere Bindung) zuerst: ¬(A || B || C) = ¬A && ¬B && ¬C
+                const orParts = _splitTopLevel(expr, '||').map(s => s.trim()).filter(Boolean);
+                if (orParts.length > 1) {
+                    return orParts.map(p => {
+                        const neg = _negateExpr(p);
+                        return neg.includes('||') ? '(' + neg + ')' : neg;
+                    }).join(' && ');
+                }
+                // Top-Level-AND: ¬(A && B && C) = ¬A || ¬B || ¬C
+                const andParts = _splitTopLevel(expr, '&&').map(s => s.trim()).filter(Boolean);
+                if (andParts.length > 1) {
+                    return andParts.map(p => {
+                        const neg = _negateExpr(p);
+                        return neg.includes('&&') ? '(' + neg + ')' : neg;
+                    }).join(' || ');
+                }
+                // Atom: ¬¬X → X, sonst ¬X davor setzen
+                if (expr.startsWith('¬')) {
+                    return _stripOuterParens(expr.substring(1).trim());
+                }
+                return '¬' + expr;
+            }
 
             // SR-Pattern (set-dominant): Top-Level-OR mit mind. einem Set-Term und
             // mind. einem AND-Term, der die Self-Variable enthält. Kommt aus der
@@ -32787,7 +32865,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const resetExpr = resetBranches.length === 1
                     ? resetBranches[0]
                     : resetBranches.map(r => r.includes('&&') ? '(' + r + ')' : r).join(' || ');
-                return { set: setExpr, reset: resetExpr.trim() };
+                // Editor zeichnet ¬R (De-Morgan'd) — Round-Trip negiert zurück
+                // damit `R := <original>` rauskommt (siehe _negateExpr-Erklärung).
+                const resetOriginal = _negateExpr(resetExpr);
+                return { set: setExpr, reset: resetOriginal.trim() };
             }
             // RS-Pattern: sucht in den (geflatteten) AND-Termen nach einem OR-Block der die eigene
             // Coil-Variable (oder bei anonymen Hilfsrelais das Norm-Prefix) enthält.
@@ -32829,15 +32910,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const resetCombined = resetTerms.length === 1
                     ? _stripOuterParens(resetTerms[0])
                     : resetTerms.map(t => _stripOuterParens(t)).map(t => t.includes('||') ? '(' + t + ')' : t).join(' && ');
-                // Reset-Term wird LITERAL aus dem Strang ausgelesen — ohne Smart-
-                // Inversion oder De-Morgan-Akrobatik. Das spiegelt das Auto-Plan-
-                // Verhalten: der Schaltplan zeigt R-Bedingung direkt als Reihe/
-                // Parallel-Layout, der Code-Pfad emittiert ebenso direkt zurück.
-                // Wenn der User einen logischen Fehler macht (z.B. `R:=¬X` mit X
-                // als Öffner-Variable, wo das Inversions-Bit beim Rendern verloren
-                // geht), bleibt das im Code als User-Fehler sichtbar — kein Auto-
-                // Korrektur-Magic.
-                return { set: setExpr, reset: resetCombined.trim() };
+                // Editor zeichnet den Reset hardware-getreu als ¬R (De Morgan auf
+                // das ursprüngliche resetAst). Beim Round-Trip muss der extrahierte
+                // Strang-Ausdruck wieder negiert werden, damit `R := <original>`
+                // herauskommt — nicht der De-Morgan'd Form.
+                const resetOriginal = _negateExpr(resetCombined);
+                return { set: setExpr, reset: resetOriginal.trim() };
             }
 
         })();

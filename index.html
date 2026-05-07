@@ -1670,13 +1670,16 @@
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, false)" data-i18n="fac_item_plastic">🟨 Block Normal (Kunststoff)</div>
                             <div onclick="spawnFactoryItem('metall', 0, 200, true)" data-i18n="fac_item_metal_solid">🧱 Block Massiv (Metall)</div>
                             <div onclick="spawnFactoryItem('kunststoff', 0, 200, true)" data-i18n="fac_item_plastic_solid">🧱 Block Massiv (Kunststoff)</div>
+                            <div id="menu-items-cat-bulk" class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-items-bulk-content');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'+ ':'− ')+'Schüttgut';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">+ Schüttgut</div>
+                            <div id="menu-items-bulk-content" class="tb-inline-group" style="display:none;">
+                                <div onclick="enterFluidPlacementMode('sand')">🏖️ Sand/Körner platzieren</div>
+                            </div>
                             <div class="tb-menu-cat-toggle" id="menu-items-cat-fluid" onclick="(function(h){var c=document.getElementById('menu-items-fluid-content');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'💧 Flüssigkeiten';updateFluidMenuVisibility();adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ 💧 Flüssigkeiten</div>
                             <div id="menu-items-fluid-content" class="tb-inline-group" style="display:none;">
                                 <div onclick="enterFluidPlacementMode('water')">💧 Wasser platzieren</div>
                                 <div onclick="enterFluidPlacementMode('oil')">🫙 Öl platzieren</div>
                                 <div onclick="enterFluidPlacementMode('coolant')">🟢 Kühlmittel platzieren</div>
                                 <div onclick="enterFluidPlacementMode('honey')">🍯 Honig platzieren</div>
-                                <div onclick="enterFluidPlacementMode('sand')">🏖️ Sand/Körner platzieren</div>
                             </div>
                             <div id="menu-items-cat-spawner" class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-items-spawner-extras');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'+ ':'− ')+'Spawner / Entfernen';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">+ Spawner / Entfernen</div>
                             <div onclick="addFactoryDevice('spawner_metall')" data-i18n="fac_spawner_metal">⏳ Spawner (Metall)</div>
@@ -11133,6 +11136,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 buildSimulatorUI(parsed.inputs, parsed.outputs, parsed.graph);
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
+                // Variablen, die im Code entfernt wurden, von den Factory-Komponenten lösen
+                // und sichtbare Tags refreshen.
+                if (typeof window._pruneStaleLinkedVars === 'function') window._pruneStaleLinkedVars();
                 window.circDuplicateOutputs = parsed.duplicates || [];
                 if (activeTask && !taskSolved) window._taskCheckConditions?.();
                 currentGraph = parsed.graph;
@@ -16015,6 +16021,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 obj.gearTeeth = obj.gearTeeth || 12;
                 obj.requiredMaterial = obj.requiredMaterial || 'molten_metal';
                 obj.spawnedMaterial = obj.spawnedMaterial || (obj.requiredMaterial === 'molten_plastic' ? 'kunststoff' : 'metall');
+                obj.ejectSide = obj.ejectSide || 'top';
                 el.className = 'f2d-obj f2d-mold';
                 el.style.width = obj.width + 'px';
                 el.style.height = obj.height + 'px';
@@ -16077,6 +16084,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                     saveCallback();
                 };
                 matW.appendChild(matSel); ctxMenu.appendChild(matW);
+                // Auswerfseite
+                let ejW = document.createElement('div'); ejW.style.padding = '4px 15px'; ejW.onclick = e => e.stopPropagation();
+                ejW.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">📤 Auswerfposition</div>`;
+                let ejSel = document.createElement('select'); ejSel.style.cssText = 'width:100%;background:#222;color:#ddd;border:1px solid #555;padding:3px;border-radius:3px;font-size:11px;';
+                [['top','⬆️ Oben'],['bottom','⬇️ Unten'],['left','⬅️ Links'],['right','➡️ Rechts']].forEach(([v,l]) => {
+                    let opt = document.createElement('option'); opt.value = v; opt.textContent = l;
+                    if (v === (obj.ejectSide || 'top')) opt.selected = true;
+                    ejSel.appendChild(opt);
+                });
+                ejSel.onchange = () => { obj.ejectSide = ejSel.value; saveCallback(); };
+                ejW.appendChild(ejSel); ctxMenu.appendChild(ejW);
                 // Form öffnen (manueller Trigger ohne SPS-Variable — Spec: 1B ohne Variable)
                 let openWrap = document.createElement('div'); openWrap.style.padding = '6px 15px'; openWrap.onclick = e => e.stopPropagation();
                 let openBtn = document.createElement('button');
@@ -16153,6 +16171,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (savedData.gearTeeth) obj.gearTeeth = savedData.gearTeeth;
                 if (savedData.requiredMaterial) obj.requiredMaterial = savedData.requiredMaterial;
                 if (savedData.spawnedMaterial) obj.spawnedMaterial = savedData.spawnedMaterial;
+                if (savedData.ejectSide) obj.ejectSide = savedData.ejectSide;
                 ComponentRegistry['mold']._renderSvg(obj, obj.el);
                 fluidGridDirty = true;
             },
@@ -16232,10 +16251,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
                 }
                 let solidMat = obj.spawnedMaterial || 'metall';
-                // Über dem Mold spawnen, damit das frisch gegossene Werkstück
-                // nicht mit der Mold-Bounding-Box kollidiert (sieht aus wie "Auswerfen").
-                let centerX = obj.x + w / 2 - 20;
-                let centerY = obj.y - 45;
+                // Auswerfseite: außerhalb der Bbox spawnen, damit das Werkstück
+                // nicht mit der Mold-Kollision in Konflikt gerät.
+                let side = obj.ejectSide || 'top';
+                let centerX, centerY;
+                if (side === 'bottom')      { centerX = obj.x + w / 2 - 20; centerY = obj.y + h + 5; }
+                else if (side === 'left')   { centerX = obj.x - 45;         centerY = obj.y + h / 2 - 20; }
+                else if (side === 'right')  { centerX = obj.x + w + 5;      centerY = obj.y + h / 2 - 20; }
+                else                        { centerX = obj.x + w / 2 - 20; centerY = obj.y - 45; }
                 spawnFactoryItem(solidMat, centerX, centerY, true, null, null, obj.cavityShape || 'gear');
                 let newItem = factoryItems[factoryItems.length - 1];
                 let meltPoint = newItem.meltTemp || (solidMat === 'metall' ? 1200 : 150);
@@ -18620,21 +18643,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                             } else { sel.value = obj[varProp] || ''; return; }
                         }
                         obj[varProp] = (sel.value && sel.value !== '__new__') ? sel.value : null;
-                        let v1 = obj.linkedVar || obj.linkedVarExt || ''; let v2 = obj.linkedVarRet || '';
-                        let lbl = obj.el.querySelector('.f2d-label');
-                        if (lbl) {
-                            if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(obj.type)) lbl.textContent = v1 || '---';
-                            else if (obj.type.startsWith('sensor_')) lbl.textContent = v1 || '---';
-                            else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
-                            else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
-                            else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
-                            else if (obj.type === 'rolltor') lbl.textContent = v1 ? `🚧 ${v1}` : '🚧 Rolltor';
-                        }
-                        let valve = obj.el.querySelector('.f2d-valve');
-                        if (valve) {
-                            if (obj.type === 'zylinder_single') valve.innerHTML = `<span>▶ ${v1}</span><span>(Feder) ◀</span>`;
-                            else valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
-                        }
+                        if (typeof window._refreshFactoryLabel === 'function') window._refreshFactoryLabel(obj);
                         saveFactoryState();
                         // Code-First: Variable in Code eintragen wenn noch nicht vorhanden
                         const _assignedVar = (sel.value && sel.value !== '__new__') ? sel.value : null;
@@ -21711,7 +21720,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     centerOnly: o.centerOnly !== undefined ? o.centerOnly : null,
                     centerTolerance: o.centerTolerance !== undefined ? o.centerTolerance : null,
                     wallThickness: o.wallThickness || null,
-                    cavityShape: o.cavityShape || null, gearTeeth: o.gearTeeth || null, requiredMaterial: o.requiredMaterial || null, spawnedMaterial: o.spawnedMaterial || null, linkedVarOpen: o.linkedVarOpen || null,
+                    cavityShape: o.cavityShape || null, gearTeeth: o.gearTeeth || null, requiredMaterial: o.requiredMaterial || null, spawnedMaterial: o.spawnedMaterial || null, linkedVarOpen: o.linkedVarOpen || null, ejectSide: o.ejectSide || null,
                     backpressureStop: o.backpressureStop || false,
                     topView: o.topView || false,
                     torView: o.torView || null, torSpeed: o.torSpeed !== undefined ? o.torSpeed : null,
@@ -21753,6 +21762,56 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
         }
         // Zentraler Sync: zeichne den Auto-Schaltplan neu (debounced)
+        // Label-Refresh nach Variablen-Änderung (von Kontextmenü ODER von Code-Parser).
+        // Zentrale Stelle, damit beide Pfade konsistent bleiben.
+        window._refreshFactoryLabel = function(obj) {
+            if (!obj || !obj.el) return;
+            let v1 = obj.linkedVar || obj.linkedVarExt || '';
+            let v2 = obj.linkedVarRet || '';
+            let lbl = obj.el.querySelector('.f2d-label');
+            if (lbl) {
+                if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(obj.type)) lbl.textContent = v1 || '---';
+                else if (obj.type.startsWith('sensor_')) lbl.textContent = v1 || '---';
+                else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
+                else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
+                else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
+                else if (obj.type === 'rolltor') lbl.textContent = v1 ? `🚧 ${v1}` : '🚧 Rolltor';
+            }
+            let valve = obj.el.querySelector('.f2d-valve');
+            if (valve) {
+                if (obj.type === 'zylinder_single') valve.innerHTML = `<span>▶ ${v1}</span><span>(Feder) ◀</span>`;
+                else if (obj.type === 'zylinder_double') valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
+            }
+        };
+        // Räumt veraltete linkedVar*-Zuweisungen auf, wenn die Variable
+        // aus dem SPS-Code verschwunden ist. Verhindert, dass das sichtbare
+        // Komponenten-Tag noch den alten Namen zeigt.
+        window._pruneStaleLinkedVars = function() {
+            if (typeof factoryObjects === 'undefined') return;
+            const allVars = new Set([...(globalInputs||[]), ...(globalOutputs||[])]);
+            const linkedKeys = [
+                'linkedVar','linkedVarExt','linkedVarRet','linkedVar3',
+                'linkedVarLeak','linkedVarPump','linkedVarOpen','linkedVarVib',
+                'linkedVarX_Plus','linkedVarX_Minus','linkedVarY_Plus','linkedVarY_Minus',
+                'linkedVarGrab','linkedVarEnable',
+                'linkedVarMotor','linkedVarMotorFW','linkedVarMotorHW',
+                'linkedVarAutoMode','linkedVarNormal','linkedVarCreep','linkedVarHubOben',
+                'linkedVarWind','linkedVarWindSensor','linkedVarPendel',
+                'linkedVarSensorAuf','linkedVarSensorZu','cycleCountVar'
+            ];
+            let anyChange = false;
+            factoryObjects.forEach(obj => {
+                let changed = false;
+                linkedKeys.forEach(k => {
+                    if (obj[k] && !allVars.has(obj[k])) { obj[k] = null; changed = true; }
+                });
+                if (changed) {
+                    window._refreshFactoryLabel(obj);
+                    anyChange = true;
+                }
+            });
+            if (anyChange && typeof saveFactoryState === 'function') saveFactoryState();
+        };
         window._syncCircuitFromFactory = function(immediate) {
             const _doRedraw = () => {
                 try {

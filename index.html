@@ -1696,6 +1696,10 @@
                                 <div onclick="addFactoryDevice('fluid_outlet')">🔩 Auslass (Flüssigkeit)</div>
                                 <div onclick="addFactoryDevice('sand_outlet')">⏬ Auslass (Sand/Körner)</div>
                             </div>
+                            <div id="menu-items-cat-special" class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-items-special-content');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'+ ':'− ')+'Spezialobjekte';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">+ Spezialobjekte</div>
+                            <div id="menu-items-special-content" class="tb-inline-group" style="display:none;">
+                                <div id="menu-items-special-anchor" style="display:none;"></div>
+                            </div>
                         </div>
                     </div>
                     <div class="tb-dropdown">
@@ -15781,6 +15785,239 @@ You must output exactly this JSON format. The logic code goes as a single string
                 intW.appendChild(intI); ctxMenu.appendChild(intW);
             },
         },
+        'spawner_special': {
+            i18n: {
+                de: { name: 'Spezialobjekt-Spawner', desc: 'Wird ein Spezialobjekt (z. B. Flasche) darauf platziert, klont der Spawner es im Takt — Größe, Rotation, Inhalt 1:1.' },
+                en: { name: 'Special Object Spawner', desc: 'Drop a special object (e.g. bottle) onto it — the spawner clones it on interval, preserving size, rotation and contents.' }
+            },
+            meta: { icon: '🧬' },
+            menuTarget: '#menu-werkstuecke',
+            menuHtml: `<div onclick="addFactoryDevice('spawner_special')">🧬 Spawner (Spezialobjekt)</div>`,
+            insertBefore: '#menu-items-spawner-extras-inner',
+            directSpawn: true, hasHeight: true,
+            role: 'output',
+            // Welche Typen darf der Spawner erfassen?
+            _SPECIAL_TYPES: ['bottle'],
+            build: function(obj, el) {
+                // createFactoryObject setzt obj.width/height vorab auf 20/40 → direkt überschreiben
+                // (das `|| X`-Pattern würde die Defaults nicht greifen lassen, weil 20/40 truthy sind).
+                obj.width = 70; obj.height = 70;
+                obj.interval = obj.interval || 3;
+                obj.useCollision = false;
+                obj.spawnXOffset = obj.spawnXOffset || 0;
+                obj.spawnYOffset = obj.spawnYOffset !== undefined ? obj.spawnYOffset : -100;
+                obj.templateConfig = obj.templateConfig || null;
+                el.className = 'f2d-obj f2d-spawner f2d-spawner-special';
+                el.style.cssText = 'width:' + obj.width + 'px;height:' + obj.height + 'px;background:linear-gradient(135deg,#37474f,#263238);border:3px dashed #ffd54f;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ffd54f;font-size:11px;font-weight:bold;text-align:center;box-shadow:inset 0 0 12px rgba(255,213,79,0.15);';
+                el.innerHTML = `<div style="font-size:28px;line-height:1;">🧬</div><div style="font-size:10px;line-height:1.15;margin-top:3px;letter-spacing:0.5px;">SPAWN<br>OBJ</div>`;
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                let label = document.createElement('div'); label.className = 'f2d-label';
+                label.textContent = obj.templateConfig ? `🧬 ${obj.templateConfig.type} (${obj.interval}s)` : `🧬 leer (${obj.interval}s)`;
+                el.appendChild(label);
+            },
+            onResize: function(obj) {
+                if (obj.el) { obj.el.style.width = obj.width + 'px'; obj.el.style.height = obj.height + 'px'; }
+            },
+            _updateOwnLabel: function(obj) {
+                let lbl = obj.el && obj.el.querySelector('.f2d-label');
+                if (!lbl) return;
+                let v = obj.linkedVar || '';
+                let tplName = obj.templateConfig ? obj.templateConfig.type : 'leer';
+                let trig = v ? v : 'Immer an';
+                lbl.textContent = `🧬 ${tplName} · ${trig} (${obj.interval}s)`;
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                let S = ComponentRegistry['spawner_special'];
+                let sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep);
+                // Template-Status (live)
+                let tplW = document.createElement('div'); tplW.style.padding = '4px 15px'; tplW.onclick = e => e.stopPropagation();
+                let updateTplRow = () => {
+                    if (obj.templateConfig) {
+                        let t = obj.templateConfig;
+                        let extra = '';
+                        if (t.type === 'bottle') {
+                            let pct = Math.round(100 * (t.currentFill || 0) / Math.max(1, t.capacity || 100));
+                            extra = ` · ${pct}% gefüllt (${t.containedMaterial || 'leer'})`;
+                        }
+                        tplW.innerHTML = `<div style="color:#aaa;font-size:10px;">🧬 Template</div>
+                            <div style="color:#fff;font-size:11px;">${t.type} · ${t.width}×${t.height}px · ${t.rotation || 0}°${extra}</div>`;
+                    } else {
+                        tplW.innerHTML = `<div style="color:#aaa;font-size:10px;">🧬 Template</div>
+                            <div style="color:#ff9800;font-size:11px;line-height:1.3;">— Kein Template gesetzt —<br><span style="color:#9e9e9e;">Spezialobjekt (z. B. Flasche) auf den Spawner platzieren.</span></div>`;
+                    }
+                };
+                updateTplRow();
+                ctxMenu.appendChild(tplW);
+                let intervalId = setInterval(updateTplRow, 300);
+                let observer = new MutationObserver(() => {
+                    if (!document.body.contains(tplW)) { clearInterval(intervalId); observer.disconnect(); }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+                // Template manuell erfassen / löschen
+                let actWrap = document.createElement('div'); actWrap.style.cssText = 'padding:4px 15px;display:flex;gap:4px;'; actWrap.onclick = e => e.stopPropagation();
+                let captureBtn = document.createElement('button');
+                captureBtn.textContent = '📥 Template erfassen';
+                captureBtn.title = 'Erfasst das aktuell auf/über dem Spawner liegende Spezialobjekt als Template.';
+                captureBtn.style.cssText = 'flex:1;padding:5px;background:#1b5e20;color:#fff;border:none;border-radius:3px;font-size:11px;cursor:pointer;';
+                captureBtn.onclick = () => {
+                    let cand = S._findCandidate(obj);
+                    if (!cand) {
+                        alert('Kein Spezialobjekt überlappt den Spawner.\nZieh z. B. eine Flasche auf den Spawner und klicke dann erneut auf "Template erfassen".');
+                        return;
+                    }
+                    obj.templateConfig = S._captureTemplate(cand);
+                    S._updateOwnLabel(obj);
+                    updateTplRow();
+                    saveCallback();
+                };
+                let clearBtn = document.createElement('button');
+                clearBtn.textContent = '🗑 Löschen';
+                clearBtn.style.cssText = 'flex:1;padding:5px;background:#b71c1c;color:#fff;border:none;border-radius:3px;font-size:11px;cursor:pointer;';
+                clearBtn.onclick = () => { obj.templateConfig = null; updateTplRow(); S._updateOwnLabel(obj); saveCallback(); };
+                actWrap.appendChild(captureBtn); actWrap.appendChild(clearBtn);
+                ctxMenu.appendChild(actWrap);
+                // Intervall
+                let intW = document.createElement('div'); intW.style.padding = '4px 15px'; intW.onclick = e => e.stopPropagation();
+                intW.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⏱️ Intervall (Sekunden)</div>`;
+                let intI = document.createElement('input'); intI.type = 'number'; intI.min = '0.1'; intI.step = '0.5'; intI.value = obj.interval || 3;
+                intI.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                intI.onchange = () => {
+                    let v = parseFloat(intI.value);
+                    if (v > 0) { obj.interval = v; S._updateOwnLabel(obj); saveCallback(); }
+                };
+                intW.appendChild(intI); ctxMenu.appendChild(intW);
+                // Spawn-Offset
+                let ofsW = document.createElement('div'); ofsW.style.padding = '4px 15px'; ofsW.onclick = e => e.stopPropagation();
+                ofsW.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">📐 Spawn-Offset zum Spawner (px)</div>`;
+                let ofsRow = document.createElement('div'); ofsRow.style.cssText = 'display:flex;gap:4px;align-items:center;';
+                let xLbl = document.createElement('span'); xLbl.style.cssText = 'color:#aaa;font-size:10px;'; xLbl.textContent = 'X';
+                let xI = document.createElement('input'); xI.type = 'number'; xI.value = obj.spawnXOffset || 0;
+                xI.style.cssText = 'flex:1;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;';
+                xI.onchange = () => { obj.spawnXOffset = parseInt(xI.value) || 0; saveCallback(); };
+                let yLbl = document.createElement('span'); yLbl.style.cssText = 'color:#aaa;font-size:10px;'; yLbl.textContent = 'Y';
+                let yI = document.createElement('input'); yI.type = 'number'; yI.value = obj.spawnYOffset !== undefined ? obj.spawnYOffset : -80;
+                yI.style.cssText = 'flex:1;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;';
+                yI.onchange = () => { obj.spawnYOffset = parseInt(yI.value) || 0; saveCallback(); };
+                ofsRow.appendChild(xLbl); ofsRow.appendChild(xI); ofsRow.appendChild(yLbl); ofsRow.appendChild(yI);
+                ofsW.appendChild(ofsRow); ctxMenu.appendChild(ofsW);
+            },
+            // Aktivierungs-Variable: optional. Ohne Variable läuft der Spawner dauerhaft im Takt.
+            contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                helpers.addVarSelect('Aktivieren durch (optional)', obj.linkedVar, 'out', 'linkedVar');
+            },
+            onLoadState: function(obj, savedData) {
+                if (savedData.templateConfig) obj.templateConfig = savedData.templateConfig;
+                if (savedData.spawnXOffset !== undefined) obj.spawnXOffset = savedData.spawnXOffset;
+                if (savedData.spawnYOffset !== undefined) obj.spawnYOffset = savedData.spawnYOffset;
+                // Gespeicherte Bbox-Maße (vom Load-Pfad auf obj.width/height geschrieben) auf el durchgeben.
+                ComponentRegistry['spawner_special'].onResize(obj);
+                ComponentRegistry['spawner_special']._updateOwnLabel(obj);
+            },
+            // Sucht ein überlappendes Spezialobjekt (Bbox-Overlap reicht — sehr verzeihend).
+            _findCandidate: function(obj) {
+                let S = ComponentRegistry['spawner_special'];
+                for (let cand of factoryObjects) {
+                    if (cand === obj) continue;
+                    if (!S._SPECIAL_TYPES.includes(cand.type)) continue;
+                    let overlap = !(cand.x + cand.width < obj.x || cand.x > obj.x + obj.width ||
+                                    cand.y + cand.height < obj.y || cand.y > obj.y + obj.height);
+                    if (overlap) return cand;
+                }
+                return null;
+            },
+            animate: function(obj, spsState) {
+                let S = ComponentRegistry['spawner_special'];
+                // 1) Template auto-erfassen: ohne aktuelles Template + ein überlappendes Spezialobjekt.
+                if (!obj.templateConfig) {
+                    let cand = S._findCandidate(obj);
+                    if (cand) {
+                        obj.templateConfig = S._captureTemplate(cand);
+                        S._updateOwnLabel(obj);
+                        if (typeof saveFactoryState === 'function') saveFactoryState();
+                    }
+                }
+                // 2) Aktivierungs-Variable prüfen (oder dauerhaft an).
+                let active = !obj.linkedVar || !!(spsState && spsState[obj.linkedVar]);
+                let now = performance.now();
+                if (!obj.templateConfig || !active) {
+                    obj.timeAccum = 0;
+                    obj._lastTick = now;
+                    if (obj.el) obj.el.style.outline = '';
+                    return;
+                }
+                // 3) Rückstau-Schutz: prüfen ob die Spawn-Position bereits durch ein anderes
+                //    Spezialobjekt belegt ist. Wenn ja → Timer einfrieren + Orange-Markierung.
+                let tmpl = obj.templateConfig;
+                let spawnX = obj.x + (obj.spawnXOffset || 0) + (obj.width - tmpl.width) / 2;
+                let spawnY = obj.y + (obj.spawnYOffset !== undefined ? obj.spawnYOffset : -80);
+                let sw = tmpl.width, sh = tmpl.height;
+                let blocked = false;
+                if (obj.backpressureStop) {
+                    for (let o of factoryObjects) {
+                        if (o === obj) continue;
+                        if (!S._SPECIAL_TYPES.includes(o.type)) continue;
+                        let oh = o.height || o.width;
+                        if (!(o.x + o.width <= spawnX || o.x >= spawnX + sw ||
+                              o.y + oh        <= spawnY || o.y >= spawnY + sh)) {
+                            blocked = true; break;
+                        }
+                    }
+                }
+                if (obj.el) obj.el.style.outline = blocked ? '2px solid #ff9800' : '';
+                if (blocked) {
+                    obj._lastTick = now;
+                    return; // Timer pausiert, kein Spawn
+                }
+                // 4) Intervall-getakteter Spawn. deltaMs/timeScale aus factoryLoop sind im Plugin-Scope
+                //    nicht erreichbar → wir messen pro Spawner selbst. Cap auf 200 ms verhindert
+                //    Sprünge nach Tab-Wechsel / Pausieren.
+                let dt = (obj._lastTick && (now - obj._lastTick) < 200) ? (now - obj._lastTick) : 16;
+                obj._lastTick = now;
+                obj.timeAccum = (obj.timeAccum || 0) + dt * (window.simSpeed || 1);
+                if (obj.timeAccum >= (obj.interval || 3) * 1000) {
+                    obj.timeAccum -= (obj.interval || 3) * 1000;
+                    S._spawnClone(obj);
+                }
+            },
+            _captureTemplate: function(src) {
+                let tmpl = {
+                    type: src.type,
+                    width: src.width,
+                    height: src.height,
+                    rotation: src.rotation || 0,
+                    useGravity: src.useGravity !== false,
+                    useCollision: src.useCollision !== false
+                };
+                if (src.type === 'bottle') {
+                    tmpl.capacity = src.capacity;
+                    tmpl.containedMaterial = src.containedMaterial || null;
+                    tmpl.currentFill = src.currentFill || 0;
+                }
+                return tmpl;
+            },
+            _spawnClone: function(obj) {
+                let tmpl = obj.templateConfig;
+                if (!tmpl) return;
+                let newObj = createFactoryObject(tmpl.type, '');
+                if (!newObj) return;
+                newObj.width = tmpl.width;
+                newObj.height = tmpl.height;
+                newObj.rotation = tmpl.rotation || 0;
+                if (tmpl.useGravity !== undefined) newObj.useGravity = tmpl.useGravity;
+                if (tmpl.useCollision !== undefined) newObj.useCollision = tmpl.useCollision;
+                newObj.vx = 0; newObj.vy = 0;
+                // Zentriert über die gewünschte Offset-Position (relativ zum Spawner)
+                newObj.x = obj.x + (obj.spawnXOffset || 0) + (obj.width - tmpl.width) / 2;
+                newObj.y = obj.y + (obj.spawnYOffset !== undefined ? obj.spawnYOffset : -80);
+                // Typ-spezifische Felder via onLoadState/onResize anwenden
+                let def = ComponentRegistry[tmpl.type];
+                if (def && def.onLoadState) def.onLoadState(newObj, tmpl);
+                else if (def && def.onResize) def.onResize(newObj);
+                updateObjTransform(newObj);
+                fluidGridDirty = true;
+                if (typeof saveFactoryState === 'function') saveFactoryState();
+            },
+        },
         'u_container': {
             i18n: {
                 de: { name: 'U-Behälter', desc: 'Wannenförmiger Behälter (oben offen) für Flüssigkeiten und Werkstücke' },
@@ -15987,6 +16224,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             _renderSvg: function(obj, el) {
                 let M = ComponentRegistry['mold'];
                 let w = obj.width, h = obj.height;
+                // el.style sync — siehe gleicher Hinweis bei bottle._renderSvg.
+                el.style.width = w + 'px';
+                el.style.height = h + 'px';
                 let cx = w / 2, cy = h / 2;
                 let cavityPath = M._cavityPath(obj, cx, cy);
                 let outerPath = `M 0,0 L ${w},0 L ${w},${h} L 0,${h} Z`;
@@ -16017,8 +16257,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (prevResizer) el.appendChild(prevResizer);
             },
             build: function(obj, el) {
-                obj.width = obj.width || 96;
-                obj.height = obj.height || 96;
+                // Direkt zuweisen, weil createFactoryObject obj.width/height auf 20/40 vorbelegt
+                // (truthy → `|| 96` würde nie greifen).
+                obj.width = 96;
+                obj.height = 96;
                 obj.cavityShape = obj.cavityShape || 'gear';
                 obj.gearTeeth = obj.gearTeeth || 12;
                 obj.requiredMaterial = obj.requiredMaterial || 'molten_metal';
@@ -16280,6 +16522,482 @@ You must output exactly this JSON format. The logic code goes as a single string
                     osc.start(); osc.stop(ctx.currentTime + 0.35);
                 }
                 if (typeof saveFactoryState === 'function') saveFactoryState();
+            },
+        },
+        'bottle': {
+            i18n: {
+                de: { name: 'Flasche', desc: 'Werkstück-Behälter — füllt sich durch Tropfen von oben. Füllstand sichtbar + im Rechtsklick.' },
+                en: { name: 'Bottle', desc: 'Workpiece container — fills from drops above. Fill level visible + in context menu.' }
+            },
+            meta: { icon: '🍾' },
+            menuTarget: '#menu-werkstuecke',
+            menuHtml: `<div onclick="addFactoryDevice('bottle')">🍾 Flasche</div>`,
+            insertBefore: '#menu-items-special-anchor',
+            directSpawn: true, hasHeight: true,
+            noContainerStyle: true,
+            useCollision: true,
+            _bottleGeom: function(obj) {
+                let w = obj.width, h = obj.height;
+                let neckW = Math.max(8, w * 0.35);
+                let neckH = Math.max(6, h * 0.18);
+                let shoulderH = Math.max(6, h * 0.10);
+                let bodyTop = neckH + shoulderH;
+                return { w, h, neckW, neckH, shoulderH, bodyTop };
+            },
+            _bottleOutlinePath: function(g) {
+                let cx = g.w / 2;
+                let neckLeft = cx - g.neckW / 2, neckRight = cx + g.neckW / 2;
+                let bodyTopY = g.bodyTop;
+                let bodyBottom = g.h - 4;
+                let wallOff = 4;
+                return `M ${neckLeft},2
+                    L ${neckRight},2
+                    L ${neckRight},${g.neckH}
+                    L ${g.w - wallOff},${bodyTopY}
+                    L ${g.w - 2},${bodyBottom}
+                    Q ${g.w - 2},${g.h - 1} ${g.w - 6},${g.h - 1}
+                    L ${6},${g.h - 1}
+                    Q ${2},${g.h - 1} ${2},${bodyBottom}
+                    L ${wallOff},${bodyTopY}
+                    L ${neckLeft},${g.neckH}
+                    Z`;
+            },
+            // Innenraum (in lokalen SVG-Koordinaten 0..w, 0..h) — wo Flüssigkeit aufgenommen wird.
+            _isInBottleInterior: function(svgX, svgY, g) {
+                if (svgY < g.bodyTop + 2) return false;
+                if (svgY > g.h - 5) return false;
+                if (svgX < 5 || svgX > g.w - 5) return false;
+                return true;
+            },
+            // Hals-Öffnung — Fluid kann hier ungehindert eintreten.
+            _isInOpening: function(svgX, svgY, g) {
+                let cx = g.w / 2;
+                if (Math.abs(svgX - cx) > g.neckW / 2 - 1) return false;
+                if (svgY > g.bodyTop + 4) return false;
+                return true;
+            },
+            _renderSvg: function(obj, el) {
+                let B = ComponentRegistry['bottle'];
+                let g = B._bottleGeom(obj);
+                // el.style.width/height in jedem Render sync halten — wichtig nach Restore aus Save,
+                // wo der Load-Pfad obj.width/height nach dem build() noch nachträglich überschreibt.
+                el.style.width = g.w + 'px';
+                el.style.height = g.h + 'px';
+                let pct = Math.max(0, Math.min(1, (obj.currentFill || 0) / Math.max(1, obj.capacity || 100)));
+                let fillColor = (obj.containedMaterial && FLUID_MATERIALS[obj.containedMaterial])
+                    ? FLUID_MATERIALS[obj.containedMaterial].color
+                    : 'rgb(80,180,220)';
+                let usableH = g.h - g.bodyTop - 5;
+                let fillH = usableH * pct;
+                let fillY = g.h - 5 - fillH;
+                let outline = B._bottleOutlinePath(g);
+                let clipId = 'bottleClip_' + (obj.id || 'x');
+                let pctTxt = Math.round(pct * 100) + '%';
+                let svg = `<svg width="${g.w}" height="${g.h}" style="overflow:visible;display:block;">
+                    <defs>
+                        <clipPath id="${clipId}"><path d="${outline}"/></clipPath>
+                    </defs>
+                    <path d="${outline}" fill="rgba(200,230,255,0.18)" stroke="#37474f" stroke-width="2"/>
+                    <rect x="0" y="${fillY.toFixed(2)}" width="${g.w}" height="${fillH.toFixed(2)}" fill="${fillColor}" clip-path="url(#${clipId})" opacity="0.85"/>
+                    <path d="M 6,${(g.bodyTop + 4).toFixed(2)} L 7,${(g.h - 8).toFixed(2)}" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none"/>
+                    <text x="${(g.w/2).toFixed(1)}" y="${(g.h - 7).toFixed(1)}" text-anchor="middle" fill="#fff" stroke="#000" stroke-width="0.5" style="font:bold 10px sans-serif;pointer-events:none;">${pctTxt}</text>
+                </svg>`;
+                let prevResizer = obj.resizerEl;
+                el.innerHTML = svg;
+                if (prevResizer) el.appendChild(prevResizer);
+            },
+            build: function(obj, el) {
+                // Direkt zuweisen — siehe Hinweis bei mold/spawner_special.
+                obj.width = 50;
+                obj.height = 110;
+                obj.capacity = obj.capacity || 100;
+                obj.currentFill = obj.currentFill || 0;
+                obj.containedMaterial = obj.containedMaterial || null;
+                // Flasche verhält sich wie ein Block: standardmäßig Schwerkraft + Kollision an.
+                obj.useGravity = obj.useGravity !== false;
+                obj.vx = obj.vx || 0;
+                obj.vy = obj.vy || 0;
+                el.className = 'f2d-obj f2d-bottle';
+                el.style.width = obj.width + 'px';
+                el.style.height = obj.height + 'px';
+                let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer;
+                ComponentRegistry['bottle']._renderSvg(obj, el);
+                el.appendChild(resizer);
+            },
+            onResize: function(obj) {
+                ComponentRegistry['bottle']._renderSvg(obj, obj.el);
+                fluidGridDirty = true;
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                let B = ComponentRegistry['bottle'];
+                let sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep);
+                // Live-Füllstand
+                let fillW = document.createElement('div'); fillW.style.padding = '4px 15px'; fillW.onclick = e => e.stopPropagation();
+                let updateFillRow = () => {
+                    let pct = Math.round(100 * (obj.currentFill || 0) / Math.max(1, obj.capacity || 100));
+                    let matName = obj.containedMaterial || 'leer';
+                    fillW.innerHTML = `<div style="color:#aaa;font-size:10px;">💧 Füllstand</div>
+                        <div style="color:#fff;font-size:13px;font-weight:bold;">${pct}%
+                            <span style="color:#9e9e9e;font-weight:normal;font-size:10px;">
+                                (${Math.round(obj.currentFill || 0)} / ${obj.capacity} · ${matName})
+                            </span>
+                        </div>`;
+                };
+                updateFillRow();
+                ctxMenu.appendChild(fillW);
+                let intervalId = setInterval(updateFillRow, 250);
+                let observer = new MutationObserver(() => {
+                    if (!document.body.contains(fillW)) { clearInterval(intervalId); observer.disconnect(); }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+                // Kapazität
+                let capW = document.createElement('div'); capW.style.padding = '4px 15px'; capW.onclick = e => e.stopPropagation();
+                capW.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">📦 Kapazität (Einheiten)</div>`;
+                let capInp = document.createElement('input'); capInp.type = 'number'; capInp.min = '10'; capInp.max = '10000'; capInp.step = '10'; capInp.value = obj.capacity || 100;
+                capInp.style.cssText = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                capInp.onchange = () => {
+                    obj.capacity = Math.max(10, parseInt(capInp.value) || 100);
+                    if (obj.currentFill > obj.capacity) obj.currentFill = obj.capacity;
+                    B._renderSvg(obj, obj.el);
+                    updateFillRow();
+                    saveCallback();
+                };
+                capW.appendChild(capInp); ctxMenu.appendChild(capW);
+                // Leeren
+                let emptyWrap = document.createElement('div'); emptyWrap.style.padding = '4px 15px'; emptyWrap.onclick = e => e.stopPropagation();
+                let emptyBtn = document.createElement('button');
+                emptyBtn.textContent = '🚮 Flasche leeren';
+                emptyBtn.style.cssText = 'width:100%;padding:5px;background:#b71c1c;color:#fff;border:none;border-radius:3px;font-size:11px;cursor:pointer;';
+                emptyBtn.onclick = () => {
+                    obj.currentFill = 0;
+                    obj.containedMaterial = null;
+                    B._renderSvg(obj, obj.el);
+                    updateFillRow();
+                    saveCallback();
+                };
+                emptyWrap.appendChild(emptyBtn); ctxMenu.appendChild(emptyWrap);
+                // Gravity-Toggle (Flasche hat keine `material`-Property → der globale Toggle blendet sie aus).
+                let gravWrap = document.createElement('div'); gravWrap.style.padding = '4px 15px'; gravWrap.onclick = e => e.stopPropagation();
+                let gravBtn = document.createElement('button');
+                let updateGravBtn = () => {
+                    gravBtn.textContent = (obj.useGravity !== false) ? '🪂 Schwerkraft AUS (Flasche fixieren)' : '🌍 Schwerkraft AN (Flasche fällt)';
+                    gravBtn.style.background = (obj.useGravity !== false) ? '#37474f' : '#1b5e20';
+                };
+                gravBtn.style.cssText = 'width:100%;padding:5px;color:#fff;border:none;border-radius:3px;font-size:11px;cursor:pointer;';
+                updateGravBtn();
+                gravBtn.onclick = () => {
+                    obj.useGravity = !(obj.useGravity !== false);
+                    if (obj.useGravity === false) { obj.vx = 0; obj.vy = 0; }
+                    updateGravBtn();
+                    saveCallback();
+                };
+                gravWrap.appendChild(gravBtn); ctxMenu.appendChild(gravWrap);
+            },
+            // Wände der Flasche blockieren Fluid; Hals + Innenraum sind offen,
+            // damit Tropfen einfallen können (Innenraum wird im animate-Tick aufgesaugt).
+            getFluidSolidCells: function(obj) {
+                let B = ComponentRegistry['bottle'];
+                let g = B._bottleGeom(obj);
+                let cells = [];
+                let rot = (obj.rotation || 0) * Math.PI / 180;
+                let cos = Math.cos(rot), sin = Math.sin(rot);
+                let ocx = obj.x + g.w / 2, ocy = obj.y + g.h / 2;
+                let ex = g.w / 2 * Math.abs(cos) + g.h / 2 * Math.abs(sin);
+                let ey = g.w / 2 * Math.abs(sin) + g.h / 2 * Math.abs(cos);
+                let gx0 = Math.floor((ocx - ex) / _solidCS), gx1 = Math.ceil((ocx + ex) / _solidCS);
+                let gy0 = Math.floor((ocy - ey) / _solidCS), gy1 = Math.ceil((ocy + ey) / _solidCS);
+                for (let gx = gx0; gx <= gx1; gx++) {
+                    for (let gy = gy0; gy <= gy1; gy++) {
+                        let pcx = gx * _solidCS + _solidCS / 2;
+                        let pcy = gy * _solidCS + _solidCS / 2;
+                        let dx = pcx - ocx, dy = pcy - ocy;
+                        let lx = dx * cos + dy * sin, ly = -dx * sin + dy * cos;
+                        if (Math.abs(lx) > g.w / 2 || Math.abs(ly) > g.h / 2) continue;
+                        let svgX = lx + g.w / 2, svgY = ly + g.h / 2;
+                        if (B._isInBottleInterior(svgX, svgY, g)) continue;
+                        if (B._isInOpening(svgX, svgY, g)) continue;
+                        cells.push([gx, gy]);
+                    }
+                }
+                return cells;
+            },
+            physics: function(obj, item, isActive, rad) {
+                // Vereinfachte Kollision: volle Bbox (Werkstücke prallen am Außenrand ab).
+                let cx = obj.x + obj.width / 2, cy = obj.y + obj.height / 2;
+                resolveOBBCollision(item, cx, cy, obj.width / 2, obj.height / 2, obj.rotation || 0);
+            },
+            onLoadState: function(obj, savedData) {
+                if (savedData.capacity !== undefined) obj.capacity = savedData.capacity;
+                if (savedData.currentFill !== undefined) obj.currentFill = savedData.currentFill;
+                if (savedData.containedMaterial) obj.containedMaterial = savedData.containedMaterial;
+                if (savedData.useGravity !== undefined && savedData.useGravity !== null) obj.useGravity = savedData.useGravity;
+                ComponentRegistry['bottle']._renderSvg(obj, obj.el);
+                fluidGridDirty = true;
+            },
+            // Physik + Fluid-Absorption. Flasche verhält sich wie ein Block: Gravity,
+            // Reibung, Kollision gegen andere factoryObjects (mit useCollision != false).
+            animate: function(obj, spsState) {
+                let B = ComponentRegistry['bottle'];
+                // ── Physics ──────────────────────────────────────────────
+                let nowPhy = performance.now();
+                let dt = (obj._lastTick && (nowPhy - obj._lastTick) < 200) ? (nowPhy - obj._lastTick) : 16;
+                obj._lastTick = nowPhy;
+                let ts = (dt / 1000) * 60;       // entspricht timeScale (1.0 ≈ 60 FPS)
+                let ss = window.simSpeed || 1;
+                let isDragged = (typeof draggedElement !== 'undefined') && draggedElement && draggedElement.data === obj;
+                let inTopView = (typeof globalViewMode !== 'undefined') && globalViewMode === 'top';
+                if (obj.useGravity !== false && !isDragged) {
+                    if (!inTopView) {
+                        obj.vy = (obj.vy || 0) + 0.4 * ss * ts;             // Schwerkraft
+                        obj.vx = (obj.vx || 0) * Math.pow(0.95, ss * ts);
+                        obj.vy = obj.vy * Math.pow(0.98, ss * ts);
+                    } else {
+                        // Draufsicht: keine vertikale Schwerkraft, stärkere Reibung (analog Items).
+                        obj.vx = (obj.vx || 0) * Math.pow(0.85, ss * ts);
+                        obj.vy = (obj.vy || 0) * Math.pow(0.85, ss * ts);
+                    }
+                    let oldX = obj.x, oldY = obj.y;
+                    obj.x += obj.vx * ss * ts;
+                    obj.y += obj.vy * ss * ts;
+                    // AABB-Kollision: resolveOBBCollision nimmt item.width/2 als Sphären-Radius,
+                    // dadurch versinkt eine 50×110-Flasche bis zu 55 px in flachen Auflagen.
+                    // Wir machen hier echtes Bbox-vs-Bbox: kleinster Überlapp bestimmt Push-Richtung.
+                    if (obj.useCollision !== false) {
+                        factoryObjects.forEach(other => {
+                            if (other === obj) return;
+                            if (other.useCollision === false) return;
+                            if (other.type.startsWith('zone_') || other.type === 'despawner' || other.type.startsWith('spawner_')) return;
+                            let ow = other.width, oh = other.height || ow;
+                            if (!ow || !oh) return;
+                            let ax0 = obj.x, ax1 = obj.x + obj.width;
+                            let ay0 = obj.y, ay1 = obj.y + obj.height;
+                            let bx0 = other.x, bx1 = other.x + ow;
+                            let by0 = other.y, by1 = other.y + oh;
+                            if (ax1 <= bx0 || ax0 >= bx1 || ay1 <= by0 || ay0 >= by1) return;
+                            let oxL = ax1 - bx0, oxR = bx1 - ax0;
+                            let oyT = ay1 - by0, oyB = by1 - ay0;
+                            let minOv = Math.min(oxL, oxR, oyT, oyB);
+                            if (minOv === oyT) {
+                                obj.y = by0 - obj.height;
+                                if (obj.vy > 0) obj.vy = 0;
+                                // Förderband-Transport (mit Rotation entlang seiner Achse)
+                                if (other.type === 'conveyor' && other.isRunning) {
+                                    let rad = (other.rotation || 0) * Math.PI / 180;
+                                    let spd = 2 * (other._speedFactor !== undefined ? other._speedFactor : 1);
+                                    obj.x += Math.cos(rad) * spd * ss;
+                                    obj.vx = Math.cos(rad) * spd;
+                                }
+                            } else if (minOv === oyB) {
+                                obj.y = by1;
+                                if (obj.vy < 0) obj.vy = 0;
+                            } else if (minOv === oxL) {
+                                obj.x = bx0 - obj.width;
+                                if (obj.vx > 0) obj.vx = 0;
+                            } else {
+                                obj.x = bx1;
+                                if (obj.vx < 0) obj.vx = 0;
+                            }
+                        });
+                    }
+                    // Off-screen-Drop: Flasche entfernen, wenn sie unten rausfällt.
+                    if (obj.y > 3000) {
+                        if (obj.el && obj.el.parentNode) obj.el.parentNode.removeChild(obj.el);
+                        let idx = factoryObjects.indexOf(obj);
+                        if (idx >= 0) factoryObjects.splice(idx, 1);
+                        fluidGridDirty = true;
+                        if (typeof saveFactoryState === 'function') saveFactoryState();
+                        return;
+                    }
+                    if (Math.abs(oldX - obj.x) > 0.05 || Math.abs(oldY - obj.y) > 0.05) {
+                        updateObjTransform(obj);
+                        // Flasche hat sich bewegt → Wände im Solid-Grid neu eintragen,
+                        // sonst läuft Fluid durch die alten Wandzellen.
+                        fluidGridDirty = true;
+                    }
+                }
+                // ── Fluid-Absorption (bestehende Logik) ──────────────────
+                if ((obj.currentFill || 0) >= (obj.capacity || 100)) {
+                    if (obj._dirtyRender) { B._renderSvg(obj, obj.el); obj._dirtyRender = false; }
+                    return;
+                }
+                let g = B._bottleGeom(obj);
+                let rot = (obj.rotation || 0) * Math.PI / 180;
+                let cos = Math.cos(rot), sin = Math.sin(rot);
+                let ocx = obj.x + g.w / 2, ocy = obj.y + g.h / 2;
+                let ex = g.w / 2 * Math.abs(cos) + g.h / 2 * Math.abs(sin);
+                let ey = g.w / 2 * Math.abs(sin) + g.h / 2 * Math.abs(cos);
+                let gx0 = Math.floor((ocx - ex) / FLUID_CELL), gx1 = Math.ceil((ocx + ex) / FLUID_CELL);
+                let gy0 = Math.floor((ocy - ey) / FLUID_CELL), gy1 = Math.ceil((ocy + ey) / FLUID_CELL);
+                let absorbed = 0;
+                let absorbedMat = obj.containedMaterial;
+                for (let gx = gx0; gx <= gx1; gx++) {
+                    for (let gy = gy0; gy <= gy1; gy++) {
+                        if ((obj.currentFill || 0) + absorbed >= (obj.capacity || 100)) break;
+                        let pcx = gx * FLUID_CELL + FLUID_CELL / 2;
+                        let pcy = gy * FLUID_CELL + FLUID_CELL / 2;
+                        let dx = pcx - ocx, dy = pcy - ocy;
+                        let lx = dx * cos + dy * sin, ly = -dx * sin + dy * cos;
+                        if (Math.abs(lx) > g.w / 2 || Math.abs(ly) > g.h / 2) continue;
+                        let svgX = lx + g.w / 2, svgY = ly + g.h / 2;
+                        // Nur tatsächlicher Innenraum saugt auf — NICHT der Hals/Opening.
+                        // Sonst zählt seitlich am Hals vorbeischwappendes Wasser als „eingefüllt",
+                        // obwohl es geometrisch noch außerhalb der Flasche ist.
+                        if (!B._isInBottleInterior(svgX, svgY, g)) continue;
+                        let key = gx + ',' + gy;
+                        let cell = fluidGrid.get(key);
+                        if (cell) {
+                            // Vereinfachte Mischbarkeit: nimmt jede Flüssigkeit auf, behält aber
+                            // das zuerst eingefüllte Material als Anzeigefarbe.
+                            fluidGrid.delete(key);
+                            absorbed++;
+                            if (!absorbedMat) absorbedMat = cell.mat;
+                        }
+                    }
+                }
+                if (absorbed > 0) {
+                    obj.currentFill = Math.min(obj.capacity || 100, (obj.currentFill || 0) + absorbed);
+                    obj.containedMaterial = absorbedMat;
+                    obj._dirtyRender = true;
+                }
+                if (obj._dirtyRender) {
+                    obj._lastRender = obj._lastRender || 0;
+                    let now = performance.now();
+                    if (now - obj._lastRender > 80) {
+                        B._renderSvg(obj, obj.el);
+                        obj._lastRender = now;
+                        obj._dirtyRender = false;
+                    }
+                }
+            },
+        },
+        'bottle_sensor': {
+            i18n: {
+                de: { name: 'Füllstandssensor', desc: 'Misst den Füllstand einer Flasche. Position relativ zur Flasche bestimmt Schaltschwelle.' },
+                en: { name: 'Fill Level Sensor', desc: 'Measures bottle fill — position on the bottle sets the threshold.' }
+            },
+            meta: { icon: '📏' },
+            menuTarget: '#menu-sensoren',
+            menuHtml: `<div onclick="addFactoryDevice('bottle_sensor')">📏 Füllstandssensor (Flasche)</div>`,
+            role: 'input',
+            build: function(obj, el, var1) {
+                obj.width = 18; obj.height = 18;
+                obj.linkedVar = var1 || null;
+                obj.useCollision = false;
+                el.className = 'f2d-obj f2d-bottle-sensor';
+                el.style.cssText = 'background:#263238;border:2px solid #ffc107;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#ffc107;font-size:11px;';
+                el.innerHTML = '📏';
+                let label = document.createElement('div'); label.className = 'f2d-label';
+                label.textContent = var1 || '---';
+                el.appendChild(label);
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                let S = ComponentRegistry['bottle_sensor'];
+                let sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep);
+                // Modus-Auswahl: Position-basiert (Standard) ODER manueller Schwellwert.
+                let modeW = document.createElement('div'); modeW.style.padding = '4px 15px'; modeW.onclick = e => e.stopPropagation();
+                modeW.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">📏 Schwellwert-Modus</div>`;
+                let modeSel = document.createElement('select'); modeSel.style.cssText = 'width:100%;background:#222;color:#ddd;border:1px solid #555;padding:3px;border-radius:3px;font-size:11px;';
+                [['auto','Auto (Sensorposition)'],['manual','Manuell (festgelegter %-Wert)']].forEach(([v,l]) => {
+                    let opt = document.createElement('option'); opt.value = v; opt.textContent = l;
+                    if ((obj.thresholdMode || 'auto') === v) opt.selected = true;
+                    modeSel.appendChild(opt);
+                });
+                modeW.appendChild(modeSel); ctxMenu.appendChild(modeW);
+                // Manueller Schwellwert (nur sichtbar im "manual"-Modus).
+                let thrW = document.createElement('div'); thrW.style.padding = '4px 15px'; thrW.onclick = e => e.stopPropagation();
+                thrW.style.display = (obj.thresholdMode === 'manual') ? '' : 'none';
+                let valSpan = document.createElement('span'); valSpan.textContent = (obj.triggerPercent != null ? obj.triggerPercent : 100);
+                let thrLbl = document.createElement('div'); thrLbl.style.cssText = 'color:#aaa;font-size:10px;margin-bottom:3px;';
+                thrLbl.append('🎯 Auslöseschwelle: ', valSpan, ' %');
+                let thrSlider = document.createElement('input'); thrSlider.type = 'range'; thrSlider.min = '0'; thrSlider.max = '100'; thrSlider.step = '1';
+                thrSlider.value = (obj.triggerPercent != null ? obj.triggerPercent : 100);
+                thrSlider.style.cssText = 'width:100%;';
+                thrSlider.oninput = () => {
+                    obj.triggerPercent = parseInt(thrSlider.value);
+                    valSpan.textContent = obj.triggerPercent;
+                    saveCallback();
+                };
+                thrW.appendChild(thrLbl); thrW.appendChild(thrSlider);
+                // Schnellwahl-Buttons
+                let presets = document.createElement('div'); presets.style.cssText = 'display:flex;gap:3px;margin-top:5px;';
+                [['0 %', 0], ['25 %', 25], ['50 %', 50], ['75 %', 75], ['100 %', 100]].forEach(([lbl, v]) => {
+                    let b = document.createElement('button'); b.textContent = lbl;
+                    b.style.cssText = 'flex:1;padding:3px;background:#37474f;color:#fff;border:none;border-radius:3px;font-size:10px;cursor:pointer;';
+                    b.onclick = () => {
+                        obj.triggerPercent = v; thrSlider.value = v; valSpan.textContent = v; saveCallback();
+                    };
+                    presets.appendChild(b);
+                });
+                thrW.appendChild(presets);
+                ctxMenu.appendChild(thrW);
+                modeSel.onchange = () => {
+                    obj.thresholdMode = modeSel.value;
+                    thrW.style.display = (obj.thresholdMode === 'manual') ? '' : 'none';
+                    if (obj.thresholdMode === 'manual' && obj.triggerPercent == null) {
+                        obj.triggerPercent = 100;
+                        thrSlider.value = 100; valSpan.textContent = 100;
+                    }
+                    saveCallback();
+                };
+                // Live-Info-Block (Host, Pegel, effektiver Schwellwert)
+                let info = document.createElement('div'); info.style.cssText = 'padding:4px 15px;color:#9e9e9e;font-size:10px;line-height:1.5;';
+                let updateInfo = () => {
+                    let host = S._findHostBottle(obj);
+                    if (!host) { info.textContent = 'ℹ️ Platziere den Sensor innerhalb einer Flasche.'; return; }
+                    // Gleiche Funktion wie animate() → Anzeige kann nicht abdriften.
+                    let { triggered, hostPct, threshold } = S._evaluate(obj, host);
+                    info.innerHTML = `📦 Host: <b>${hostPct}%</b> gefüllt<br>🎯 Schwelle: <b>${threshold}%</b><br>📡 Zustand: <b style="color:${triggered ? '#66bb6a' : '#ef9a9a'};">${triggered ? 'AUSGELÖST' : 'inaktiv'}</b>`;
+                };
+                updateInfo();
+                ctxMenu.appendChild(info);
+                let intervalId = setInterval(updateInfo, 300);
+                let observer = new MutationObserver(() => {
+                    if (!document.body.contains(info)) { clearInterval(intervalId); observer.disconnect(); }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+            },
+            contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                helpers.addVarSelect('Füllstandssensor (Eingang)', obj.linkedVar, 'in', 'linkedVar');
+            },
+            onLoadState: function(obj, savedData) {
+                if (savedData.thresholdMode) obj.thresholdMode = savedData.thresholdMode;
+                if (savedData.triggerPercent != null) obj.triggerPercent = savedData.triggerPercent;
+            },
+            // Nächste Flasche unter dem Sensor finden (Sensor-Zentrum muss in Flaschen-Bbox liegen).
+            _findHostBottle: function(obj) {
+                let cx = obj.x + obj.width / 2, cy = obj.y + obj.height / 2;
+                for (let o of factoryObjects) {
+                    if (o.type !== 'bottle') continue;
+                    if (cx >= o.x && cx <= o.x + o.width && cy >= o.y && cy <= o.y + o.height) return o;
+                }
+                return null;
+            },
+            // EINZIGE Quelle für Trigger-Entscheidung — Anzeige (Kontextmenü) und
+            // SPS-Schreibvorgang (animate) rufen beide diese Funktion auf,
+            // damit sie sich nicht auseinanderlaufen können.
+            _evaluate: function(obj, host) {
+                if (!host) return { triggered: false, hostPct: 0, threshold: 0 };
+                let pctRounded = Math.round(100 * (host.currentFill || 0) / Math.max(1, host.capacity || 100));
+                let thr;
+                if (obj.thresholdMode === 'manual' && obj.triggerPercent != null) {
+                    thr = obj.triggerPercent;
+                } else {
+                    let g = ComponentRegistry['bottle']._bottleGeom(host);
+                    let bodyTopY = host.y + g.bodyTop;
+                    let bodyBottomY = host.y + g.h - 5;
+                    let cy = obj.y + obj.height / 2;
+                    let relY = Math.max(0, Math.min(1, (bodyBottomY - cy) / Math.max(1, bodyBottomY - bodyTopY)));
+                    thr = Math.round(100 * relY);
+                }
+                return { triggered: pctRounded >= thr, hostPct: pctRounded, threshold: thr };
+            },
+            animate: function(obj, spsState) {
+                if (!obj.linkedVar) return;
+                let S = ComponentRegistry['bottle_sensor'];
+                let host = S._findHostBottle(obj);
+                let { triggered } = S._evaluate(obj, host);
+                spsState[obj.linkedVar] = triggered ? 1 : 0;
+                if (obj.el) obj.el.style.backgroundColor = triggered ? '#1b5e20' : '#263238';
             },
         },
         'silo': {
@@ -20303,7 +21021,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 addFluidBlob(obj.fluidMat || 'water', obj.x + obj.width / 2, obj.y + obj.height, 1, true);
                             }
                         } else { obj.timeAccum = 0; }
-                    } else if (obj.type.startsWith('spawner_')) {
+                    } else if (obj.type === 'spawner_metall' || obj.type === 'spawner_kunststoff') {
+                        // Catch-All wurde durch eine explizite Whitelist ersetzt, damit Plugin-Spawner
+                        // (z. B. spawner_special) hier nicht versehentlich als Item-Spawner enden.
                         let isActive = obj.linkedVar ? resolveLinked(obj, spsState) : true;
                         if (isActive) {
                             // Rückstau: Timer pausieren wenn Spawn-Position durch ein Teil blockiert ist
@@ -21313,8 +22033,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 if (obj.type === 'sensor_kap') isTriggered = true;
                             }
                         });
-                        // Kapazitiver Sensor: auch Flüssigkeit erkennen (CA-Fluid)
-                        if (!isTriggered && obj.type === 'sensor_kap' && fluidGrid.size > 0) {
+                        // Kapazitiv + Optisch: Flüssigkeit erkennen (kap = Dielektrizitäts­änderung,
+                        // opt = der Strahl wird durch das blickdichte Fluid blockiert).
+                        if (!isTriggered && (obj.type === 'sensor_kap' || obj.type === 'sensor_opt') && fluidGrid.size > 0) {
                             let sRad = (obj.rotation || 0) * Math.PI / 180;
                             let cos = Math.cos(sRad), sin = Math.sin(sRad);
                             let oCx = obj.x + obj.width / 2, oCy = obj.y + (obj.height || obj.width) / 2;
@@ -21323,15 +22044,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 let p = k.split(',');
                                 let fx = +p[0] * FLUID_CELL + FLUID_CELL / 2;
                                 let fy = +p[1] * FLUID_CELL + FLUID_CELL / 2;
-                                // Transform fluid cell center into sensor local space
                                 let dx = fx - oCx, dy = fy - oCy;
                                 let localX = dx * cos + dy * sin + obj.width / 2;
                                 let localY = -dx * sin + dy * cos + (obj.height || obj.width) / 2;
                                 if (localX >= lx && localX <= lx + lw && localY >= ly && localY <= ly + lh) isTriggered = true;
                             }
                         }
-                        // Kapazitiver Sensor: auch Sand/Körner erkennen
-                        if (!isTriggered && obj.type === 'sensor_kap' && sandGrid.size > 0) {
+                        // Kapazitiv + Optisch: Sand/Körner erkennen (opt: Schüttgut ist blickdicht).
+                        if (!isTriggered && (obj.type === 'sensor_kap' || obj.type === 'sensor_opt') && sandGrid.size > 0) {
                             let sRad = (obj.rotation || 0) * Math.PI / 180;
                             let cos = Math.cos(sRad), sin = Math.sin(sRad);
                             let oCx = obj.x + obj.width / 2, oCy = obj.y + (obj.height || obj.width) / 2;
@@ -21346,6 +22066,43 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 if (localX >= lx && localX <= lx + lw && localY >= ly && localY <= ly + lh) isTriggered = true;
                             }
                         }
+                        // Kap-Sensor: Flaschen werden erkannt (sind kein Strukturobjekt, sondern Werkstück-Behälter).
+                        // Andere Strukturen (Wände, Behälter, Anbauteile …) bleiben für kap unsichtbar,
+                        // damit man durch sie hindurch Werkstücke/Fluid detektieren kann.
+                        if (!isTriggered && obj.type === 'sensor_kap') {
+                            let sRad = (obj.rotation || 0) * Math.PI / 180;
+                            let cos = Math.cos(sRad), sin = Math.sin(sRad);
+                            let oCx = obj.x + obj.width / 2, oCy = obj.y + (obj.height || obj.width) / 2;
+                            for (let bo of factoryObjects) {
+                                if (bo.type !== 'bottle') continue;
+                                // Test: liegt das Sensor-Erfassungsfeld in der Flaschen-Bbox?
+                                let bCx = bo.x + bo.width / 2, bCy = bo.y + bo.height / 2;
+                                let bHw = bo.width / 2, bHh = bo.height / 2;
+                                let bRad = (bo.rotation || 0) * Math.PI / 180;
+                                let bCos = Math.cos(bRad), bSin = Math.sin(bRad);
+                                // Eckpunkte + Mitte des Sensor-Felds in Flaschen-Lokal-Koords transformieren …
+                                let pts = [[lx, ly], [lx + lw, ly], [lx, ly + lh], [lx + lw, ly + lh], [lx + lw / 2, ly + lh / 2]];
+                                for (let [px, py] of pts) {
+                                    let distX = px - obj.width / 2;
+                                    let distY = py - (obj.height || obj.width) / 2;
+                                    let wx = obj.x + obj.width / 2 + distX * cos - distY * sin;
+                                    let wy = obj.y + (obj.height || obj.width) / 2 + distX * sin + distY * cos;
+                                    let dx = wx - bCx, dy = wy - bCy;
+                                    let blx = dx * bCos + dy * bSin;
+                                    let bly = -dx * bSin + dy * bCos;
+                                    if (Math.abs(blx) <= bHw && Math.abs(bly) <= bHh) { isTriggered = true; break; }
+                                }
+                                if (isTriggered) break;
+                                // … und Reverse-Test: liegt das Flaschen-Zentrum im Sensor-Feld?
+                                // (Fängt den Fall ab, dass die Flasche kleiner als das Feld ist und vollständig drin liegt.)
+                                let dxC = bCx - oCx, dyC = bCy - oCy;
+                                let slx = dxC * cos + dyC * sin + obj.width / 2;
+                                let sly = -dxC * sin + dyC * cos + (obj.height || obj.width) / 2;
+                                if (slx >= lx && slx <= lx + lw && sly >= ly && sly <= ly + lh) { isTriggered = true; break; }
+                            }
+                        }
+                        // Strukturobjekte (Wände, Behälter, Anbauteile, Flaschen …) — für opt/ind:
+                        // Magnet- und Kap-Sensor werden hier ausgeschlossen, die haben anderes Trigger-Verhalten.
                         if (!isTriggered && obj.type !== 'sensor_mag' && obj.type !== 'sensor_kap') {
                             let sRad = (obj.rotation || 0) * Math.PI / 180;
                             let steps = obj.type === 'sensor_opt' ? 5 : 2;
@@ -21723,6 +22480,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     centerTolerance: o.centerTolerance !== undefined ? o.centerTolerance : null,
                     wallThickness: o.wallThickness || null,
                     cavityShape: o.cavityShape || null, gearTeeth: o.gearTeeth || null, requiredMaterial: o.requiredMaterial || null, spawnedMaterial: o.spawnedMaterial || null, linkedVarOpen: o.linkedVarOpen || null, ejectSide: o.ejectSide || null,
+                    capacity: o.capacity || null, currentFill: o.currentFill !== undefined ? o.currentFill : null, containedMaterial: o.containedMaterial || null,
+                    useGravity: o.useGravity !== undefined ? o.useGravity : null,
+                    templateConfig: o.templateConfig || null,
+                    thresholdMode: o.thresholdMode || null, triggerPercent: o.triggerPercent != null ? o.triggerPercent : null,
                     backpressureStop: o.backpressureStop || false,
                     topView: o.topView || false,
                     torView: o.torView || null, torSpeed: o.torSpeed !== undefined ? o.torSpeed : null,
@@ -21773,7 +22534,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             let lbl = obj.el.querySelector('.f2d-label');
             if (lbl) {
                 if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(obj.type)) lbl.textContent = v1 || '---';
-                else if (obj.type.startsWith('sensor_')) lbl.textContent = v1 || '---';
+                else if (obj.type.startsWith('sensor_') || obj.type === 'bottle_sensor') lbl.textContent = v1 || '---';
                 else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
                 else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
                 else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;

@@ -4331,6 +4331,23 @@ You must output exactly this JSON format. The logic code goes as a single string
                 || cType === 'light_curtain'
                 || (typeof ComponentRegistry !== 'undefined' && ComponentRegistry[cType] && ComponentRegistry[cType].isNC);
         };
+        // Variable-Semantik-NC-Flag (modus-abhängig). Entkoppelt:
+        //   - _isNCContact:           "Wie ist die HARDWARE physisch verdrahtet?"
+        //                              Mode-unabhängig, bestimmt Symbolwahl auf Koppelrelais-Strecke
+        //                              und ob ein Koppelrelais zur Hardware-Korrektur nötig ist.
+        //   - _variableIsNCInverted:  "Ist die Variable im Code gegenüber dem PHYSISCHEN Zustand invertiert?"
+        //                              SPS-Modus: ja, bei NC-Hardware (Variable = SPS-Eingangslese-Zustand,
+        //                                       Ruhezustand = true).
+        //                              E-Pneu-Modus: nein (Variable = physischer Press-Zustand, Ruhe = false).
+        //                                            Legacy taster_nc/schalter_nc behalten ihre Inversion
+        //                                            für Migrations-Code, der noch raw `X` schreibt.
+        // Aufgerufen von: Sim-Init/Toggle/Setter, UI-Sync, Schaltplan-Symbol- & Code-Generator.
+        window._variableIsNCInverted = function(cType) {
+            if (window.epneuMode) {
+                return cType === 'taster_nc' || cType === 'schalter_nc';
+            }
+            return window._isNCContact(cType);
+        };
         // EINZIGE Quelle für die Eingangstyp-Optionen — alle Dropdowns (Sim-Panel, IEC-Kontextmenü,
         // Schaltplan-Editor-Dialog) rufen das hier auf, damit der Modus-Wechsel konsistent durchschlägt.
         window._inputTypeOptions = function(currentType) {
@@ -4369,21 +4386,48 @@ You must output exactly this JSON format. The logic code goes as a single string
             ];
         };
         window.toggleEpneuMode = function() {
+            // Variablen, deren Semantik beim Mode-Wechsel kippt:
+            //   - taster_nc/schalter_nc: bleiben Legacy-NC in beiden Modi → keine Kippung
+            //   - nothalt/light_curtain/Registry.isNC: SPS-Modus invertiert, E-Pneu-Modus nicht
+            // Im SPS-Modus heißt `NOTAUS` raw = "nicht gedrückt"; im E-Pneu-Modus heißt es "gedrückt".
+            // Bestehender Code mit `NOTAUS` ohne ¬ muss daher beim Aktivieren angefasst werden.
+            let affectedVars = Object.entries(componentTypes)
+                .filter(([k, v]) => v === 'nothalt' || v === 'light_curtain'
+                    || (typeof ComponentRegistry !== 'undefined' && ComponentRegistry[v] && ComponentRegistry[v].isNC))
+                .map(([k]) => k);
             if (!window.epneuMode) {
-                // Aktivierung: nach Legacy-NC-Variablen scannen und User warnen.
-                let ncVars = Object.entries(componentTypes)
+                // Aktivierung: Legacy-NC + Semantik-Kippung warnen.
+                let legacyNcVars = Object.entries(componentTypes)
                     .filter(([k, v]) => v === 'taster_nc' || v === 'schalter_nc')
                     .map(([k]) => k);
-                if (ncVars.length > 0) {
-                    let msg = `Im E-Pneumatik-Modus existiert das Konzept "Öffner-Kontakt" für Schalter/Taster nicht mehr — der Code ist die einzige Wahrheit.\n\n` +
-                              `Folgende ${ncVars.length} Variable(n) sind aktuell als Öffner definiert:\n  ${ncVars.join(', ')}\n\n` +
-                              `Notaus und Lichtgitter bleiben explizit als Öffner verfügbar (Sicherheits-Konvention nach Norm).\n\n` +
-                              `Im neuen Modus erscheinen die Legacy-Öffner mit ⚠️-Markierung im Dropdown, damit du sie bei Bedarf umstellst. Verhalten und Code bleiben dabei unverändert.\n\n` +
-                              `E-Pneumatik-Modus aktivieren?`;
-                    if (!confirm(msg)) return;
+                let warnMsg = `E-Pneumatik-Modus aktivieren?\n\n` +
+                              `Im E-Pneu-Modus repräsentieren Variablen den PHYSISCHEN Press-Zustand:\n` +
+                              `  Ruhe → false, gedrückt → true.\n\n` +
+                              `Im SPS-Modus war es umgekehrt für NC-Hardware (NOTAUS, Lichtgitter):\n` +
+                              `  Ruhe → true, gedrückt → false.\n\n`;
+                if (affectedVars.length > 0) {
+                    warnMsg += `⚠ Folgende ${affectedVars.length} NC-Variable(n) kippen ihre Semantik:\n  ${affectedVars.join(', ')}\n\n` +
+                               `Code wie "MOTOR := START && NOTAUS" wird zu "Motor läuft wenn Notaus gedrückt" — sicherheitskritisch.\n` +
+                               `Schreibe stattdessen "MOTOR := START && ¬NOTAUS" für die gewohnte Semantik.\n\n`;
                 }
+                if (legacyNcVars.length > 0) {
+                    warnMsg += `Legacy-Öffner (taster_nc / schalter_nc), Anzahl ${legacyNcVars.length}: ${legacyNcVars.join(', ')}\n` +
+                               `behalten ihre SPS-Semantik (Inversion) für Code-Migration und erscheinen im Dropdown mit ⚠️.\n\n`;
+                }
+                warnMsg += `Notaus und Lichtgitter bleiben Symbol-seitig als Öffner gezeichnet (Sicherheits-Konvention nach Norm).\n\n` +
+                           `Fortfahren?`;
+                if (!confirm(warnMsg)) return;
                 window.epneuMode = true;
             } else {
+                if (affectedVars.length > 0) {
+                    let warnMsg = `Zurück in den SPS-Modus?\n\n` +
+                                  `⚠ Die Semantik dieser ${affectedVars.length} NC-Variable(n) kippt zurück:\n  ${affectedVars.join(', ')}\n\n` +
+                                  `Code wie "MOTOR := START && ¬NOTAUS" bedeutet im SPS-Modus wieder ` +
+                                  `"Motor läuft wenn Notaus gedrückt".\n` +
+                                  `Schreibe ihn vor dem Wechsel ggf. zu "MOTOR := START && NOTAUS" um.\n\n` +
+                                  `Fortfahren?`;
+                    if (!confirm(warnMsg)) return;
+                }
                 window.epneuMode = false;
             }
             localStorage.setItem('valisEpneuMode', window.epneuMode ? '1' : '0');
@@ -4394,20 +4438,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                 btn.style.background = window.epneuMode ? '#0288d1' : '#455a64';
                 btn.style.color = window.epneuMode ? '#fff' : '#ccc';
             }
-            // Sim-Panel neu rendern, damit die Dropdowns die neuen Labels haben.
+            // spsState der betroffenen Variablen löschen, damit buildSimulatorUI sie
+            // mit der neuen Mode-Semantik aus dem Ruhezustand initialisiert (sonst
+            // hängt z.B. NOTAUS=true aus dem SPS-Modus in E-Pneu = "gedrückt").
+            if (typeof spsState !== 'undefined') {
+                affectedVars.forEach(v => { delete spsState[v]; });
+            }
+            // Sim-Panel neu rendern (Dropdown-Labels + spsState-Init).
             if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
                 buildSimulatorUI(globalInputs, globalOutputs, currentGraph);
+            }
+            // Auto-Schaltplan neu zeichnen (Symbol-NC wechselt für die kippenden Variablen).
+            if (typeof updateEditor === 'function') updateEditor();
+            // Circuit-Editor: nur Symbol-Sync (keine Layout-Regenerierung), damit der User
+            // sein manuelles Arrangement behält. cedSyncTypes ruft intern auch cedRender.
+            if (typeof window.cedSyncTypes === 'function') {
+                try { window.cedSyncTypes(); } catch (_e) { /* Editor möglicherweise nicht initialisiert */ }
+            } else if (typeof window.cedRender === 'function') {
+                try { window.cedRender(); } catch (_e) { /* dito */ }
             }
         };
         window.changeType = function(id, val) {
             let oldVal = componentTypes[id] || 'taster';
             componentTypes[id] = val;
             localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
-            // NEU: Wenn zwischen Öffner (NC) und Schließer (NO) gewechselt wird, 
-            // invertieren wir das Signal sofort. Ein unbetätigter Schließer (FALSE) 
+            // NEU: Wenn sich die Variable-Semantik zwischen Öffner (NC) und Schließer (NO) ändert,
+            // invertieren wir das Signal sofort. Ein unbetätigter Schließer (FALSE)
             // wird so automatisch zu einem unbetätigten Öffner (TRUE).
-            let wasNC = window._isNCContact(oldVal);
-            let isNC = window._isNCContact(val);
+            // Im E-Pneu-Modus tritt das nur beim Umstellen auf/von Legacy taster_nc/schalter_nc auf.
+            let wasNC = window._variableIsNCInverted(oldVal);
+            let isNC = window._variableIsNCInverted(val);
             if (wasNC !== isNC && spsState.hasOwnProperty(id)) {
                 spsState[id] = !spsState[id];
             }
@@ -5954,7 +6014,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     componentTypes[name] = isNotHalt ? 'nothalt' : (isSchalter ? 'schalter' : 'taster');
                 }
                 let cType = componentTypes[name];
-                let isNCContact = window._isNCContact(cType);
+                // Mode-abhängig: SPS-Modus invertiert die Variable für NC-Hardware (Ruhe=true),
+                // E-Pneu-Modus repräsentiert physischen Press-Zustand (Ruhe=false).
+                let isNCContact = window._variableIsNCInverted(cType);
                 let isMomentary = (cType === 'taster' || cType === 'taster_nc');
                 if (oldState.hasOwnProperty(name) && !isMomentary) {
                     // Switches/sensors keep their state; tasters always reset to resting state
@@ -6014,21 +6076,22 @@ You must output exactly this JSON format. The logic code goes as a single string
             runSimulationTick();
         }
         window.toggleInput = function(varName) {
-			SoundEngine.click();		
+			SoundEngine.click();
             let cType = componentTypes[varName] || 'taster';
-            let isNC = window._isNCContact(cType);
-            let isActuated = document.getElementById(`sim_in_${varName}`).checked; 
-            // Ein betätigter Öffner verliert das Signal (FALSE), ein Schließer bekommt es (TRUE)
-            spsState[varName] = isNC ? !isActuated : isActuated; 
-            runSimulationTick(); 
+            let isNC = window._variableIsNCInverted(cType);
+            let isActuated = document.getElementById(`sim_in_${varName}`).checked;
+            // Ein betätigter Öffner verliert das Signal (FALSE), ein Schließer bekommt es (TRUE).
+            // Im E-Pneu-Modus gibt es kein NC-Konzept mehr → Variable = isActuated direkt.
+            spsState[varName] = isNC ? !isActuated : isActuated;
+            runSimulationTick();
         };
         // --- NEU: STRG-Logik für Taster ---
         let latchedTasters = new Set(); 
         window.setTaster = function(varName, isActionDown, event) {
 			if (isActionDown) SoundEngine.click();
-            if (event && typeof event.preventDefault === 'function') event.preventDefault(); 
+            if (event && typeof event.preventDefault === 'function') event.preventDefault();
             let cType = componentTypes[varName] || 'taster';
-            let isNCContact = window._isNCContact(cType);
+            let isNCContact = window._variableIsNCInverted(cType);
             if (event && (event.ctrlKey || event.metaKey)) {
                 if (isActionDown) {
                     if (latchedTasters.has(varName)) {
@@ -6057,7 +6120,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (latchedTasters.size > 0) {
                 latchedTasters.forEach(varName => {
                     let cType = componentTypes[varName] || 'taster';
-                    let isNCContact = window._isNCContact(cType);
+                    let isNCContact = window._variableIsNCInverted(cType);
                     spsState[varName] = isNCContact ? true : false; // Zurück in Ruhezustand
                     const btn = document.getElementById(`sim_taster_${varName}`);
                     if (btn) btn.classList.remove('pressed');
@@ -6077,9 +6140,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 boundVars.forEach(boundVar => {
                     let cType = componentTypes[boundVar] || 'taster';
                     if (cType.includes('taster')) {
-                        let isNC = window._isNCContact(cType);
+                        let isNC = window._variableIsNCInverted(cType);
                         // Taster losgelassen -> Zurück in den Ruhezustand
-                        spsState[boundVar] = isNC ? true : false; 
+                        spsState[boundVar] = isNC ? true : false;
                     }
                 });
                 // Nur einen neuen Frame berechnen, wenn auch wirklich eine unserer Tasten losgelassen wurde
@@ -6688,8 +6751,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (led) { if (value) led.classList.add('on'); else led.classList.remove('on'); }
                 // 2. Eingänge (Schalter & Taster) bidirektional synchronisieren
                 let cType = componentTypes[key] || 'taster';
-                let isNC = window._isNCContact(cType);
-                let shouldBeActuated = isNC ? !value : value; 
+                let isNC = window._variableIsNCInverted(cType);
+                let shouldBeActuated = isNC ? !value : value;
                 const switchIn = document.getElementById(`sim_in_${key}`);
                 if (switchIn) switchIn.checked = shouldBeActuated;
                 const btnIn = document.getElementById(`sim_taster_${key}`);
@@ -6739,7 +6802,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         isMechanicallyClosed = isNC ? !val : val;
                     } else {
                         // 🌟 FIX: Entkopplung von logischem Software-Zustand und echtem mechanischem Finger-Druck!
-                        let pNC = window._isNCContact(componentTypes[varName]);
+                        // Variable-Semantik (nicht Hardware-Realität) bestimmt, wie spsState→isPressed zu mappen ist.
+                        let pNC = window._variableIsNCInverted(componentTypes[varName]);
                         let isPressed = pNC ? !val : val;
                         isMechanicallyClosed = isNC ? !isPressed : isPressed;
                     }
@@ -7153,10 +7217,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!edge) return false;
                 let t = contactTypeMap[edge.sourceId] || 'relais';
                 if (['relais', 'ton', 'tof', 'tp', 'ctu'].includes(t)) return edge.inverted;
+                // Symbol-NC ergibt sich aus Variable-Semantik (mode-abhängig) ⊕ Code-seitiger Negation.
+                // SPS-Modus: NC-Hardware → Variable invertiert, also wirkt `X` raw als NC-Symbol.
+                // E-Pneu-Modus: keine Variable-Inversion, also nur Code-Negation `¬X` zeichnet NC.
                 let cT = componentTypes[edge.sourceId];
-                let pNC = window._isNCContact(cT);
-                return pNC ? !edge.inverted : edge.inverted;
-            };			
+                let varInv = window._variableIsNCInverted(cT);
+                return varInv ? !edge.inverted : edge.inverted;
+            };
             const nodesToDraw = Array.from(graph.nodes.values()).filter(n => ['GATE', 'RS', 'SR', 'TON', 'TOF', 'TP', 'CTU', 'OUTPUT'].includes(n.type)).sort((a,b) => a.level - b.level);
             function getTreeW(nodeId) {
                 let node = graph.nodes.get(nodeId);
@@ -22124,7 +22191,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         ComponentRegistry[obj.type].animate(obj, spsState);
                     }
                     if (obj.type === 'taster' || obj.type === 'schalter' || obj.type === 'nothalt') {
-                        let isVisuallyPressed = window._isNCContact(componentTypes[obj.linkedVar]) ? !spsState[obj.linkedVar] : spsState[obj.linkedVar];
+                        // Variable-Semantik: spsState→isPressed mapping ist im E-Pneu-Modus direkt (kein NC-Flip).
+                        let isVisuallyPressed = window._variableIsNCInverted(componentTypes[obj.linkedVar]) ? !spsState[obj.linkedVar] : spsState[obj.linkedVar];
                         if (isVisuallyPressed) { obj.el.classList.add('f2d-control-active'); obj.el.style.boxShadow = `0 0 15px ${obj.hexColor}, inset 0 0 10px rgba(0,0,0,0.5)`; }
                         else { obj.el.classList.remove('f2d-control-active'); obj.el.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.4)'; }
                         let _badge = obj.el.querySelector('.f2d-key-badge');
@@ -22913,10 +22981,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (typeof SoundEngine !== 'undefined') SoundEngine.click();
                     boundVars.forEach(boundVar => {
                         let cType = componentTypes[boundVar] || 'taster';
-                        let isNC = window._isNCContact(cType);
+                        let isNC = window._variableIsNCInverted(cType);
                         if (cType.includes('taster')) {
                             // Taster: Wird gedrückt
-                            spsState[boundVar] = isNC ? false : true; 
+                            spsState[boundVar] = isNC ? false : true;
                         } else {
                             // Schalter/Sensoren: Zustand umschalten (Toggle)
                             spsState[boundVar] = !spsState[boundVar];
@@ -31069,7 +31137,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const _contactSymbolFor = (varName, isNeg) => {
                     const ct = componentTypes[varName];
                     if (!ct) return null;
-                    const isHwNC = window._isNCContact(ct);
+                    // Variable-Semantik (mode-abhängig) bestimmt, ob die Code-Negation gespiegelt wird:
+                    // SPS-Modus + NC-Hardware → Inversion (raw `X` = NC-Symbol);
+                    // E-Pneu-Modus → keine Inversion (raw `X` = NO-Symbol, `¬X` = NC-Symbol).
+                    const isHwNC = window._variableIsNCInverted(ct);
                     const effectiveNC = isHwNC ? !isNeg : isNeg;
                     if (ct === 'taster' || ct === 'taster_nc')     return effectiveNC ? 'taster_nc'   : 'taster';
                     if (ct === 'schalter' || ct === 'schalter_nc') return effectiveNC ? 'schalter_nc' : 'schalter';
@@ -31602,15 +31673,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Das gezeichnete Symbol entspricht dem Ruhe-Zustand des Strangs:
                     //   NC-Symbol = Kontakt im Ruhezustand geschlossen (Strang führt Strom)
                     //   NO-Symbol = Kontakt im Ruhezustand offen
-                    // Bei NC-Hardware (taster_nc, nothalt, schalter_nc, light_curtain)
-                    // ist die Variable im Ruhezustand 1, also ist das positive Atom
-                    // im Strang als NC-Symbol darzustellen; ein ¬X kehrt das um.
-                    // Bei NO-Hardware ist es umgekehrt.
+                    // SPS-Modus + NC-Hardware: Variable im Ruhezustand = 1, raw `X` zeichnet NC, `¬X` zeichnet NO.
+                    // E-Pneu-Modus: Variable repräsentiert physischen Press-Zustand, keine Inversion;
+                    //               daher zeichnet `¬X` das NC-Symbol (Sicherheits-Konvention bleibt visuell)
+                    //               und raw `X` das NO-Symbol.
                     // Die ¬-Information geht NICHT verloren — sie ist im Editor-Typ
                     // (taster vs taster_nc) gegenüber der Hardware-Konfiguration
                     // implizit kodiert und wird in _exprForCoil rekonstruiert.
                     const ct = _ct(name);
-                    const isHwNC = window._isNCContact(ct);
+                    const isHwNC = window._variableIsNCInverted(ct);
                     const effectiveNC = isHwNC ? !isNeg : isNeg;
                     // Hardware-Familien mit beiden Varianten
                     if (ct === 'taster' || ct === 'taster_nc')     return effectiveNC ? 'taster_nc'   : 'taster';
@@ -34539,8 +34610,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (typeof c._isNeg === 'boolean') {
                             isNeg = c._isNeg;
                         } else {
+                            // Rekonstruktion der SCL-Negation aus Symbol- vs. Variable-Semantik:
+                            // SPS-Modus: NC-Hardware-Variable invertiert → Symbol-NC + HW-NC → raw `X`.
+                            // E-Pneu-Modus: keine Inversion → Symbol-NC → `¬X` (mode-konsistent).
                             const hwType = (typeof componentTypes !== 'undefined') ? componentTypes[c.varName] : null;
-                            const hwIsNC = window._isNCContact(hwType);
+                            const hwIsNC = window._variableIsNCInverted(hwType);
                             const symIsNC = !!t.nc;
                             isNeg = (symIsNC !== hwIsNC);
                         }

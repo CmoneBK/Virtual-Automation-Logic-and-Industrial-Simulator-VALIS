@@ -721,12 +721,34 @@
             display: inline-block; margin-left: 8px; color: #ffc107; font-weight: bold;
             letter-spacing: 2px; animation: vsHintDots 1.2s ease-in-out infinite;
         }
-        /* Lösungsabgleich-Ergebnisse */
-        .vs-line-correct { background: rgba(76,175,80,0.15); border-left: 3px solid #4caf50; padding-left: 5px; }
+        /* Lösungsabgleich-Ergebnisse — box-shadow inset statt border-left,
+           damit die Textarea-Selektion exakt über der Highlighter-Schrift bleibt. */
+        .vs-line-correct { background: rgba(76,175,80,0.15); box-shadow: inset 3px 0 0 0 #4caf50; }
         .vs-line-partial { background: rgba(255,193,7,0.10); }
         .vs-line-partial-marker {
             display: inline-block; margin-left: 10px; color: #ffc107;
             letter-spacing: 2px; font-weight: bold; opacity: 0.85;
+        }
+        /* „Zu viel Code" – korrekt, aber unnötig komplex */
+        .vs-line-extra { background: rgba(33,150,243,0.10); box-shadow: inset 3px 0 0 0 #4caf50; }
+        /* „Zu viel Code" – falsch, vermutlich wegen überflüssiger Bedingung */
+        .vs-line-extra-wrong { background: rgba(33,150,243,0.10); box-shadow: inset 3px 0 0 0 #ffc107; }
+        /* Geister-Zeile: zeigt, dass eine Zuweisung komplett fehlt, die nicht zu
+           einer existierenden Code-Zeile gehört. Pro fehlendem Eintrag eine Zeile. */
+        .vs-missing-ghost {
+            display: block;
+            background: rgba(255,193,7,0.10);
+            box-shadow: inset 3px 0 0 0 #ffc107;
+            color: #ffc107;
+            opacity: 0.85;
+            font-style: italic;
+            letter-spacing: 4px;
+            padding-left: 4px;
+            user-select: none;
+        }
+        .vs-line-extra-marker {
+            display: inline-block; margin-left: 10px; color: #64b5f6;
+            font-weight: bold; opacity: 0.85; font-style: italic;
         }
         #editor-missing-badge {
             position: absolute; bottom: 6px; right: 6px; z-index: 4;
@@ -736,6 +758,27 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
             pointer-events: none; user-select: none;
             display: none;
+        }
+        /* Legenden-Leiste mit Marker-Erklärung — erscheint nur, wenn ein
+           Lösungsabgleich aktiv ist, und nur mit den real vorkommenden Markern. */
+        #check-result-legend {
+            position: absolute; bottom: 6px; left: 6px; z-index: 4;
+            background: rgba(45,45,48,0.94); color: #cfd8dc;
+            padding: 3px 8px; border-radius: 4px;
+            font-size: 10px; line-height: 1.4;
+            display: none; gap: 12px; align-items: center;
+            pointer-events: none; user-select: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            max-width: calc(100% - 100px); flex-wrap: wrap;
+        }
+        #check-result-legend.active { display: flex; }
+        #check-result-legend > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+        #check-result-legend .lg-swatch {
+            display: inline-block; width: 4px; height: 12px; border-radius: 1px;
+        }
+        #check-result-legend .lg-bg {
+            display: inline-block; padding: 0 4px; border-radius: 2px;
+            font-style: italic; font-weight: bold; font-family: 'Consolas','Courier New',monospace;
         }
         /* Hint-Button im Task-Panel */
         .task-hint-btn {
@@ -1631,6 +1674,7 @@
                 <textarea id="code" spellcheck="false"></textarea>
                 <div id="error-gutter" aria-hidden="true"></div>
                 <div id="editor-missing-badge" title="Es fehlen noch Ausgänge/Bedingungen, die in der Lösung erwartet werden."></div>
+                <div id="check-result-legend" aria-live="polite"></div>
             </div>
             <div id="code-inspector" aria-live="polite"></div>
         </div>
@@ -6880,6 +6924,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             const _ccr = window._codeCheckResult || null;
             const _greenLines = _ccr && _ccr.greenLines ? _ccr.greenLines : null;
             const _partialLines = _ccr && _ccr.partialLines ? _ccr.partialLines : null;
+            const _extraLines = _ccr && _ccr.extraLines ? _ccr.extraLines : null;
+            const _extraWrongLines = _ccr && _ccr.extraWrongLines ? _ccr.extraWrongLines : null;
             const _hintLines = _ccr && _ccr.hintLines ? _ccr.hintLines : null;
             const html = rawLines.map((line, idx) => {
                 const isError = errLines.has(idx) && idx !== cursorLine;
@@ -6890,16 +6936,32 @@ You must output exactly this JSON format. The logic code goes as a single string
                     bg = 'background:rgba(220,50,50,0.18);';
                 } else if (_greenLines && _greenLines.has(idx)) {
                     cls = ' class="vs-line-correct"';
+                } else if (_extraWrongLines && _extraWrongLines.has(idx)) {
+                    cls = ' class="vs-line-extra-wrong"';
+                    suffix = '<span class="vs-line-extra-marker" title="Vermutlich zu viel — eine Bedingung könnte überflüssig sein">≈</span>';
                 } else if (_partialLines && _partialLines.has(idx)) {
                     cls = ' class="vs-line-partial"';
                     suffix = '<span class="vs-line-partial-marker">⋯</span>';
+                } else if (_extraLines && _extraLines.has(idx)) {
+                    cls = ' class="vs-line-extra"';
+                    suffix = '<span class="vs-line-extra-marker" title="Korrekt, aber kürzer möglich">≈</span>';
                 }
                 if (_hintLines && _hintLines.has(idx)) {
                     suffix = (suffix || '') + '<span class="vs-hint-dots">⋯</span>';
                 }
                 return `<span style="display:block;${bg}"${cls}>${processLine(line)}${suffix}</span>`;
             }).join('');
-            highlightingContent.innerHTML = html;
+            // Geister-Zeilen: für jeden code-bezogenen fehlenden Eintrag eine gelbe
+            // Zeile unter dem letzten echten Code-Span. Sie sind nicht editierbar
+            // (gehören nur der Highlighter-Schicht an).
+            let ghostHtml = '';
+            const _cm = _ccr && _ccr.codeMissing ? _ccr.codeMissing : 0;
+            if (_cm > 0) {
+                for (let i = 0; i < _cm; i++) {
+                    ghostHtml += '<span class="vs-missing-ghost">⋯</span>';
+                }
+            }
+            highlightingContent.innerHTML = html + ghostHtml;
         }
 		// Funktion zum Einfügen von Symbolen an der aktuellen Cursor-Position
         window.insertSymbol = function(symbol) {
@@ -11404,6 +11466,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._taskHintsUsed = 0;
             window._codeCheckResult = null;
             const _mb = document.getElementById('editor-missing-badge'); if (_mb) _mb.style.display = 'none';
+            const _lg = document.getElementById('check-result-legend'); if (_lg) { _lg.classList.remove('active'); _lg.innerHTML = ''; }
             if (_taskTimerInterval) { clearInterval(_taskTimerInterval); _taskTimerInterval = null; }
 
             document.getElementById('task-panel-name').textContent = taskObj.name || 'Aufgabe';
@@ -11981,6 +12044,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._taskHintsUsed = 0;
             window._codeCheckResult = null;
             const _mb = document.getElementById('editor-missing-badge'); if (_mb) _mb.style.display = 'none';
+            if (typeof _hideCheckLegend === 'function') _hideCheckLegend();
             if (typeof _taskRefreshActionButtons === 'function') _taskRefreshActionButtons();
             try { updateHighlighting(); } catch(e){}
             if (_taskTimerInterval) { clearInterval(_taskTimerInterval); _taskTimerInterval = null; }
@@ -12048,6 +12112,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Reflow erzwingen, damit die Animation neu startet auch wenn sie schon lief
             void el.offsetWidth;
             el.classList.add('vs-hint-pulse');
+            // Element ins Blickfeld scrollen, falls es außerhalb des sichtbaren Bereichs liegt
+            try { el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); } catch(e) {}
             setTimeout(() => el.classList.remove('vs-hint-pulse'), 2600);
             return true;
         }
@@ -12066,6 +12132,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (b.dataset.objectType === objectType || b.dataset['2dTool'] === objectType) return b;
             }
             return null;
+        }
+        // Scrollt den Code-Editor so, dass die angegebene Zeile sichtbar wird,
+        // falls sie aktuell nicht im sichtbaren Bereich liegt. Sonst kein Scroll.
+        function _scrollEditorToLine(lineIdx) {
+            const ta = document.getElementById('code');
+            if (!ta || lineIdx == null || lineIdx < 0) return;
+            const cs = getComputedStyle(ta);
+            const lineHeight = parseFloat(cs.lineHeight) || 19.5;
+            const padTop = parseFloat(cs.paddingTop) || 15;
+            const targetY = padTop + lineIdx * lineHeight;
+            const lineBottom = targetY + lineHeight;
+            const viewTop = ta.scrollTop;
+            const viewBottom = viewTop + ta.clientHeight;
+            // Nur scrollen, wenn die Zeile (mit etwas Sicherheitsabstand) außerhalb liegt
+            const margin = lineHeight * 1.5;
+            if (targetY < viewTop + margin || lineBottom > viewBottom - margin) {
+                // Zeile zentrieren
+                const newTop = Math.max(0, targetY - ta.clientHeight / 2 + lineHeight / 2);
+                ta.scrollTop = newTop;
+                // Highlighter-Overlay synchron mitscrollen
+                const hi = document.getElementById('highlighting');
+                if (hi) hi.scrollTop = newTop;
+            }
         }
         // Setzt einen kurzlebigen Tipp-Marker im Editor (3 gelbe Punkte am Zeilenende oder am Ende des Codes).
         // Wenn lineIdx === -1, werden die Punkte unter den Code gelegt (Indikator: hier fehlt was komplett).
@@ -12088,6 +12177,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._codeCheckResult.hintLines = window._codeCheckResult.hintLines || new Set();
             window._codeCheckResult.hintLines.add(lineIdx);
             try { updateHighlighting(); } catch(e){}
+            // Sichtbar machen, falls nötig
+            _scrollEditorToLine(lineIdx);
             setTimeout(() => {
                 if (window._codeCheckResult && window._codeCheckResult.hintLines) {
                     window._codeCheckResult.hintLines.delete(lineIdx);
@@ -12168,21 +12259,68 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
         }
 
+        // Kann für diese Condition aktuell eine sinnvolle visuelle Markierung gesetzt werden?
+        // (z.B. logic_equivalent ohne jeglichen Schülercode → noch nicht markierbar → überspringen)
+        function _canHintForCondition(cond) {
+            try {
+                switch (cond.type) {
+                    case 'component_type':
+                    case 'sps_output':
+                    case 'sps_input':
+                    case 'variable_exists':
+                        return !!_findSimRowForVar(cond.variable);
+                    case 'logic_equivalent': {
+                        const refParsed = parseToGraph(cond.refCode || '');
+                        const refOuts = refParsed.outputs || [];
+                        for (const o of refOuts) {
+                            if (_findLinesForOutput(o).length) return true;
+                        }
+                        return false;
+                    }
+                    case 'factory_object':
+                        return !!_findFactoryToolbarBtn(cond.objectType);
+                    case 'code_contains':
+                        return true; // Editor-Pulse ist immer möglich
+                    default:
+                        return true; // Cond-Item im Panel kann immer pulsieren
+                }
+            } catch(e) { return false; }
+        }
+        function _shuffledIndices(n) {
+            const a = Array.from({length: n}, (_, i) => i);
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+        // Findet den Index der nächsten Condition, für die ein Tipp aktuell möglich ist.
+        // Berücksichtigt: hintEnabled, bereits erfüllt, Hint-Reihenfolge (sequenziell vs. zufällig).
+        function _taskFindNextHintableCondition() {
+            if (!activeTask) return -1;
+            const conds = _taskActiveConds();
+            if (!conds.length) return -1;
+            const random = activeTask.hintOrder === 'random';
+            const order = random ? _shuffledIndices(conds.length) : conds.map((_, i) => i);
+            for (const i of order) {
+                const c = conds[i];
+                if (!c) continue;
+                if (c.hintEnabled === false) continue;
+                if (_checkCondition(c)) continue;
+                if (!_canHintForCondition(c)) continue;
+                return i;
+            }
+            return -1;
+        }
+
         window._taskUseTip = function() {
             if (!activeTask) return;
             const maxH = activeTask.maxHints || 0;
             if (maxH <= 0) return;
             if ((window._taskHintsUsed || 0) >= maxH) return;
+            const chosenIdx = _taskFindNextHintableCondition();
+            if (chosenIdx < 0) return; // Nichts Markierbares → kein Verbrauch
             const conds = _taskActiveConds();
-            // Erste unerfüllte Condition mit hintEnabled
-            let chosenIdx = -1;
-            for (let i = 0; i < conds.length; i++) {
-                const c = conds[i];
-                if (c.hintEnabled === false) continue;
-                if (_checkCondition(c)) continue;
-                chosenIdx = i; break;
-            }
-            if (chosenIdx < 0) return; // Nichts zu tippen
             const ok = _taskHintForCondition(conds[chosenIdx], chosenIdx);
             if (ok) {
                 window._taskHintsUsed = (window._taskHintsUsed || 0) + 1;
@@ -12205,7 +12343,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (maxH > 0) {
                 tipBtn.style.display = '';
                 tipBtn.textContent = '💡 Tipp (' + remaining + '/' + maxH + ')';
-                tipBtn.disabled = (remaining === 0);
+                // Tipp blockieren, wenn Tipps aufgebraucht ODER aktuell nichts Markierbares existiert
+                const hasHintable = _taskFindNextHintableCondition() >= 0;
+                const blocked = (remaining === 0) || !hasHintable;
+                tipBtn.disabled = blocked;
+                tipBtn.title = !hasHintable && remaining > 0
+                    ? 'Aktuell kein Tipp möglich — schreibe oder lege erst etwas an, worauf der Tipp zeigen kann.'
+                    : (blocked ? 'Keine Tipps mehr verfügbar.' : 'Subtile, visuelle Hilfe für die nächste unerfüllte Bedingung.');
             } else {
                 tipBtn.style.display = 'none';
             }
@@ -12241,9 +12385,36 @@ You must output exactly this JSON format. The logic code goes as a single string
             });
             return idxs;
         }
+        // Zählt die "Last" der RHS-Ausdrücke, die einen bestimmten Output produzieren.
+        // Maß = Anzahl Identifier + Anzahl Operatoren (über alle Zeilen, die LHS dieses Outputs sind).
+        // Wird für die "zu viel Code"-Erkennung verwendet (Schüler-Komplexität vs. Referenz).
+        function _countTokensForOutput(code, outputName) {
+            if (!code || !outputName) return 0;
+            const lines = String(code).split('\n');
+            const qm = outputName.match(/^Q(\d+)(_(?:SR|RS))?$/i);
+            const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const targetREs = [ new RegExp('^\\s*' + esc(outputName) + '\\s*:=', 'i') ];
+            if (qm) {
+                const num = qm[1];
+                const suf = (qm[2] || '').toUpperCase();
+                targetREs.push(new RegExp('^\\s*S' + num + (suf ? suf : '(?:_RS)?') + '\\s*:=', 'i'));
+                targetREs.push(new RegExp('^\\s*R' + num + (suf ? suf : '(?:_RS)?') + '\\s*:=', 'i'));
+            }
+            let total = 0;
+            for (const line of lines) {
+                const cl = line.split('//')[0];
+                if (!targetREs.some(re => re.test(cl))) continue;
+                const eqIdx = cl.search(/:=|<-|=|\bIST\b|\bIS\b|\bGLEICH\b/i);
+                if (eqIdx < 0) continue;
+                const rhs = cl.substring(eqIdx).replace(/^\s*(:=|<-|=|\bIST\b|\bIS\b|\bGLEICH\b)\s*/i, '');
+                const tokens = rhs.match(/[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*|&&|\|\||¬|!/g) || [];
+                total += tokens.length;
+            }
+            return total;
+        }
         // Pro Output prüfen, ob Schülercode für alle Eingangskombinationen dasselbe liefert
         function _checkLogicEquivPerOutput(refCode) {
-            const result = { matchingOuts: [], mismatchingOuts: [], missingOuts: [] };
+            const result = { matchingOuts: [], mismatchingOuts: [], missingOuts: [], overSpecifiedOuts: [], overSpecifiedWrongOuts: [] };
             const _refCode = (refCode || '').trim();
             if (!_refCode) return result;
             const _stuCode = document.getElementById('code').value;
@@ -12296,121 +12467,205 @@ You must output exactly this JSON format. The logic code goes as a single string
             result.missingOuts    = result.missingOuts.filter(o => !_isQ(o));
             result.matchingOuts   = result.matchingOuts.filter(o => !_isQ(o));
             result.mismatchingOuts= result.mismatchingOuts.filter(o => !_isQ(o));
+            // „Zu viel Code"-Erkennung: deutlich mehr Tokens als Referenz
+            // (mind. 2 mehr UND mehr als das 1.5-fache).
+            const _isOver = (stu, ref) => (stu >= ref + 2) && (stu > Math.ceil(ref * 1.5));
+            // Korrekte Outputs mit zu viel Code → Hinweis „kürzer möglich"
+            for (const o of result.matchingOuts) {
+                if (_isOver(_countTokensForOutput(_stuCode, o), _countTokensForOutput(_refCode, o))) {
+                    result.overSpecifiedOuts.push(o);
+                }
+            }
+            // Falsche Outputs mit zu viel Code → vermutlich überflüssige Bedingung ist Ursache
+            for (const o of result.mismatchingOuts) {
+                if (_isOver(_countTokensForOutput(_stuCode, o), _countTokensForOutput(_refCode, o))) {
+                    result.overSpecifiedWrongOuts.push(o);
+                }
+            }
             return result;
         }
         // Partial-Analyse für eine einzelne Condition
         function _taskAnalyzeConditionPartial(cond) {
             const greenLines = new Set();
             const partialLines = new Set();
-            let missing = 0;
+            const extraLines = new Set();        // korrekt, aber zu viel Code
+            const extraWrongLines = new Set();   // falsch, vermutlich wegen zu viel Code
+            let codeMissing = 0;     // fehlt im Code (eigene Zuweisung erwartet, nicht vorhanden)
+            let runtimeMissing = 0;  // fehlt in der Laufzeit (Fabrikobjekt, Simulation, …)
             try {
                 switch (cond.type) {
                     case 'component_type': {
                         const v = cond.variable;
-                        if (!v) { missing = 1; break; }
+                        if (!v) { codeMissing = 1; break; }
                         const has = componentTypes[v];
                         const lines = _findLinesForLhs(v);
                         if (has === cond.compType) {
                             lines.forEach(l => greenLines.add(l));
-                            if (!lines.length) missing = 1;
+                            if (!lines.length) codeMissing = 1;
                         } else if (has) {
                             lines.forEach(l => partialLines.add(l));
-                            if (!lines.length) missing = 1;
+                            if (!lines.length) codeMissing = 1;
                         } else {
-                            missing = 1;
+                            codeMissing = 1;
                         }
                         break;
                     }
                     case 'variable_exists': {
                         const v = cond.variable;
-                        if (!v) { missing = 1; break; }
+                        if (!v) { codeMissing = 1; break; }
                         const exists = (globalInputs||[]).includes(v) || (globalOutputs||[]).includes(v);
                         if (exists) {
                             const lines = _findLinesContainingVar(v);
                             lines.forEach(l => greenLines.add(l));
-                            if (!lines.length) missing = 1;
+                            if (!lines.length) codeMissing = 1;
                         } else {
-                            missing = 1;
+                            codeMissing = 1;
                         }
                         break;
                     }
                     case 'code_contains': {
-                        if (!cond.pattern) { missing = 1; break; }
+                        if (!cond.pattern) { codeMissing = 1; break; }
                         try {
                             const re = new RegExp(cond.pattern);
                             const text = document.getElementById('code').value;
                             const lines = text.split('\n');
                             let any = false;
                             lines.forEach((line, idx) => { if (re.test(line)) { greenLines.add(idx); any = true; } });
-                            if (!any) missing = 1;
-                        } catch(e) { missing = 1; }
+                            if (!any) codeMissing = 1;
+                        } catch(e) { codeMissing = 1; }
                         break;
                     }
                     case 'logic_equivalent': {
                         const r = _checkLogicEquivPerOutput(cond.refCode);
-                        r.matchingOuts.forEach(o => _findLinesForOutput(o).forEach(l => greenLines.add(l)));
-                        r.mismatchingOuts.forEach(o => _findLinesForOutput(o).forEach(l => partialLines.add(l)));
-                        missing = r.missingOuts.length;
+                        const overSet = new Set(r.overSpecifiedOuts || []);
+                        const overWrongSet = new Set(r.overSpecifiedWrongOuts || []);
+                        r.matchingOuts.forEach(o => {
+                            const lines = _findLinesForOutput(o);
+                            if (overSet.has(o)) lines.forEach(l => extraLines.add(l));
+                            else lines.forEach(l => greenLines.add(l));
+                        });
+                        r.mismatchingOuts.forEach(o => {
+                            const lines = _findLinesForOutput(o);
+                            if (overWrongSet.has(o)) lines.forEach(l => extraWrongLines.add(l));
+                            else lines.forEach(l => partialLines.add(l));
+                        });
+                        codeMissing = r.missingOuts.length;
                         break;
                     }
                     case 'sps_output':
                     case 'sps_input':
-                        if (spsState[cond.variable] !== cond.value) missing = 1;
+                        if (spsState[cond.variable] !== cond.value) runtimeMissing = 1;
                         break;
                     case 'factory_object':
-                        if (!(factoryObjects||[]).some(o => o.type === cond.objectType && o.linkedVar === cond.linkedVar)) missing = 1;
+                        if (!(factoryObjects||[]).some(o => o.type === cond.objectType && o.linkedVar === cond.linkedVar)) runtimeMissing = 1;
                         break;
                     case 'sim_running':
-                        if (taskSimSeconds < cond.minSeconds) missing = 1;
+                        if (taskSimSeconds < cond.minSeconds) runtimeMissing = 1;
                         break;
                     case 'despawner_count':
-                        if (taskDespawnCount < cond.count) missing = 1;
+                        if (taskDespawnCount < cond.count) runtimeMissing = 1;
                         break;
                     case 'custom_js':
                         try {
                             const ok = !!new Function('spsState','factoryObjects','globalInputs','globalOutputs','taskSimSeconds','return '+cond.expression)(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
-                            if (!ok) missing = 1;
-                        } catch(e) { missing = 1; }
+                            if (!ok) runtimeMissing = 1;
+                        } catch(e) { runtimeMissing = 1; }
                         break;
                 }
             } catch(e) {}
-            return { greenLines, partialLines, missing };
+            return { greenLines, partialLines, extraLines, extraWrongLines, codeMissing, runtimeMissing };
         }
 
         window._taskRunCheck = function() {
             if (!activeTask) return;
             const conds = _taskActiveConds();
             if (!conds.length) return;
-            const result = { greenLines: new Set(), partialLines: new Set(), missingCount: 0, hintLines: new Set() };
+            const result = { greenLines: new Set(), partialLines: new Set(), extraLines: new Set(), extraWrongLines: new Set(), codeMissing: 0, runtimeMissing: 0, missingCount: 0, hintLines: new Set() };
             for (const c of conds) {
                 const r = _taskAnalyzeConditionPartial(c);
                 r.greenLines.forEach(l => result.greenLines.add(l));
-                r.partialLines.forEach(l => { if (!result.greenLines.has(l)) result.partialLines.add(l); });
-                result.missingCount += r.missing;
+                r.partialLines.forEach(l => result.partialLines.add(l));
+                (r.extraLines || new Set()).forEach(l => result.extraLines.add(l));
+                (r.extraWrongLines || new Set()).forEach(l => result.extraWrongLines.add(l));
+                result.codeMissing    += (r.codeMissing    || 0);
+                result.runtimeMissing += (r.runtimeMissing || 0);
             }
-            result.partialLines.forEach(l => { if (result.greenLines.has(l)) result.partialLines.delete(l); });
+            result.missingCount = result.codeMissing + result.runtimeMissing;
+            // Vorrangs-Auflösung: grün > extraWrong > partial > extra (korrekt-aber-lang).
+            // grün ist das positivste Signal; extraWrong ist informationsreicher als reines partial.
+            result.extraWrongLines.forEach(l => { if (result.greenLines.has(l)) result.extraWrongLines.delete(l); });
+            result.partialLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l)) result.partialLines.delete(l); });
+            result.extraLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l) || result.partialLines.has(l)) result.extraLines.delete(l); });
             window._codeCheckResult = result;
             const mb = document.getElementById('editor-missing-badge');
             if (mb) {
-                if (result.missingCount > 0) {
-                    mb.textContent = '+' + result.missingCount + (result.missingCount === 1 ? ' fehlt' : ' fehlen');
+                // Badge zeigt nur Laufzeit-Fehlendes (Fabrikobjekt/Simulation/…).
+                // Code-bezogenes Fehlendes wird als Geister-Zeilen unter dem Code dargestellt.
+                if (result.runtimeMissing > 0) {
+                    mb.textContent = '+' + result.runtimeMissing + (result.runtimeMissing === 1 ? ' weitere Bedingung' : ' weitere Bedingungen');
                     mb.style.display = 'block';
                 } else {
                     mb.style.display = 'none';
                 }
             }
+            // Legenden-Leiste: nur die Marker zeigen, die im Ergebnis vorkommen
+            _renderCheckLegend(result);
             try { updateHighlighting(); } catch(e){}
         };
+        function _renderCheckLegend(result) {
+            const lg = document.getElementById('check-result-legend');
+            if (!lg) return;
+            const items = [];
+            if (result.greenLines && result.greenLines.size) {
+                items.push('<span><span class="lg-swatch" style="background:#4caf50;"></span>korrekt</span>');
+            }
+            if (result.extraLines && result.extraLines.size) {
+                items.push('<span><span class="lg-bg" style="background:rgba(33,150,243,0.18);color:#64b5f6;">≈</span>korrekt, aber kürzer möglich</span>');
+            }
+            if (result.extraWrongLines && result.extraWrongLines.size) {
+                items.push('<span><span class="lg-bg" style="background:rgba(33,150,243,0.18);color:#64b5f6;">≈</span>falsch — vermutlich zu viel</span>');
+            }
+            if (result.partialLines && result.partialLines.size) {
+                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>stimmt noch nicht</span>');
+            }
+            if (result.codeMissing > 0) {
+                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>Zuweisung fehlt komplett</span>');
+            }
+            if (result.runtimeMissing > 0) {
+                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.92);color:#1a1a1a;">+N</span>weitere Bedingung (außerhalb Code)</span>');
+            }
+            if (!items.length) {
+                lg.classList.remove('active');
+                lg.innerHTML = '';
+                return;
+            }
+            lg.innerHTML = items.join('');
+            lg.classList.add('active');
+        }
+        function _hideCheckLegend() {
+            const lg = document.getElementById('check-result-legend');
+            if (lg) { lg.classList.remove('active'); lg.innerHTML = ''; }
+        }
 
-        // Auto-Clear: Bei Code-Änderung verschwinden alle Check-Markierungen
+        // Auto-Clear: Bei Code-Änderung verschwinden alle Check-Markierungen.
+        // Außerdem: Tipp-Button-Status aktualisieren (Markierbarkeit kann sich geändert haben).
         (function attachAutoClear() {
             const ta = document.getElementById('code');
             if (!ta) return;
+            let _refreshTo = 0;
             ta.addEventListener('input', function() {
-                if (!window._codeCheckResult) return;
-                window._codeCheckResult = null;
-                const mb = document.getElementById('editor-missing-badge');
-                if (mb) mb.style.display = 'none';
+                if (window._codeCheckResult) {
+                    window._codeCheckResult = null;
+                    const mb = document.getElementById('editor-missing-badge');
+                    if (mb) mb.style.display = 'none';
+                    _hideCheckLegend();
+                }
+                if (activeTask) {
+                    clearTimeout(_refreshTo);
+                    _refreshTo = setTimeout(() => {
+                        try { _taskRefreshActionButtons(); } catch(e){}
+                    }, 200);
+                }
             });
         })();
 
@@ -12914,6 +13169,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             task.timeLimit = tl > 0 ? tl : null;
             const mh = parseInt((document.getElementById('ted-maxhints')||{value:'0'}).value);
             task.maxHints = (isNaN(mh) || mh < 0) ? 0 : mh;
+            task.hintOrder = (document.getElementById('ted-hint-random')||{checked:false}).checked ? 'random' : 'sequential';
             // Aktuelle Stage persistieren (in _stages[currentStage])
             _stagePersistCurrent();
             const stages = task._stages || [];
@@ -13093,6 +13349,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;color:#b0bec5;font-size:11px;">
                     <input type="checkbox" id="ted-auto-start-sim" ${task.autoStartSim ? 'checked' : ''}>
                     <span>Simulation beim Start der Aufgabe automatisch starten</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;margin-top:6px;cursor:pointer;color:#b0bec5;font-size:11px;" title="Wenn aktiviert, wählt der Tipp-Knopf eine zufällige unerfüllte Bedingung. Sonst wird die Reihenfolge der Erfolgskriterien eingehalten.">
+                    <input type="checkbox" id="ted-hint-random" ${task.hintOrder === 'random' ? 'checked' : ''}>
+                    <span>Tipps in zufälliger Reihenfolge vergeben (statt nach Erfolgskriterien-Reihenfolge)</span>
                 </label>
                 <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">📸 Preset (Ausgangszustand der Aufgabe)</div>
@@ -13307,7 +13567,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             const doSave = () => {
                 _saveTaskLocally(task);
                 let modal = document.getElementById('task-editor-modal');
-                modal._savedSnapshot = JSON.stringify(task);
+                // Snapshot mit demselben Format wie der Dirty-Check vergleicht:
+                // _taskCollectFromEditor() liefert die noch nicht bereinigte Form
+                // (mit `_stages`/`_currentStage`). Würden wir hier `task` (bereinigt)
+                // speichern, käme die Schließen-Prüfung sofort nach dem Speichern
+                // zu „ungespeicherte Änderungen" — auch ohne reale Änderung.
+                modal._savedSnapshot = JSON.stringify(_taskCollectFromEditor());
                 window._openTaskManager();
                 _showToast('✅ Aufgabe "' + task.name + '" gespeichert.');
             };

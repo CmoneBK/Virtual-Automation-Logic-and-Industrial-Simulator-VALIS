@@ -4987,20 +4987,20 @@ You must output exactly this JSON format. The logic code goes as a single string
             {
                 key: 'safe_start',
                 title: 'Sichere Selbsthaltung mit Notaus',
-                desc: 'Industrial-Pattern: Start setzt, Stopp & Tripwire-Stop löschen. Die Form, die Du in Redstone als Door-Lock-Schaltung kennst.',
-                code: '// Sichere Selbsthaltung\nS1 := START_BUTTON\nR1 := STOP_BUTTON || ¬TRIPWIRE_STOP\nMOTOR := Q1'
+                desc: 'Industrial-Pattern: Start setzt, Stop-Knopf ODER Tripwire-Auslösung löschen. Die Form, die Du in Redstone als Door-Lock-Schaltung kennst.',
+                code: '// Sichere Selbsthaltung\nS1 := START_BUTTON\nR1 := STOP_BUTTON || TRIPWIRE\nMOTOR := Q1'
             },
             {
                 key: 'pulse',
-                title: 'Pulse-Generator (1 Tick Pulse via TON)',
-                desc: 'In Redstone: Button + Repeater + Torch-Loop. In VALIS sauber als kurzer TON-getrigger­ter Puls.',
-                code: '// Kurzer Puls bei Knopfdruck (100 ms)\nPULSE := BUTTON && ¬TON(BUTTON, 0.1)'
+                title: 'Pulse-Generator (kurzer Impuls via TON)',
+                desc: 'In Redstone: Button + Repeater + Torch-Loop. In VALIS als TON-Verzögerung in eigener Hilfsvariable, danach mit dem Eingang UND-verknüpft.',
+                code: '// Kurzer Puls bei Knopfdruck (100 ms)\n// Wichtig: Timer in eigener Zeile, nicht im Ausdruck!\nPULS_DELAY := TON(BUTTON, 0.1)\nPULSE := BUTTON && ¬PULS_DELAY'
             },
             {
                 key: 'edge_detect',
                 title: 'Edge-Detector (Observer-Ersatz)',
-                desc: 'Erkennt die steigende Flanke eines Signals — wie ein Observer-Block, aber explizit codiert.',
-                code: '// Steigende Flanke erkennen (Ersatz für Observer)\nEDGE := SIGNAL && ¬TON(SIGNAL, 0.05)\nNOTE_BLOCK := EDGE'
+                desc: 'Erkennt die steigende Flanke eines Signals — wie ein Observer-Block, aber explizit codiert. Auch hier: Timer in eigener Hilfszeile, dann mit dem Signal verknüpfen.',
+                code: '// Steigende Flanke erkennen (Ersatz für Observer)\nEDGE_DELAY := TON(SIGNAL, 0.05)\nEDGE := SIGNAL && ¬EDGE_DELAY\nNOTE_BLOCK := EDGE'
             },
             {
                 key: 'repeater_chain',
@@ -5052,12 +5052,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 `<rect x="${x-1}" y="${y+2}" width="2" height="6" fill="${C.wd}"/>` +
                 `<circle cx="${x}" cy="${y-1}" r="${on?2.6:1.8}" fill="${on?C.th:C.wo}"/>` +
                 (on ? `<circle cx="${x}" cy="${y-1}" r="5" fill="${C.th}" opacity="0.4"/>` : '');
-            // Lever (Holzbasis + Hebel-Stick)
+            // Lever (Holzbasis + Hebel-Stick).
+            //   Konvention: nach RECHTS geneigt = AN (rot), nach LINKS = AUS (grau).
+            //   In SVG drehen positive Winkel im Uhrzeigersinn → +25° = Stick neigt nach rechts.
+            //   Im AN-Zustand wird zusätzlich der Stick rot eingefärbt, damit der Zustand auch
+            //   im flüchtigen Blick erkennbar ist (nicht nur der kleine Knopf am Ende).
             const L = (x,y,on,lab) => {
-                const a = on ? -25 : 25;
+                const a = on ? 25 : -25;
+                const stickColor = on ? C.tb : C.sd;
                 return `<rect x="${x+1}" y="${y+14}" width="22" height="8" fill="${C.w}" stroke="${C.wd}" stroke-width="0.5"/>` +
                        `<g transform="translate(${x+12},${y+18}) rotate(${a})">` +
-                       `<line x1="0" y1="0" x2="0" y2="-12" stroke="${C.sd}" stroke-width="2"/>` +
+                       `<line x1="0" y1="0" x2="0" y2="-12" stroke="${stickColor}" stroke-width="2"/>` +
                        `<circle cx="0" cy="-12" r="2.5" fill="${on?C.tb:C.sl}"/></g>` +
                        (lab ? `<text x="${x+12}" y="${y+34}" fill="${C.lb}" font-size="9" font-family="Consolas,monospace" text-anchor="middle">${lab}</text>` : '');
             };
@@ -5135,11 +5140,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ),
 
                 // 2. AND-Gate — zwei NOT-Torches → gemeinsamer Block → finaler NOT-Torch (NOR-NOR-Trick)
+                //   Demo-Zustand: BEIDE Lever ON → beide Eingangs-Blöcke bestromt → erste Torches AUS
+                //   → mittlere Wires + Mittel-Block UN-bestromt → finale Torch AN → Lampe AN ✓
                 and_torches: () => wrap(W_, H2,
-                    L(20, 12, false, 'LEVER_A') +
-                    L(20, 72, false, 'LEVER_B') +
-                    W(44, 24, 90, 24, false) +
-                    W(44, 84, 90, 84, false) +
+                    L(20, 12, true, 'LEVER_A') +
+                    L(20, 72, true, 'LEVER_B') +
+                    W(44, 24, 90, 24, true) +
+                    W(44, 84, 90, 84, true) +
                     B(90, 12) + B(90, 72) +
                     T(126, 24, false) + T(126, 84, false) +
                     W(126, 24, 180, 24, false) +
@@ -5150,8 +5157,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     T(256, 54, true) +
                     W(256, 54, 330, 54, true) +
                     LP(330, 42, true, 'LAMPE') +
-                    TX(380, 40, 'Klassische NOR-NOR-Konstruktion', 'start') +
-                    TX(380, 56, 'Zwei NOT-Torches × NOT-Torch = AND', 'start', {italic:true, size:8})
+                    TX(380, 32, 'Klassische NOR-NOR-Konstruktion', 'start') +
+                    TX(380, 48, 'Zwei NOT-Torches × NOT-Torch = AND', 'start', {italic:true, size:8}) +
+                    TX(380, 72, 'Beide Lever AN → Lampe AN ✓', 'start', {italic:true, size:8})
                 ),
 
                 // 3. OR-Gate — zwei Wires laufen einfach zusammen
@@ -5168,24 +5176,31 @@ You must output exactly this JSON format. The logic code goes as a single string
                     TX(310, 76, 'Kein Gatter nötig.', 'start', {italic:true, size:8})
                 ),
 
-                // 4. XOR — Klassisches 4-Torch-Pattern (vereinfachte Darstellung)
+                // 4. XOR — Klassisches 4-Torch-Pattern
+                //   Demo-Zustand: LEVER_A=AN, LEVER_B=AUS → genau eins ist an → XOR liefert AN.
+                //   So sieht man die unterschiedlichen Wires aktiv/inaktiv und kann den Pfad
+                //   „eingang → torch → cross-wire → finaler torch → lampe" verfolgen.
                 xor: () => wrap(W_, H2,
-                    L(20, 12, false, 'LEVER_A') +
+                    L(20, 12, true,  'LEVER_A') +
                     L(20, 72, false, 'LEVER_B') +
-                    W(44, 24, 110, 24, false) +
+                    W(44, 24, 110, 24, true) +
                     W(44, 84, 110, 84, false) +
                     B(110, 12) + B(110, 72) +
-                    T(146, 24, true) + T(146, 84, true) +
-                    // Cross-wires
+                    // A=ON → block_A bestromt → torch_A OFF; B=OFF → block_B unbestromt → torch_B ON
+                    T(146, 24, false) + T(146, 84, true) +
+                    // Cross-wires: oben→unten (von torch_A AUS = OFF), unten→oben (von torch_B AN = ON)
                     W(146, 24, 180, 84, false) +
-                    W(146, 84, 180, 24, false) +
+                    W(146, 84, 180, 24, true) +
                     B(180, 12) + B(180, 72) +
-                    T(216, 24, false) + T(216, 84, false) +
+                    // Rechtes block_A bestromt (Cross von B-Torch) → 2. torch_A OFF
+                    // Rechtes block_B unbestromt (Cross von A-Torch) → 2. torch_B ON
+                    T(216, 24, false) + T(216, 84, true) +
                     W(216, 24, 260, 54, false) +
-                    W(216, 84, 260, 54, false) +
-                    LP(260, 42, false, 'LAMPE') +
-                    TX(320, 40, 'XOR: genau einer von beiden', 'start') +
-                    TX(320, 56, '4 Torches, gekreuzte Wires', 'start', {italic:true, size:8})
+                    W(216, 84, 260, 54, true) +
+                    LP(260, 42, true, 'LAMPE') +
+                    TX(320, 32, 'XOR: genau einer von beiden', 'start') +
+                    TX(320, 48, '4 Torches, gekreuzte Wires', 'start', {italic:true, size:8}) +
+                    TX(320, 72, 'A=AN, B=AUS → Lampe AN ✓', 'start', {italic:true, size:8})
                 ),
 
                 // 5. RS-Latch — klassische cross-coupled NOR-Torches (orthogonale Wires!)
@@ -5195,9 +5210,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 //   SET-Knopf drücken setzt Q=1 (selbsthaltend), RESET-Knopf setzt Q=0.
                 //   Nur orthogonale Wires — wie in Minecraft tatsächlich baubar.
                 rs_latch: () => wrap(W_, H2,
-                    // Eingänge links
-                    BTN(20, 4, false, 'SET') +
-                    BTN(20, 88, false, 'RESET') +
+                    // Eingänge links — Wires gehen direkt in den jeweiligen Mounting-Block.
+                    // Wer den oberen Block (B_S, T_S → Q) bestromt, schaltet T_S AUS → Q AUS.
+                    // Das ist RESET-Verhalten. Daher oben „RESET", unten „SET".
+                    BTN(20, 4, false, 'RESET') +
+                    BTN(20, 88, false, 'SET') +
                     // Input-Wires (Knöpfe nicht gedrückt → AUS)
                     W(44, 16, 100, 16, false) +
                     W(44, 100, 100, 100, false) +
@@ -5227,14 +5244,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                     TX(330, 98, '→ Lampe leuchtet auch nach SET-Loslassen', 'start', {italic:true, size:8})
                 ),
 
-                // 6. Safe self-latching — START + STOP + Tripwire
+                // 6. Safe self-latching — START + (STOP || TRIPWIRE) via sichtbare OR-Junction
+                //   STOP-Wire und TRIPWIRE-Wire treffen am selben Punkt zusammen, bevor sie
+                //   in den RESET-Eingang gehen — das ist die VISUELLE Form von „||" in Redstone.
                 safe_start: () => wrap(W_, H2,
                     BTN(20, 4, false, 'START') +
-                    BTN(20, 40, false, 'STOP') +
+                    BTN(20, 50, false, 'STOP') +
                     TW(20, 80, 100, 'TRIPWIRE') +
+                    // START-Wire → S-Eingang der RS-Box (y=16)
                     W(44, 16, 130, 16, false) +
-                    W(44, 52, 130, 52, false) +
-                    W(80, 100, 130, 100, false) +
+                    // STOP-Wire → OR-Sammelpunkt (110, 75)
+                    W(44, 62, 110, 62, false) +
+                    W(110, 62, 110, 75, false) +
+                    // TRIPWIRE-Wire → derselbe Sammelpunkt
+                    W(80, 100, 110, 100, false) +
+                    W(110, 100, 110, 75, false) +
+                    // Junction-Punkt visuell markieren (kleiner Kreis)
+                    `<circle cx="110" cy="75" r="3" fill="${C.wo}" stroke="${C.wd}" stroke-width="0.5"/>` +
+                    // Sammel-Wire → R-Eingang der RS-Box (y=75)
+                    W(110, 75, 130, 75, false) +
                     // RS-Latch-Box (stylized)
                     `<rect x="130" y="0" width="100" height="120" fill="${C.s}" stroke="${C.sd}" stroke-width="1.5" rx="3" opacity="0.7"/>` +
                     T(160, 32, false) + T(200, 32, false) +
@@ -5242,8 +5270,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     TX(180, 88, '(Self-Hold)', 'middle', {italic:true, size:8}) +
                     W(230, 60, 280, 60, false) +
                     PT(280, 48, 'right', false, 'PISTON (MOTOR)') +
-                    TX(360, 40, 'STOP oder Tripwire-Bruch', 'start') +
-                    TX(360, 56, '→ Motor sofort AUS', 'start', {italic:true, size:8})
+                    TX(360, 32, 'STOP ∨ TRIPWIRE → Sammelpunkt', 'start') +
+                    TX(360, 48, '→ RESET-Eingang des RS-Glieds', 'start', {italic:true, size:8}) +
+                    TX(360, 72, 'Beides löscht den Motor sofort.', 'start', {italic:true, size:8})
                 ),
 
                 // 7. Pulse-Generator — Knopf + kurze Schleife mit Repeater
@@ -5292,9 +5321,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ),
 
                 // 10. Piston-Door — Zwei Sticky Pistons, Wire-Verteiler im Tür-Rücken
+                //   KEY-Knopf → S-Eingang des RS, CLOSE-Knopf → R-Eingang des RS.
                 piston_door: () => wrap(W_, H2,
-                    BTN(20, 50, false, 'KEY') +
-                    W(44, 62, 100, 62, false) +
+                    BTN(20, 20, false, 'KEY') +
+                    BTN(20, 80, false, 'CLOSE') +
+                    // KEY-Wire bis zum SET-Eingang der RS-Box
+                    W(44, 32, 100, 32, false) +
+                    W(100, 32, 100, 50, false) +
+                    // CLOSE-Wire bis zum RESET-Eingang der RS-Box
+                    W(44, 92, 100, 92, false) +
+                    W(100, 92, 100, 74, false) +
                     // RS-Latch indicator
                     `<rect x="100" y="40" width="60" height="44" fill="${C.s}" stroke="${C.sd}" stroke-width="1" rx="3" opacity="0.6"/>` +
                     T(120, 62, false) + T(140, 62, false) +
@@ -5310,9 +5346,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // Door blocks (Werkstücke)
                     B(232, 18) + B(232, 78) +
                     TX(244, 124, 'TÜRBLÖCKE', 'middle', {size:8}) +
-                    TX(330, 40, 'Beide Pistons fahren aus,', 'start') +
-                    TX(330, 56, 'wenn KEY gedrückt.', 'start') +
-                    TX(330, 80, 'Selbsthaltung via RS.', 'start', {italic:true, size:8})
+                    TX(330, 32, 'KEY → Tür auf,', 'start') +
+                    TX(330, 48, 'CLOSE → Tür zu.', 'start') +
+                    TX(330, 72, 'Selbsthaltung via RS-Glied.', 'start', {italic:true, size:8})
                 ),
 
                 // 11. Combination Lock — A && ¬B && C
@@ -5320,33 +5356,37 @@ You must output exactly this JSON format. The logic code goes as a single string
                 //   LEVER_1 (A)  → NOT-Torch → wire (off when A=ON)
                 //   LEVER_2 (B)  → direct wire (off when B=OFF)        ← KEIN Torch!
                 //   LEVER_3 (C)  → NOT-Torch → wire (off when C=ON)
-                //   alle drei → OR-Junction → AND-Block → finale NOT-Torch → Lampe
-                //   Demo-Stellung ↑ ↓ ↑ → alle drei Junction-Wires OFF → Block UNgespeist
+                //   alle drei → OR-Junction (gemeinsamer Sammel-Wire) → AND-Block → finale NOT-Torch → Lampe
+                //   Demo-Stellung ↑ ↓ ↑ → alle drei Pfad-Wires OFF → Block UNgespeist
                 //                                  → finale Torch AN → Lampe AN ✓
+                //   ALLE Wires orthogonal — wie in Minecraft baubar (90°-Bends, keine Diagonalen).
                 comb_lock: () => wrap(W_, H2,
                     L(20, 4,  true,  'LEVER_1') +
                     L(20, 48, false, 'LEVER_2') +
                     L(20, 92, true,  'LEVER_3') +
-                    // LEVER_1: durch NOT-Torch (¬-Pfad)
+                    // LEVER_1: durch NOT-Torch (¬-Pfad), Wire dann orthogonal nach unten zum Sammel-Punkt (170,60)
                     W(44, 16, 100, 16, true) +
                     B(100, 4) +
-                    T(140, 16, false) +    // Lever ON → Torch OFF
-                    W(140, 16, 200, 60, false) +
-                    // LEVER_2: DIRECT (keine Negation in Redstone, da im Code bereits ¬)
-                    W(44, 60, 200, 60, false) +   // Lever OFF → Wire OFF
-                    // LEVER_3: durch NOT-Torch (¬-Pfad)
+                    T(140, 16, false) +
+                    W(140, 16, 170, 16, false) +
+                    W(170, 16, 170, 60, false) +
+                    // LEVER_2: DIRECT (keine Negation in Redstone, da im Code bereits ¬), orthogonal zum Sammel-Punkt
+                    W(44, 60, 170, 60, false) +
+                    // LEVER_3: durch NOT-Torch, Wire orthogonal nach oben zum Sammel-Punkt
                     W(44, 104, 100, 104, true) +
                     B(100, 92) +
-                    T(140, 104, false) +   // Lever ON → Torch OFF
-                    W(140, 104, 200, 60, false) +
-                    // OR-Junction → AND-Block → finale NOT-Torch
-                    B(200, 48) +
-                    T(238, 60, true) +     // Block UNgespeist → finale Torch AN
-                    W(238, 60, 300, 60, true) +
-                    LP(300, 48, true, 'LAMPE') +
-                    TX(360, 40, 'Code: LEVER_1 && ¬LEVER_2', 'start') +
-                    TX(360, 56, '         && LEVER_3', 'start') +
-                    TX(360, 80, '↑ ↓ ↑  — Schloss offen!', 'start', {italic:true, size:8})
+                    T(140, 104, false) +
+                    W(140, 104, 170, 104, false) +
+                    W(170, 104, 170, 60, false) +
+                    // Sammel-Wire (Junction!) zum AND-Block — DAS ist das visuelle „&&" in Redstone
+                    W(170, 60, 220, 60, false) +
+                    B(220, 48) +
+                    T(258, 60, true) +
+                    W(258, 60, 320, 60, true) +
+                    LP(320, 48, true, 'LAMPE') +
+                    TX(380, 32, 'Drei Wires → 1 Junction → 1 Block', 'start') +
+                    TX(380, 48, 'Code: LEVER_1 && ¬LEVER_2 && LEVER_3', 'start', {italic:true, size:8}) +
+                    TX(380, 72, '↑ ↓ ↑  — Schloss offen!', 'start', {italic:true, size:8})
                 )
             };
             return d[key] ? d[key]() : '';
@@ -7782,6 +7822,49 @@ You must output exactly this JSON format. The logic code goes as a single string
                 });
             });
 
+            // === 4b. Timer/Zähler mitten im Ausdruck ===
+            // (vor RS-Partner-Check, damit das eigentliche Problem nicht durch Folgefehler überschrieben wird)
+            lineInfos.forEach(li => {
+                if (!li.rhs) return;
+                if (/(?:&&|\|\||¬|!)\s*(?:TON|TOF|TP|CTU)\s*\(/i.test(li.rhs)) {
+                    const fm = li.rhs.match(/(TON|TOF|TP|CTU)\s*\(/i);
+                    const fn = fm ? fm[1].toUpperCase() : 'TON';
+                    addErr(li.idx, {
+                        title: 'Timer/Zähler darf nicht innerhalb eines Ausdrucks stehen',
+                        why: 'Zeitglieder (`TON`/`TOF`/`TP`) und der Zähler `CTU` müssen die GESAMTE rechte Seite einer Zuweisung sein. In dieser Zeile steht `' + fn + '` nach `&&`/`||`/`¬`. Der Parser löst die Klammer dann fälschlich auf und behandelt den Ausdruck als gewöhnliche Variable.',
+                        hint: 'Lege das Timer-/Zähler-Ergebnis in einer Hilfsvariablen ab und kombiniere DIE Hilfsvariable mit den anderen Bedingungen.',
+                        fix: 'HILFS_' + fn + ' := ' + fn + '(SIGNAL, 2.0)\n' + (li.lhs || 'AUSGANG') + ' := ' + (li.rhs.replace(/(TON|TOF|TP|CTU)\s*\([^)]*\)/i, 'HILFS_' + fn))
+                    });
+                }
+            });
+
+            // === 4c. Per-Line Selbst-Referenz (auch für S/R/Q-Pins) ===
+            // Die Zyklus-DFS unten überspringt S/R-Pin-Zuweisungen, aber `S1 := ... && S1`
+            // ist trotzdem unsinnig — der SET-Eingang darf nicht von sich selbst abhängen.
+            // (vor RS-Partner-Check, damit das eigentliche Problem zuerst kommt)
+            lineInfos.forEach(li => {
+                if (!li.lhs || !li.rhs) return;
+                if (!identRe.test(li.lhs)) return;
+                const re = new RegExp('\\b' + li.lhs.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+                if (re.test(li.rhs)) {
+                    const isFFPin = /^[SR]\d+(_(?:RS|SR))?$/i.test(li.lhs);
+                    const num = (li.lhs.match(/\d+/)||['1'])[0];
+                    addErr(li.idx, {
+                        title: 'Selbst-Referenz: Variable verweist auf sich selbst',
+                        why: '"' + li.lhs + '" steht auf beiden Seiten der Zuweisung. ' +
+                             (isFFPin
+                                ? 'Bei einem S/R-Eingang ist das immer falsch: der Eingang darf nicht von sich selbst abhängen. Vermutlich war Q' + num + ' (der Ausgang des Glieds) gemeint statt ' + li.lhs + '.'
+                                : 'Ohne RS/SR-Glied führt das zu einer leeren oder undefinierten Logik — VALIS löst das nicht automatisch als Speicherglied auf.'),
+                        hint: isFFPin
+                            ? 'Vermutlich war der Q-Ausgang gemeint. Schreibe Q' + num + ' statt ' + li.lhs + ' in der RHS.'
+                            : 'Für eine Selbsthaltung verwende ein RS-Glied: SET-Bedingung an S<n>, RESET-Bedingung an R<n>, und schreibe `' + li.lhs + ' := Q<n>`.',
+                        fix: isFFPin
+                            ? li.lhs + ' := ' + li.rhs.replace(new RegExp('\\b' + li.lhs.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), 'Q' + num)
+                            : null
+                    });
+                }
+            });
+
             // === 5. RS/SR ohne Partner ===
             const ffPairs = new Map();
             lineInfos.forEach(li => {
@@ -8082,6 +8165,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             const sbWidth = Math.max(0, ta.offsetWidth - ta.clientWidth);
             const rightOffset = sbWidth + 4;
             const iconSize = 18;
+            // Gutter-Breite dynamisch anpassen — sonst beschneidet `overflow: hidden`
+            // bei sichtbarer Scrollbar die linke Hälfte des Icons.
+            gutter.style.width = (rightOffset + iconSize + 4) + 'px';
             const offsetY = (lineHeight - iconSize) / 2;
             let html = '';
             errLines.forEach(idx => {

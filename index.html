@@ -759,17 +759,18 @@
             pointer-events: none; user-select: none;
             display: none;
         }
-        /* Legenden-Leiste mit Marker-Erklärung — erscheint nur, wenn ein
-           Lösungsabgleich aktiv ist, und nur mit den real vorkommenden Markern. */
+        /* Legenden-Statusleiste mit Marker-Erklärung — erscheint als eigene Zeile
+           unter dem Editor, sobald ein Lösungsabgleich aktiv ist. Nur die real
+           vorkommenden Marker werden gezeigt. */
         #check-result-legend {
-            position: absolute; bottom: 6px; left: 6px; z-index: 4;
-            background: rgba(45,45,48,0.94); color: #cfd8dc;
-            padding: 3px 8px; border-radius: 4px;
+            background: rgba(45,45,48,0.6); color: #cfd8dc;
+            padding: 5px 10px; border-top: 1px solid #3e3e42;
+            border-radius: 0 0 4px 4px;
             font-size: 10px; line-height: 1.4;
             display: none; gap: 12px; align-items: center;
-            pointer-events: none; user-select: none;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-            max-width: calc(100% - 100px); flex-wrap: wrap;
+            user-select: none;
+            flex-wrap: wrap;
+            margin-top: -4px; /* leicht oberhalb der nächsten Sektion andocken */
         }
         #check-result-legend.active { display: flex; }
         #check-result-legend > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -1673,9 +1674,9 @@
                 <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
                 <textarea id="code" spellcheck="false"></textarea>
                 <div id="error-gutter" aria-hidden="true"></div>
-                <div id="editor-missing-badge" title="Es fehlen noch Ausgänge/Bedingungen, die in der Lösung erwartet werden."></div>
-                <div id="check-result-legend" aria-live="polite"></div>
+                <div id="editor-missing-badge" title="Hinweis: hier fehlt etwas Allgemeines."></div>
             </div>
+            <div id="check-result-legend" aria-live="polite"></div>
             <div id="code-inspector" aria-live="polite"></div>
         </div>
         <div id="panel-resizer"></div>
@@ -12597,18 +12598,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             result.partialLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l)) result.partialLines.delete(l); });
             result.extraLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l) || result.partialLines.has(l)) result.extraLines.delete(l); });
             window._codeCheckResult = result;
+            // Das Editor-Corner-Badge ist nur noch für transiente Hinweise (_taskHintDots(-1))
+            // reserviert. Laufzeit-Fehlendes wird Teil der Legenden-Statusleiste.
             const mb = document.getElementById('editor-missing-badge');
-            if (mb) {
-                // Badge zeigt nur Laufzeit-Fehlendes (Fabrikobjekt/Simulation/…).
-                // Code-bezogenes Fehlendes wird als Geister-Zeilen unter dem Code dargestellt.
-                if (result.runtimeMissing > 0) {
-                    mb.textContent = '+' + result.runtimeMissing + (result.runtimeMissing === 1 ? ' weitere Bedingung' : ' weitere Bedingungen');
-                    mb.style.display = 'block';
-                } else {
-                    mb.style.display = 'none';
-                }
-            }
-            // Legenden-Leiste: nur die Marker zeigen, die im Ergebnis vorkommen
+            if (mb) mb.style.display = 'none';
             _renderCheckLegend(result);
             try { updateHighlighting(); } catch(e){}
         };
@@ -12629,10 +12622,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>stimmt noch nicht</span>');
             }
             if (result.codeMissing > 0) {
-                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>Zuweisung fehlt komplett</span>');
+                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>Zuweisung fehlt komplett (' + result.codeMissing + '×)</span>');
             }
             if (result.runtimeMissing > 0) {
-                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.92);color:#1a1a1a;">+N</span>weitere Bedingung (außerhalb Code)</span>');
+                const word = result.runtimeMissing === 1 ? 'weitere Bedingung' : 'weitere Bedingungen';
+                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.92);color:#1a1a1a;">+' + result.runtimeMissing + '</span>' + word + ' (außerhalb Code)</span>');
             }
             if (!items.length) {
                 lg.classList.remove('active');

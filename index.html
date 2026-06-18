@@ -415,6 +415,10 @@
         #code-glossary-popup .gp-desc { margin-top: 5px; color: #d4d4d4; }
         #code-glossary-popup .gp-example { font-family: 'Consolas','Courier New',monospace; background: #1e1e1e; padding: 6px 8px; border-radius: 3px; margin-top: 6px; color: #d4d4d4; white-space: pre; font-size: 11px; border-left: 2px solid #6a9955; }
         #code-glossary-popup .gp-example .ex-comment { color: #6a9955; font-style: italic; }
+        #code-glossary-popup .gp-side { margin-top: 6px; padding: 4px 8px; border-radius: 3px; background: rgba(86,156,214,0.07); border-left: 2px solid #569cd6; color: #d4d4d4; font-size: 11px; line-height: 1.5; }
+        #code-glossary-popup .gp-side b { color: #569cd6; }
+        #code-glossary-popup .gp-scenario { margin-top: 6px; padding: 5px 8px; border-radius: 3px; background: rgba(255,213,79,0.06); border-left: 2px solid #ffd54f; color: #d4d4d4; font-size: 11px; line-height: 1.55; white-space: pre-line; }
+        #code-glossary-popup .gp-scenario b { color: #ffd54f; }
         [data-glossary], .legend-code { cursor: help; }
         #code-inspector {
             background: #252526; border-top: 1px solid #3e3e42;
@@ -5513,7 +5517,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     inverted = true;
                     cleanId = cleanId.substring(1).trim();
                 }
-                if (!cleanId || /\s/.test(cleanId)) throw new Error('Ungültiger Variablenname: ' + JSON.stringify(cleanId));
+                // Identifier-Format streng prüfen: nur Buchstaben/Ziffern/Unterstrich,
+                // muss mit Buchstabe oder _ beginnen. Sonst landen Konstrukte wie
+                // "TON(START,3)" innerhalb eines Ausdrucks als "TONSTART,3"-INPUT
+                // unbemerkt durch.
+                if (!cleanId || !/^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/.test(cleanId)) {
+                    throw new Error('Ungültiger Variablenname: ' + JSON.stringify(cleanId));
+                }
                 if (/^(AND_|OR_|GATE_)[a-zA-Z0-9_]+$/.test(cleanId)) return { id: cleanId, inverted };
                 let canonicalKey = cleanId;
                 if (exprCache.has(canonicalKey)) return { id: exprCache.get(canonicalKey), inverted };
@@ -5574,16 +5584,35 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let timerMatch = expressionStr.match(/^(TON|TOF|TP)\s*\(\s*([^,]+)\s*,\s*([\d\.]*)\s*(?:s|ms)?\s*\)$/i);
                 let counterMatch = expressionStr.match(/^CTU\s*\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*(\d*)\s*\)$/i);
                 if (timerMatch) {
-                    let funcType = timerMatch[1].toUpperCase(); let inVar = timerMatch[2]; 
-                    let ptVal = parseFloat(timerMatch[3]) || 0; 
-                    let blockId = `${funcType}_${outputStr}`; 
+                    let funcType = timerMatch[1].toUpperCase(); let inVar = timerMatch[2];
+                    let ptVal = parseFloat(timerMatch[3]) || 0;
+                    let blockId = `${funcType}_${outputStr}`;
                     graph.addNode(blockId, funcType, `${funcType} (${ptVal}s)`);
                     let sourceObj = parseExpression(inVar); // 🌟 Wieder Standard-Aufruf
                     graph.addEdge(sourceObj.id, blockId, 'IN', sourceObj.inverted);
-                    graph.addNode(outputStr, 'OUTPUT', outputStr);
-                    graph.addEdge(blockId, outputStr, 'Q', false);
-                    if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
-                    definedOutputs.add(outputStr);
+                    // Wenn die LHS ein S/R-Pin eines RS/SR-Glieds ist, geht der Timer-Q
+                    // dort als Pin-Eingang rein — NICHT als eigenständiger Output.
+                    const _tRs = outputStr.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
+                    let _tWriteTarget; // wohin der Q-Wert in state[] geschrieben wird
+                    if (_tRs) {
+                        const _tPin    = _tRs[1].toUpperCase();
+                        const _tNum    = _tRs[2];
+                        const _tSuffix = _tRs[3] ? _tRs[3].toUpperCase() : '';
+                        const _tIsSR   = _tSuffix === '_SR';
+                        const _tBlock  = _tIsSR ? 'SR' : 'RS';
+                        const _tTargetId = `${_tBlock}_${_tNum}`;
+                        rsBlocks.set(`${_tNum}${_tSuffix}`, _tBlock);
+                        graph.addNode(_tTargetId, _tBlock, `${_tBlock}-Glied ${_tNum}`);
+                        graph.addEdge(blockId, _tTargetId, _tPin, false);
+                        definedOutputs.add(`Q${_tNum}${_tSuffix}`);
+                        _tWriteTarget = `state['${_tTargetId}_${_tPin}']`;
+                    } else {
+                        graph.addNode(outputStr, 'OUTPUT', outputStr);
+                        graph.addEdge(blockId, outputStr, 'Q', false);
+                        if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
+                        definedOutputs.add(outputStr);
+                        _tWriteTarget = `state['${outputStr}']`;
+                    }
                     let sourceIsTimer = sourceObj.id.startsWith('TON_') || sourceObj.id.startsWith('TOF_') || sourceObj.id.startsWith('TP_') || sourceObj.id.startsWith('CTU_');
                     let inVarQuery = sourceIsTimer ? `(timers['${sourceObj.id}'] ? timers['${sourceObj.id}'].q : false)` : `state['${sourceObj.id}']`;
                     jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { et: 0, q: false, active: false, lastIn: false };\n`;
@@ -5597,28 +5626,47 @@ You must output exactly this JSON format. The logic code goes as a single string
                         jsCompiledCode += `    if (timers['${blockId}'].q) { timers['${blockId}'].et += deltaMs; if (timers['${blockId}'].et >= ${ptVal * 1000}) { timers['${blockId}'].q = false; timers['${blockId}'].active = in_${blockId}; } }\n`;
                         jsCompiledCode += `    else if (!in_${blockId}) { timers['${blockId}'].active = false; }\n`;
                     }
-                    jsCompiledCode += `    state['${outputStr}'] = timers['${blockId}'].q;\n`;
+                    jsCompiledCode += `    ${_tWriteTarget} = timers['${blockId}'].q;\n`;
                     jsCompiledCode += `    state['${blockId}'] = timers['${blockId}'].q;\n`;
-                    return; 
+                    return;
                 }
                 if (counterMatch) {
-                    let funcType = 'CTU'; let cuVar = counterMatch[1]; let rVar = counterMatch[2]; 
-                    let pvVal = parseInt(counterMatch[3]) || 0; 
+                    let funcType = 'CTU'; let cuVar = counterMatch[1]; let rVar = counterMatch[2];
+                    let pvVal = parseInt(counterMatch[3]) || 0;
                     let blockId = `CTU_${outputStr}`;
                     graph.addNode(blockId, funcType, `CTU (${pvVal})`);
                     let cuObj = parseExpression(cuVar); // 🌟 Wieder Standard-Aufruf
                     let rObj = parseExpression(rVar);
                     graph.addEdge(cuObj.id, blockId, 'CU', cuObj.inverted); graph.addEdge(rObj.id, blockId, 'R', rObj.inverted);
-                    graph.addNode(outputStr, 'OUTPUT', outputStr); graph.addEdge(blockId, outputStr, 'Q', false);
-                    if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
-                    definedOutputs.add(outputStr);
+                    // Wie beim Timer: bei S/R-LHS direkt in den Flipflop-Pin schreiben
+                    const _cRs = outputStr.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
+                    let _cWriteTarget;
+                    if (_cRs) {
+                        const _cPin    = _cRs[1].toUpperCase();
+                        const _cNum    = _cRs[2];
+                        const _cSuffix = _cRs[3] ? _cRs[3].toUpperCase() : '';
+                        const _cIsSR   = _cSuffix === '_SR';
+                        const _cBlock  = _cIsSR ? 'SR' : 'RS';
+                        const _cTargetId = `${_cBlock}_${_cNum}`;
+                        rsBlocks.set(`${_cNum}${_cSuffix}`, _cBlock);
+                        graph.addNode(_cTargetId, _cBlock, `${_cBlock}-Glied ${_cNum}`);
+                        graph.addEdge(blockId, _cTargetId, _cPin, false);
+                        definedOutputs.add(`Q${_cNum}${_cSuffix}`);
+                        _cWriteTarget = `state['${_cTargetId}_${_cPin}']`;
+                    } else {
+                        graph.addNode(outputStr, 'OUTPUT', outputStr);
+                        graph.addEdge(blockId, outputStr, 'Q', false);
+                        if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
+                        definedOutputs.add(outputStr);
+                        _cWriteTarget = `state['${outputStr}']`;
+                    }
                     jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { cv: 0, q: false, lastCu: false };\n`;
                     jsCompiledCode += `    let cu_${blockId} = ${cuObj.inverted ? '!' : ''}state['${cuObj.id}']; let r_${blockId} = ${rObj.inverted ? '!' : ''}state['${rObj.id}'];\n`;
                     jsCompiledCode += `    if (r_${blockId}) { timers['${blockId}'].cv = 0; timers['${blockId}'].q = false; } else {\n`;
                     jsCompiledCode += `        if (cu_${blockId} && !timers['${blockId}'].lastCu) { timers['${blockId}'].cv++; if (timers['${blockId}'].cv >= ${pvVal}) timers['${blockId}'].q = true; }\n    }\n`;
-                    jsCompiledCode += `    timers['${blockId}'].lastCu = cu_${blockId};\n    state['${outputStr}'] = timers['${blockId}'].q;\n`;
+                    jsCompiledCode += `    timers['${blockId}'].lastCu = cu_${blockId};\n    ${_cWriteTarget} = timers['${blockId}'].q;\n`;
                     jsCompiledCode += `    state['${blockId}'] = timers['${blockId}'].q;\n`;
-                    return; 
+                    return;
                 }
                 const rsMatch = outputStr.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
                 let targetId = outputStr;
@@ -6985,16 +7033,20 @@ You must output exactly this JSON format. The logic code goes as a single string
 
         // ===== Inline Code-Glossar (Stufen 1-3) =====
         window._CODE_GLOSSARY = {
-            ':=':    { title:'Zuweisung', syntax:'VARIABLE := AUSDRUCK', desc:'Weist der Variablen links das Ergebnis des Ausdrucks rechts zu. Auch erlaubt: =, <-, IST, GLEICH.', example:'LAMPE := TASTER && ¬NOTAUS' },
-            '&&':    { title:'UND-Verknüpfung', syntax:'A && B', desc:'Wahr, wenn ALLE Bedingungen wahr sind. Wie eine Reihenschaltung von Schaltern. Auch: &, ∧, UND, AND.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
-            '||':    { title:'ODER-Verknüpfung', syntax:'A || B', desc:'Wahr, wenn MINDESTENS EINE Bedingung wahr ist. Wie eine Parallelschaltung. Auch: |, ∨, ODER, OR.', example:'ALARM := RAUCH_SENSOR || WAERME_SENSOR' },
+            ':=':    { title:'Zuweisung', syntax:'VARIABLE := AUSDRUCK', desc:'Weist der Variablen links das Ergebnis des Ausdrucks rechts zu. Auch erlaubt: =, <-, IST, GLEICH.', lhs:'Aktoren (Zylinder, Förderbänder, Motoren, Heizungen …) und Anzeigeelemente (LEDs, Lampen, Ampeln, Hupen …). Also alles, was die Steuerung ANSTEUERN soll — typischerweise mit „A_" am Anfang.', rhs:'Bedienelemente (Taster, Schalter, Schlüsselschalter, Not-Halt) und Sensoren (induktiv, kapazitiv, optisch, magnetisch, mechanisch) — einzeln oder als logische Kombination mit && / || / ¬. Das ist die Bedingung, unter der die linke Seite aktiv werden soll — typischerweise mit „E_" am Anfang.', example:'LAMPE := TASTER && ¬NOTAUS' },
+            '&&':    { title:'UND-Verknüpfung', syntax:'A && B', desc:'Wahr, wenn ALLE Bedingungen wahr sind. Wie eine Reihenschaltung von Schaltern. Auch: &, ∧, UND, AND.', scenario:'„und", „sowohl … als auch", „gleichzeitig", „zusätzlich", „nur wenn auch", „beide aktiv", „erst wenn alle …", „während …" — überall, wo mehrere Bedingungen ZUSAMMEN erfüllt sein müssen.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
+            '||':    { title:'ODER-Verknüpfung', syntax:'A || B', desc:'Wahr, wenn MINDESTENS EINE Bedingung wahr ist. Wie eine Parallelschaltung. Auch: |, ∨, ODER, OR.', scenario:'„oder", „entweder … oder", „mindestens eines", „wahlweise", „auch wenn", „falls irgendein …", „kann durch X ODER Y ausgelöst werden" — sobald EINE von mehreren Bedingungen reicht, um die linke Seite zu aktivieren.', example:'ALARM := RAUCH_SENSOR || WAERME_SENSOR' },
             '¬':  { title:'Negation (NICHT)', syntax:'¬A', desc:'Kehrt den Wahrheitswert um: aus wahr wird falsch und umgekehrt. Auch: !, NICHT, NOT.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
             'TON':   { title:'Timer: Einschaltverzögert', syntax:'OUT := TON(IN, Sekunden)', desc:'OUT wird wahr, wenn IN ununterbrochen für die angegebene Zeit wahr war. Klassischer Anlaufschutz.', example:'WARNLAMPE := TON(MOTOR_AN, 3.0)' },
             'TOF':   { title:'Timer: Ausschaltverzögert', syntax:'OUT := TOF(IN, Sekunden)', desc:'OUT bleibt nach Abfall von IN noch die angegebene Zeit wahr. Klassischer Nachlauf.', example:'LUEFTER := TOF(OFEN_AN, 60.0)' },
             'TP':    { title:'Timer: Impuls', syntax:'OUT := TP(IN, Sekunden)', desc:'Ein kurzer Wechsel von IN auf wahr erzeugt einen festen Impuls der angegebenen Länge.', example:'HUPE := TP(START_TASTER, 0.5)' },
             'CTU':   { title:'Vorwärtszähler', syntax:'OUT := CTU(Zähl_Signal, Reset, Limit)', desc:'Zählt jede steigende Flanke (0→1) des Zähl-Signals. OUT wird wahr, sobald der Stand das Limit erreicht. Reset setzt zurück.', example:'VOLL := CTU(LICHTSCHRANKE, RESET_TASTER, 10)' },
-            'RS':    { title:'RS-Selbsthaltung (rücksetzdominant)', syntax:'S1 := SET_TERM\nR1 := RESET_TERM\nLAMPE := Q1', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt RESET (Sicherheits-Default). Die Nummer hinter S/R/Q ist beliebig, muss aber zusammenpassen.', example:'// SET-Term, RESET-Term, Q als Ausgang\nS1 := START_TASTER\nR1 := STOP_TASTER || NOTAUS\nLAMPE := Q1' },
-            'SR':    { title:'SR-Selbsthaltung (setzdominant)', syntax:'S1_SR := SET_TERM\nR1_SR := RESET_TERM\nLAMPE := Q1_SR', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt SET (Start hat Vorrang). Das Suffix _SR macht es setzdominant; ohne Suffix ist es RS.', example:'S1_SR := START_TASTER\nR1_SR := STOP_TASTER\nLAMPE := Q1_SR' },
+            'RS':    { title:'RS-Selbsthaltung (rücksetzdominant)', syntax:'S1 := SET_TERM\nR1 := RESET_TERM\nLAMPE := Q1', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt RESET (Sicherheits-Default). Die Nummer hinter S/R/Q ist beliebig, muss aber zusammenpassen.',
+                       scenario:'Selbsthaltung: „einrastet"/„eingerastet"/„selbsthaltend", „bleibt aktiv nach Loslassen"\nBedienung: „Ein-/Aus-Taster", „Start- und Stop-Taster", „Zwei-Taster-Bedienung", „drücken zum Starten — anderer Knopf zum Stoppen"\nModi & Zustände: „Hand-/Automatik-Modus", „Modus aktivieren/umschalten", „Betriebsart wählen", „Schritt 1 → Schritt 2", „Phase aktiv", „Zustand merken", „Wartungsmodus", „bleibt im Modus, bis …"\nSicherheit: „Not-Halt schaltet alles aus", „Stop hat Vorrang", „Sicherheits-Aus dominiert"\nQuittierung & Alarme: „Fehler merken bis quittiert", „Alarm bleibt aktiv bis Reset", „Quittierung erforderlich"\nVerriegelung & Anlauf: „Tür verriegelt bis Freigabe", „Anlaufschutz", „läuft weiter, bis abgeschaltet wird"\n\nStandard-Selbsthaltung — Stop/Reset gewinnt im Konflikt. Im Zweifel diese Form verwenden.',
+                       example:'// SET-Term, RESET-Term, Q als Ausgang\nS1 := START_TASTER\nR1 := STOP_TASTER || NOTAUS\nLAMPE := Q1' },
+            'SR':    { title:'SR-Selbsthaltung (setzdominant)', syntax:'S1_SR := SET_TERM\nR1_SR := RESET_TERM\nLAMPE := Q1_SR', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt SET (Start hat Vorrang). Das Suffix _SR macht es setzdominant; ohne Suffix ist es RS.',
+                       scenario:'Setzpriorität: „Start hat Vorrang", „Einschalten dominiert", „muss trotz Reset einschalten", „Setzpriorität gegenüber Reset"\nSpezialfälle: „Alarm springt an, auch wenn gleichzeitig quittiert wird", „Auslösung MUSS durchkommen", „Sicherheits-Einschaltung (z.B. Lüfter bei Übertemperatur)", „Zwangsstart trotz Stop-Befehl"\n\nEher selten in der Industriepraxis — nur wo das Einschalten zwingend gegen einen anhaltenden Reset durchgreifen soll. Im Zweifel das normale RS-Glied verwenden (sicherer).',
+                       example:'S1_SR := START_TASTER\nR1_SR := STOP_TASTER\nLAMPE := Q1_SR' },
             'TRUE':  { title:'Konstante TRUE', syntax:'TRUE', desc:'Logisch wahr (immer aktiv).', example:'IMMER_AN := TRUE' },
             'FALSE': { title:'Konstante FALSE', syntax:'FALSE', desc:'Logisch falsch (nie aktiv). Praktisch, um einen Reset-Eingang fest aus zu halten.', example:'R1 := FALSE' },
             '//':    { title:'Kommentar', syntax:'// Mein Kommentar', desc:'Alles hinter // bis zum Zeilenende wird ignoriert. Zum Notizen-Schreiben und Erklären der Logik.', example:'// Sicherheitskette: Notaus blockiert alles\nMOTOR := START && ¬NOTAUS' }
@@ -7034,6 +7086,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             let html = '<div class="gp-title">' + esc(entry.title) + '</div>';
             if (entry.syntax) html += '<div class="gp-syntax">' + esc(entry.syntax) + '</div>';
             html += '<div class="gp-desc">' + esc(entry.desc) + '</div>';
+            // Erweiterte Blöcke (LHS/RHS-Definition + Szenario-Stichwörter) nur im Erklärmodus.
+            const _extended = !!window._explainMode;
+            if (_extended && entry.lhs) html += '<div class="gp-side"><b>← Linke Seite:</b> ' + esc(entry.lhs) + '</div>';
+            if (_extended && entry.rhs) html += '<div class="gp-side"><b>→ Rechte Seite:</b> ' + esc(entry.rhs) + '</div>';
+            if (_extended && entry.scenario) html += '<div class="gp-scenario"><b>🔎 Hinweise im Aufgabentext:</b> ' + esc(entry.scenario) + '</div>';
             if (entry.example) html += '<div class="gp-example">' + exampleHtml + '</div>';
             pop.innerHTML = html;
             pop.style.display = 'block';
@@ -7469,6 +7526,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                         fix: lhs + ' := ' + fn + '(' + args[0] + ', 2.0)'
                     };
                 }
+                if (parseFloat(args[1]) <= 0) {
+                    return {
+                        title: 'Timer-Zeit ist 0 oder negativ',
+                        why: 'Eine Zeit ≤ 0 ist sinnlos: ' + fn + ' würde sofort umschalten oder gar nicht reagieren. Vermutlich ein Tippfehler.',
+                        hint: 'Setze die Zeit auf einen positiven Sekundenwert wie `2.5` oder `0.1`.',
+                        fix: lhs + ' := ' + fn + '(' + args[0] + ', 2.0)'
+                    };
+                }
             }
             // CTU braucht genau 3 Argumente
             const ctuCall = rhs.match(/^CTU\s*\(\s*([\s\S]*)\s*\)\s*$/i);
@@ -7490,6 +7555,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                         fix: lhs + ' := CTU(' + args[0] + ', ' + args[1] + ', 10)'
                     };
                 }
+                if (parseInt(args[2]) <= 0) {
+                    return {
+                        title: 'CTU-Limit ist 0 oder negativ',
+                        why: 'Ein Limit ≤ 0 lässt den Zähler sofort auslösen — wahrscheinlich nicht gewollt.',
+                        hint: 'Setze das Limit auf eine positive ganze Zahl wie `5` oder `10`.',
+                        fix: lhs + ' := CTU(' + args[0] + ', ' + args[1] + ', 10)'
+                    };
+                }
             }
             // Operator am Ende ohne nachfolgenden Operand
             const trailingOp = rhs.match(/(&&|\|\||¬|!|\bAND\b|\bUND\b|\bOR\b|\bODER\b|\bNOT\b|\bNICHT\b)\s*$/i);
@@ -7499,6 +7572,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     why: 'Nach `' + trailingOp[1] + '` muss noch eine Variable oder ein weiterer Ausdruck folgen.',
                     hint: 'Ergänze den fehlenden zweiten Operand.',
                     fix: lhs + ' := ' + rhs + ' WEITERE_BEDINGUNG'
+                };
+            }
+            // Doppelte Negation
+            if (/¬\s*¬|!!|\bNICHT\s+NICHT\b|\bNOT\s+NOT\b/i.test(rhs)) {
+                const cleaned = rhs
+                    .replace(/¬\s*¬\s*/g, '')
+                    .replace(/!!\s*/g, '')
+                    .replace(/\bNICHT\s+NICHT\s+/gi, '')
+                    .replace(/\bNOT\s+NOT\s+/gi, '')
+                    .trim();
+                return {
+                    title: 'Doppelte Negation aufheben',
+                    why: 'Zwei NICHT-Operatoren hintereinander (z.B. `¬¬X`) heben sich gegenseitig auf — das Ergebnis ist genau X. Die doppelte Negation ist überflüssig.',
+                    hint: 'Lasse das doppelte ¬ einfach weg.',
+                    fix: lhs + ' := ' + (cleaned || 'X')
                 };
             }
             // Unerlaubte Sonderzeichen
@@ -7596,20 +7684,378 @@ You must output exactly this JSON format. The logic code goes as a single string
 
         // ===== Fehler-Gutter: klickbare Warn-Symbole an den Fehlerzeilen =====
         // Sammelt sowohl Parser-erkannte Fehler (window._errorLines) als auch
-        // eigene Zusatz-Checks (z.B. mehrere Zuweisungen in einer Zeile).
+        // eigene Zusatz-Checks. Pro Custom-Fehler wird gleich die Erklärung in
+        // window._customErrorExplanations abgelegt — der Popup-Renderer greift dort
+        // zuerst, bevor er auf _explainError(line) zurückfällt.
         window._collectAllErrors = function() {
             const set = new Set();
-            const base = window._errorLines || new Set();
-            base.forEach(idx => set.add(idx));
+            if (!window._customErrorExplanations) window._customErrorExplanations = new Map();
+            window._customErrorExplanations.clear();
+
+            const parserErrors = window._errorLines || new Set();
+            parserErrors.forEach(idx => set.add(idx));
+
             const ta = document.getElementById('code');
             if (!ta) return set;
+            const lines = (ta.value || '').split('\n');
+
+            // Wenn die Zeile vom Parser bereits geworfen wurde, lassen wir die Parser-
+            // Erklärung (via _explainError) vorne; eigene Custom-Erklärungen werden
+            // dann nicht überschrieben.
+            const addErr = (idx, expl) => {
+                set.add(idx);
+                if (parserErrors.has(idx)) return;
+                if (!window._customErrorExplanations.has(idx)) {
+                    window._customErrorExplanations.set(idx, expl);
+                }
+            };
+
+            const reservedRe = /^(TON|TOF|TP|CTU|TRUE|FALSE|AND|OR|UND|ODER|NOT|NICHT|IST|IS|GLEICH|INPUT)$/i;
+            const identRe = /^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/;
             const assignTokenRe = /:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/gi;
-            (ta.value || '').split('\n').forEach((line, idx) => {
+            const assignFirstRe = /:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/i;
+
+            // Pro Zeile vorparsen: LHS und RHS bestimmen (für viele Checks nützlich)
+            const lineInfos = lines.map((line, idx) => {
                 const codePart = line.split('//')[0];
-                if (!codePart.trim()) return;
-                const m = codePart.match(assignTokenRe);
-                if (m && m.length > 1) set.add(idx);
+                const m = codePart.match(assignFirstRe);
+                if (!m || m.index == null) return { idx, line, codePart, lhs: null, rhs: null };
+                const opLen = m[0].length;
+                const lhs = codePart.substring(0, m.index).trim();
+                const rhs = codePart.substring(m.index + opLen).trim();
+                return { idx, line, codePart, lhs, rhs };
             });
+
+            // === 1. Mehrfach-Zuweisung (Details liefert _explainError) ===
+            lineInfos.forEach(li => {
+                if (!li.codePart.trim()) return;
+                const m = li.codePart.match(assignTokenRe);
+                if (m && m.length > 1) set.add(li.idx);
+            });
+
+            // === 2. Doppelte Ausgangsdefinition ===
+            const lhsCount = new Map();
+            lineInfos.forEach(li => {
+                if (!li.lhs) return;
+                const key = li.lhs.toUpperCase();
+                if (!lhsCount.has(key)) lhsCount.set(key, []);
+                lhsCount.get(key).push(li.idx);
+            });
+            lhsCount.forEach((idxs, lhs) => {
+                if (idxs.length < 2) return;
+                idxs.slice(1).forEach(idx => {
+                    addErr(idx, {
+                        title: 'Doppelte Ausgangsdefinition: ' + lhs,
+                        why: '"' + lhs + '" wird bereits in Zeile ' + (idxs[0]+1) + ' definiert. VALIS verarbeitet pro Ausgang nur EINE Zuweisung — die spätere überschreibt die frühere stillschweigend.',
+                        hint: 'Kombiniere beide Bedingungen mit `&&` (UND) oder `||` (ODER) in einer einzigen Zeile.',
+                        fix: null
+                    });
+                });
+            });
+
+            // === 3. Reservierte Wörter als LHS ===
+            lineInfos.forEach(li => {
+                if (!li.lhs) return;
+                if (reservedRe.test(li.lhs)) {
+                    addErr(li.idx, {
+                        title: 'Reserviertes Schlüsselwort als Variable: ' + li.lhs.toUpperCase(),
+                        why: '"' + li.lhs.toUpperCase() + '" ist ein VALIS-Schlüsselwort und darf nicht als Variablenname auf der linken Seite verwendet werden.',
+                        hint: 'Wähle einen anderen Namen, z.B. mit „MEIN_"-Präfix oder einer typischen Aktor-Bezeichnung wie „A_LAMPE".',
+                        fix: 'MEIN_' + li.lhs.toUpperCase() + ' := ' + (li.rhs || 'BEDINGUNG')
+                    });
+                }
+            });
+
+            // === 4. Q-Variable als LHS ===
+            lineInfos.forEach(li => {
+                if (!li.lhs) return;
+                const qm = li.lhs.match(/^Q(\d+)(_(?:SR|RS))?$/i);
+                if (!qm) return;
+                const num = qm[1];
+                const suf = qm[2] ? qm[2].toUpperCase() : '';
+                const ffType = suf === '_SR' ? 'SR' : 'RS';
+                addErr(li.idx, {
+                    title: 'Q-Variable kann nicht direkt zugewiesen werden',
+                    why: '"' + li.lhs + '" ist der Ausgang eines ' + ffType + '-Glieds und wird AUTOMATISCH aus den S- und R-Eingängen berechnet. Direkt schreibbar sind nur S' + num + suf + ' und R' + num + suf + '.',
+                    hint: 'Schreibe stattdessen die SET- und RESET-Bedingungen separat. Q' + num + suf + ' entsteht dann automatisch.',
+                    fix: 'S' + num + suf + ' := SET_BEDINGUNG\nR' + num + suf + ' := RESET_BEDINGUNG'
+                });
+            });
+
+            // === 5. RS/SR ohne Partner ===
+            const ffPairs = new Map();
+            lineInfos.forEach(li => {
+                if (!li.lhs) return;
+                const m = li.lhs.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
+                if (!m) return;
+                const pin = m[1].toUpperCase();
+                const num = m[2];
+                const suf = (m[3] || '').toUpperCase();
+                const key = num + suf;
+                if (!ffPairs.has(key)) ffPairs.set(key, { hasS: false, hasR: false, sIdx: -1, rIdx: -1, suffix: suf, num: num });
+                const entry = ffPairs.get(key);
+                if (pin === 'S') { entry.hasS = true; entry.sIdx = li.idx; }
+                else { entry.hasR = true; entry.rIdx = li.idx; }
+            });
+            ffPairs.forEach(entry => {
+                const ffType = entry.suffix === '_SR' ? 'SR' : 'RS';
+                const suf = entry.suffix;
+                if (entry.hasS && !entry.hasR) {
+                    addErr(entry.sIdx, {
+                        title: ffType + '-Glied ' + entry.num + ' ohne RESET-Partner',
+                        why: 'Die SET-Zuweisung S' + entry.num + suf + ' ist vorhanden, aber die zugehörige RESET-Zuweisung R' + entry.num + suf + ' fehlt. Das Glied kann nie zurückgesetzt werden — der Ausgang Q' + entry.num + suf + ' bleibt nach dem ersten SET dauerhaft aktiv.',
+                        hint: 'Ergänze in einer eigenen Zeile: `R' + entry.num + suf + ' := <Reset-Bedingung>` — z.B. STOP-Taster oder NOT-Halt.',
+                        fix: 'R' + entry.num + suf + ' := STOP_TASTER || NOTAUS'
+                    });
+                }
+                if (entry.hasR && !entry.hasS) {
+                    addErr(entry.rIdx, {
+                        title: ffType + '-Glied ' + entry.num + ' ohne SET-Partner',
+                        why: 'Die RESET-Zuweisung R' + entry.num + suf + ' ist vorhanden, aber die zugehörige SET-Zuweisung S' + entry.num + suf + ' fehlt. Das Glied wird nie eingeschaltet.',
+                        hint: 'Ergänze in einer eigenen Zeile: `S' + entry.num + suf + ' := <Set-Bedingung>` — z.B. START-Taster.',
+                        fix: 'S' + entry.num + suf + ' := START_TASTER'
+                    });
+                }
+            });
+
+            // === 6. RS und SR mit gleicher Nummer ===
+            const ffByNum = new Map();
+            lineInfos.forEach(li => {
+                if (!li.lhs) return;
+                const m = li.lhs.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
+                if (!m) return;
+                const num = m[2];
+                const suf = (m[3] || '').toUpperCase();
+                if (!ffByNum.has(num)) ffByNum.set(num, []);
+                ffByNum.get(num).push({ suffix: suf, idx: li.idx });
+            });
+            ffByNum.forEach((entries, num) => {
+                const distinct = new Set(entries.map(e => e.suffix));
+                if (distinct.size > 1) {
+                    entries.forEach(e => {
+                        addErr(e.idx, {
+                            title: 'RS- und SR-Glied teilen die Nummer ' + num,
+                            why: 'In dieser Datei gibt es Zuweisungen sowohl an Q' + num + ' (RS-Glied, rücksetzdominant) als auch an Q' + num + '_SR (SR-Glied, setzdominant). Das sind ZWEI verschiedene Flipflops mit konfliktierendem Verhalten.',
+                            hint: 'Vereinheitliche die Form: entweder alle Zuweisungen ohne Suffix (RS, sichere Variante) oder alle mit `_SR`. Ansonsten: vergib unterschiedliche Nummern.',
+                            fix: null
+                        });
+                    });
+                }
+            });
+
+            // === 7. INPUT-Statements: mehrfach + ungültiger Name ===
+            const inputs = new Map();
+            lineInfos.forEach(li => {
+                const trimmed = li.codePart.trim();
+                const m = trimmed.match(/^INPUT\s+(\S+)\s*$/i);
+                if (!m) return;
+                const name = m[1];
+                if (inputs.has(name)) {
+                    addErr(li.idx, {
+                        title: 'INPUT mehrfach deklariert: ' + name,
+                        why: '"' + name + '" wurde bereits in Zeile ' + (inputs.get(name)+1) + ' als INPUT deklariert. Mehrfach-Deklarationen sind überflüssig.',
+                        hint: 'Entferne diese doppelte INPUT-Zeile.',
+                        fix: null
+                    });
+                    return;
+                }
+                inputs.set(name, li.idx);
+                if (reservedRe.test(name)) {
+                    addErr(li.idx, {
+                        title: 'Reserviertes Wort als INPUT-Name',
+                        why: '"' + name + '" ist ein VALIS-Schlüsselwort und nicht als Variablenname erlaubt.',
+                        hint: 'Wähle einen Namen wie „E_' + name.toUpperCase() + '" oder „MEIN_' + name.toUpperCase() + '".',
+                        fix: 'INPUT E_' + name.toUpperCase()
+                    });
+                } else if (!identRe.test(name)) {
+                    addErr(li.idx, {
+                        title: 'Ungültiger Variablenname in INPUT: ' + name,
+                        why: '"' + name + '" enthält Zeichen, die in Variablennamen nicht erlaubt sind. Gültig sind: Buchstaben, Ziffern und Unterstrich; das erste Zeichen muss ein Buchstabe oder Unterstrich sein.',
+                        hint: 'Wähle einen Namen wie „TASTER_1" oder „E_START".',
+                        fix: 'INPUT ' + name.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[0-9]/, 'V$&')
+                    });
+                }
+            });
+
+            // === 8. TON/TOF/TP/CTU mit Zeit/Limit ≤ 0 ===
+            lineInfos.forEach(li => {
+                if (!li.lhs || !li.rhs) return;
+                const tm = li.rhs.match(/^(TON|TOF|TP)\s*\(\s*([\s\S]+?)\s*,\s*(-?[\d\.]+)\s*\)\s*$/i);
+                if (tm) {
+                    const v = parseFloat(tm[3]);
+                    if (!isNaN(v) && v <= 0) {
+                        addErr(li.idx, {
+                            title: 'Timer-Zeit ist 0 oder negativ',
+                            why: 'Eine Zeit ≤ 0 ist sinnlos: ' + tm[1].toUpperCase() + ' würde sofort umschalten oder nichts tun. Vermutlich Tippfehler.',
+                            hint: 'Setze die Zeit auf einen positiven Sekundenwert wie `2.5` oder `0.1`.',
+                            fix: li.lhs + ' := ' + tm[1].toUpperCase() + '(' + tm[2].trim() + ', 2.0)'
+                        });
+                    }
+                }
+                const cm = li.rhs.match(/^CTU\s*\(\s*([\s\S]+?)\s*,\s*([\s\S]+?)\s*,\s*(-?\d+)\s*\)\s*$/i);
+                if (cm) {
+                    const v = parseInt(cm[3]);
+                    if (!isNaN(v) && v <= 0) {
+                        addErr(li.idx, {
+                            title: 'CTU-Limit ist 0 oder negativ',
+                            why: 'Ein Limit ≤ 0 lässt den Zähler sofort auslösen — wahrscheinlich nicht gewollt.',
+                            hint: 'Setze das Limit auf eine positive ganze Zahl wie `5` oder `10`.',
+                            fix: li.lhs + ' := CTU(' + cm[1].trim() + ', ' + cm[2].trim() + ', 10)'
+                        });
+                    }
+                }
+            });
+
+            // === 9. Falsche `:=`-Schreibweise (Leerzeichen im Operator) ===
+            // Wichtig: NICHT skippen wenn die Zeile als geparst gilt — der Parser kann
+            // `LAMPE : = TASTER` fälschlich als `=`-Zuweisung verstehen, dabei wird `:`
+            // Teil des LHS-Namens („LAMPE :"). Das ist semantisch falsch.
+            lineInfos.forEach(li => {
+                if (/\S\s*:\s+=\s*\S/.test(li.codePart) && !/:=/.test(li.codePart)) {
+                    addErr(li.idx, {
+                        title: 'Leerzeichen im Zuweisungs-Operator',
+                        why: '"`: =`" mit Leerzeichen dazwischen wird von VALIS nicht als Zuweisung erkannt — VALIS verschluckt das `:` als Teil des Variablennamens.',
+                        hint: 'Schreibe `:=` direkt, ohne Leerzeichen dazwischen.',
+                        fix: li.codePart.replace(/\s*:\s+=\s*/, ' := ')
+                    });
+                } else if (/\S\s*<\s+-\s*\S/.test(li.codePart) && !/<-/.test(li.codePart)) {
+                    addErr(li.idx, {
+                        title: 'Leerzeichen im Zuweisungs-Operator',
+                        why: '"`< -`" mit Leerzeichen wird nicht als Zuweisung erkannt.',
+                        hint: 'Schreibe `<-` direkt, ohne Leerzeichen — oder verwende `:=`.',
+                        fix: li.codePart.replace(/\s*<\s+-\s*/, ' := ')
+                    });
+                }
+            });
+
+            // === 10. Doppelte Negation ===
+            lineInfos.forEach(li => {
+                if (!li.rhs) return;
+                if (/¬\s*¬|!!|\bNICHT\s+NICHT\b|\bNOT\s+NOT\b/i.test(li.rhs)) {
+                    const cleaned = li.rhs
+                        .replace(/¬\s*¬\s*/g, '')
+                        .replace(/!!\s*/g, '')
+                        .replace(/\bNICHT\s+NICHT\s+/gi, '')
+                        .replace(/\bNOT\s+NOT\s+/gi, '')
+                        .trim();
+                    addErr(li.idx, {
+                        title: 'Doppelte Negation aufheben',
+                        why: 'Zwei NICHT-Operatoren hintereinander (z.B. `¬¬X`) heben sich gegenseitig auf — das Ergebnis ist genau X. Die doppelte Negation ist überflüssig und macht den Code schwerer lesbar.',
+                        hint: 'Lasse das doppelte ¬ einfach weg.',
+                        fix: li.lhs + ' := ' + (cleaned || 'X')
+                    });
+                }
+            });
+
+            // === 11. Tautologie / Kontradiktion (einfache Fälle) ===
+            if (typeof window._tokenizeLine === 'function' && typeof window._parseLine === 'function') {
+                lineInfos.forEach(li => {
+                    if (!li.rhs) return;
+                    try {
+                        const tokens = window._tokenizeLine(li.rhs);
+                        if (!tokens.length) return;
+                        const ast = window._parseLine(tokens);
+                        let exprNode = null;
+                        if (ast.type === 'EXPR_ONLY') exprNode = ast.expr;
+                        else if (ast.type === 'ASSIGN') exprNode = ast.rhs;
+                        if (!exprNode) return;
+                        const collect = (n, t) => (!n || n.type !== t) ? [n] : collect(n.l, t).concat(collect(n.r, t));
+                        const findConflict = (atoms) => {
+                            const pos = new Set(), neg = new Set();
+                            for (const a of atoms) {
+                                if (!a) continue;
+                                if (a.type === 'IDENT') pos.add(a.val.toUpperCase());
+                                else if (a.type === 'NOT' && a.x && a.x.type === 'IDENT') neg.add(a.x.val.toUpperCase());
+                            }
+                            for (const v of pos) if (neg.has(v)) return v;
+                            return null;
+                        };
+                        if (exprNode.type === 'AND') {
+                            const c = findConflict(collect(exprNode, 'AND'));
+                            if (c) addErr(li.idx, {
+                                title: 'Kontradiktion — Ausdruck ist IMMER FALSCH',
+                                why: 'Im UND-Ausdruck stehen "' + c + '" UND "¬' + c + '" gleichzeitig — beide können nicht zugleich wahr sein. Das Ergebnis ist immer falsch, der Ausgang wird NIE aktiv.',
+                                hint: 'Eine der beiden Bedingungen ist überflüssig oder falsch. Entscheide, welche du eigentlich meinst.',
+                                fix: null
+                            });
+                        } else if (exprNode.type === 'OR') {
+                            const c = findConflict(collect(exprNode, 'OR'));
+                            if (c) addErr(li.idx, {
+                                title: 'Tautologie — Ausdruck ist IMMER WAHR',
+                                why: 'Im ODER-Ausdruck stehen "' + c + '" ODER "¬' + c + '" — mindestens eines davon ist immer wahr. Der Ausgang ist permanent aktiv.',
+                                hint: 'Vermutlich ist eine der Alternativen nicht gemeint. Entferne sie, oder verwende `TRUE` direkt.',
+                                fix: null
+                            });
+                        }
+                    } catch(e) {}
+                });
+            }
+
+            // === 12. Zyklus-Erkennung (Selbst-Ref, direkt, indirekt) ===
+            const deps = new Map(); // LHS-uppercase → { rhsIds: [...], idx }
+            lineInfos.forEach(li => {
+                if (!li.lhs || !li.rhs) return;
+                // S/R-Pin-Zuweisungen brechen den Zyklus per RS-Glied-Speicher
+                if (/^[SR]\d+(_(?:RS|SR))?$/i.test(li.lhs)) return;
+                const idents = li.rhs.match(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g) || [];
+                const clean = idents
+                    .map(id => id.toUpperCase())
+                    .filter(id => !reservedRe.test(id))
+                    .filter(id => !/^Q\d+(_(?:RS|SR))?$/i.test(id));
+                deps.set(li.lhs.toUpperCase(), { rhsIds: clean, idx: li.idx });
+            });
+            const WHITE = 0, GRAY = 1, BLACK = 2;
+            const color = new Map();
+            const stack = [];
+            const cyclesFound = [];
+            function dfs(node) {
+                color.set(node, GRAY);
+                stack.push(node);
+                const dep = deps.get(node);
+                if (dep) {
+                    for (const next of dep.rhsIds) {
+                        if (!deps.has(next)) continue;
+                        const c = color.get(next) || WHITE;
+                        if (c === GRAY) {
+                            const startIdx = stack.indexOf(next);
+                            cyclesFound.push(stack.slice(startIdx));
+                        } else if (c === WHITE) {
+                            dfs(next);
+                        }
+                    }
+                }
+                color.set(node, BLACK);
+                stack.pop();
+            }
+            deps.forEach((_, node) => {
+                if ((color.get(node) || WHITE) === WHITE) dfs(node);
+            });
+            const seenCycleNode = new Set();
+            cyclesFound.forEach(cycle => {
+                const pathStr = cycle.concat([cycle[0]]).join(' → ');
+                cycle.forEach(node => {
+                    if (seenCycleNode.has(node)) return;
+                    seenCycleNode.add(node);
+                    const dep = deps.get(node);
+                    if (!dep) return;
+                    let title, why, hint;
+                    if (cycle.length === 1) {
+                        title = 'Selbst-Referenz ohne Selbsthaltung';
+                        why = 'Die Variable "' + node + '" steht auf beiden Seiten der Zuweisung. Ohne RS/SR-Glied führt das zu einer leeren oder undefinierten Logik — VALIS löst das nicht automatisch als Speicherglied auf.';
+                        hint = 'Für eine Selbsthaltung verwende ein RS-Glied: SET-Bedingung an S<n>, RESET-Bedingung an R<n>, und schreibe `' + node + ' := Q<n>`.';
+                    } else if (cycle.length === 2) {
+                        title = 'Direkte zirkuläre Abhängigkeit';
+                        why = '"' + cycle[0] + '" hängt von "' + cycle[1] + '" ab und umgekehrt (' + pathStr + '). VALIS hat keinen definierten Anfangswert für diese Schleife — das Ergebnis ist undefiniert.';
+                        hint = 'Brich den Zyklus auf: entweder durch ein RS/SR-Glied (echte Selbsthaltung) oder indem du eine der beiden Variablen anders berechnest.';
+                    } else {
+                        title = 'Indirekte zirkuläre Abhängigkeit (' + cycle.length + ' Stufen)';
+                        why = 'Die Variablen-Kette ' + pathStr + ' führt zurück zu sich selbst. Es gibt keinen definierten Anfangswert für diese Schleife.';
+                        hint = 'Brich den Zyklus auf: irgendwo in der Kette muss eine Variable von einer Eingangs-Quelle (Taster, Sensor, RS-Glied) abhängen, nicht nur von ihren Nachfolgern.';
+                    }
+                    addErr(dep.idx, { title, why, hint, fix: null });
+                });
+            });
+
             return set;
         };
 
@@ -7663,7 +8109,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             const pop = document.getElementById('code-error-popup');
             if (!ta || !pop) return;
             const line = (ta.value || '').split('\n')[lineIdx] || '';
-            const err = window._explainError(line) || {
+            // Reihenfolge: Custom-Map (Cross-Line-Checks) > _explainError (per Zeile) > generischer Default
+            const custom = (window._customErrorExplanations && window._customErrorExplanations.get(lineIdx)) || null;
+            const err = custom || window._explainError(line) || {
                 title: 'Syntax-Fehler in dieser Zeile',
                 why: 'Diese Zeile konnte nicht ausgewertet werden.',
                 hint: 'Prüfe Klammern, Operatoren und Variablen-Namen.',

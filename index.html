@@ -738,13 +738,16 @@
         /* „Zu viel Code" – falsch, vermutlich wegen überflüssiger Bedingung */
         .vs-line-extra-wrong { background: rgba(33,150,243,0.10); box-shadow: inset 3px 0 0 0 #ffc107; }
         /* Geister-Zeile: zeigt, dass eine Zuweisung komplett fehlt, die nicht zu
-           einer existierenden Code-Zeile gehört. Pro fehlendem Eintrag eine Zeile. */
+           einer existierenden Code-Zeile gehört. Farblich (orange) und glyphisch (`+`)
+           bewusst abgesetzt von den gelben Partial-Markern (⋯), damit die zwei Bedeutungen
+           „etwas stimmt nicht in dieser Zeile" vs. „hier müsste noch eine ganze Zeile hin"
+           visuell nicht verwechselt werden können. */
         .vs-missing-ghost {
             display: block;
-            background: rgba(255,193,7,0.10);
-            box-shadow: inset 3px 0 0 0 #ffc107;
-            color: #ffc107;
-            opacity: 0.85;
+            background: rgba(255,138,32,0.10);
+            box-shadow: inset 3px 0 0 0 #ff8a20;
+            color: #ff8a20;
+            opacity: 0.9;
             font-style: italic;
             letter-spacing: 4px;
             padding-left: 4px;
@@ -7023,9 +7026,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let suffix = '';
                 if (isError) {
                     bg = 'background:rgba(220,50,50,0.18);';
-                } else if (_greenLines && _greenLines.has(idx)) {
-                    cls = ' class="vs-line-correct"';
                 } else if (_extraWrongLines && _extraWrongLines.has(idx)) {
+                    // „falsch UND zu viel" — informativste Fehler-Diagnose
                     cls = ' class="vs-line-extra-wrong"';
                     suffix = '<span class="vs-line-extra-marker" title="Vermutlich zu viel — eine Bedingung könnte überflüssig sein">≈</span>';
                 } else if (_partialLines && _partialLines.has(idx)) {
@@ -7034,6 +7036,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 } else if (_extraLines && _extraLines.has(idx)) {
                     cls = ' class="vs-line-extra"';
                     suffix = '<span class="vs-line-extra-marker" title="Korrekt, aber kürzer möglich">≈</span>';
+                } else if (_greenLines && _greenLines.has(idx)) {
+                    // Grün erst hier — nur wenn KEINE Bedingung „falsch" sagt.
+                    cls = ' class="vs-line-correct"';
                 }
                 if (_hintLines && _hintLines.has(idx)) {
                     suffix = (suffix || '') + '<span class="vs-hint-dots">⋯</span>';
@@ -7047,7 +7052,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             const _cm = _ccr && _ccr.codeMissing ? _ccr.codeMissing : 0;
             if (_cm > 0) {
                 for (let i = 0; i < _cm; i++) {
-                    ghostHtml += '<span class="vs-missing-ghost">⋯</span>';
+                    ghostHtml += '<span class="vs-missing-ghost">+ ⋯</span>';
                 }
             }
             highlightingContent.innerHTML = html + ghostHtml;
@@ -13030,44 +13035,40 @@ You must output exactly this JSON format. The logic code goes as a single string
             try {
                 switch (cond.type) {
                     case 'component_type': {
+                        // Nur greenLines, wenn Typ korrekt und Variable im Code.
+                        // KEIN codeMissing/partialLines: für die Typ-Konfiguration ist die
+                        // Sim-Panel-Bedienung zuständig, nicht die Code-Zeile. Falsche/fehlende
+                        // Typen werden in der Task-Conditions-Liste angezeigt.
                         const v = cond.variable;
-                        if (!v) { codeMissing = 1; break; }
+                        if (!v) break;
                         const has = componentTypes[v];
-                        const lines = _findLinesForLhs(v);
                         if (has === cond.compType) {
+                            const lhsLines = _findLinesForLhs(v);
+                            const lines = lhsLines.length ? lhsLines : _findLinesContainingVar(v);
                             lines.forEach(l => greenLines.add(l));
-                            if (!lines.length) codeMissing = 1;
-                        } else if (has) {
-                            lines.forEach(l => partialLines.add(l));
-                            if (!lines.length) codeMissing = 1;
-                        } else {
-                            codeMissing = 1;
                         }
                         break;
                     }
                     case 'variable_exists': {
+                        // Analog: nur grün, wenn die Variable existiert. Sonst KEIN Ghost-Line —
+                        // die Task-Conditions-Liste zeigt die unerfüllte Bedingung.
                         const v = cond.variable;
-                        if (!v) { codeMissing = 1; break; }
+                        if (!v) break;
                         const exists = (globalInputs||[]).includes(v) || (globalOutputs||[]).includes(v);
                         if (exists) {
-                            const lines = _findLinesContainingVar(v);
-                            lines.forEach(l => greenLines.add(l));
-                            if (!lines.length) codeMissing = 1;
-                        } else {
-                            codeMissing = 1;
+                            _findLinesContainingVar(v).forEach(l => greenLines.add(l));
                         }
                         break;
                     }
                     case 'code_contains': {
-                        if (!cond.pattern) { codeMissing = 1; break; }
+                        // Nur die Match-Zeilen grün markieren. Wenn Pattern fehlt: kein Ghost-Line
+                        // (der Schüler weiß ja nicht, welches konkrete Pattern erwartet wird).
+                        if (!cond.pattern) break;
                         try {
                             const re = new RegExp(cond.pattern);
                             const text = document.getElementById('code').value;
-                            const lines = text.split('\n');
-                            let any = false;
-                            lines.forEach((line, idx) => { if (re.test(line)) { greenLines.add(idx); any = true; } });
-                            if (!any) codeMissing = 1;
-                        } catch(e) { codeMissing = 1; }
+                            text.split('\n').forEach((line, idx) => { if (re.test(line)) greenLines.add(idx); });
+                        } catch(e) {}
                         break;
                     }
                     case 'logic_equivalent': {
@@ -13126,11 +13127,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 result.runtimeMissing += (r.runtimeMissing || 0);
             }
             result.missingCount = result.codeMissing + result.runtimeMissing;
-            // Vorrangs-Auflösung: grün > extraWrong > partial > extra (korrekt-aber-lang).
-            // grün ist das positivste Signal; extraWrong ist informationsreicher als reines partial.
-            result.extraWrongLines.forEach(l => { if (result.greenLines.has(l)) result.extraWrongLines.delete(l); });
-            result.partialLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l)) result.partialLines.delete(l); });
-            result.extraLines.forEach(l => { if (result.greenLines.has(l) || result.extraWrongLines.has(l) || result.partialLines.has(l)) result.extraLines.delete(l); });
+            // Vorrangs-Auflösung: extraWrong > partial > extra > grün.
+            // Begründung: Wenn IRGENDEINE Bedingung eine Zeile als „falsch" einstuft,
+            // darf eine andere (z.B. korrekter Bauteiltyp) sie nicht grün übermalen.
+            // Ein passender Typ entschuldigt keine falsche Logik.
+            //   extraWrong = falsch + Diagnose „zu viel"  → wichtigste Info
+            //   partial    = falsch (generisch)
+            //   extra      = korrekt, aber kürzer möglich (Hinweis)
+            //   grün       = überall korrekt
+            result.partialLines.forEach(l => { if (result.extraWrongLines.has(l)) result.partialLines.delete(l); });
+            result.extraLines.forEach(l => { if (result.extraWrongLines.has(l) || result.partialLines.has(l)) result.extraLines.delete(l); });
+            result.greenLines.forEach(l => { if (result.extraWrongLines.has(l) || result.partialLines.has(l) || result.extraLines.has(l)) result.greenLines.delete(l); });
             window._codeCheckResult = result;
             // Das Editor-Corner-Badge ist nur noch für transiente Hinweise (_taskHintDots(-1))
             // reserviert. Laufzeit-Fehlendes wird Teil der Legenden-Statusleiste.
@@ -13156,7 +13163,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>stimmt noch nicht</span>');
             }
             if (result.codeMissing > 0) {
-                items.push('<span><span class="lg-bg" style="background:rgba(255,193,7,0.18);color:#ffc107;">⋯</span>Zuweisung fehlt komplett (' + result.codeMissing + '×)</span>');
+                items.push('<span><span class="lg-bg" style="background:rgba(255,138,32,0.18);color:#ff8a20;">+ ⋯</span>Zuweisung fehlt komplett (' + result.codeMissing + '×)</span>');
             }
             if (result.runtimeMissing > 0) {
                 const word = result.runtimeMissing === 1 ? 'weitere Bedingung' : 'weitere Bedingungen';

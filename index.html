@@ -517,6 +517,42 @@
         /* ⚠️-Marker für Variablen, die einem Bauteil mit nicht-passendem Typ
            zugewiesen sind (also aus „Andere Variablen" gewählt wurden) */
         .sim-var-mismatch { color: #ffb300; margin-left: 4px; cursor: help; font-size: 11px; flex-shrink: 0; user-select: none; }
+        /* Verwaiste Variable: war im Code, ist jetzt nicht mehr drin, bleibt aber
+           für diese Session in der Liste (sticky). Greyed-out + italic + Trash-Icon. */
+        .switch-row.is-orphan, .led-row.is-orphan {
+            opacity: 0.55; font-style: italic; border-style: dashed; border-color: #ff9800;
+            background: #2a1f10;
+        }
+        .switch-row.is-orphan .type-select, .led-row.is-orphan .type-select { color: #aaa; }
+        .sim-orphan-badge {
+            color: #ff9800; font-size: 10px; margin-left: 6px; padding: 1px 5px;
+            border: 1px solid #ff9800; border-radius: 8px; font-style: normal; flex-shrink: 0;
+            user-select: none;
+        }
+        .sim-orphan-trash {
+            background: transparent; border: 1px solid #b71c1c; color: #ff6e6e;
+            font-size: 11px; padding: 2px 6px; border-radius: 3px; cursor: pointer;
+            margin-left: 4px; flex-shrink: 0; line-height: 1;
+        }
+        .sim-orphan-trash:hover { background: #b71c1c; color: #fff; }
+        .sim-cleanup-btn {
+            float: right; background: transparent; border: 1px solid #ff9800; color: #ff9800;
+            font-size: 11px; padding: 1px 7px; border-radius: 3px; cursor: pointer; margin-left: 8px;
+        }
+        .sim-cleanup-btn:hover { background: #ff9800; color: #1e1e1e; }
+        .sim-cleanup-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+        /* Factory-Bauteil-Glow: orange = Variable im sticky-Pool, aber NICHT im Code (verwaist).
+           rot = Variable existiert nirgends (vom User manuell aus Sticky-Pool gelöscht). */
+        @keyframes facOrphanVarPulse {
+            0%, 100% { box-shadow: 0 0 4px 1px rgba(255,152,0,0.55), 0 0 8px 2px rgba(255,152,0,0.30); }
+            50%      { box-shadow: 0 0 8px 2px rgba(255,152,0,0.95), 0 0 16px 4px rgba(255,152,0,0.55); }
+        }
+        @keyframes facMissingVarPulse {
+            0%, 100% { box-shadow: 0 0 4px 1px rgba(255,48,48,0.70), 0 0 8px 2px rgba(255,48,48,0.40); }
+            50%      { box-shadow: 0 0 9px 2px rgba(255,48,48,1.00), 0 0 18px 5px rgba(255,48,48,0.65); }
+        }
+        .fac-orphan-var  { animation: facOrphanVarPulse  1.8s ease-in-out infinite; outline: 1px dashed #ff9800; outline-offset: 1px; }
+        .fac-missing-var { animation: facMissingVarPulse 1.4s ease-in-out infinite; outline: 1px solid  #ff3030; outline-offset: 1px; }
         .led { width: 14px; height: 14px; border-radius: 50%; background-color: #444; box-shadow: inset 0 0 3px #000; transition: background-color 0.1s; flex-shrink: 0; }
         .led.on { background-color: #f58231; box-shadow: 0 0 8px #f58231; }
         #svg-wrapper { flex-grow: 1; width: 100%; position: relative; background-image: radial-gradient(#e0e0e0 1px, transparent 1px); background-size: 20px 20px; }
@@ -1723,6 +1759,7 @@
                 <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="E-Pneumatik-Modus: blendet Schließer/Öffner-Wahl bei Tastern/Schaltern aus (Notaus & Lichtgitter bleiben Öffner). Verändert NICHT den Code." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
                 <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
                 <button onclick="openAnalyzerModal()" title="Oszilloskop öffnen" style="background:#607d8b;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📊</button>
+                <button id="btn-editor-settings" onclick="window._openEditorSettings(event)" title="Einstellungen für die Variablen-Verwaltung (Auto-Aufräumen, Karenzzeit)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚙️</button>
             </span>
         </div>
         <div id="simulator-container">
@@ -2483,7 +2520,32 @@
                 <button onclick="confirmFbsAdd()" style="background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;" data-i18n="btn_generate">Generieren</button>
             </div>
         </div>
-		<div id="help-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2000; width: 450px; color: #ccc; font-size: 12px; line-height: 1.6;">
+		<div id="editor-settings-popup" style="display:none; position:fixed; background:#2d2d30; padding:12px 14px; border:1px solid #555; border-radius:4px; box-shadow:0 8px 20px rgba(0,0,0,0.7); z-index:2500; min-width:300px; max-width:340px; color:#ccc; font-size:12px;">
+                <div style="color:#90caf9;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:6px;">Variablen-Verwaltung</div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-auto-cleanup" onchange="window._setStickyAutoCleanup(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Auto-Aufräumen verwaister Variablen</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 12px 24px;line-height:1.35;">
+                    Wenn aktiv: Variablen ohne Bauteil-Bindung werden nach der Karenzzeit kommentarlos aus der Liste entfernt, statt als „verwaist" angezeigt zu werden. Mit Bauteil-Bindung bleiben sie sichtbar.
+                </div>
+                <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#ddd;margin-bottom:6px;">
+                    <span>Karenzzeit</span>
+                    <span style="display:flex;align-items:center;gap:4px;">
+                        <input type="number" id="settings-carenz-num" min="200" max="20000" step="100" value="2500"
+                               onchange="window._setStickyCarenzMs(this.value)"
+                               style="width:64px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;text-align:right;">
+                        <span style="color:#888;font-size:11px;">ms</span>
+                    </span>
+                </label>
+                <input type="range" id="settings-carenz-slider" min="200" max="10000" step="100" value="2500"
+                       oninput="document.getElementById('settings-carenz-num').value=this.value;window._setStickyCarenzMs(this.value)"
+                       style="width:100%;margin:0 0 4px 0;">
+                <div style="font-size:10px;color:#888;line-height:1.35;">
+                    Wartezeit vor dem Wechsel auf „verwaist" und Mindest-Lebenszeit, bevor eine kurzlebige Variable (Tipp-Artefakt) als verwaist angezeigt wird. Default 2500 ms.
+                </div>
+            </div>
+<div id="help-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2000; width: 450px; color: #ccc; font-size: 12px; line-height: 1.6;">
 			<h3 style="margin-top:0; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px;">ℹ️ Wichtige Bedienungshinweise</h3>
 			<ul style="padding-left: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
 				<li><strong style="color: #9CDCFE;">Hardware-Kopplung:</strong> Sobald ein Signal (Taster, Sensor etc.) einem echten Bauteil in der 2D-Anlage zugewiesen wird, übernimmt die 2D-Mechanik die Kontrolle. Die manuelle Eingabe im linken Simulationsfenster wird für diese Variable dann gesperrt – klicke stattdessen direkt auf die Bauteile in der Anlage!</li>
@@ -8447,10 +8509,17 @@ You must output exactly this JSON format. The logic code goes as a single string
         function buildSimulatorUI(inputs, outputs, graph) {
             latchedTasters.clear(); // Ensure no latched tasters carry over to new simulation
             const oldState = { ...spsState };
-            spsState = {}; 
+            spsState = {};
             const usedAsSource = new Set(graph ? graph.edges.map(e => e.sourceId) : []);
+            // Cleanup-Button-HTML — wird in beide Header injiziert. Klick = sanft (ohne
+            // Bindungen weg), STRG+Klick = aggressiv (alle verwaisten, Bindungen werden
+            // rot markiert). Deaktiviert, wenn keine verwaisten Variablen existieren.
+            const _orphanCount = (window._committedOrphans && window._committedOrphans.size) || 0;
+            const _cleanupBtnHTML = `<button class="sim-cleanup-btn" title="Verwaiste Variablen aufräumen (STRG+Klick = aggressiv, auch mit Bindungen)" `
+                + `onclick="event.ctrlKey||event.metaKey?_cleanupStickyVars('aggressive'):_cleanupStickyVars('soft')" `
+                + (_orphanCount === 0 ? 'disabled' : '') + `>🧹 Aufräumen (${_orphanCount})</button>`;
             // 🌟 i18n Übersetzung für Header und Hinweis
-            simInputsContainer.innerHTML = `<h3>${window.t('sim_inputs')}</h3><div class="sim-hint">${window.t('sim_hint')}</div>`;
+            simInputsContainer.innerHTML = `<h3>${window.t('sim_inputs')}${_cleanupBtnHTML}</h3><div class="sim-hint">${window.t('sim_hint')}</div>`;
             inputs.forEach(name => {
                 if (!componentTypes[name]) {
                     const isNotHalt = name === 'NH' || name === 'NA' || name.startsWith('NH_') || name.startsWith('NA_') || name.includes('NOTHALT') || name.includes('NOTAUS');
@@ -8497,7 +8566,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 </div>`;
             });
             // 🌟 i18n Übersetzung für die Ausgänge
-            simOutputsContainer.innerHTML = `<h3>${window.t('sim_outputs')}</h3>`;
+            simOutputsContainer.innerHTML = `<h3>${window.t('sim_outputs')}${_cleanupBtnHTML}</h3>`;
             outputs.forEach(name => {
                 if(!name.match(/^[SR]\d+(_(?:SR|RS))?$/i)) {
                     spsState[name] = oldState[name] || false;
@@ -8532,6 +8601,38 @@ You must output exactly this JSON format. The logic code goes as a single string
                     </div>`;
                 }
             });
+            // 🔒 Verwaiste (sticky-aber-nicht-im-Code) Variablen anhängen — grau/kursiv,
+            // mit „verwaist"-Badge und Trash-Icon. Eingaben oben, Ausgaben unten.
+            if (window._stickyVars && window._committedOrphans && window._committedOrphans.size > 0) {
+                const _inSet  = new Set(inputs);
+                const _outSet = new Set(outputs);
+                const _orphIn = [], _orphOut = [];
+                window._stickyVars.forEach((info, name) => {
+                    if (!window._committedOrphans.has(name)) return;
+                    if (info.role === 'in'  && !_inSet.has(name))  _orphIn.push(name);
+                    if (info.role === 'out' && !_outSet.has(name)) _orphOut.push(name);
+                });
+                _orphIn.sort();
+                _orphOut.sort();
+                _orphIn.forEach(name => {
+                    simInputsContainer.innerHTML += `<div class="switch-row flex-col is-orphan" data-orphan-var="${name}">
+                        <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">
+                            <span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>
+                            <span class="sim-orphan-badge" title="Variable ist aktuell nicht im Code, bleibt aber für die Session erhalten.">verwaist</span>
+                        </div>
+                        <button class="sim-orphan-trash" title="Variable aus der Liste entfernen" onclick="_deleteStickyVar('${name}', true)">🗑️</button></div>
+                    </div>`;
+                });
+                _orphOut.forEach(name => {
+                    simOutputsContainer.innerHTML += `<div class="led-row flex-col is-orphan" data-orphan-var="${name}">
+                        <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">
+                            <span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>
+                            <span class="sim-orphan-badge" title="Variable ist aktuell nicht im Code, bleibt aber für die Session erhalten.">verwaist</span>
+                        </div>
+                        <button class="sim-orphan-trash" title="Variable aus der Liste entfernen" onclick="_deleteStickyVar('${name}', true)">🗑️</button></div>
+                    </div>`;
+                });
+            }
             runSimulationTick();
         }
         window.toggleInput = function(varName) {
@@ -12144,6 +12245,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Reset all input states so no stale taster/switch values survive into the new task
             spsState = {};
             latchedTasters.clear();
+            // Neuer Task = expliziter Frischstart → Sticky-Pool leeren, damit verwaiste
+            // Variablen aus der vorherigen Aufgabe nicht in die neue Aufgabe hineinblenden.
+            if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
             // Reste der vorherigen Aufgabe entfernen, falls ohne explizites Abbrechen
             // direkt eine neue Aufgabe gestartet wird. Sonst bleiben Bereiche der alten
             // Aufgabe gesperrt/versteckt, die die neue nicht mehr will.
@@ -14369,11 +14473,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                     console.error(e);
                     simulationFunction = null;
                 }
-                buildSimulatorUI(parsed.inputs, parsed.outputs, parsed.graph);
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
-                // Variablen, die im Code entfernt wurden, von den Factory-Komponenten lösen
-                // und sichtbare Tags refreshen.
+                // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
+                // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
+                // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
+                if (parsed.inputs.length === 0 && parsed.outputs.length === 0 && !code.trim()) {
+                    if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
+                }
+                // Sticky-Pool aktualisieren (registriert Code-Variablen, startet Debounce).
+                if (typeof window._updateStickyAndRefresh === 'function') window._updateStickyAndRefresh();
+                buildSimulatorUI(parsed.inputs, parsed.outputs, parsed.graph);
+                // Veraltete Bindungen nur räumen, wenn die Variable WEDER im Code NOCH
+                // im Sticky-Pool ist (echter Orphan, kein Cut/Paste-Artefakt).
                 if (typeof window._pruneStaleLinkedVars === 'function') window._pruneStaleLinkedVars();
                 window.circDuplicateOutputs = parsed.duplicates || [];
                 if (activeTask && !taskSolved) window._taskCheckConditions?.();
@@ -22396,7 +22508,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             colorGrp.style.display = 'none'; intervalGrp.style.display = 'none';
             const spawnerPropsGrp = document.getElementById('fm-group-spawner-props'); if (spawnerPropsGrp) spawnerPropsGrp.style.display = 'none';
             let fillOptions = (selectElem, isOutput, targetType) => {
-                let list = isOutput ? globalOutputs : globalInputs;
+                // Wir mischen aktive Code-Variablen mit verwaisten (sticky-aber-nicht-im-
+                // Code), damit Bindungen an temporär aus dem Code entfernte Variablen
+                // im Modal nicht verschwinden. _getStickyInputs/_getStickyOutputs liefert
+                // die kombinierte Liste; ohne Sticky-Pool ist sie identisch zur Code-Liste.
+                let list = isOutput
+                    ? (typeof window._getStickyOutputs === 'function' ? window._getStickyOutputs() : globalOutputs)
+                    : (typeof window._getStickyInputs  === 'function' ? window._getStickyInputs()  : globalInputs);
                 let groupMatch = document.createElement('optgroup'); groupMatch.label = "Passende Komponenten";
                 let groupOther = document.createElement('optgroup'); groupOther.label = "Andere Variablen";
                 list.forEach(v => {
@@ -23250,8 +23368,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     sel.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; cursor: pointer;";
                     let optNone = document.createElement('option'); optNone.value = ""; optNone.textContent = window.t('ctx_fac_remove_var'); sel.appendChild(optNone);
                     let items = [];
-                    if (listType === 'in') items = globalInputs;
-                    else if (listType === 'out') items = globalOutputs;
+                    if (listType === 'in')
+                        items = (typeof window._getStickyInputs  === 'function') ? window._getStickyInputs()  : globalInputs;
+                    else if (listType === 'out')
+                        items = (typeof window._getStickyOutputs === 'function') ? window._getStickyOutputs() : globalOutputs;
                     else if (listType === 'timers' && currentGraph) items = Array.from(currentGraph.nodes.values()).filter(n => ['TON','TOF','TP','CTU'].includes(n.type)).map(n => n.id);
                     // Trennung „Passende Komponenten" / „Andere Variablen" — gleiche Logik
                     // wie im Platzierungs-Dialog (fillOptions). Bei `timers` und unbekannten
@@ -26135,7 +26255,14 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Re-insert fluid + sand canvases (removed by innerHTML = '')
             let sc = document.createElement('canvas'); sc.id = 'sand-canvas';  sc.width = 4000; sc.height = 3000; sc.style.cssText  = 'position:absolute;top:0;left:0;pointer-events:none;z-index:6;image-rendering:pixelated;opacity:0.93;'; factoryCanvas.prepend(sc);
             let fc = document.createElement('canvas'); fc.id = 'fluid-canvas'; fc.width = 4000; fc.height = 3000; fc.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;image-rendering:pixelated;filter:blur(4px) contrast(15);opacity:0.88;'; factoryCanvas.prepend(fc); initFluidCanvas();
+            // „Alles löschen" ist ein expliziter Frischstart → Sticky-Pool auch leeren,
+            // sonst hängen verwaiste Variablen aus der alten Anlage in der I/O-Liste.
+            if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
             saveFactoryState(); updateFluidMenuVisibility();
+            // Sim-UI nach Reset einmal nachziehen, damit verwaiste Zeilen verschwinden.
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
         };
 		// 🌟 NEU: Funktion für den Klick auf den Zuweisungs-Button
         window.assignKey = function(varName) {
@@ -26488,27 +26615,527 @@ You must output exactly this JSON format. The logic code goes as a single string
                 else if (obj.type === 'zylinder_double') valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
             }
         };
-        // Räumt veraltete linkedVar*-Zuweisungen auf, wenn die Variable
-        // aus dem SPS-Code verschwunden ist. Verhindert, dass das sichtbare
-        // Komponenten-Tag noch den alten Namen zeigt.
-        window._pruneStaleLinkedVars = function() {
+        // ==========================================
+        // 🔒 STICKY VARIABLES (Session-persistente Variablen)
+        // ==========================================
+        // Problem das hier gelöst wird: Sobald eine Variable kurzfristig aus dem
+        // Code verschwand (z.B. Cut+Paste, Zeile temporär gelöscht), wurde sie
+        // aus den I/O-Listen entfernt UND alle Factory-Bindungen verworfen.
+        // Das war zu fragil für normales Editieren.
+        //
+        // Neues Modell:
+        //  - Variablen, die einmal im Code aufgetaucht sind (oder einer Factory-
+        //    Komponente zugewiesen wurden), bleiben für die Session bekannt.
+        //  - Sind sie gerade nicht im Code → Status "verwaist" (orange Markierung,
+        //    Trash-Icon). Factory-Bindungen bleiben erhalten.
+        //  - Vom User per Trash gelöscht → wirklich weg. Factory-Bindungen, die
+        //    noch auf die Variable zeigen, bekommen rote Glow-Markierung.
+        //  - Debounce: 2,5 Sek Karenz, bevor eine verschwundene Variable als
+        //    verwaist sichtbar markiert wird. Cut+Paste flackert nicht mehr.
+        //  - Reset-Trigger: Code komplett geleert, „Alles löschen" in Factory,
+        //    neue Aufgabe gestartet → sticky-Pool wird geleert.
+        //
+        // Persistenz: localStorage('valisStickyVars'), damit nach Reload die
+        // Bindungen + verwaiste Status weiter passen.
+        // ==========================================
+        // Alle linkedVar*-Felder, die auf eine SPS-Variable verweisen können.
+        // Single source of truth für alle Sweep-Operationen (Prune/Cleanup/Glow).
+        window._STICKY_LINKED_KEYS = [
+            'linkedVar','linkedVarExt','linkedVarRet','linkedVar3',
+            'linkedVarLeak','linkedVarPump','linkedVarOpen','linkedVarVib',
+            'linkedVarX_Plus','linkedVarX_Minus','linkedVarY_Plus','linkedVarY_Minus',
+            'linkedVarGrab','linkedVarEnable',
+            'linkedVarMotor','linkedVarMotorFW','linkedVarMotorHW',
+            'linkedVarAutoMode','linkedVarNormal','linkedVarCreep','linkedVarHubOben',
+            'linkedVarWind','linkedVarWindSensor','linkedVarPendel',
+            'linkedVarSensorAuf','linkedVarSensorZu','cycleCountVar'
+        ];
+        // Map<varName, { role:'in'|'out', compType:string }>
+        window._stickyVars = new Map();
+        // Set<varName> — Variablen, die als verwaist im UI sichtbar werden sollen.
+        // Wird durch Debounce-Timer gefüllt, NICHT bei jedem Parse direkt — damit
+        // kurzes Verschwinden (Cut/Paste) kein Flackern erzeugt.
+        window._committedOrphans = new Set();
+        window._STICKY_DEBOUNCE_MS = 2500;
+        // Mindest-Lebenszeit im Code, bevor eine Variable beim Verschwinden als
+        // „verwaist" promoviert wird. Tipp-Artefakte (Zwischenstände beim Eintippen
+        // eines längeren Variablennamens) verschwinden nach Millisekunden und
+        // unterschreiten diese Schwelle → werden stumm aus dem Sticky-Pool entfernt
+        // statt als Verwaist-Zeile angezeigt. Ausnahme: Hat die Variable eine
+        // Factory-Bindung, wird sie sofort promoviert (User hat sie offensichtlich
+        // genutzt).
+        window._STICKY_PROMOTE_MS = 2500;
+        // Auto-Aufräumen-Modus (User-Setting): wenn true, werden auch verwaiste
+        // Variablen OHNE Bauteil-Bindung stumm entfernt (statt als Verwaist-Zeile
+        // angezeigt). Mit Bindung bleiben sie immer sichtbar, damit keine Bauteil-
+        // Verknüpfungen unbemerkt verschwinden.
+        window._stickyAutoCleanup = false;
+        window._stickyDebounceTimer = null;
+        // User-Settings aus localStorage initialisieren (Defaults fallen zurück).
+        (function _initStickySettings() {
+            try {
+                const ac = localStorage.getItem('valisStickyAutoCleanup');
+                if (ac === '1') window._stickyAutoCleanup = true;
+                const ms = parseInt(localStorage.getItem('valisStickyCarenzMs'), 10);
+                if (Number.isFinite(ms) && ms >= 200 && ms <= 60000) {
+                    window._STICKY_DEBOUNCE_MS = ms;
+                    window._STICKY_PROMOTE_MS  = ms;
+                }
+            } catch(_e) {}
+        })();
+        // Setter, die das Setting persistieren und (für Karenzzeit) auch alle laufenden
+        // Timer neu starten, damit die neue Schwelle sofort greift.
+        window._setStickyAutoCleanup = function(on) {
+            window._stickyAutoCleanup = !!on;
+            try { localStorage.setItem('valisStickyAutoCleanup', on ? '1' : '0'); } catch(_e) {}
+            // Wenn gerade aktiviert: sofort einmal eine Cleanup-Runde laufen lassen,
+            // damit bestehende ungebundene Verwaiste verschwinden.
+            if (on && typeof window._stickyAutoCleanupSweep === 'function') {
+                window._stickyAutoCleanupSweep();
+            }
+        };
+        window._setStickyCarenzMs = function(ms) {
+            const v = parseInt(ms, 10);
+            if (!Number.isFinite(v) || v < 200 || v > 60000) return;
+            window._STICKY_DEBOUNCE_MS = v;
+            window._STICKY_PROMOTE_MS  = v;
+            try { localStorage.setItem('valisStickyCarenzMs', String(v)); } catch(_e) {}
+            // Beide UI-Inputs in Sync halten (number + slider können einzeln bewegt werden).
+            const inpN = document.getElementById('settings-carenz-num');
+            const inpS = document.getElementById('settings-carenz-slider');
+            if (inpN && String(inpN.value) !== String(v)) inpN.value = v;
+            if (inpS && String(inpS.value) !== String(v)) inpS.value = v;
+        };
+        // Editor-Einstellungs-Popup öffnen/schließen.
+        window._openEditorSettings = function(ev) {
+            if (ev) { ev.stopPropagation(); }
+            const popup = document.getElementById('editor-settings-popup');
+            const btn = document.getElementById('btn-editor-settings');
+            if (!popup || !btn) return;
+            if (popup.style.display === 'block') { popup.style.display = 'none'; return; }
+            // Aktuelle Werte in die Inputs übernehmen, bevor wir das Popup zeigen.
+            const ac = document.getElementById('settings-auto-cleanup');
+            if (ac) ac.checked = !!window._stickyAutoCleanup;
+            const ms = window._STICKY_DEBOUNCE_MS || 2500;
+            const inpN = document.getElementById('settings-carenz-num');
+            const inpS = document.getElementById('settings-carenz-slider');
+            if (inpN) inpN.value = ms;
+            if (inpS) inpS.value = Math.min(Math.max(ms, 200), 10000);
+            // Position berechnen: am rechten Rand des Buttons ausrichten, drunter.
+            const r = btn.getBoundingClientRect();
+            popup.style.display = 'block';
+            // Width erst nach display:block messbar.
+            const popupW = popup.offsetWidth || 320;
+            let left = r.right - popupW;
+            if (left < 8) left = 8;
+            const maxLeft = window.innerWidth - popupW - 8;
+            if (left > maxLeft) left = maxLeft;
+            popup.style.left = left + 'px';
+            popup.style.top  = (r.bottom + 4) + 'px';
+        };
+        // Outside-Click: schließt das Popup. Auf document, damit Clicks irgendwo
+        // außerhalb auch durchkommen — der Button selbst stoppt Propagation,
+        // damit wiederholtes Klicken auf das Zahnrad sauber toggelt.
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('editor-settings-popup');
+            if (!popup || popup.style.display !== 'block') return;
+            if (popup.contains(e.target)) return;
+            const btn = document.getElementById('btn-editor-settings');
+            if (btn && btn.contains(e.target)) return;
+            popup.style.display = 'none';
+        });
+        // Sofort-Cleanup für ungebundene Verwaiste (wird beim Aktivieren des Auto-
+        // Modus aufgerufen und am Ende von _updateStickyAndRefresh, falls der Modus an ist).
+        window._stickyAutoCleanupSweep = function() {
+            if (!window._stickyAutoCleanup) return;
+            let mapChanged = false, visualChanged = false;
+            const toRemove = [];
+            window._committedOrphans.forEach(name => {
+                if (window._findFactoryBindingsForVar(name).length === 0) toRemove.push(name);
+            });
+            toRemove.forEach(name => {
+                window._stickyVars.delete(name);
+                window._committedOrphans.delete(name);
+                mapChanged = true; visualChanged = true;
+            });
+            if (mapChanged) window._saveStickyVarsToStorage();
+            if (visualChanged) {
+                if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                    try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+                }
+                if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                    try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+                }
+            }
+        };
+
+        window._loadStickyVarsFromStorage = function() {
+            try {
+                const raw = localStorage.getItem('valisStickyVars');
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                if (!data || !Array.isArray(data.entries)) return;
+                window._stickyVars = new Map(data.entries);
+                // Committed-Status wiederherstellen — alle Sticky-Vars sind beim Laden
+                // erstmal als „committed orphan" eingestuft; der erste updateEditor-Lauf
+                // räumt diejenigen wieder raus, die jetzt im Code stehen.
+                window._committedOrphans = new Set(window._stickyVars.keys());
+            } catch (_e) { /* defekter Eintrag — ignorieren */ }
+        };
+        window._saveStickyVarsToStorage = function() {
+            try {
+                const data = { entries: Array.from(window._stickyVars.entries()) };
+                localStorage.setItem('valisStickyVars', JSON.stringify(data));
+            } catch (_e) {}
+        };
+        // Erste Initialisierung aus dem Storage (vor dem ersten updateEditor-Lauf).
+        window._loadStickyVarsFromStorage();
+
+        // Gibt die effektive Variablenliste für UI-Komponenten zurück: aktive (im Code)
+        // ∪ sticky-aber-nicht-im-Code (verwaist). Reihenfolge: erst aktive in Code-
+        // Reihenfolge, dann verwaiste sortiert. Wird von buildSimulatorUI, fillOptions,
+        // addVarSelect benutzt.
+        window._getStickyInputs = function() {
+            const active = Array.isArray(globalInputs) ? globalInputs : [];
+            const orphans = [];
+            window._stickyVars.forEach((info, name) => {
+                if (info.role === 'in' && !active.includes(name)) orphans.push(name);
+            });
+            orphans.sort();
+            return [...active, ...orphans];
+        };
+        window._getStickyOutputs = function() {
+            const active = Array.isArray(globalOutputs) ? globalOutputs : [];
+            const orphans = [];
+            window._stickyVars.forEach((info, name) => {
+                if (info.role === 'out' && !active.includes(name)) orphans.push(name);
+            });
+            orphans.sort();
+            return [...active, ...orphans];
+        };
+        window._isVarOrphaned = function(varName) {
+            // Sichtbarer (committed) Verwaist-Status, NICHT der rohe Computed-Status.
+            return window._committedOrphans.has(varName);
+        };
+        window._isVarMissing = function(varName) {
+            if (!varName) return false;
+            const inCode = (Array.isArray(globalInputs)  && globalInputs.includes(varName))
+                       || (Array.isArray(globalOutputs) && globalOutputs.includes(varName));
+            return !inCode && !window._stickyVars.has(varName);
+        };
+        // Welche Bauteile sind aktuell an Variable `varName` gebunden? (für Cleanup,
+        // Bestätigungs-Dialog und Glow-Refresh.)
+        window._findFactoryBindingsForVar = function(varName) {
+            const out = [];
+            if (typeof factoryObjects === 'undefined' || !varName) return out;
+            const keys = window._STICKY_LINKED_KEYS;
+            factoryObjects.forEach(obj => {
+                keys.forEach(k => { if (obj[k] === varName) out.push({ obj, prop: k }); });
+            });
+            return out;
+        };
+        // Sammelt alle aktuell in factoryObjects gebundenen Variablennamen + ihre Rolle.
+        // Wird beim Sticky-Register-Schritt benutzt, damit Bindungen aus dem Save-State
+        // beim ersten Laden auch ohne aktuellen Code erhalten bleiben.
+        window._collectBoundVarsFromFactory = function() {
+            const out = new Map(); // name → guessed role
+            if (typeof factoryObjects === 'undefined') return out;
+            const inputKeys = ['linkedVar','linkedVarSensorAuf','linkedVarSensorZu',
+                'linkedVarWindSensor','linkedVarHubOben','linkedVarPendel'];
+            // SPS-Variablen-Pattern: muss mit Buchstabe/Underscore beginnen, nur
+            // alphanumerisch + Underscore. Filtert Special-Werte wie 'solid', 'normal'
+            // (Spawner-Block-Property) aus, die nicht als SPS-Variable behandelt werden
+            // dürfen.
+            const _isValidVarName = (name) =>
+                typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+                && name !== 'solid' && name !== 'normal' && name !== 'true' && name !== 'false';
+            factoryObjects.forEach(obj => {
+                // Spawner-Bauteile speichern in linkedVarRet 'solid'/'normal' — Special-
+                // Werte, keine Variable. Wir überspringen das Feld bei Spawnern bewusst.
+                const isSpawner = obj.type && obj.type.startsWith('spawner_');
+                window._STICKY_LINKED_KEYS.forEach(k => {
+                    if (isSpawner && k === 'linkedVarRet') return;
+                    const v = obj[k]; if (!v || !_isValidVarName(v)) return;
+                    // Rolle aus Bauteil-Typ + Feldnamen herleiten:
+                    // Sensor-/Taster-/Schalter-Bauteile + bekannte Input-Felder → 'in',
+                    // sonst → 'out' (Default für Aktoren / Hilfsfelder).
+                    let role = 'out';
+                    if (obj.type && (obj.type.startsWith('sensor_') ||
+                                     ['taster','schalter','nothalt','key_switch','light_curtain',
+                                      'mech_sensor','bottle_sensor'].includes(obj.type))) {
+                        role = 'in';
+                    } else if (inputKeys.includes(k)) {
+                        role = 'in';
+                    }
+                    // Wenn bereits ein Eintrag existiert, NICHT überschreiben — der erste Treffer
+                    // wins (typischerweise die kanonische Bindung).
+                    if (!out.has(v)) out.set(v, role);
+                });
+            });
+            return out;
+        };
+
+        // Wird von updateEditor() nach jedem Parse aufgerufen. Aktualisiert den
+        // Sticky-Pool, schedult ggf. den Debounced Commit auf „verwaist", und
+        // refreshed Sim-UI + Factory-Glow.
+        //
+        // Lifetime-Tracking: jeder Sticky-Eintrag hat addedAt (erste Sichtung im Code).
+        // Ist die Variable temporär weg, wird firstMissingAt gesetzt. Beim Commit
+        // entscheidet (firstMissingAt - addedAt) vs. _STICKY_PROMOTE_MS, ob die Variable
+        // als „verwaist" sichtbar wird oder stumm aus dem Pool fliegt (Tipp-Artefakt).
+        window._updateStickyAndRefresh = function() {
+            const inputs  = Array.isArray(globalInputs)  ? globalInputs  : [];
+            const outputs = Array.isArray(globalOutputs) ? globalOutputs : [];
+            const _now = Date.now();
+            let mapChanged = false;
+            // 1) Alle aktiven (in-Code) Variablen sticky registrieren bzw. updaten.
+            //    Neue Einträge bekommen addedAt=now; Reappearance löscht firstMissingAt.
+            const _registerInCode = (name, role) => {
+                const compType = (typeof componentTypes !== 'undefined') ? componentTypes[name] : undefined;
+                const prev = window._stickyVars.get(name);
+                if (!prev) {
+                    window._stickyVars.set(name, { role, compType: compType || null, addedAt: _now });
+                    mapChanged = true;
+                } else {
+                    let dirty = false;
+                    if (prev.role !== role)                 { prev.role = role;         dirty = true; }
+                    if (prev.compType !== (compType||null)) { prev.compType = compType||null; dirty = true; }
+                    if (prev.firstMissingAt)                { delete prev.firstMissingAt; dirty = true; }
+                    if (dirty) mapChanged = true;
+                }
+            };
+            inputs.forEach(name  => _registerInCode(name, 'in'));
+            outputs.forEach(name => _registerInCode(name, 'out'));
+            // 2) Variablen, die jetzt wieder im Code sind, SOFORT aus den Committed-Orphans
+            //    entfernen (kein Debounce).
+            const allInCode = new Set([...inputs, ...outputs]);
+            let visualChanged = false;
+            window._committedOrphans.forEach(name => {
+                if (allInCode.has(name)) { window._committedOrphans.delete(name); visualChanged = true; }
+            });
+            // 3) Variablen, die jetzt nicht im Code aber im Sticky-Pool sind, kriegen
+            //    firstMissingAt (falls noch nicht gesetzt). Pending-Orphan-Flag setzen
+            //    nur dann, wenn die Variable noch nicht committed ist.
+            let hasPendingNewOrphan = false;
+            window._stickyVars.forEach((info, name) => {
+                if (allInCode.has(name)) return;
+                if (!info.firstMissingAt) { info.firstMissingAt = _now; mapChanged = true; }
+                if (!window._committedOrphans.has(name)) hasPendingNewOrphan = true;
+            });
+            if (hasPendingNewOrphan) {
+                if (window._stickyDebounceTimer) clearTimeout(window._stickyDebounceTimer);
+                window._stickyDebounceTimer = setTimeout(() => {
+                    window._stickyDebounceTimer = null;
+                    let changed = false, mapChanged2 = false;
+                    const _commitNow = Date.now();
+                    const _allInCodeNow = new Set([
+                        ...(Array.isArray(globalInputs)  ? globalInputs  : []),
+                        ...(Array.isArray(globalOutputs) ? globalOutputs : [])
+                    ]);
+                    // Sammeln vor dem Iterieren, damit wir gefahrlos delete() während
+                    // forEach machen können.
+                    const _toEvaluate = [];
+                    window._stickyVars.forEach((info, name) => {
+                        if (_allInCodeNow.has(name)) return;
+                        if (window._committedOrphans.has(name)) return;
+                        _toEvaluate.push(name);
+                    });
+                    _toEvaluate.forEach(name => {
+                        const info = window._stickyVars.get(name);
+                        if (!info) return;
+                        const lifeMs = (info.firstMissingAt || _commitNow) - (info.addedAt || _commitNow);
+                        const hasBinding = window._findFactoryBindingsForVar(name).length > 0;
+                        const oldEnough  = lifeMs >= window._STICKY_PROMOTE_MS;
+                        // Auto-Aufräumen-Modus + keine Bindung → stumm raus (egal ob
+                        // alt genug oder Tipp-Artefakt). Mit Bindung bleibt sichtbar.
+                        if (window._stickyAutoCleanup && !hasBinding) {
+                            window._stickyVars.delete(name);
+                            mapChanged2 = true;
+                            return;
+                        }
+                        // Sonst: Promotion bei lifetime über Schwelle ODER Bindung.
+                        if (hasBinding || oldEnough) {
+                            window._committedOrphans.add(name);
+                            changed = true;
+                        } else {
+                            // Tipp-Artefakt: stumm aus dem Pool entfernen.
+                            window._stickyVars.delete(name);
+                            mapChanged2 = true;
+                        }
+                    });
+                    if (mapChanged2) window._saveStickyVarsToStorage();
+                    if (changed || mapChanged2) {
+                        if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                            try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+                        }
+                        if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                            try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+                        }
+                    }
+                }, window._STICKY_DEBOUNCE_MS);
+            }
+            if (mapChanged) window._saveStickyVarsToStorage();
+            if (visualChanged && typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+            }
+        };
+
+        // Glow-Marker für Factory-Bauteile auffrischen. Iteriert alle factoryObjects
+        // und setzt CSS-Klassen (.fac-orphan-var / .fac-missing-var) basierend auf
+        // dem Status der verlinkten Variablen.
+        window._refreshFactoryGlowMarkers = function() {
             if (typeof factoryObjects === 'undefined') return;
-            const allVars = new Set([...(globalInputs||[]), ...(globalOutputs||[])]);
-            const linkedKeys = [
-                'linkedVar','linkedVarExt','linkedVarRet','linkedVar3',
-                'linkedVarLeak','linkedVarPump','linkedVarOpen','linkedVarVib',
-                'linkedVarX_Plus','linkedVarX_Minus','linkedVarY_Plus','linkedVarY_Minus',
-                'linkedVarGrab','linkedVarEnable',
-                'linkedVarMotor','linkedVarMotorFW','linkedVarMotorHW',
-                'linkedVarAutoMode','linkedVarNormal','linkedVarCreep','linkedVarHubOben',
-                'linkedVarWind','linkedVarWindSensor','linkedVarPendel',
-                'linkedVarSensorAuf','linkedVarSensorZu','cycleCountVar'
-            ];
+            const keys = window._STICKY_LINKED_KEYS;
+            factoryObjects.forEach(obj => {
+                if (!obj || !obj.el) return;
+                let hasOrphan = false, hasMissing = false;
+                const orphanNames = [], missingNames = [];
+                keys.forEach(k => {
+                    const v = obj[k]; if (!v) return;
+                    if (window._isVarMissing(v))      { hasMissing = true; missingNames.push(v); }
+                    else if (window._isVarOrphaned(v)) { hasOrphan  = true; orphanNames.push(v); }
+                });
+                obj.el.classList.toggle('fac-orphan-var',  hasOrphan && !hasMissing);
+                obj.el.classList.toggle('fac-missing-var', hasMissing);
+                // Tooltip ergänzen, ohne bestehenden Titel zu zerstören.
+                const baseTitle = obj.el.dataset._origTitle !== undefined
+                    ? obj.el.dataset._origTitle
+                    : (obj.el.title || '');
+                if (obj.el.dataset._origTitle === undefined && (hasOrphan || hasMissing)) {
+                    obj.el.dataset._origTitle = baseTitle;
+                }
+                if (hasMissing) {
+                    obj.el.title = (baseTitle ? baseTitle + '\n\n' : '') +
+                        '⛔ Diese Komponente ist Variable(n) zugewiesen, die nicht mehr existieren:\n• ' +
+                        missingNames.join('\n• ') +
+                        '\nBitte neu zuweisen oder Variable im Code/Liste wieder anlegen.';
+                } else if (hasOrphan) {
+                    obj.el.title = (baseTitle ? baseTitle + '\n\n' : '') +
+                        '⚠️ Diese Komponente ist Variable(n) zugewiesen, die aktuell nicht im Code stehen:\n• ' +
+                        orphanNames.join('\n• ') +
+                        '\nVariable bleibt erhalten, simuliert aber nichts.';
+                } else if (obj.el.dataset._origTitle !== undefined) {
+                    obj.el.title = baseTitle;
+                    delete obj.el.dataset._origTitle;
+                }
+            });
+        };
+
+        // Variable manuell aus dem Sticky-Pool entfernen (Trash-Icon im Sim-Panel).
+        // Wenn confirmIfBound===true und es noch Bindungen gibt, vorher fragen.
+        window._deleteStickyVar = function(varName, confirmIfBound) {
+            if (!varName) return false;
+            const bindings = window._findFactoryBindingsForVar(varName);
+            if (confirmIfBound !== false && bindings.length > 0) {
+                const labels = bindings.map(b => (typeof _getObjectTypeLabel === 'function'
+                    ? _getObjectTypeLabel(b.obj.type) : b.obj.type));
+                const ok = confirm(`Variable „${varName}" ist noch ${bindings.length} Bauteil(en) zugewiesen:\n• `
+                    + labels.join('\n• ')
+                    + `\n\nTrotzdem aus der Liste entfernen?\n(Die Bauteile werden danach rot markiert.)`);
+                if (!ok) return false;
+            }
+            window._stickyVars.delete(varName);
+            window._committedOrphans.delete(varName);
+            window._saveStickyVarsToStorage();
+            // Sim-UI + Factory-Glow neu zeichnen.
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+            }
+            return true;
+        };
+
+        // „Variablen aufräumen"-Aktion. modus='soft' (Default): nur verwaiste Variablen
+        // OHNE Factory-Bindungen entfernen. modus='aggressive': alle verwaisten entfernen,
+        // egal ob Bindungen existieren — Bindungen werden danach rot markiert.
+        window._cleanupStickyVars = function(modus) {
+            modus = modus || 'soft';
+            const removed = [];
+            const stillBound = [];
+            window._committedOrphans.forEach(name => {
+                const bindings = window._findFactoryBindingsForVar(name);
+                if (bindings.length === 0) {
+                    removed.push(name);
+                } else if (modus === 'aggressive') {
+                    removed.push(name);
+                } else {
+                    stillBound.push({ name, count: bindings.length });
+                }
+            });
+            if (removed.length === 0 && stillBound.length === 0) {
+                alert('Keine verwaisten Variablen zum Aufräumen.');
+                return;
+            }
+            let msg;
+            if (modus === 'aggressive') {
+                msg = `Alle ${removed.length} verwaisten Variablen löschen?\n`;
+                const withBindings = removed.filter(n => window._findFactoryBindingsForVar(n).length > 0);
+                if (withBindings.length > 0) {
+                    msg += `\n⚠️ ${withBindings.length} davon ist/sind Bauteilen zugewiesen — die Bauteile werden rot markiert:\n• `
+                         + withBindings.join('\n• ');
+                }
+            } else {
+                msg = `${removed.length} verwaiste Variable(n) entfernen (ohne Bauteil-Bindung).`;
+                if (stillBound.length > 0) {
+                    msg += `\n\n${stillBound.length} Variable(n) bleiben erhalten, weil noch Bauteile darauf verweisen:\n• `
+                         + stillBound.map(s => `${s.name} (${s.count}×)`).join('\n• ')
+                         + `\n\n(Für aggressives Löschen STRG+Klick auf den Aufräumen-Button.)`;
+                }
+            }
+            if (!confirm(msg)) return;
+            removed.forEach(name => {
+                window._stickyVars.delete(name);
+                window._committedOrphans.delete(name);
+            });
+            window._saveStickyVarsToStorage();
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+            }
+        };
+
+        // Vollständiger Reset des Sticky-Pools (Code geleert, Alles löschen, neue Aufgabe).
+        window._resetStickyVars = function() {
+            window._stickyVars.clear();
+            window._committedOrphans.clear();
+            if (window._stickyDebounceTimer) {
+                clearTimeout(window._stickyDebounceTimer);
+                window._stickyDebounceTimer = null;
+            }
+            window._saveStickyVarsToStorage();
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+            }
+        };
+
+        // Räumt veraltete linkedVar*-Zuweisungen auf, wenn die Variable
+        // aus dem SPS-Code verschwunden ist UND NICHT im Sticky-Pool ist.
+        // Unter dem neuen Modell bleiben alle Bindungen während der Session
+        // erhalten — nur explizit gelöschte (oder Reset-getriggerte) Variablen
+        // verlieren ihre Bindung. Wird primär für Reset-Trigger benötigt.
+        window._pruneStaleLinkedVars = function() {
+            // Vor jeder Bereinigung: Sticky-Pool aktualisieren, damit der erste
+            // Aufruf nach Parse die Code-Variablen auch wirklich kennt.
+            if (typeof window._updateStickyAndRefresh === 'function') {
+                window._updateStickyAndRefresh();
+            }
+            if (typeof factoryObjects === 'undefined') return;
+            // „Erlaubt" = im Code ODER im Sticky-Pool.
+            const allowed = new Set([
+                ...(Array.isArray(globalInputs)  ? globalInputs  : []),
+                ...(Array.isArray(globalOutputs) ? globalOutputs : []),
+                ...window._stickyVars.keys()
+            ]);
+            const linkedKeys = window._STICKY_LINKED_KEYS;
             let anyChange = false;
             factoryObjects.forEach(obj => {
                 let changed = false;
                 linkedKeys.forEach(k => {
-                    if (obj[k] && !allVars.has(obj[k])) { obj[k] = null; changed = true; }
+                    if (obj[k] && !allowed.has(obj[k])) { obj[k] = null; changed = true; }
                 });
                 if (changed) {
                     window._refreshFactoryLabel(obj);
@@ -26516,6 +27143,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             });
             if (anyChange && typeof saveFactoryState === 'function') saveFactoryState();
+            // Glow-Marker aktualisieren (auch wenn keine Änderung — orange↔aktiv kann
+            // sich durch _updateStickyAndRefresh trotzdem verschoben haben).
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
+            }
         };
         window._syncCircuitFromFactory = function(immediate) {
             const _doRedraw = () => {
@@ -26547,6 +27179,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Mismatch-Lage einer Variable verschieben (neu, gelöscht, umgetypt).
             if (typeof window._refreshSimMismatchMarkers === 'function') {
                 try { window._refreshSimMismatchMarkers(); } catch(_e) {}
+            }
+            // Factory-Glow ebenfalls auffrischen — Bindungs-Änderung kann Orphan-/
+            // Missing-Status verschieben.
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
             }
         }
         function undoFactory() {
@@ -26875,6 +27512,43 @@ You must output exactly this JSON format. The logic code goes as a single string
             // war factoryObjects noch leer, also blieben alle Mismatches unsichtbar.
             if (typeof window._refreshSimMismatchMarkers === 'function') {
                 try { window._refreshSimMismatchMarkers(); } catch(_e) {}
+            }
+            // Sticky-Pool aus den geladenen Bindungen reseeden — Bindungen, die noch
+            // KEINEN Sticky-Eintrag haben (z.B. nach Page-Reload mit leerem Storage
+            // oder bei Save aus älterer Version), bekommen einen Platzhalter-Eintrag,
+            // damit sie weder als „fehlend" (rot) noch als unbekannt im Dropdown
+            // erscheinen. Reale Rolle/Typ wird beim nächsten updateEditor-Lauf
+            // korrigiert, sobald die Variable im Code steht.
+            let _stickySeeded = false;
+            try {
+                const boundFromFactory = window._collectBoundVarsFromFactory();
+                const _seedNow = Date.now();
+                boundFromFactory.forEach((role, name) => {
+                    if (!window._stickyVars.has(name)) {
+                        // addedAt: setzen, damit spätere Lifetime-Checks definiert sind.
+                        // firstMissingAt: setzen, damit nachträgliches Re-Auftauchen im
+                        // Code als „Reappearance" korrekt erkannt wird (firstMissingAt
+                        // wird dann gelöscht).
+                        window._stickyVars.set(name, {
+                            role, compType: null,
+                            addedAt: _seedNow, firstMissingAt: _seedNow
+                        });
+                        window._committedOrphans.add(name); // zunächst als verwaist einstufen
+                        _stickySeeded = true;
+                    }
+                });
+                if (_stickySeeded) window._saveStickyVarsToStorage();
+            } catch(_e) {}
+            // Sim-UI nachziehen, falls neue Sticky-Variablen aus Factory-Bindungen
+            // reseeded wurden — das initiale buildSimulatorUI lief vor diesem Reseed
+            // und kennt die verwaisten Variablen daher noch nicht.
+            if (_stickySeeded && typeof currentGraph !== 'undefined' && currentGraph
+                && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
+            // Glow-Marker nach komplettem Laden einmal anstoßen.
+            if (typeof window._refreshFactoryGlowMarkers === 'function') {
+                try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
             }
         };
         // ==========================================
@@ -31361,6 +32035,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 btn.style.color = '#fff';
                 btn.textContent = '📊 Drücke anzeigen: AN';
             }
+            // Editor-Settings-Dropdown initial befüllen (Auto-Aufräumen + Karenzzeit).
+            const ac = document.getElementById('settings-auto-cleanup');
+            if (ac) ac.checked = !!window._stickyAutoCleanup;
+            const carenzN = document.getElementById('settings-carenz-num');
+            const carenzS = document.getElementById('settings-carenz-slider');
+            const ms = window._STICKY_DEBOUNCE_MS || 2500;
+            if (carenzN) carenzN.value = ms;
+            if (carenzS) carenzS.value = ms;
         });
         window.toggleFbsOptions = function() {
             let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)

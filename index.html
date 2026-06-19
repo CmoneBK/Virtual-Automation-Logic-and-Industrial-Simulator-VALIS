@@ -514,6 +514,9 @@
         .taster-btn { background-color: #555; color: white; border: none; padding: 3px 10px; border-radius: 10px; cursor: pointer; font-family: monospace; font-size: 11px; font-weight: bold; transition: background-color 0.1s, transform 0.1s; user-select: none; flex-shrink: 0; }
         .taster-btn:active, .taster-btn.pressed { background-color: #3cb44b; transform: scale(0.95); }
         .led-row { display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 13px; background: #1e1e1e; padding: 4px 8px; border-radius: 3px; border: 1px solid #333; box-sizing: border-box; }
+        /* ⚠️-Marker für Variablen, die einem Bauteil mit nicht-passendem Typ
+           zugewiesen sind (also aus „Andere Variablen" gewählt wurden) */
+        .sim-var-mismatch { color: #ffb300; margin-left: 4px; cursor: help; font-size: 11px; flex-shrink: 0; user-select: none; }
         .led { width: 14px; height: 14px; border-radius: 50%; background-color: #444; box-shadow: inset 0 0 3px #000; transition: background-color 0.1s; flex-shrink: 0; }
         .led.on { background-color: #f58231; box-shadow: 0 0 8px #f58231; }
         #svg-wrapper { flex-grow: 1; width: 100%; position: relative; background-image: radial-gradient(#e0e0e0 1px, transparent 1px); background-size: 20px 20px; }
@@ -610,6 +613,33 @@
         svg.sim-running .fbs-line.inactive { stroke: #333 !important; opacity: 0.3; stroke-width: 2.5px; }
         svg.sim-running .fbs-dot.inactive { fill: #333 !important; opacity: 0.3; }
         svg.sim-running .fbs-bubble.inactive { stroke: #333 !important; }
+        /* --- Code-Fehler im Logikplan (rot pulsierend) --- */
+        @keyframes fbsErrorPulse {
+            0%, 100% { filter: drop-shadow(0 0 3px rgba(255,48,48,0.75)) drop-shadow(0 0 6px rgba(255,48,48,0.45)); }
+            50%      { filter: drop-shadow(0 0 6px rgba(255,48,48,1.00)) drop-shadow(0 0 12px rgba(255,48,48,0.70)); }
+        }
+        .fbs-error-glow {
+            animation: fbsErrorPulse 1.6s ease-in-out infinite;
+        }
+        .fbs-error-glow .fbs-block,
+        .fbs-error-glow .fbs-io-box {
+            stroke: #ff3030 !important;
+            stroke-width: 3px !important;
+        }
+        .fbs-error-glow .fbs-text { fill: #b00020 !important; }
+        .fbs-error-glow .fbs-pin-text { fill: #b00020 !important; }
+        path.fbs-line.fbs-error-glow,
+        circle.fbs-dot.fbs-error-glow {
+            stroke: #ff3030 !important;
+        }
+        circle.fbs-dot.fbs-error-glow { fill: #ff3030 !important; }
+        circle.fbs-bubble.fbs-error-glow { stroke: #ff3030 !important; }
+        /* Sim-Modus: rote Fehlermarkierung soll auch im aktiv/inaktiv-Zustand durchschlagen */
+        svg.sim-running .fbs-error-glow .fbs-block,
+        svg.sim-running .fbs-error-glow .fbs-io-box,
+        svg.sim-running path.fbs-line.fbs-error-glow {
+            stroke: #ff3030 !important;
+        }
 		/* Schaltplan-spezifische Transitionen */
         .circ-component { transition: fill 0.2s ease; }
         /* Buttons bleiben strikt IN der Leiste, Emojis bekommen mehr Luft! */
@@ -1774,6 +1804,7 @@
                     <div id="fbs-options-group">
                         <button id="btn-fbs-colors" class="btn-export" style="background-color: #911eb4; border: 1px solid #333;" onclick="toggleFbsColors()">🌈 Bunte Linien: AN</button>
                         <button id="btn-fbs-layout" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="cycleFbsLayout()">📐 Dichte: Normal</button>
+                        <button id="btn-fbs-errorglow" class="btn-export" style="background-color: #d50000; border: 1px solid #333;" onclick="toggleFbsErrorHighlight()" title="Code-Fehler im Logikplan durch rotes Leuchten an den betroffenen Variablen und Linien sichtbar machen.">🚨 Fehler-Glow: AN</button>
                     </div>
                 </div>
                 <svg id="custom-svg" xmlns="http://www.w3.org/2000/svg">
@@ -4082,6 +4113,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.fbsColorMode = true;   // true = bunte Linien (Standard)
         window.fbsLayoutScale = 1.0;  // 1.0 = Normal
         window.fbsLayoutIndex = 0;    // 0=Normal, 1=Kompakt, 2=Weit
+        window.fbsErrorHighlight = true; // true = Code-Fehler im Logikplan rot hervorheben
 		// ==========================================
         // NEU: WEB AUDIO API SYNTHESIZER (0 Bytes Audio-Dateien!)
         // ==========================================
@@ -5461,6 +5493,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 spsState[id] = !spsState[id];
             }
             updateEditor(); // Aktualisiert UI und Schaltplan sofort live!
+            // Defensiv: Falls updateEditor wegen eines transienten Parse-Fehlers
+            // die Sim-UI gerade nicht neu baut, wenigstens die ⚠️-Marker direkt
+            // aktualisieren (kein No-Op, da der Type-Wechsel die Mismatch-Lage ändert).
+            if (typeof window._refreshSimMismatchMarkers === 'function') {
+                try { window._refreshSimMismatchMarkers(); } catch(_e) {}
+            }
             if (activeTask && !taskSolved) window._taskCheckConditions?.();
         };
         function safe(val) { return isNaN(val) ? 0 : Math.round(val); }
@@ -6198,6 +6236,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             graph.nodes.forEach(node => {
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${safe(node.x)}, ${safe(node.y)})`);
+                g.setAttribute("data-node-id", node.id);
 				// NEU: Visual Editor - Rechtsklick auf den Knoten!
                 g.style.cursor = 'context-menu';
                 g.addEventListener('contextmenu', (e) => {
@@ -6306,6 +6345,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 svgNodes.appendChild(g);
             });
             if (panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = null; }
+            // Fehler-Hervorhebung (rote Glow-Markierung) anwenden, falls aktiviert
+            try { _fbsApplyErrorHighlight(); } catch(e) { console.warn('Fehler-Highlight fehlgeschlagen:', e); }
             // FIX: Timeout gibt dem Browser Zeit, die SVG-Kästen zu rendern, bevor die Größe abgefragt wird!
             // NEU: Nicht zerstören! Wir aktualisieren stattdessen einfach die Bounding-Boxen der bestehenden Instanz.
             setTimeout(() => {
@@ -6325,6 +6366,112 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }, 15);
         }
+        // ==============================================================
+        // FEHLER-HIGHLIGHT im LOGIKPLAN
+        // ==============================================================
+        // Bestimmt die Liste der Graph-Knoten-IDs, die von Code-Fehlern betroffen
+        // sind, und markiert die zugehörigen SVG-Knoten/Linien mit der Klasse
+        // `fbs-error-glow`. Der visuelle Effekt ist rein per CSS gesteuert
+        // (rotes pulsierendes Drop-Shadow + roter Stroke).
+        // ----
+        // LHS-Auflösung auf Graph-Knoten:
+        //   S<n>     -> RS_<n>     (S-Pin des RS-Glieds)
+        //   R<n>     -> RS_<n>
+        //   S<n>_SR  -> SR_<n>
+        //   R<n>_SR  -> SR_<n>
+        //   Q<n>     -> RS_<n>     (Q-LHS-Fehler hat Parser-Output Q<n> als OUTPUT-Node;
+        //                           wir mappen das auf den vermutlich gemeinten RS_<n>)
+        //   INPUT X  -> X
+        //   sonst    -> outputStr (1:1)
+        // Wenn der gemappte Knoten nicht im Graph existiert, fällt die Markierung
+        // einfach weg – kein Schaden.
+        window._fbsApplyErrorHighlight = function _fbsApplyErrorHighlight() {
+            // Erst: ALLE alten Markierungen entfernen (z.B. nach Fix oder Toggle-Aus)
+            svgNodes.querySelectorAll('.fbs-error-glow').forEach(el => el.classList.remove('fbs-error-glow'));
+            svgLines.querySelectorAll('.fbs-error-glow').forEach(el => el.classList.remove('fbs-error-glow'));
+
+            if (window.fbsErrorHighlight === false) return;
+            if (typeof window._collectAllErrors !== 'function') return;
+            const errLines = window._collectAllErrors();
+            if (!errLines || errLines.size === 0) return;
+
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            const lines = (ta.value || '').split('\n');
+            const assignFirstRe = /:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/i;
+
+            const affected = new Set();
+            const mapLhsToNodeId = (lhs) => {
+                const rsM = lhs.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
+                if (rsM) {
+                    const suf = rsM[3] ? rsM[3].toUpperCase() : '';
+                    return (suf === '_SR' ? 'SR_' : 'RS_') + rsM[2];
+                }
+                const qM = lhs.match(/^Q(\d+)(_(?:SR|RS))?$/i);
+                if (qM) {
+                    const suf = qM[2] ? qM[2].toUpperCase() : '';
+                    // Q-LHS-Fehler: Knoten wird ggf. als OUTPUT 'Q<n>' angelegt, der
+                    // entsprechende RS-/SR-Block ist meist das, was der Nutzer meinte.
+                    // Markiere beides, falls vorhanden.
+                    affected.add(lhs);
+                    return (suf === '_SR' ? 'SR_' : 'RS_') + qM[1];
+                }
+                return lhs;
+            };
+
+            errLines.forEach(idx => {
+                const raw = lines[idx];
+                if (raw == null) return;
+                const codePart = raw.split('//')[0].trim();
+                if (!codePart) return;
+                // INPUT-Statement?
+                const im = codePart.match(/^INPUT\s+(\S+)\s*$/i);
+                if (im) { affected.add(im[1].toUpperCase()); return; }
+                const m = codePart.match(assignFirstRe);
+                if (!m || m.index == null) return;
+                const lhs = codePart.substring(0, m.index).trim();
+                if (!lhs) return;
+                affected.add(mapLhsToNodeId(lhs));
+            });
+
+            if (affected.size === 0) return;
+
+            // Knoten markieren (rect-Element bekommt die Klasse via Eltern-g, da
+            // unsere CSS-Selektoren `.fbs-error-glow .fbs-block` / `.fbs-io-box` nutzen)
+            svgNodes.querySelectorAll('g[data-node-id]').forEach(gEl => {
+                const id = gEl.getAttribute('data-node-id');
+                if (affected.has(id)) gEl.classList.add('fbs-error-glow');
+            });
+
+            // Verteiler-Punkte und Negations-Bubbles: tragen `net-source-<id>` als Klasse.
+            svgNodes.querySelectorAll('.fbs-dot, .fbs-bubble').forEach(c => {
+                for (const cls of c.classList) {
+                    if (cls.startsWith('net-source-')) {
+                        const id = cls.substring('net-source-'.length);
+                        if (affected.has(id)) c.classList.add('fbs-error-glow');
+                        break;
+                    }
+                }
+            });
+
+            // Linien-Pfade markieren:
+            //   Trunk:  data-trunk-source -> glow, falls Quelle betroffen
+            //   Branch: data-edge-id "<src>___<tgt>___<pin>" -> glow, falls Quelle ODER Ziel betroffen
+            svgLines.querySelectorAll('path').forEach(p => {
+                const trunk = p.getAttribute('data-trunk-source');
+                if (trunk) {
+                    if (affected.has(trunk)) p.classList.add('fbs-error-glow');
+                    return;
+                }
+                const ed = p.getAttribute('data-edge-id');
+                if (ed) {
+                    const parts = ed.split('___');
+                    const src = parts[0];
+                    const tgt = parts[1];
+                    if (affected.has(src) || affected.has(tgt)) p.classList.add('fbs-error-glow');
+                }
+            });
+        };
         function loadFromStorage() {
             const saved = localStorage.getItem('logikEditorCode');
             if (saved !== null && saved.trim() !== "") {
@@ -7078,7 +7225,7 @@ You must output exactly this JSON format. The logic code goes as a single string
 
         // ===== Inline Code-Glossar (Stufen 1-3) =====
         window._CODE_GLOSSARY = {
-            ':=':    { title:'Zuweisung', syntax:'VARIABLE := AUSDRUCK', desc:'Weist der Variablen links das Ergebnis des Ausdrucks rechts zu. Auch erlaubt: =, <-, IST, GLEICH.', lhs:'Aktoren (Zylinder, Förderbänder, Motoren, Heizungen …) und Anzeigeelemente (LEDs, Lampen, Ampeln, Hupen …). Also alles, was die Steuerung ANSTEUERN soll — typischerweise mit „A_" am Anfang.', rhs:'Bedienelemente (Taster, Schalter, Schlüsselschalter, Not-Halt) und Sensoren (induktiv, kapazitiv, optisch, magnetisch, mechanisch) — einzeln oder als logische Kombination mit && / || / ¬. Das ist die Bedingung, unter der die linke Seite aktiv werden soll — typischerweise mit „E_" am Anfang.', example:'LAMPE := TASTER && ¬NOTAUS' },
+            ':=':    { title:'Zuweisung', syntax:'VARIABLE := AUSDRUCK', desc:'Weist der Variablen links das Ergebnis des Ausdrucks rechts zu. Auch erlaubt: =, <-, IST, GLEICH.', lhs:'Aktoren (Zylinder, Förderbänder, Motoren, Heizungen …) und Anzeigeelemente (LEDs, Lampen, Ampeln, Hupen …). Also alles, was die Steuerung ANSTEUERN soll. Tipp: Wer sich beim Unterscheiden schwertut, kann Ausgängen konsequent ein „A_" voranstellen — dann ist auf einen Blick klar, was nach links gehört.', rhs:'Bedienelemente (Taster, Schalter, Schlüsselschalter, Not-Halt) und Sensoren (induktiv, kapazitiv, optisch, magnetisch, mechanisch) — einzeln oder als logische Kombination mit && / || / ¬. Das ist die Bedingung, unter der die linke Seite aktiv werden soll. Tipp: Wer sich beim Unterscheiden schwertut, kann Eingängen konsequent ein „E_" voranstellen — dann ist auf einen Blick klar, was nach rechts gehört.', example:'LAMPE := TASTER && ¬NOTAUS' },
             '&&':    { title:'UND-Verknüpfung', syntax:'A && B', desc:'Wahr, wenn ALLE Bedingungen wahr sind. Wie eine Reihenschaltung von Schaltern. Auch: &, ∧, UND, AND.', scenario:'„und", „sowohl … als auch", „gleichzeitig", „zusätzlich", „nur wenn auch", „beide aktiv", „erst wenn alle …", „während …" — überall, wo mehrere Bedingungen ZUSAMMEN erfüllt sein müssen.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
             '||':    { title:'ODER-Verknüpfung', syntax:'A || B', desc:'Wahr, wenn MINDESTENS EINE Bedingung wahr ist. Wie eine Parallelschaltung. Auch: |, ∨, ODER, OR.', scenario:'„oder", „entweder … oder", „mindestens eines", „wahlweise", „auch wenn", „falls irgendein …", „kann durch X ODER Y ausgelöst werden" — sobald EINE von mehreren Bedingungen reicht, um die linke Seite zu aktivieren.', example:'ALARM := RAUCH_SENSOR || WAERME_SENSOR' },
             '¬':  { title:'Negation (NICHT)', syntax:'¬A', desc:'Kehrt den Wahrheitswert um: aus wahr wird falsch und umgekehrt. Auch: !, NICHT, NOT.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
@@ -8334,8 +8481,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                     : `<button class="taster-btn ${isActuated ? 'pressed' : ''}" id="sim_taster_${name}" onmousedown="setTaster('${name}', true, event)" onmouseup="setTaster('${name}', false, event)" onmouseleave="setTaster('${name}', false, event)" ontouchstart="setTaster('${name}', true, event)" ontouchend="setTaster('${name}', false, event)">${window.t('btn_pushbutton')}</button>`;
                 let _bk = window.inputKeyBindings[name]; let boundKey = _bk ? `[${_bk === ' ' ? '␣' : _bk.toUpperCase()}]` : '⌨️';
                 let keyBtnHTML = `<button id="btn_key_${name}" class="key-bind-btn" onclick="assignKey('${name}')" title="Klicken, um Taste zuzuweisen (Entf zum Löschen)">${boundKey}</button>`;
+                // ⚠️-Marker: zeigt an, dass diese Variable mindestens einem 2D-Bauteil
+                // zugewiesen ist, dessen Bauteil-Typ nicht zum Komponenten-Typ passt
+                // (Variable wurde aus „Andere Variablen" im Zuweisungs-Menü gewählt).
+                const _mmIn = window._fctFindMismatchedAssignmentsForVar
+                    ? window._fctFindMismatchedAssignmentsForVar(name) : [];
+                const _mmInLabels = _mmIn.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
+                const _mmInTitle = _mmIn.length > 0
+                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmInLabels.join('&#10;• ')}`
+                    : '';
+                const _mmInHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmIn.length > 0 ? '' : 'display:none;'}" title="${_mmInTitle}">⚠️</span>`;
                 simInputsContainer.innerHTML += `<div class="switch-row flex-col">
-                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span style="text-overflow:ellipsis; overflow:hidden;">${name}</span></div>${selectHTML}</div>
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;">${controlHTML}</div>
                 </div>`;
             });
@@ -8361,8 +8518,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                             .join('');
                         selectHTML = `<select class="type-select" onchange="changeType('${name}', this.value)">${_outOptsHTML}</select>`;
                     }
+                    // ⚠️-Marker für Ausgänge — analog zu den Eingängen, gleiche Logik.
+                    const _mmOut = window._fctFindMismatchedAssignmentsForVar
+                        ? window._fctFindMismatchedAssignmentsForVar(name) : [];
+                    const _mmOutLabels = _mmOut.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
+                    const _mmOutTitle = _mmOut.length > 0
+                        ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
+                        : '';
+                    const _mmOutHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmOut.length > 0 ? '' : 'display:none;'}" title="${_mmOutTitle}">⚠️</span>`;
                     simOutputsContainer.innerHTML += `<div class="led-row flex-col">
-                        <div class="flex-row-between"><span>${name}</span>${selectHTML}</div>
+                        <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;"><span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
                         <div class="flex-row-between" style="justify-content: flex-end;"><div class="led" id="sim_out_${name}"></div></div>
                     </div>`;
                 }
@@ -11979,6 +12144,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Reset all input states so no stale taster/switch values survive into the new task
             spsState = {};
             latchedTasters.clear();
+            // Reste der vorherigen Aufgabe entfernen, falls ohne explizites Abbrechen
+            // direkt eine neue Aufgabe gestartet wird. Sonst bleiben Bereiche der alten
+            // Aufgabe gesperrt/versteckt, die die neue nicht mehr will.
+            try { _taskRestoreObjectRestrictions(); } catch(e){}
+            try { _taskRestoreBlockAreas();         } catch(e){}
+            try { _taskRestoreHideAreas();          } catch(e){}
             if (taskObj.preset) {
                 let presetData = {
                     code: taskObj.preset.code || '',
@@ -14243,6 +14414,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     .fbs-io-box { fill: #f0f0f0; stroke-width: 2px; }
                     .fbs-bubble { fill: #ffffff; stroke-width: 2px; }
                     text { font-family: 'Segoe UI', Tahoma, sans-serif; }
+                    .fbs-error-glow .fbs-block,
+                    .fbs-error-glow .fbs-io-box { stroke: #ff3030 !important; stroke-width: 3px !important; }
+                    .fbs-error-glow .fbs-text,
+                    .fbs-error-glow .fbs-pin-text { fill: #b00020 !important; }
+                    path.fbs-line.fbs-error-glow,
+                    circle.fbs-dot.fbs-error-glow,
+                    circle.fbs-bubble.fbs-error-glow { stroke: #ff3030 !important; }
+                    circle.fbs-dot.fbs-error-glow { fill: #ff3030 !important; }
                 `;
             } else {
                 // Bake contact resting-state rotations as SVG attribute transforms.
@@ -14409,6 +14588,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 .fbs-io-box { fill:#f0f0f0; stroke-width:2px; }
                 .fbs-bubble { fill:#fff; stroke-width:2px; }
                 text { font-family:'Segoe UI',Tahoma,sans-serif; }
+                .fbs-error-glow .fbs-block,
+                .fbs-error-glow .fbs-io-box { stroke:#ff3030 !important; stroke-width:3px !important; }
+                .fbs-error-glow .fbs-text,
+                .fbs-error-glow .fbs-pin-text { fill:#b00020 !important; }
+                path.fbs-line.fbs-error-glow,
+                circle.fbs-dot.fbs-error-glow,
+                circle.fbs-bubble.fbs-error-glow { stroke:#ff3030 !important; }
+                circle.fbs-dot.fbs-error-glow { fill:#ff3030 !important; }
             `;
             const iecCss = `
                 text { font-family:'Segoe UI',Tahoma,sans-serif; fill:#222; }
@@ -22102,6 +22289,82 @@ You must output exactly this JSON format. The logic code goes as a single string
             factoryItems.push(item); updateObjTransform(item); factoryCanvas.appendChild(el); makeDraggable(el, item);
             if(!isLoadingFactory) saveFactoryState();
         };
+        // ==========================================
+        // Matching: Variable ↔ Bauteil-Typ
+        // ==========================================
+        // Welcher Komponententyp (componentTypes[varName]) gilt als „passend"
+        // für welchen Factory-Bauteil-Typ. Wird sowohl im Zuweisungs-Modal als
+        // auch im Rechtsklick-Menü und für die Markierung in der Sim-UI
+        // benutzt. Single Source of Truth.
+        window._fctValidMatchesByType = {
+            'conveyor': ['motor', 'contactor', 'valve'],
+            'led': ['led'],
+            'taster': ['taster', 'taster_nc'],
+            'schalter': ['schalter', 'schalter_nc'],
+            'nothalt': ['nothalt'],
+            'zylinder_single': ['valve'],
+            'zylinder_double': ['valve'],
+            'mech_sensor': ['mech_sensor'],
+            'key_switch': ['key_switch', 'schalter'],
+            'light_curtain': ['light_curtain'],
+            'heater': ['heater', 'contactor', 'valve'],
+            'siren': ['siren', 'led']
+        };
+        // Liefert true (passt), false (mismatch) oder null (unbestimmt — keine Match-Profile
+        // für diesen Bauteil-Typ; z.B. ein Custom-Component-Registry-Eintrag ohne Eintrag
+        // in der Tabelle). Sensor-Bauteile matchen 1:1 mit dem gleichen componentType.
+        window._fctVarMatchesTargetType = function(varName, targetType) {
+            // `componentTypes` ist im Script-Scope per `let` deklariert (nicht auf window),
+            // wir greifen daher direkt per Closure zu.
+            const compType = (typeof componentTypes !== 'undefined' ? componentTypes[varName] : undefined);
+            if (!compType || !targetType) return null;
+            // Hilfsrelais ('relais') werden von buildSimulatorUI ZWANGSWEISE gesetzt,
+            // sobald die Variable als Quelle in einer anderen Zeile referenziert wird
+            // (`A := … && B` macht A zum Relais). Der Nutzer kann den Typ dann NICHT
+            // mehr im Sim-Panel ändern — eine Mismatch-Warnung wäre unfair. Wir geben
+            // null („unbestimmt") zurück, der Marker bleibt aus.
+            if (compType === 'relais') return null;
+            if (targetType.startsWith('sensor_')) return compType === targetType;
+            const validMatches = window._fctValidMatchesByType || {};
+            if (!validMatches[targetType]) return null;
+            return validMatches[targetType].includes(compType);
+        };
+        // Sucht alle Bauteile in der 2D-Anlage, denen `varName` über IRGENDEINE
+        // linkedVar*-Eigenschaft zugewiesen ist und deren Bauteil-Typ NICHT zum
+        // Komponenten-Typ der Variable passt (also: aus der Liste „Andere
+        // Variablen" stammt). Liefert ein Array von { obj, prop }-Paaren.
+        window._fctFindMismatchedAssignmentsForVar = function(varName) {
+            if (!varName) return [];
+            const propsToCheck = ['linkedVar', 'linkedVarExt', 'linkedVarRet', 'linkedVar3',
+                                  'linkedVarX_Plus', 'linkedVarX_Minus',
+                                  'linkedVarY_Plus', 'linkedVarY_Minus',
+                                  'linkedVarGrab', 'linkedVarVib'];
+            const out = [];
+            if (typeof factoryObjects === 'undefined') return out;
+            factoryObjects.forEach(obj => {
+                if (!obj || !obj.type) return;
+                propsToCheck.forEach(prop => {
+                    if (obj[prop] !== varName) return;
+                    const m = window._fctVarMatchesTargetType(varName, obj.type);
+                    if (m === false) out.push({ obj, prop });
+                });
+            });
+            return out;
+        };
+        // Aktualisiert NUR die ⚠️-Marker im Sim-Panel (Eingänge / Ausgänge),
+        // ohne die ganze UI neu aufzubauen. Wird nach Zuweisungs-Änderungen
+        // im Rechtsklick-Menü gerufen.
+        window._refreshSimMismatchMarkers = function() {
+            document.querySelectorAll('.sim-var-mismatch[data-var]').forEach(el => {
+                const varName = el.getAttribute('data-var');
+                const mm = window._fctFindMismatchedAssignmentsForVar(varName);
+                el.style.display = mm.length > 0 ? '' : 'none';
+                if (mm.length > 0) {
+                    const labels = mm.map(m => _getObjectTypeLabel ? _getObjectTypeLabel(m.obj.type) : m.obj.type);
+                    el.title = 'Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):\n• ' + labels.join('\n• ');
+                }
+            });
+        };
         window.addFactoryDevice = function(type) {
             // Ansichts-Kompatibilitäts-Warnung
             if (!type.startsWith('zone_')) {
@@ -22136,20 +22399,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let list = isOutput ? globalOutputs : globalInputs;
                 let groupMatch = document.createElement('optgroup'); groupMatch.label = "Passende Komponenten";
                 let groupOther = document.createElement('optgroup'); groupOther.label = "Andere Variablen";
-                const validMatches = {
-                    'conveyor': ['motor', 'contactor', 'valve'],'led': ['led'], 'taster': ['taster', 'taster_nc'], 'schalter': ['schalter', 'schalter_nc'],
-                    'nothalt': ['nothalt'], 'zylinder_single': ['valve'], 'zylinder_double': ['valve'], 'conveyor': ['valve'],
-                    'mech_sensor': ['mech_sensor'], 'key_switch': ['key_switch', 'schalter'],
-                    'light_curtain': ['light_curtain'],'heater': ['heater', 'contactor', 'valve'],
-                    'siren': ['siren', 'led'] // Hupe passt zu Siren oder LED Variablen
-                };
                 list.forEach(v => {
-                    // FIX: Die Regex hier wurde an deine neuen SR/RS Glieder angepasst, 
+                    // FIX: Die Regex hier wurde an deine neuen SR/RS Glieder angepasst,
                     // damit diese nicht fälschlicherweise in der Liste für Aktoren auftauchen!
-                    if (isOutput && v.match(/^Q\d+(_(?:SR|RS))?$/i)) return; 
+                    if (isOutput && v.match(/^Q\d+(_(?:SR|RS))?$/i)) return;
                     let opt = document.createElement('option'); opt.value = v; opt.textContent = v;
-                    let compType = componentTypes[v] || (isOutput ? 'led' : 'taster');
-                    let isMatch = targetType.startsWith('sensor_') ? (compType === targetType) : (validMatches[targetType] && validMatches[targetType].includes(compType));
+                    // Fallback-compType nur lokal (kein Schreibzugriff auf componentTypes hier!)
+                    const compType = componentTypes[v] || (isOutput ? 'led' : 'taster');
+                    let isMatch;
+                    if (targetType.startsWith('sensor_')) {
+                        isMatch = compType === targetType;
+                    } else {
+                        const validMatches = window._fctValidMatchesByType || {};
+                        isMatch = !!(validMatches[targetType] && validMatches[targetType].includes(compType));
+                    }
                     if (isMatch) groupMatch.appendChild(opt); else groupOther.appendChild(opt);
                 });
                 if (groupMatch.children.length > 0) selectElem.appendChild(groupMatch);
@@ -22981,7 +23244,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const addVarSelect = (label, currentVal, listType, varProp) => {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
                     let wrapper = document.createElement('div'); wrapper.style.padding = '0 15px 5px 15px';
-                    wrapper.onclick = (e) => e.stopPropagation(); 
+                    wrapper.onclick = (e) => e.stopPropagation();
                     wrapper.innerHTML = `<div style="color: #aaa; font-size: 10px; margin-bottom: 3px;">🔌 ${label}</div>`;
                     let sel = document.createElement('select');
                     sel.style.cssText = "width: 100%; padding: 4px; background: #1e1e1e; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; outline: none; cursor: pointer;";
@@ -22990,11 +23253,36 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (listType === 'in') items = globalInputs;
                     else if (listType === 'out') items = globalOutputs;
                     else if (listType === 'timers' && currentGraph) items = Array.from(currentGraph.nodes.values()).filter(n => ['TON','TOF','TP','CTU'].includes(n.type)).map(n => n.id);
+                    // Trennung „Passende Komponenten" / „Andere Variablen" — gleiche Logik
+                    // wie im Platzierungs-Dialog (fillOptions). Bei `timers` und unbekannten
+                    // Bauteil-Typen fällt die Trennung sinnvollerweise weg (alle Optionen
+                    // direkt im Select).
+                    const groupMatch = document.createElement('optgroup'); groupMatch.label = "Passende Komponenten";
+                    const groupOther = document.createElement('optgroup'); groupOther.label = "Andere Variablen";
+                    const targetType = obj.type;
+                    const validMatches = window._fctValidMatchesByType || {};
+                    const hasMatchProfile = listType !== 'timers' && targetType &&
+                        (targetType.startsWith('sensor_') || !!validMatches[targetType]);
                     items.forEach(i => {
+                        // RS/SR-Pin-Variablen (Q…) sind keine zuweisbaren Ausgänge in der Anlage.
+                        // Konsistent mit fillOptions im Platzierungsdialog.
+                        if (listType === 'out' && /^Q\d+(?:_(?:SR|RS))?$/i.test(i)) return;
                         let o = document.createElement('option'); o.value = i; o.textContent = i;
                         if (i === currentVal) o.selected = true;
-                        sel.appendChild(o);
+                        if (!hasMatchProfile) { sel.appendChild(o); return; }
+                        const compType = componentTypes[i] || (listType === 'out' ? 'led' : 'taster');
+                        let isMatch;
+                        if (targetType.startsWith('sensor_')) {
+                            isMatch = compType === targetType;
+                        } else {
+                            isMatch = !!(validMatches[targetType] && validMatches[targetType].includes(compType));
+                        }
+                        (isMatch ? groupMatch : groupOther).appendChild(o);
                     });
+                    if (hasMatchProfile) {
+                        if (groupMatch.children.length > 0) sel.appendChild(groupMatch);
+                        if (groupOther.children.length > 0) sel.appendChild(groupOther);
+                    }
                     // "+ Neue Variable anlegen"
                     let optNew = document.createElement('option'); optNew.value = '__new__'; optNew.textContent = '＋ Neue Variable anlegen…'; optNew.style.color = '#4caf50'; sel.appendChild(optNew);
                     sel.onchange = (e) => {
@@ -23022,6 +23310,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 _ta.value = _code.trimEnd() + '\n' + (listType === 'in' ? `INPUT ${_assignedVar}` : `${_assignedVar} := False`) + '\n';
                                 _ta.dispatchEvent(new Event('input'));
                             }
+                        }
+                        // Marker im Sim-Panel aktualisieren (Variable könnte jetzt aus
+                        // „Andere Variablen" stammen — oder umgekehrt repariert sein).
+                        if (typeof window._refreshSimMismatchMarkers === 'function') {
+                            try { window._refreshSimMismatchMarkers(); } catch(_e) {}
                         }
                         if (activeTask && !taskSolved) window._taskCheckConditions();
                     };
@@ -26250,6 +26543,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             while (factoryHistory.length > HISTORY_MAX) factoryHistory.shift();
             historyIndex = factoryHistory.length - 1;
             window._syncCircuitFromFactory();
+            // Sim-Panel-Marker aktualisieren — Bauteil-Änderungen können die
+            // Mismatch-Lage einer Variable verschieben (neu, gelöscht, umgetypt).
+            if (typeof window._refreshSimMismatchMarkers === 'function') {
+                try { window._refreshSimMismatchMarkers(); } catch(_e) {}
+            }
         }
         function undoFactory() {
             if (historyIndex <= 0) return;
@@ -26573,6 +26871,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                     drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true);
                 }
             } catch(e) { /* currentGraph ggf. noch nicht bereit — egal */ }
+            // Marker im Sim-Panel jetzt einmalig auffrischen — beim ersten Aufruf
+            // war factoryObjects noch leer, also blieben alle Mismatches unsichtbar.
+            if (typeof window._refreshSimMismatchMarkers === 'function') {
+                try { window._refreshSimMismatchMarkers(); } catch(_e) {}
+            }
         };
         // ==========================================
         // KOMMENTAR-PINS
@@ -31110,6 +31413,26 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (typeof currentGraph !== 'undefined' && currentGraph) {
                 calculateLayout(currentGraph);
                 drawGraph(currentGraph);
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        window.toggleFbsErrorHighlight = function() {
+            window.fbsErrorHighlight = (window.fbsErrorHighlight === false);
+            let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
+                      ? window.popOutWindows['fbs-wrapper'].document : document;
+            const btn = doc.getElementById('btn-fbs-errorglow');
+            if (btn) {
+                if (window.fbsErrorHighlight) {
+                    btn.style.backgroundColor = '#d50000';
+                    btn.textContent = '🚨 Fehler-Glow: AN';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '🚨 Fehler-Glow: AUS';
+                }
+            }
+            // Nicht den ganzen Graph neu zeichnen — nur die Hervorhebung an/aus.
+            if (typeof window._fbsApplyErrorHighlight === 'function') {
+                try { window._fbsApplyErrorHighlight(); } catch(e) {}
             }
             if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };

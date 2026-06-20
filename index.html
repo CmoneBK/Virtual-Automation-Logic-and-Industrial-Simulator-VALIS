@@ -2729,6 +2729,13 @@
                     <input type="checkbox" id="settings-indent-guides" onchange="window._setIndentGuides(this.checked)" style="margin:0;cursor:pointer;">
                     <span>Einrückungsgitter</span>
                 </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:2px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-fbs-colors" onchange="window._setFbsColors(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Farben aus dem Logikplan übernehmen</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 6px 24px;line-height:1.35;">
+                    Variablen und Operatoren werden mit den gleichen Farben gezeichnet, die der Logikplan für die entsprechenden Signale verwendet. Hilfreich, um die gleiche Variable in mehreren Zeilen schneller zu finden.
+                </div>
                 <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#ddd;margin:6px 0 4px 0;">
                     <span>Schriftgröße</span>
                     <span style="display:flex;align-items:center;gap:6px;">
@@ -7515,15 +7522,121 @@ You must output exactly this JSON format. The logic code goes as a single string
             const errLines = (typeof window._collectAllErrors === 'function')
                 ? window._collectAllErrors()
                 : (window._errorLines || new Set());
+            // FBS-Farb-Setting + Lookup. Wird beim Bau jeder Zeile einmal gelesen,
+            // damit der Toggle ohne Refresh wirkt. `currentGraph.nodes` ist die
+            // Wahrheit (n.color enthält die nach Alias-Vererbung gültige Farbe);
+            // `fbsNodeColors` ist nur der Counter-Cache aus der Vergabe.
+            const fbsOn = !!(window._codeEditorSettings && window._codeEditorSettings.fbsColors);
+            const fbsColorOf = (varName) => {
+                if (!fbsOn) return null;
+                // `currentGraph` ist `let` im Top-Level-Scope deklariert und damit
+                // NICHT als `window.currentGraph` sichtbar — wir greifen direkt
+                // lexikalisch zu, was über alle Closures hinweg sauber funktioniert.
+                const graph = currentGraph;
+                if (!graph || !graph.nodes) return null;
+                const up = varName.toUpperCase();
+                if (graph.nodes.has(up)) {
+                    const n = graph.nodes.get(up);
+                    if (n && n.color) return n.color;
+                }
+                // S/R/Q-Pins lösen auf das jeweilige RS_/SR_-Glied auf — dort lebt die Farbe.
+                const m = up.match(/^([SRQ])(\d+)(_(?:RS|SR))?$/);
+                if (m) {
+                    const num = m[2];
+                    const suf = m[3] ? m[3].toUpperCase() : '';
+                    const block = suf === '_SR' ? 'SR' : 'RS';
+                    const id = block + '_' + num;
+                    if (graph.nodes.has(id)) {
+                        const n = graph.nodes.get(id);
+                        if (n && n.color) return n.color;
+                    }
+                }
+                return null;
+            };
+            // Wahrgenommene Helligkeit (Rec. 709-Luminanz) auf 0..1 normalisiert.
+            // Für hex (#rgb / #rrggbb) und hsl(h,s%,l%) — andere Formate fallen auf
+            // 0.5 (= „weder besonders hell noch dunkel") zurück.
+            const fbsLuminance = (c) => {
+                if (!c) return 0.5;
+                let m = c.match(/^#([0-9a-f]{6})$/i);
+                if (m) {
+                    const r = parseInt(m[1].slice(0,2),16);
+                    const g = parseInt(m[1].slice(2,4),16);
+                    const b = parseInt(m[1].slice(4,6),16);
+                    return (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+                }
+                m = c.match(/^#([0-9a-f]{3})$/i);
+                if (m) {
+                    const r = parseInt(m[1][0]+m[1][0],16);
+                    const g = parseInt(m[1][1]+m[1][1],16);
+                    const b = parseInt(m[1][2]+m[1][2],16);
+                    return (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+                }
+                m = c.match(/^hsl\(\s*\d+\s*,\s*\d+%\s*,\s*(\d+)%\s*\)$/i);
+                if (m) return parseInt(m[1], 10) / 100;
+                return 0.5;
+            };
+            // Erzeugt die inline-style-Zeichenkette für ein Token mit FBS-Farbe.
+            // Sehr dunkle Farben bekommen einen dezenten weißen Glow per
+            // text-shadow — der Schriftcharakter bleibt erhalten, kein Klotz-
+            // Hintergrund. Hellere Farben kommen ohne aus.
+            const fbsStyleFor = (color) => {
+                const lum = fbsLuminance(color);
+                if (lum < 0.32) {
+                    return 'color:' + color + ';text-shadow:0 0 3px rgba(255,255,255,0.55);';
+                }
+                return 'color:' + color + ';';
+            };
             const processLine = (line) => {
-                let t = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                // Kommentar vorab abspalten, damit weder Operator-Regex noch der
+                // Variablen-Wrap unten in den Kommentartext greift.
+                const cidx = line.indexOf('//');
+                const codeRaw = cidx >= 0 ? line.slice(0, cidx) : line;
+                const commRaw = cidx >= 0 ? line.slice(cidx)   : '';
+                let t = codeRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 t = t.replace(/(:=|=|&lt;-|\bIST\b|\bIS\b|\bGLEICH\b)/gi, '<span class="token assign">$1</span>');
                 t = t.replace(/(:=)/g, '<span class="token assign">$1</span>');
                 t = t.replace(/(&amp;&amp;|&amp;|\|\||\||\^|∧|\bv\b|∨|¬|!|\bAND\b|\bOR\b|\bUND\b|\bODER\b|\bNOT\b|\bNICHT\b)/gi, '<span class="token operator">$1</span>');
                 t = t.replace(/(\(|\))/g, '<span class="token paren">$1</span>');
-                t = t.replace(/\b([SRQ]\d+(?:_(?:SR|RS))?)\b/gi, '<span class="token rs">$1</span>');
+                t = t.replace(/\b([SRQ]\d+(?:_(?:SR|RS))?)\b/gi,
+                    (mm, name) => '<span class="token rs" data-var="' + name.toUpperCase() + '">' + mm + '</span>');
                 t = t.replace(/\b(TON|TOF|TP|CTU|INPUT)\b/gi, '<span class="token func">$1</span>');
                 t = t.replace(/\b(FALSE|TRUE)\b/gi, '<span class="token fallback">$1</span>');
+                if (fbsOn) {
+                    // Variablen-Wrap: bare Identifier ZWISCHEN bestehenden Spans
+                    // (oder am Zeilenanfang/-ende). Matcht nur Text-Inseln außerhalb
+                    // bereits getaggter Tokens, damit FALSE/TRUE im fallback-Span
+                    // nicht doppelt eingepackt werden. Var-Wrap nur bei aktiven
+                    // FBS-Farben — sonst unnötige DOM-Knoten ohne sichtbaren Effekt.
+                    t = t.replace(/(<\/span>|^)([^<]+?)(?=<span|$)/g, (m, prefix, txt) => {
+                        const wrapped = txt.replace(
+                            /([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)/g,
+                            (mm, name) => '<span class="token var" data-var="' + name.toUpperCase() + '">' + mm + '</span>'
+                        );
+                        return prefix + wrapped;
+                    });
+                    // FBS-Farben injizieren — Variablen-Spans bekommen die Knoten-
+                    // Farbe, Operatoren/Parens/Assign die Farbe der LHS dieser Zeile
+                    // (= die Farbe der Ausgangsgröße, die diese Zeile produziert).
+                    t = t.replace(/<span class="token (var|rs)" data-var="([^"]+)">/g, (m, cls, vid) => {
+                        const c = fbsColorOf(vid);
+                        if (!c) return m;
+                        return '<span class="token ' + cls + '" data-var="' + vid + '" style="' + fbsStyleFor(c) + '">';
+                    });
+                    const lhsName = (codeRaw.split(/:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/i)[0] || '').trim();
+                    const lhsColor = lhsName && fbsColorOf(lhsName);
+                    if (lhsColor) {
+                        const lhsStyle = fbsStyleFor(lhsColor);
+                        t = t.replace(/<span class="token (operator|paren|assign)">/g,
+                            (m, cls) => '<span class="token ' + cls + '" style="' + lhsStyle + '">');
+                    }
+                }
+                // Kommentar (falls vorhanden) als eigenen Span anhängen — bekommt
+                // die normale .token.comment-Farbe (grün, kursiv).
+                if (commRaw) {
+                    const ce = commRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    t += '<span class="token comment">' + ce + '</span>';
+                }
                 return t || ' ';
             };
             const _ccr = window._codeCheckResult || null;
@@ -9158,6 +9271,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             highlightLine:  localStorage.getItem('valisCodeHighlightLine') === '1',
             bracketMatch:   localStorage.getItem('valisCodeBracketMatch')  === '1',
             indentGuides:   localStorage.getItem('valisCodeIndentGuides')  === '1',
+            fbsColors:      localStorage.getItem('valisCodeFbsColors')     === '1',
             autocomplete:   localStorage.getItem('valisCodeAutocomplete')  !== '0',
             forceUpper:     localStorage.getItem('valisCodeForceUpper')    !== '0',
             fontSize:       parseInt(localStorage.getItem('valisCodeFontSize'), 10) || 13
@@ -9312,6 +9426,20 @@ You must output exactly this JSON format. The logic code goes as a single string
             const ta = document.getElementById('code');
             const wrapper = ta ? ta.closest('.editor-wrapper') : null;
             if (wrapper) wrapper.classList.toggle('indent-guides', !!on);
+        };
+        // FBS-Farben im Code-Editor — Variablen + Logikzeichen bekommen die Farbe,
+        // die der Logikplan für das jeweilige Signal verwendet. Wirkt rein
+        // visuell; das Highlighting wird beim nächsten updateHighlighting-Lauf neu
+        // aufgebaut. Wir lösen ihn aktiv aus, damit der Wechsel sofort sichtbar ist.
+        window._setFbsColors = function(on) {
+            window._codeEditorSettings.fbsColors = !!on;
+            try { localStorage.setItem('valisCodeFbsColors', on ? '1' : '0'); } catch(_e) {}
+            if (typeof updateHighlighting === 'function') {
+                try { updateHighlighting(); } catch(_e) {}
+            }
+            if (window._codeEditorSettings.bracketMatch && typeof window._refreshBracketMatch === 'function') {
+                try { window._refreshBracketMatch(); } catch(_e) {}
+            }
         };
         // Schriftgröße — setzt font-size auf #code, #highlighting, #line-gutter.
         // line-height bleibt 1.5 (CSS-Default), damit Zeilennummern und Code-Zeilen
@@ -9643,6 +9771,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             set('settings-highlight-line', ces.highlightLine);
             set('settings-bracket-match',  ces.bracketMatch);
             set('settings-indent-guides',  ces.indentGuides);
+            set('settings-fbs-colors',     ces.fbsColors);
             set('settings-autocomplete',   ces.autocomplete);
             set('settings-force-upper',    ces.forceUpper);
             const fsInp = document.getElementById('settings-font-size');
@@ -15685,6 +15814,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             try {
                 const parsed = parseToGraph(code);
                 window._errorLines = parsed.errorLines || new Set();
+                // currentGraph früh setzen — der Highlighter konsultiert ihn für die
+                // FBS-Farb-Übernahme, sonst hinkt das Editor-Highlighting beim
+                // Color-Setting einen Tipp hinterher.
+                currentGraph = parsed.graph;
                 updateHighlighting();
                 // FIX: Wir übergeben deltaMs und den timer-Speicher an die simulierte SPS!
                 try {
@@ -15695,10 +15828,6 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
-                // currentGraph FRÜH zuweisen — der Sticky-Pool und _pruneStaleLinkedVars
-                // konsultieren ihn über _getTimerCounterIds(), um z.B. CTU_BOX_FULL nicht
-                // als verwaist zu flaggen, obwohl die Counter-Zeile aktiv im Code steht.
-                currentGraph = parsed.graph;
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
@@ -33623,6 +33752,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (ces.highlightLine)  window._setHighlightLine(true);
                     if (ces.bracketMatch)   window._setBracketMatch(true);
                     if (ces.indentGuides)   window._setIndentGuides(true);
+                    if (ces.fbsColors)      window._setFbsColors(true);
                     if (ces.autocomplete)   window._setAutocomplete(true);
                     // forceUpper ist standardmäßig aktiv — keine Sonderbehandlung
                     // beim Start, damit existierender Code nicht still überschrieben wird.

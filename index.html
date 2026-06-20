@@ -438,6 +438,102 @@
         #code-inspector .ci-chips-row { font-size: 10px; color: #999; margin-top: 4px; }
         #code-inspector .ci-chips-label { color: #888; font-style: italic; margin-right: 4px; }
         #code-inspector .ci-chips-row .ci-token { font-size: 10px; padding: 0 5px; margin-right: 4px; }
+        /* Zeilennummern-Gutter (links, optional). Default: ausgeblendet.
+           Wird via .editor-wrapper.with-line-numbers sichtbar; gleiche Schrift/
+           Zeilenhöhe wie #code, damit Zeilennummern vertikal zu den Code-Zeilen
+           passen. Padding-Top muss zu #code passen (15px). overflow:hidden +
+           manuelles scrollTop-Sync via JS — sonst flackert horizontaler Scroll. */
+        #line-gutter {
+            position: absolute; top: 0; left: 0;
+            width: 38px; height: 100%;
+            background: #1a1a1a; border-right: 1px solid #2d2d2d;
+            color: #6a737d; text-align: right;
+            font-family: 'Courier New', Courier, monospace; font-size: 13px;
+            line-height: 1.5; padding: 15px 6px 15px 0;
+            box-sizing: border-box; pointer-events: none;
+            overflow: hidden; z-index: 3; display: none;
+            user-select: none; white-space: pre;
+        }
+        .editor-wrapper.with-line-numbers #line-gutter { display: block; }
+        .editor-wrapper.with-line-numbers #code,
+        .editor-wrapper.with-line-numbers #highlighting { padding-left: 46px; }
+        /* Wort-Umbruch deaktivieren → horizontal scrollen erlauben. */
+        .editor-wrapper.no-wrap #code,
+        .editor-wrapper.no-wrap #highlighting,
+        .editor-wrapper.no-wrap #highlighting-content {
+            white-space: pre !important; word-break: normal !important; overflow-wrap: normal !important;
+        }
+        /* Aktuelle-Zeile-Hervorhebung — Overlay-Streifen unter Code/Highlighting,
+           Position wird per JS gesetzt. */
+        #current-line-highlight {
+            position: absolute; left: 0; right: 0; height: 1.5em;
+            background: rgba(255,255,255,0.05); pointer-events: none;
+            z-index: 0; display: none;
+        }
+        .editor-wrapper.highlight-current-line #current-line-highlight { display: block; }
+        /* Klammer-Match-Highlight: vom JS gesetzte Spans im Highlighting-Content. */
+        #highlighting-content .bracket-match {
+            background: rgba(255, 215, 0, 0.28);
+            border-radius: 2px;
+            outline: 1px solid rgba(255, 215, 0, 0.55);
+        }
+        /* Einrückungsgitter: vertikale Linien alle 4 Zeichen (ch-Einheit auf
+           Monospace-Schrift). Background auf #code-Schicht, weil #highlighting
+           sonst seine bunten Tokens überlagert. */
+        .editor-wrapper.indent-guides #code {
+            background-image: repeating-linear-gradient(
+                to right,
+                transparent 0,
+                transparent calc(4ch - 1px),
+                rgba(150,150,150,0.10) calc(4ch - 1px),
+                rgba(150,150,150,0.10) 4ch
+            );
+            background-position: 15px 15px;
+            background-repeat: repeat;
+        }
+        .editor-wrapper.with-line-numbers.indent-guides #code {
+            background-position: 46px 15px;
+        }
+        /* Autocomplete-Popup. */
+        #code-autocomplete {
+            position: absolute; z-index: 9999;
+            background: #1e1e1e; border: 1px solid #555; border-radius: 3px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.7);
+            font-family: 'Courier New', Courier, monospace; font-size: 12px;
+            min-width: 140px; max-width: 260px; max-height: 200px; overflow-y: auto;
+            display: none; padding: 2px 0;
+        }
+        #code-autocomplete .ac-item {
+            padding: 3px 10px; cursor: pointer; color: #d4d4d4; white-space: nowrap;
+        }
+        #code-autocomplete .ac-item.active { background: #007acc; color: #fff; }
+        #code-autocomplete .ac-item:hover  { background: #333; }
+        #code-autocomplete .ac-item .ac-kind {
+            display: inline-block; font-size: 9px; color: #888; margin-left: 8px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        /* Code-Editor-Kontextmenü (Rechtsklick). Eigener Container, damit Snippets
+           sauber von den Standard-Browser-Optionen unterscheidbar sind. */
+        #code-ctx-menu {
+            position: fixed; z-index: 9999;
+            background: #2d2d30; border: 1px solid #555; border-radius: 4px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.7);
+            min-width: 200px; display: none; padding: 4px 0;
+            font-size: 12px; color: #ddd;
+        }
+        #code-ctx-menu .ctx-item {
+            padding: 6px 14px; cursor: pointer; white-space: nowrap;
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+        }
+        #code-ctx-menu .ctx-item:hover { background: #007acc; color: #fff; }
+        #code-ctx-menu .ctx-sep {
+            height: 1px; background: #444; margin: 4px 0;
+        }
+        #code-ctx-menu .ctx-section {
+            padding: 4px 14px; font-size: 9px; color: #888;
+            text-transform: uppercase; letter-spacing: 0.7px; pointer-events: none;
+        }
+        #code-ctx-menu .ctx-shortcut { font-size: 10px; color: #888; }
         /* Fehler-Gutter (klickbare Warn-Symbole an den Fehlerzeilen) */
         #error-gutter {
             position: absolute; top: 0; right: 0;
@@ -461,6 +557,26 @@
             transform: scale(1.2);
             box-shadow: 0 0 12px rgba(255,82,82,0.95);
             background: #ff6b6b;
+        }
+        /* Info-Variante: gelber Punkt mit „i" — kein Fehler, nur Hinweis. */
+        #error-gutter .info-icon {
+            position: absolute; right: 4px;
+            width: 18px; height: 18px;
+            background: #ffc107; color: #1e1e1e;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold; font-style: italic;
+            cursor: pointer; pointer-events: auto;
+            box-shadow: 0 0 6px rgba(255,193,7,0.55);
+            transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+            user-select: none;
+            font-family: 'Segoe UI', serif;
+        }
+        #error-gutter .info-icon:hover,
+        #error-gutter .info-icon.active {
+            transform: scale(1.2);
+            box-shadow: 0 0 12px rgba(255,193,7,0.95);
+            background: #ffd54f;
         }
         /* Fehler-Popup (öffnet sich nach Klick auf das Warn-Symbol) */
         #code-error-popup {
@@ -517,6 +633,18 @@
         /* ⚠️-Marker für Variablen, die einem Bauteil mit nicht-passendem Typ
            zugewiesen sind (also aus „Andere Variablen" gewählt wurden) */
         .sim-var-mismatch { color: #ffb300; margin-left: 4px; cursor: help; font-size: 11px; flex-shrink: 0; user-select: none; }
+        /* Variablen-Namen im Sim-Panel: klickbar (Click=Sprung, Dblclick=Rename).
+           Dezenter Hover-Hinweis, damit der User die Interaktion entdeckt. */
+        .sim-var-name { text-decoration: underline dotted transparent; transition: text-decoration-color 0.15s, color 0.15s; }
+        .sim-var-name:hover { color: #fff; text-decoration-color: #569cd6; }
+        /* Gruppen-Überschrift in der Sim-Liste (wenn Gruppierung aktiv). */
+        .sim-group-header {
+            color: #90caf9; font-size: 10px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 0.7px;
+            margin: 8px 0 3px 0; padding-bottom: 2px;
+            border-bottom: 1px dashed #444; user-select: none;
+        }
+        .sim-col > .sim-group-header:first-of-type { margin-top: 4px; }
         /* Verwaiste Variable: war im Code, ist jetzt nicht mehr drin, bleibt aber
            für diese Session in der Liste (sticky). Greyed-out + italic + Trash-Icon. */
         .switch-row.is-orphan, .led-row.is-orphan {
@@ -1702,6 +1830,9 @@
                 <button id="btn-redstone-snippets" onclick="window._showRedstoneSnippetMenu()" title="Redstone-Schaltungen als VALIS-Code" style="display:none;background:#c93838;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🔴 Redstone-Snippets</button>
                 <button id="btn-explain-toggle" onclick="toggleExplainMode()" title="Aktivierbarer Erklärmodus: Blendet unter dem Editor ein Panel ein, das die aktuelle Code-Zeile in einen lesbaren deutschen Satz übersetzt. Folgt der Cursor-Position." style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">📖 Erklärmodus</button>
                 <button onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" title="Code-Editor leeren" style="background:#555;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🗑️ Leeren</button>
+                <button onclick="window._codeUndo()" title="Rückgängig (Strg+Z)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">↶</button>
+                <button onclick="window._codeRedo()" title="Wiederholen (Strg+Y / Strg+Shift+Z)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">↷</button>
+                <button id="btn-code-editor-settings" onclick="window._openCodeEditorSettings(event)" title="Editor-Einstellungen (Zeilennummern, …)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">⚙️</button>
             </span>
         </div>
         <div id="editor-container">
@@ -1744,11 +1875,15 @@
                 </details>
             </div>
             <div class="editor-wrapper">
+                <div id="line-gutter" aria-hidden="true"></div>
+                <div id="current-line-highlight" aria-hidden="true"></div>
                 <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
                 <textarea id="code" spellcheck="false"></textarea>
                 <div id="error-gutter" aria-hidden="true"></div>
                 <div id="editor-missing-badge" title="Hinweis: hier fehlt etwas Allgemeines."></div>
             </div>
+            <div id="code-autocomplete"></div>
+            <div id="code-ctx-menu"></div>
             <div id="check-result-legend" aria-live="polite"></div>
             <div id="code-inspector" aria-live="polite"></div>
         </div>
@@ -2526,8 +2661,15 @@
                     <input type="checkbox" id="settings-auto-cleanup" onchange="window._setStickyAutoCleanup(this.checked)" style="margin:0;cursor:pointer;">
                     <span>Auto-Aufräumen verwaister Variablen</span>
                 </label>
-                <div style="font-size:10px;color:#888;margin:0 0 12px 24px;line-height:1.35;">
+                <div style="font-size:10px;color:#888;margin:0 0 6px 24px;line-height:1.35;">
                     Wenn aktiv: Variablen ohne Bauteil-Bindung werden nach der Karenzzeit kommentarlos aus der Liste entfernt, statt als „verwaist" angezeigt zu werden. Mit Bauteil-Bindung bleiben sie sichtbar.
+                </div>
+                <label id="settings-auto-cleanup-hard-row" style="display:flex;align-items:center;gap:8px;margin:0 0 4px 24px;font-size:12px;color:#ddd;cursor:pointer;opacity:0.45;">
+                    <input type="checkbox" id="settings-auto-cleanup-hard" onchange="window._setStickyAutoCleanupHard(this.checked)" style="margin:0;cursor:pointer;" disabled>
+                    <span>Auch verwaiste mit Bauteil-Bindung entfernen</span>
+                </label>
+                <div style="font-size:10px;color:#ff9800;margin:0 0 12px 48px;line-height:1.35;">
+                    ⚠️ Hart: Bindungen verschwinden ohne Rückfrage. Bauteile mit gelöschter Variable glühen danach rot (fehlend).
                 </div>
                 <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#ddd;margin-bottom:6px;">
                     <span>Karenzzeit</span>
@@ -2543,6 +2685,73 @@
                        style="width:100%;margin:0 0 4px 0;">
                 <div style="font-size:10px;color:#888;line-height:1.35;">
                     Wartezeit vor dem Wechsel auf „verwaist" und Mindest-Lebenszeit, bevor eine kurzlebige Variable (Tipp-Artefakt) als verwaist angezeigt wird. Default 2500 ms.
+                </div>
+                <div style="color:#90caf9;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;margin:10px 0 8px;border-bottom:1px solid #444;padding-bottom:6px;">Anzeige</div>
+                <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#ddd;margin-bottom:6px;">
+                    <span>Sortierung</span>
+                    <select id="settings-sim-sort" onchange="window._setSimSort(this.value)"
+                            style="background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;">
+                        <option value="code">Code-Reihenfolge</option>
+                        <option value="alpha">Alphabetisch</option>
+                        <option value="type">Nach Typ</option>
+                    </select>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-sim-group" onchange="window._setSimGroup(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Nach Typ gruppieren (Sub-Überschriften)</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 4px 24px;line-height:1.35;">
+                    Eingänge teilen sich in Taster / Schalter / Sensoren auf, Ausgänge in LEDs / Aktoren / Hilfsrelais.
+                </div>
+            </div>
+<div id="code-editor-settings-popup" style="display:none; position:fixed; background:#2d2d30; padding:12px 14px; border:1px solid #555; border-radius:4px; box-shadow:0 8px 20px rgba(0,0,0,0.7); z-index:2500; min-width:300px; max-width:340px; color:#ccc; font-size:12px;">
+                <div style="color:#90caf9;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:6px;">Editor-Anzeige</div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-line-numbers" onchange="window._setLineNumbers(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Zeilennummern anzeigen</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-no-wrap" onchange="window._setCodeNoWrap(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Lange Zeilen nicht umbrechen</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-highlight-line" onchange="window._setHighlightLine(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Aktuelle Zeile hervorheben</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:2px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-bracket-match" onchange="window._setBracketMatch(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Klammer-Matching</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 6px 24px;line-height:1.35;">
+                    Wenn der Cursor an einer Klammer steht, wird sie samt ihrer passenden Gegenklammer farbig hervorgehoben — auch bei verschachtelten Klammern.
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-indent-guides" onchange="window._setIndentGuides(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Einrückungsgitter</span>
+                </label>
+                <label style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#ddd;margin:6px 0 4px 0;">
+                    <span>Schriftgröße</span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                        <input type="range" id="settings-font-size" min="10" max="20" step="1" value="13"
+                               oninput="document.getElementById('settings-font-size-val').textContent=this.value+' px';window._setCodeFontSize(this.value)"
+                               style="width:120px;">
+                        <span id="settings-font-size-val" style="color:#888;font-size:11px;min-width:38px;text-align:right;">13 px</span>
+                    </span>
+                </label>
+                <div style="color:#90caf9;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.7px;margin:10px 0 8px;border-bottom:1px solid #444;padding-bottom:6px;">Editor-Verhalten</div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:2px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-force-upper" onchange="window._setForceUpper(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Großbuchstaben im Code erzwingen</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 6px 24px;line-height:1.35;">
+                    Wandelt eingegebene Kleinbuchstaben sofort in Großbuchstaben um. Text nach <code style="color:#bbb;">//</code> (Kommentar) bleibt unverändert.
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px;color:#ddd;cursor:pointer;">
+                    <input type="checkbox" id="settings-autocomplete" onchange="window._setAutocomplete(this.checked)" style="margin:0;cursor:pointer;">
+                    <span>Auto-Vervollständigung von Variablennamen</span>
+                </label>
+                <div style="font-size:10px;color:#888;margin:0 0 4px 24px;line-height:1.35;">
+                    Schlägt beim Tippen passende Variablen aus Code + Sticky-Pool vor. Tab/Enter übernimmt, Esc bricht ab.
                 </div>
             </div>
 <div id="help-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2000; width: 450px; color: #ccc; font-size: 12px; line-height: 1.6;">
@@ -3373,6 +3582,90 @@ const aktiv = resolveLinked(obj, spsState);
         const saveIndicator = document.getElementById('save-indicator');
         const simInputsContainer = document.getElementById('sim-inputs');
         const simOutputsContainer = document.getElementById('sim-outputs');
+        // === Doppelklick auf Logikplan-Node → Code-Sprung ===
+        // Auf das svg-nodes-Element delegiert; jeder Node hat ein g[data-node-id].
+        // Wir lesen die ID, schlagen den Node im currentGraph nach und springen zur
+        // Definitions-Zeile der zugehörigen Variable.
+        if (svgNodes) {
+            svgNodes.addEventListener('dblclick', (e) => {
+                const g = e.target.closest('g[data-node-id]');
+                if (!g) return;
+                const id = g.getAttribute('data-node-id');
+                if (!id || !currentGraph || !currentGraph.nodes) return;
+                const node = currentGraph.nodes.get(id);
+                if (!node) return;
+                // Wir bevorzugen das Label (Variablenname), fallen auf die ID zurück.
+                // RS/SR-Nodes bekommen Q1/Q1_SR als „Variable", die wir suchen.
+                let target = node.label || node.id;
+                // Für RS/SR ist label oft 'RS'/'SR' und die eigentliche Variable hängt
+                // an einem Ausgangs-Edge — wir nutzen die ID selbst (RS_1 → R1+S1 in
+                // Code) oder das Output-Pin als Annäherung. Pragmatisch: kürze auf
+                // den Identifier-Teil.
+                if (typeof target === 'string') {
+                    target = target.replace(/\s+/g, '');
+                    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) {
+                        // Versuche stattdessen die Node-ID.
+                        target = node.id;
+                    }
+                }
+                if (target && typeof window._jumpToVariableDef === 'function') {
+                    try { window._jumpToVariableDef(target); } catch(_e) {}
+                }
+            });
+        }
+        // === Click / Dblclick auf .sim-var-name ===
+        // Einzelklick → Code-Sprung zur Definitions-Zeile.
+        // Doppelklick → Variable umbenennen (Refactor-Pfad).
+        // Wir erkennen das Paar über einen 220-ms-Timer: kommt innerhalb dieses
+        // Fensters ein zweiter Click, gilt es als Dblclick, der erste Click wird
+        // verworfen.
+        (function _initSimVarNameInteractions() {
+            const handler = (root) => {
+                let pendingClickTimer = null;
+                let pendingVar = null;
+                root.addEventListener('click', (e) => {
+                    const span = e.target.closest('.sim-var-name');
+                    if (!span) return;
+                    const name = span.getAttribute('data-var-name');
+                    if (!name) return;
+                    e.preventDefault();
+                    if (pendingClickTimer) {
+                        // War schon ein Click pending → das ist der zweite → dblclick.
+                        clearTimeout(pendingClickTimer);
+                        pendingClickTimer = null;
+                        pendingVar = null;
+                        // dblclick-Handler unten übernimmt
+                        return;
+                    }
+                    pendingVar = name;
+                    pendingClickTimer = setTimeout(() => {
+                        pendingClickTimer = null;
+                        if (pendingVar && typeof window._jumpToVariableDef === 'function') {
+                            try { window._jumpToVariableDef(pendingVar); } catch(_e) {}
+                        }
+                        pendingVar = null;
+                    }, 220);
+                });
+                root.addEventListener('dblclick', (e) => {
+                    const span = e.target.closest('.sim-var-name');
+                    if (!span) return;
+                    const name = span.getAttribute('data-var-name');
+                    if (!name) return;
+                    e.preventDefault();
+                    // Pending Click-Timer canceln (falls noch aktiv).
+                    if (pendingClickTimer) {
+                        clearTimeout(pendingClickTimer);
+                        pendingClickTimer = null;
+                        pendingVar = null;
+                    }
+                    if (typeof window._renameVariable === 'function') {
+                        try { window._renameVariable(name); } catch(_e) {}
+                    }
+                });
+            };
+            handler(simInputsContainer);
+            handler(simOutputsContainer);
+        })();
 		// ==========================================
         // 🌟 NEU: i18n TRANSLATION ENGINE
         // ==========================================
@@ -6568,6 +6861,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     let newFactory = typeof exData === 'string' ? EXAMPLES.factory : exData.factory;
                     let newKeys = typeof exData === 'string' ? {} : (exData.keyBindings || {}); // 🌟 NEU: KeyBindings auslesen
                     let newLayout = typeof exData === 'object' ? (exData.layout || null) : null;
+                    // Beispiel laden = vollständiger Frischstart. Sticky-Pool leeren,
+                    // sonst werden alle Variablen aus dem vorherigen Code als verwaist
+                    // im neuen Beispiel mitgeschleppt.
+                    if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
+                    // Fehler-/Check-UI gleichzeitig leeren (Aufgaben-Markierungen,
+                    // Missing-Badge, offene Error-Popups) — sonst kleben Reste aus
+                    // dem vorherigen Code visuell am neuen Beispiel.
+                    if (typeof window._resetCodeErrorUI === 'function') window._resetCodeErrorUI();
                     textarea.value = newCode;
                     if (newTypes) {
                         componentTypes = { ...newTypes };
@@ -6582,6 +6883,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     updateHighlighting();
                     updateEditor();
                     saveToStorage();
+                    // Error-Gutter manuell auffrischen — hört nur auf input/keyup/scroll/resize,
+                    // wird also durch das programmatische Setzen von textarea.value nicht erreicht.
+                    if (typeof window._updateErrorGutter === 'function') window._updateErrorGutter();
                     // Layout anwenden falls im Beispiel definiert
                     if (newLayout) changeWorkspaceLayout(newLayout);
                     // Anlage aufbauen und Physik vorbereiten
@@ -7228,12 +7532,17 @@ You must output exactly this JSON format. The logic code goes as a single string
             const _extraLines = _ccr && _ccr.extraLines ? _ccr.extraLines : null;
             const _extraWrongLines = _ccr && _ccr.extraWrongLines ? _ccr.extraWrongLines : null;
             const _hintLines = _ccr && _ccr.hintLines ? _ccr.hintLines : null;
+            const infoLines = window._infoLines || new Set();
             const html = rawLines.map((line, idx) => {
                 const isError = errLines.has(idx) && idx !== cursorLine;
+                const isInfo  = isError && infoLines.has(idx);
                 let cls = '';
                 let bg = '';
                 let suffix = '';
-                if (isError) {
+                if (isInfo) {
+                    // Sanfter gelber Hinweis-Hintergrund (kein Fehler — funktioniert ja).
+                    bg = 'background:rgba(255,205,0,0.14);';
+                } else if (isError) {
                     bg = 'background:rgba(220,50,50,0.18);';
                 } else if (_extraWrongLines && _extraWrongLines.has(idx)) {
                     // „falsch UND zu viel" — informativste Fehler-Diagnose
@@ -7265,6 +7574,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             highlightingContent.innerHTML = html + ghostHtml;
+            // Bracket-Match nach jedem Re-Render neu setzen (Markierungen sind durch
+            // innerHTML-Reset weg).
+            if (window._codeEditorSettings && window._codeEditorSettings.bracketMatch
+                && typeof window._refreshBracketMatch === 'function') {
+                window._refreshBracketMatch();
+            }
         }
 		// Funktion zum Einfügen von Symbolen an der aktuellen Cursor-Position
         window.insertSymbol = function(symbol) {
@@ -7945,6 +8260,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             const set = new Set();
             if (!window._customErrorExplanations) window._customErrorExplanations = new Map();
             window._customErrorExplanations.clear();
+            // Info-Linien (severity:'info') werden in einem separaten Set geführt,
+            // damit der Highlighter sie gelb statt rot färbt und der Gutter ein
+            // i-Symbol statt eines Warn-Symbols rendert.
+            if (!window._infoLines) window._infoLines = new Set();
+            window._infoLines.clear();
 
             const parserErrors = window._errorLines || new Set();
             parserErrors.forEach(idx => set.add(idx));
@@ -7959,8 +8279,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             const addErr = (idx, expl) => {
                 set.add(idx);
                 if (parserErrors.has(idx)) return;
-                if (!window._customErrorExplanations.has(idx)) {
+                const existing = window._customErrorExplanations.get(idx);
+                const newIsInfo = expl && expl.severity === 'info';
+                if (!existing) {
                     window._customErrorExplanations.set(idx, expl);
+                    if (newIsInfo) window._infoLines.add(idx);
+                } else if (!newIsInfo && existing.severity === 'info') {
+                    // Echte Fehlerursache verdrängt zuvor gesetzte Info.
+                    window._customErrorExplanations.set(idx, expl);
+                    window._infoLines.delete(idx);
                 }
             };
 
@@ -8064,17 +8391,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const isFFPin = /^[SR]\d+(_(?:RS|SR))?$/i.test(li.lhs);
                     const num = (li.lhs.match(/\d+/)||['1'])[0];
                     addErr(li.idx, {
-                        title: 'Selbst-Referenz: Variable verweist auf sich selbst',
+                        title: isFFPin
+                            ? 'Selbst-Referenz: Variable verweist auf sich selbst'
+                            : 'Selbsthaltung über vorherigen Tick',
                         why: '"' + li.lhs + '" steht auf beiden Seiten der Zuweisung. ' +
                              (isFFPin
                                 ? 'Bei einem S/R-Eingang ist das immer falsch: der Eingang darf nicht von sich selbst abhängen. Vermutlich war Q' + num + ' (der Ausgang des Glieds) gemeint statt ' + li.lhs + '.'
-                                : 'Ohne RS/SR-Glied führt das zu einer leeren oder undefinierten Logik — VALIS löst das nicht automatisch als Speicherglied auf.'),
+                                : 'VALIS wertet das als Selbsthaltung über den vorherigen Tick-Wert aus — funktioniert technisch, ist aber im Logikplan eine Rückkopplungs-Schleife. Für klarere Visualisierung und deterministisches Verhalten empfiehlt sich ein RS-/SR-Glied.'),
                         hint: isFFPin
                             ? 'Vermutlich war der Q-Ausgang gemeint. Schreibe Q' + num + ' statt ' + li.lhs + ' in der RHS.'
-                            : 'Für eine Selbsthaltung verwende ein RS-Glied: SET-Bedingung an S<n>, RESET-Bedingung an R<n>, und schreibe `' + li.lhs + ' := Q<n>`.',
+                            : 'Klicke unten auf einen der Buttons, um die Zeile automatisch in ein RS- oder SR-Glied umzuschreiben.',
                         fix: isFFPin
                             ? li.lhs + ' := ' + li.rhs.replace(new RegExp('\\b' + li.lhs.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi'), 'Q' + num)
-                            : null
+                            : null,
+                        canConvertSelfHold: !isFFPin,
+                        severity: isFFPin ? 'error' : 'info'
                     });
                 }
             });
@@ -8335,11 +8666,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     seenCycleNode.add(node);
                     const dep = deps.get(node);
                     if (!dep) return;
-                    let title, why, hint;
+                    let title, why, hint, canConvertSelfHold = false;
                     if (cycle.length === 1) {
-                        title = 'Selbst-Referenz ohne Selbsthaltung';
-                        why = 'Die Variable "' + node + '" steht auf beiden Seiten der Zuweisung. Ohne RS/SR-Glied führt das zu einer leeren oder undefinierten Logik — VALIS löst das nicht automatisch als Speicherglied auf.';
-                        hint = 'Für eine Selbsthaltung verwende ein RS-Glied: SET-Bedingung an S<n>, RESET-Bedingung an R<n>, und schreibe `' + node + ' := Q<n>`.';
+                        title = 'Selbsthaltung über vorherigen Tick';
+                        why = '"' + node + '" steht auf beiden Seiten der Zuweisung. VALIS wertet das als Selbsthaltung über den vorherigen Tick-Wert aus — funktioniert technisch, ist aber im Logikplan eine Rückkopplungs-Schleife. Für klarere Visualisierung und deterministisches Verhalten empfiehlt sich ein RS-/SR-Glied.';
+                        hint = 'Klicke unten auf einen der Buttons, um die Zeile automatisch in ein RS- oder SR-Glied umzuschreiben.';
+                        canConvertSelfHold = true;
                     } else if (cycle.length === 2) {
                         title = 'Direkte zirkuläre Abhängigkeit';
                         why = '"' + cycle[0] + '" hängt von "' + cycle[1] + '" ab und umgekehrt (' + pathStr + '). VALIS hat keinen definierten Anfangswert für diese Schleife — das Ergebnis ist undefiniert.';
@@ -8349,7 +8681,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         why = 'Die Variablen-Kette ' + pathStr + ' führt zurück zu sich selbst. Es gibt keinen definierten Anfangswert für diese Schleife.';
                         hint = 'Brich den Zyklus auf: irgendwo in der Kette muss eine Variable von einer Eingangs-Quelle (Taster, Sensor, RS-Glied) abhängen, nicht nur von ihren Nachfolgern.';
                     }
-                    addErr(dep.idx, { title, why, hint, fix: null });
+                    addErr(dep.idx, { title, why, hint, fix: null, canConvertSelfHold, severity: canConvertSelfHold ? 'info' : 'error' });
                 });
             });
 
@@ -8383,11 +8715,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             // bei sichtbarer Scrollbar die linke Hälfte des Icons.
             gutter.style.width = (rightOffset + iconSize + 4) + 'px';
             const offsetY = (lineHeight - iconSize) / 2;
+            const infoLines = window._infoLines || new Set();
             let html = '';
             errLines.forEach(idx => {
                 const top = padTop + idx * lineHeight + offsetY - scrollTop;
                 const activeAttr = (idx === prevActive) ? ' active' : '';
-                html += '<div class="error-icon' + activeAttr + '" data-line="' + idx + '" title="Klicke für Erklärung dieses Fehlers" style="top:' + top + 'px; right:' + rightOffset + 'px;">!</div>';
+                const isInfo = infoLines.has(idx);
+                const cls   = isInfo ? 'info-icon'  : 'error-icon';
+                const glyph = isInfo ? 'i'          : '!';
+                const title = isInfo ? 'Klicke für Hinweis zu dieser Zeile' : 'Klicke für Erklärung dieses Fehlers';
+                html += '<div class="' + cls + activeAttr + '" data-line="' + idx + '" title="' + title + '" style="top:' + top + 'px; right:' + rightOffset + 'px;">' + glyph + '</div>';
             });
             gutter.innerHTML = html;
         };
@@ -8399,10 +8736,259 @@ You must output exactly this JSON format. The logic code goes as a single string
             pop.setAttribute('aria-hidden', 'true');
             const gutter = document.getElementById('error-gutter');
             if (gutter) {
-                gutter.querySelectorAll('.error-icon.active').forEach(e => e.classList.remove('active'));
+                gutter.querySelectorAll('.error-icon.active, .info-icon.active').forEach(e => e.classList.remove('active'));
                 gutter._activeLine = null;
             }
         };
+
+        // === Self-Hold → RS/SR-Glied Konverter ===
+        // Erkennt das Muster `LHS := f(LHS)` (Selbsthaltung über vorigen Tick-Wert)
+        // und zerlegt es in SET/RESET-Bedingungen, damit der Popup-Button die
+        // Zeile durch ein RS- oder SR-Glied ersetzen kann.
+        (function _initSelfHoldConverter() {
+            function tokenize(s) {
+                const tokens = [];
+                let i = 0;
+                while (i < s.length) {
+                    const c = s[i];
+                    if (/\s/.test(c)) { i++; continue; }
+                    if (c === '¬' || c === '!') { tokens.push({type:'NOT'}); i++; continue; }
+                    if (c === '(') { tokens.push({type:'LP'}); i++; continue; }
+                    if (c === ')') { tokens.push({type:'RP'}); i++; continue; }
+                    if (c === '&' && s[i+1] === '&') { tokens.push({type:'AND'}); i += 2; continue; }
+                    if (c === '|' && s[i+1] === '|') { tokens.push({type:'OR'}); i += 2; continue; }
+                    if (/[A-Za-z_ÄÖÜäöüß]/.test(c)) {
+                        let j = i;
+                        while (j < s.length && /[A-Za-z0-9_ÄÖÜäöüß]/.test(s[j])) j++;
+                        tokens.push({type:'ID', val: s.slice(i,j).toUpperCase()});
+                        i = j; continue;
+                    }
+                    throw new Error('Unbekanntes Zeichen: ' + c);
+                }
+                return tokens;
+            }
+            function parse(tokens) {
+                let pos = 0;
+                function peek() { return tokens[pos]; }
+                function take() { return tokens[pos++]; }
+                function parseOr() {
+                    let left = parseAnd();
+                    while (peek() && peek().type === 'OR') {
+                        take();
+                        const right = parseAnd();
+                        if (left.type === 'OR') left.children.push(right);
+                        else left = { type: 'OR', children: [left, right] };
+                    }
+                    return left;
+                }
+                function parseAnd() {
+                    let left = parseNot();
+                    while (peek() && peek().type === 'AND') {
+                        take();
+                        const right = parseNot();
+                        if (left.type === 'AND') left.children.push(right);
+                        else left = { type: 'AND', children: [left, right] };
+                    }
+                    return left;
+                }
+                function parseNot() {
+                    if (peek() && peek().type === 'NOT') { take(); return { type: 'NOT', child: parseNot() }; }
+                    return parseAtom();
+                }
+                function parseAtom() {
+                    const t = take();
+                    if (!t) throw new Error('Unerwartetes Ende');
+                    if (t.type === 'LP') {
+                        const e = parseOr();
+                        const rp = take();
+                        if (!rp || rp.type !== 'RP') throw new Error('Klammer fehlt');
+                        return e;
+                    }
+                    if (t.type === 'ID') return { type: 'ID', val: t.val };
+                    throw new Error('Unerwartetes Token: ' + t.type);
+                }
+                const r = parseOr();
+                if (pos < tokens.length) throw new Error('Reste am Ende');
+                return r;
+            }
+            function containsId(n, id) {
+                if (!n) return false;
+                if (n.type === 'ID') return n.val === id;
+                if (n.type === 'NOT') return containsId(n.child, id);
+                if (n.type === 'AND' || n.type === 'OR') return n.children.some(c => containsId(c, id));
+                return false;
+            }
+            function negate(n) {
+                if (n.type === 'NOT') return n.child;
+                return { type: 'NOT', child: n };
+            }
+            function astToStr(n, parentPrec) {
+                // Präzedenz: NOT(3) > AND(2) > OR(1). Klammern, wenn nötig.
+                if (n.type === 'ID') return n.val;
+                if (n.type === 'NOT') {
+                    const inner = astToStr(n.child, 3);
+                    return '¬' + (n.child.type === 'ID' || n.child.type === 'NOT' ? inner : '(' + inner + ')');
+                }
+                if (n.type === 'AND') {
+                    const s = n.children.map(c => astToStr(c, 2)).join(' && ');
+                    return (parentPrec > 2) ? '(' + s + ')' : s;
+                }
+                if (n.type === 'OR') {
+                    const s = n.children.map(c => astToStr(c, 1)).join(' || ');
+                    return (parentPrec > 1) ? '(' + s + ')' : s;
+                }
+                return '';
+            }
+            function orList(nodes) {
+                if (nodes.length === 0) return null;
+                if (nodes.length === 1) return nodes[0];
+                return { type: 'OR', children: nodes };
+            }
+            function decompose(ast, lhs) {
+                // Triviale Schleife `A := A` — nicht zerlegbar.
+                if (ast.type === 'ID' && ast.val === lhs) return null;
+                // Fall 1: Top ist AND  →  (A || SETs) && C1 && C2 ...  (Reset-dominant)
+                if (ast.type === 'AND') {
+                    let aIdx = -1;
+                    ast.children.forEach((c, i) => { if (containsId(c, lhs)) { if (aIdx < 0) aIdx = i; else aIdx = -2; } });
+                    if (aIdx < 0 || aIdx === -2) return null;
+                    const aPart = ast.children[aIdx];
+                    const conds = ast.children.filter((_, i) => i !== aIdx);
+                    if (conds.some(c => containsId(c, lhs))) return null;
+                    if (conds.length === 0) return null;
+                    let sets = [];
+                    if (aPart.type === 'ID' && aPart.val === lhs) {
+                        sets = [];
+                    } else if (aPart.type === 'OR') {
+                        let aSub = -1;
+                        aPart.children.forEach((c, i) => { if (c.type === 'ID' && c.val === lhs) { if (aSub < 0) aSub = i; else aSub = -2; } });
+                        if (aSub < 0 || aSub === -2) return null;
+                        sets = aPart.children.filter((_, i) => i !== aSub);
+                        if (sets.some(s => containsId(s, lhs))) return null;
+                    } else {
+                        return null;
+                    }
+                    if (sets.length === 0) return null;
+                    return {
+                        setExpr:   astToStr(orList(sets), 0),
+                        resetExpr: astToStr(orList(conds.map(negate)), 0),
+                        topShape: 'AND'
+                    };
+                }
+                // Fall 2: Top ist OR  →  SETs || (A && C1 && C2 ...)  (Set-dominant)
+                if (ast.type === 'OR') {
+                    let aIdx = -1;
+                    ast.children.forEach((c, i) => { if (containsId(c, lhs)) { if (aIdx < 0) aIdx = i; else aIdx = -2; } });
+                    if (aIdx < 0 || aIdx === -2) return null;
+                    const aPart = ast.children[aIdx];
+                    const sets = ast.children.filter((_, i) => i !== aIdx);
+                    if (sets.some(s => containsId(s, lhs))) return null;
+                    if (sets.length === 0) return null;
+                    let conds = [];
+                    if (aPart.type === 'ID' && aPart.val === lhs) {
+                        conds = [];
+                    } else if (aPart.type === 'AND') {
+                        let aSub = -1;
+                        aPart.children.forEach((c, i) => { if (c.type === 'ID' && c.val === lhs) { if (aSub < 0) aSub = i; else aSub = -2; } });
+                        if (aSub < 0 || aSub === -2) return null;
+                        conds = aPart.children.filter((_, i) => i !== aSub);
+                        if (conds.some(c => containsId(c, lhs))) return null;
+                    } else {
+                        return null;
+                    }
+                    if (conds.length === 0) return null;
+                    return {
+                        setExpr:   astToStr(orList(sets), 0),
+                        resetExpr: astToStr(orList(conds.map(negate)), 0),
+                        topShape: 'OR'
+                    };
+                }
+                return null;
+            }
+            // Operator-Normalisierung wie im Parser (`!` → `¬`, `NOT/NICHT` → `¬`,
+            // `AND/UND/^` → `&&`, `OR/ODER/v` → `||`). Synchron mit parseToGraph.
+            function normalizeOps(s) {
+                let out = s
+                    .replace(/!/g, '¬').replace(/\bNOT\b/gi, '¬').replace(/\bNICHT\b/gi, '¬')
+                    .replace(/\bAND\b/gi, '&&').replace(/\bUND\b/gi, '&&').replace(/\^/g, '&&').replace(/∧/g, '&&')
+                    .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/g, '||').replace(/∨/g, '||');
+                out = out.replace(/&&/g, '##AND##').replace(/&/g, '&&').replace(/##AND##/g, '&&');
+                out = out.replace(/\|\|/g, '##OR##').replace(/\|/g, '||').replace(/##OR##/g, '||');
+                return out;
+            }
+            // Versucht, eine Code-Zeile `LHS := f(LHS)` zu zerlegen.
+            // Liefert {lhs, setExpr, resetExpr, topShape} oder null.
+            window._trySelfHoldConvert = function(line) {
+                if (!line) return null;
+                const noComment = line.split('//')[0];
+                const norm = noComment.replace(/(:=|=|<-|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
+                if (!norm.includes(':=')) return null;
+                const parts = norm.split(':=');
+                const lhs = parts[0].trim().toUpperCase();
+                let rhsRaw = parts.slice(1).join(':=').trim();
+                if (!lhs || !rhsRaw) return null;
+                if (!/^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/.test(lhs)) return null;
+                // FF-Pins (S1/R1 etc.) sind hier nie konvertierbar.
+                if (/^[SR]\d+(_(?:RS|SR))?$/i.test(lhs)) return null;
+                if (/^Q\d+(_(?:RS|SR))?$/i.test(lhs)) return null;
+                // Timer/Counter-Aufrufe können wir nicht zerlegen.
+                if (/\b(TON|TOF|TP|CTU)\s*\(/i.test(rhsRaw)) return null;
+                rhsRaw = normalizeOps(rhsRaw);
+                let ast;
+                try { ast = parse(tokenize(rhsRaw)); } catch(_e) { return null; }
+                if (!containsId(ast, lhs)) return null;
+                const d = decompose(ast, lhs);
+                if (!d) return null;
+                return { lhs: parts[0].trim(), setExpr: d.setExpr, resetExpr: d.resetExpr, topShape: d.topShape };
+            };
+            // Sucht im Code-Text die nächste freie FF-Nummer, die weder als RS
+            // noch als SR (mit beliebigem Suffix) belegt ist.
+            function nextFreeFFNumber(code) {
+                const re = /^\s*[SR](\d+)(_(?:RS|SR))?\s*:=/gim;
+                const used = new Set();
+                let m;
+                while ((m = re.exec(code)) !== null) used.add(parseInt(m[1], 10));
+                let n = 1;
+                while (used.has(n)) n++;
+                return n;
+            }
+            // Ersetzt die Zeile `lineIdx` im Editor durch drei neue Zeilen:
+            //   S<n>[_SR] := setExpr
+            //   R<n>[_SR] := resetExpr
+            //   <LHS>     := Q<n>[_SR]
+            // `kind` ∈ {'RS','SR'}.
+            window._applySelfHoldConvert = function(lineIdx, kind) {
+                const ta = document.getElementById('code');
+                if (!ta) return;
+                const lines = ta.value.split('\n');
+                if (lineIdx < 0 || lineIdx >= lines.length) return;
+                const orig = lines[lineIdx];
+                const d = window._trySelfHoldConvert(orig);
+                if (!d) {
+                    if (typeof window._hideErrorPopup === 'function') window._hideErrorPopup();
+                    alert('Diese Zeile lässt sich nicht eindeutig in ein RS-/SR-Glied umwandeln.');
+                    return;
+                }
+                const suf = kind === 'SR' ? '_SR' : '';
+                const n = nextFreeFFNumber(ta.value);
+                // Einrückung der Originalzeile übernehmen.
+                const indent = (orig.match(/^\s*/) || [''])[0];
+                const newLines = [
+                    indent + 'S' + n + suf + ' := ' + d.setExpr,
+                    indent + 'R' + n + suf + ' := ' + d.resetExpr,
+                    indent + d.lhs + ' := Q' + n + suf
+                ];
+                lines.splice(lineIdx, 1, ...newLines);
+                ta.value = lines.join('\n');
+                // Cursor in die A-Zuweisung setzen, damit der User direkt sieht, was geschah.
+                let offset = 0;
+                for (let i = 0; i < lineIdx + 2; i++) offset += lines[i].length + 1;
+                try { ta.selectionStart = ta.selectionEnd = offset + newLines[2].length; } catch(_e) {}
+                if (typeof window._hideErrorPopup === 'function') window._hideErrorPopup();
+                ta.focus();
+                ta.dispatchEvent(new Event('input'));
+            };
+        })();
 
         window._showErrorPopupForLine = function(lineIdx, anchorEl) {
             const ta = document.getElementById('code');
@@ -8418,14 +9004,51 @@ You must output exactly this JSON format. The logic code goes as a single string
                 fix: null
             };
             const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const isInfo = err.severity === 'info';
+            // Popup-Akzent farblich an Severity anpassen (links Border, Header-Farbe).
+            const accentColor = isInfo ? '#ffc107' : '#ff5252';
+            const headerColor = isInfo ? '#ffd54f' : '#ff7043';
+            pop.style.borderLeftColor = accentColor;
             let html = '<button class="ep-close" onclick="window._hideErrorPopup()" aria-label="Schließen">×</button>';
-            html += '<div class="ep-header">⚠️ Fehler in Zeile ' + (lineIdx + 1) + '</div>';
+            html += '<div class="ep-header" style="color:' + headerColor + ';">'
+                  + (isInfo ? 'ℹ️ Hinweis zu Zeile ' : '⚠️ Fehler in Zeile ')
+                  + (lineIdx + 1) + '</div>';
             html += '<div class="ep-title">' + esc(err.title) + '</div>';
             html += '<div class="ep-why">' + esc(err.why) + '</div>';
             html += '<div class="ep-hint">💡 ' + esc(err.hint) + '</div>';
             if (err.fix) {
                 html += '<div class="ep-fix-label">✓ So geht es richtig:</div>';
                 html += '<pre class="ep-fix">' + esc(err.fix) + '</pre>';
+            }
+            // Self-Hold-Konverter: bei `LHS := f(LHS)` zwei Buttons anbieten,
+            // die die Zeile durch ein RS- bzw. SR-Glied ersetzen.
+            if (err.canConvertSelfHold && typeof window._trySelfHoldConvert === 'function') {
+                const conv = window._trySelfHoldConvert(line);
+                if (conv) {
+                    const recommended = conv.topShape === 'OR' ? 'SR' : 'RS';
+                    const recNote = conv.topShape === 'OR'
+                        ? 'Empfehlung: SR-Glied (oberstes ODER ⇒ SET-Vorrang).'
+                        : 'Empfehlung: RS-Glied (oberstes UND ⇒ RESET-Vorrang).';
+                    html += '<div class="ep-fix-label" style="margin-top:8px;">🔧 Automatisch umwandeln</div>';
+                    html += '<div style="font-size:11px;color:#aaa;margin:2px 0 4px;">' + esc(recNote) + '</div>';
+                    html += '<pre class="ep-fix" style="font-size:11px;">'
+                         + 'S&lt;n&gt;' + (recommended === 'SR' ? '_SR' : '') + ' := ' + esc(conv.setExpr) + '\n'
+                         + 'R&lt;n&gt;' + (recommended === 'SR' ? '_SR' : '') + ' := ' + esc(conv.resetExpr) + '\n'
+                         + esc(conv.lhs) + ' := Q&lt;n&gt;' + (recommended === 'SR' ? '_SR' : '')
+                         + '</pre>';
+                    html += '<div style="display:flex;gap:6px;margin-top:6px;">';
+                    html += '<button type="button" class="ep-btn-convert"'
+                          + (recommended === 'RS' ? ' data-rec="1"' : '')
+                          + ' style="flex:1;background:' + (recommended === 'RS' ? '#26a69a' : '#444')
+                          + ';color:#fff;border:none;border-radius:3px;padding:5px 10px;font-size:11px;cursor:pointer;"'
+                          + ' onclick="window._applySelfHoldConvert(' + lineIdx + ',\'RS\')">→ RS-Glied einsetzen</button>';
+                    html += '<button type="button" class="ep-btn-convert"'
+                          + (recommended === 'SR' ? ' data-rec="1"' : '')
+                          + ' style="flex:1;background:' + (recommended === 'SR' ? '#26a69a' : '#444')
+                          + ';color:#fff;border:none;border-radius:3px;padding:5px 10px;font-size:11px;cursor:pointer;"'
+                          + ' onclick="window._applySelfHoldConvert(' + lineIdx + ',\'SR\')">→ SR-Glied einsetzen</button>';
+                    html += '</div>';
+                }
             }
             pop.innerHTML = html;
             pop.style.display = 'block';
@@ -8444,7 +9067,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Markiere aktives Icon
             const gutter = document.getElementById('error-gutter');
             if (gutter) {
-                gutter.querySelectorAll('.error-icon.active').forEach(e => e.classList.remove('active'));
+                gutter.querySelectorAll('.error-icon.active, .info-icon.active').forEach(e => e.classList.remove('active'));
                 if (anchorEl) anchorEl.classList.add('active');
                 gutter._activeLine = lineIdx;
             }
@@ -8452,7 +9075,7 @@ You must output exactly this JSON format. The logic code goes as a single string
 
         // Klick auf Warn-Symbol → Popup öffnen
         document.getElementById('error-gutter').addEventListener('click', function(e) {
-            const icon = e.target.closest('.error-icon');
+            const icon = e.target.closest('.error-icon, .info-icon');
             if (!icon) return;
             const lineIdx = parseInt(icon.getAttribute('data-line'), 10);
             if (isNaN(lineIdx)) return;
@@ -8469,7 +9092,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         document.addEventListener('click', function(e) {
             const pop = document.getElementById('code-error-popup');
             if (!pop || pop.style.display !== 'block') return;
-            if (e.target.closest('#code-error-popup') || e.target.closest('.error-icon')) return;
+            if (e.target.closest('#code-error-popup') || e.target.closest('.error-icon') || e.target.closest('.info-icon')) return;
             window._hideErrorPopup();
         });
         // ESC schließt das Popup
@@ -8503,6 +9126,550 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._updateCodeInspector();
         };
         _applyExplainModeUi();
+        // ↶ / ↷ Buttons im Editor-Header. Der Code-Editor ist eine native <textarea>,
+        // hat also einen eigenen Browser-Undo-Stack. Wir können den über
+        // document.execCommand('undo'/'redo') triggern — die Strg+Z/Y-Tastenkombis
+        // tun dasselbe. execCommand ist zwar deprecated, funktioniert für Textarea-
+        // Undo aber zuverlässig in allen aktuellen Browsern und ist der einzige
+        // Weg, an den nativen Stack heranzukommen, ohne ihn selbst nachzubauen.
+        // Wichtig: vor dem execCommand die Textarea fokussieren, sonst greift
+        // der Befehl nicht. Danach 'input' dispatchen, damit Highlighting/Parser/
+        // Sim-Pipeline auf die rückgängig gemachten Änderungen reagieren.
+        window._codeUndo = function() {
+            const ta = document.getElementById('code');
+            if (!ta || ta.readOnly) return;
+            ta.focus();
+            try { document.execCommand('undo'); } catch(_e) {}
+            ta.dispatchEvent(new Event('input'));
+        };
+        window._codeRedo = function() {
+            const ta = document.getElementById('code');
+            if (!ta || ta.readOnly) return;
+            ta.focus();
+            try { document.execCommand('redo'); } catch(_e) {}
+            ta.dispatchEvent(new Event('input'));
+        };
+        // === Code-Editor-Einstellungen: Popup + Optionen ===
+        // Persistiert in localStorage. Alle Defaults entsprechen dem alten Verhalten,
+        // d.h. neue Optionen sind anfangs aus.
+        window._codeEditorSettings = {
+            lineNumbers:    localStorage.getItem('valisCodeLineNumbers')   === '1',
+            noWrap:         localStorage.getItem('valisCodeNoWrap')        === '1',
+            highlightLine:  localStorage.getItem('valisCodeHighlightLine') === '1',
+            bracketMatch:   localStorage.getItem('valisCodeBracketMatch')  === '1',
+            indentGuides:   localStorage.getItem('valisCodeIndentGuides')  === '1',
+            autocomplete:   localStorage.getItem('valisCodeAutocomplete')  !== '0',
+            forceUpper:     localStorage.getItem('valisCodeForceUpper')    !== '0',
+            fontSize:       parseInt(localStorage.getItem('valisCodeFontSize'), 10) || 13
+        };
+        // Zeilennummern in das #line-gutter rendern. Wir bauen einen reinen
+        // Number-Text-String, eine Nummer pro Zeile, getrennt durch \n. Das
+        // gleiche line-height + font-size wie #code sorgt für vertikale Deckung.
+        window._renderLineNumbers = function() {
+            const ta  = document.getElementById('code');
+            const lg  = document.getElementById('line-gutter');
+            if (!ta || !lg) return;
+            const wrapper = ta.closest('.editor-wrapper');
+            if (!wrapper || !wrapper.classList.contains('with-line-numbers')) return;
+            // \n-getrennte Zeilen plus eine virtuelle Leerzeile am Ende, falls der
+            // Code mit \n endet (sonst fehlt die Zeilennummer für die leere letzte Zeile).
+            const lines = ta.value.split('\n').length;
+            let out = '';
+            for (let i = 1; i <= lines; i++) out += i + '\n';
+            lg.textContent = out;
+        };
+        // Scroll-Sync: die Textarea hat überflows; der Gutter ist overflow:hidden
+        // und wird via scrollTop nachgezogen.
+        window._syncLineGutterScroll = function() {
+            const ta = document.getElementById('code');
+            const lg = document.getElementById('line-gutter');
+            if (!ta || !lg) return;
+            lg.scrollTop = ta.scrollTop;
+        };
+        window._setLineNumbers = function(on) {
+            window._codeEditorSettings.lineNumbers = !!on;
+            try { localStorage.setItem('valisCodeLineNumbers', on ? '1' : '0'); } catch(_e) {}
+            const ta = document.getElementById('code');
+            const wrapper = ta ? ta.closest('.editor-wrapper') : null;
+            if (wrapper) wrapper.classList.toggle('with-line-numbers', !!on);
+            if (on) {
+                window._renderLineNumbers();
+                window._syncLineGutterScroll();
+            }
+        };
+        // Wort-Umbruch: Klasse .no-wrap am editor-wrapper schaltet white-space + word-break.
+        window._setCodeNoWrap = function(on) {
+            window._codeEditorSettings.noWrap = !!on;
+            try { localStorage.setItem('valisCodeNoWrap', on ? '1' : '0'); } catch(_e) {}
+            const ta = document.getElementById('code');
+            const wrapper = ta ? ta.closest('.editor-wrapper') : null;
+            if (wrapper) wrapper.classList.toggle('no-wrap', !!on);
+        };
+        // Aktuelle Zeile hervorheben — Overlay-Div wird auf die aktuelle Cursor-Zeile
+        // positioniert. Wird bei jeder Cursor-Bewegung und beim Tippen aktualisiert.
+        window._setHighlightLine = function(on) {
+            window._codeEditorSettings.highlightLine = !!on;
+            try { localStorage.setItem('valisCodeHighlightLine', on ? '1' : '0'); } catch(_e) {}
+            const ta = document.getElementById('code');
+            const wrapper = ta ? ta.closest('.editor-wrapper') : null;
+            if (wrapper) wrapper.classList.toggle('highlight-current-line', !!on);
+            if (on) window._updateCurrentLineHighlight();
+        };
+        window._updateCurrentLineHighlight = function() {
+            if (!window._codeEditorSettings.highlightLine) return;
+            const ta  = document.getElementById('code');
+            const hl  = document.getElementById('current-line-highlight');
+            if (!ta || !hl) return;
+            // Aktuelle Zeile aus Cursor-Position berechnen.
+            const before = ta.value.substring(0, ta.selectionStart);
+            const row = before.split('\n').length - 1;
+            const cs = getComputedStyle(ta);
+            const lineHeight = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.5);
+            const padTop = parseFloat(cs.paddingTop) || 0;
+            hl.style.height = lineHeight + 'px';
+            hl.style.top = (padTop + row * lineHeight - ta.scrollTop) + 'px';
+        };
+        // Klammer-Matching — re-rendert Highlighting mit zusätzlichen Spans um die
+        // beiden zusammengehörigen Klammern. Wird durch updateHighlighting() angetriggert,
+        // wenn die Option an ist.
+        window._setBracketMatch = function(on) {
+            window._codeEditorSettings.bracketMatch = !!on;
+            try { localStorage.setItem('valisCodeBracketMatch', on ? '1' : '0'); } catch(_e) {}
+            if (!on) {
+                // Bestehende Marker entfernen.
+                document.querySelectorAll('#highlighting-content .bracket-match')
+                    .forEach(el => el.classList.remove('bracket-match'));
+            } else if (typeof window._refreshBracketMatch === 'function') {
+                window._refreshBracketMatch();
+            }
+        };
+        // Setzt die .bracket-match-Klasse auf das Klammern-Paar, das zur aktuellen
+        // Cursor-Position passt. Identifiziert die richtigen Spans anhand der
+        // Reihenfolge: paren-Spans im DOM sind in Lesereihenfolge, also können wir
+        // sie über den Zähler der Klammern im Rohtext zuordnen.
+        window._refreshBracketMatch = function() {
+            // Alte Marker immer wegräumen — auch wenn Feature an ist, damit
+            // veraltete Hervorhebungen verschwinden.
+            document.querySelectorAll('#highlighting-content .bracket-match')
+                .forEach(el => el.classList.remove('bracket-match'));
+            if (!window._codeEditorSettings.bracketMatch) return;
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            const match = window._findMatchingBrackets(ta.value, ta.selectionStart);
+            if (!match) return;
+            const [openPos, closePos] = match;
+            const parens = document.querySelectorAll('#highlighting-content .token.paren');
+            if (!parens.length) return;
+            let parenIdx = 0;
+            const text = ta.value;
+            for (let i = 0; i < text.length && parenIdx < parens.length; i++) {
+                const c = text[i];
+                if (c === '(' || c === ')') {
+                    if (i === openPos)  parens[parenIdx].classList.add('bracket-match');
+                    if (i === closePos) parens[parenIdx].classList.add('bracket-match');
+                    parenIdx++;
+                }
+            }
+        };
+        // Findet zur Cursor-Position das passende Klammern-Paar und gibt deren
+        // Indizes zurück, oder null wenn der Cursor nicht direkt an einer Klammer steht.
+        // Berücksichtigt verschachtelte Klammern via Counter.
+        window._findMatchingBrackets = function(text, cursorPos) {
+            if (!text) return null;
+            // Char direkt vor oder am Cursor prüfen.
+            const candidates = [];
+            const before = cursorPos - 1;
+            if (before >= 0 && (text[before] === '(' || text[before] === ')')) candidates.push(before);
+            if (cursorPos < text.length && (text[cursorPos] === '(' || text[cursorPos] === ')')) candidates.push(cursorPos);
+            for (const pos of candidates) {
+                const ch = text[pos];
+                if (ch === '(') {
+                    let depth = 1;
+                    for (let i = pos + 1; i < text.length; i++) {
+                        if (text[i] === '(') depth++;
+                        else if (text[i] === ')') {
+                            depth--;
+                            if (depth === 0) return [pos, i];
+                        }
+                    }
+                } else if (ch === ')') {
+                    let depth = 1;
+                    for (let i = pos - 1; i >= 0; i--) {
+                        if (text[i] === ')') depth++;
+                        else if (text[i] === '(') {
+                            depth--;
+                            if (depth === 0) return [i, pos];
+                        }
+                    }
+                }
+            }
+            return null;
+        };
+        // Einrückungsgitter — reine CSS, Toggle via Klasse.
+        window._setIndentGuides = function(on) {
+            window._codeEditorSettings.indentGuides = !!on;
+            try { localStorage.setItem('valisCodeIndentGuides', on ? '1' : '0'); } catch(_e) {}
+            const ta = document.getElementById('code');
+            const wrapper = ta ? ta.closest('.editor-wrapper') : null;
+            if (wrapper) wrapper.classList.toggle('indent-guides', !!on);
+        };
+        // Schriftgröße — setzt font-size auf #code, #highlighting, #line-gutter.
+        // line-height bleibt 1.5 (CSS-Default), damit Zeilennummern und Code-Zeilen
+        // weiter exakt auf Höhe liegen.
+        window._setCodeFontSize = function(sz) {
+            const v = parseInt(sz, 10);
+            if (!Number.isFinite(v) || v < 8 || v > 30) return;
+            window._codeEditorSettings.fontSize = v;
+            try { localStorage.setItem('valisCodeFontSize', String(v)); } catch(_e) {}
+            const ta = document.getElementById('code');
+            const hl = document.getElementById('highlighting');
+            const hc = document.getElementById('highlighting-content');
+            const lg = document.getElementById('line-gutter');
+            const sizePx = v + 'px';
+            if (ta) ta.style.fontSize = sizePx;
+            if (hl) hl.style.fontSize = sizePx;
+            if (hc) hc.style.fontSize = sizePx;
+            if (lg) lg.style.fontSize = sizePx;
+            // Aktuelle-Zeile-Overlay danach neu vermessen.
+            if (typeof window._updateCurrentLineHighlight === 'function') window._updateCurrentLineHighlight();
+            if (typeof window._renderLineNumbers === 'function') window._renderLineNumbers();
+            if (typeof window._syncLineGutterScroll === 'function') window._syncLineGutterScroll();
+        };
+        // Großbuchstaben im Code erzwingen — wandelt Kleinbuchstaben in Code-Bereichen
+        // automatisch in Großbuchstaben um. Kommentartext (alles ab `//` bis Zeilenende)
+        // bleibt unverändert, damit der Anwender dort frei formulieren kann.
+        window._setForceUpper = function(on) {
+            window._codeEditorSettings.forceUpper = !!on;
+            try { localStorage.setItem('valisCodeForceUpper', on ? '1' : '0'); } catch(_e) {}
+            if (on) {
+                try { window._applyForceUpper(); } catch(_e) {}
+            }
+        };
+        // Wandelt den aktuellen Textarea-Inhalt entsprechend der Regel um. Wird vom
+        // input-Listener aufgerufen und ist eine reine Idempotenz-Transformation —
+        // mehrfache Aufrufe ändern nichts mehr, wenn der Text bereits konform ist.
+        // Cursor- und Auswahl-Position werden erhalten, weil die Längen unverändert
+        // bleiben (Großbuchstabe ersetzt Kleinbuchstabe 1:1, Umlaute ebenfalls).
+        window._applyForceUpper = function() {
+            if (!window._codeEditorSettings || !window._codeEditorSettings.forceUpper) return;
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            const orig = ta.value;
+            if (!orig) return;
+            let out = '';
+            let inComment = false;
+            let changed = false;
+            for (let i = 0; i < orig.length; i++) {
+                const c = orig[i];
+                if (c === '\n') {
+                    inComment = false;
+                    out += c;
+                    continue;
+                }
+                if (!inComment && c === '/' && orig[i + 1] === '/') {
+                    inComment = true;
+                }
+                if (inComment) {
+                    out += c;
+                    continue;
+                }
+                // Kein Kommentar: Kleinbuchstaben hoch ziehen. ASCII a-z + Umlaute.
+                let up = c;
+                if (c >= 'a' && c <= 'z') {
+                    up = String.fromCharCode(c.charCodeAt(0) - 32);
+                } else if (c === 'ä') up = 'Ä';
+                else if (c === 'ö') up = 'Ö';
+                else if (c === 'ü') up = 'Ü';
+                if (up !== c) changed = true;
+                out += up;
+            }
+            if (!changed) return;
+            // Cursor/Selektion merken — Längen bleiben gleich, daher gefahrlos restaurierbar.
+            const cs = ta.selectionStart;
+            const ce = ta.selectionEnd;
+            ta.value = out;
+            try { ta.selectionStart = cs; ta.selectionEnd = ce; } catch(_e) {}
+        };
+        // === Code-Editor Rechtsklick-Menü ===
+        // Snippet-Library zum Einfügen + Standard-Aktionen (Markieren / Kopieren /
+        // Einfügen) + ggf. „Variable umbenennen" wenn der User mit der rechten Maus
+        // auf einem Identifier steht.
+        window._CODE_SNIPPETS = [
+            { label: 'RS-Flipflop (Setzen / Rücksetzen)',
+              code: 'S1 := START\nR1 := STOP || NOT_AUS\nA_MOTOR := Q1\n' },
+            { label: 'Start/Stop mit Selbsthalte',
+              code: 'A_MOTOR := (START || A_MOTOR) && ¬STOP && ¬NOT_AUS\n' },
+            { label: 'Einschalt-Verzögerung (TON)',
+              code: 'A_LAMPE := TON(E_TASTER, 2.0)\n' },
+            { label: 'Ausschalt-Verzögerung (TOF)',
+              code: 'A_LAMPE := TOF(E_TASTER, 1.5)\n' },
+            { label: 'Impuls (TP)',
+              code: 'A_PULS := TP(E_TASTER, 0.5)\n' },
+            { label: 'Vorwärtszähler (CTU)',
+              code: 'A_VOLL := CTU(E_ZAEHL, E_RESET, 10)\n' },
+            { label: 'Sicherheitskette (Not-Aus + Schutztür)',
+              code: 'BETRIEB := ¬NOT_AUS && SCHUTZTUER && BEREIT\n' }
+        ];
+        // Bei Rechtsklick auf der Textarea unser eigenes Menü zeigen.
+        textarea.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const menu = document.getElementById('code-ctx-menu');
+            if (!menu) return;
+            const ta = textarea;
+            // Aus der Klick-Position das Wort/Identifier unterm Cursor lesen, damit
+            // wir gezielt „Variable X umbenennen" anbieten können. Browser haben
+            // keine Position-→-Charakter-API für Textareas, also nutzen wir die
+            // selectionStart, die der Browser beim Rechtsklick auf die Klick-Position
+            // setzt (FF/Chrome verhalten sich dabei konsistent).
+            const cursor = ta.selectionStart;
+            const text   = ta.value;
+            const idLeft  = text.slice(0, cursor).match(/[A-Za-z_][A-Za-z0-9_]*$/);
+            const idRight = text.slice(cursor).match(/^[A-Za-z0-9_]*/);
+            let identifier = '';
+            if (idLeft || idRight) {
+                identifier = (idLeft ? idLeft[0] : '') + (idRight ? idRight[0] : '');
+                if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) identifier = '';
+            }
+            // Menü-Inhalt aufbauen.
+            let html = '';
+            const hasSelection = ta.selectionStart !== ta.selectionEnd;
+            html += `<div class="ctx-item" data-act="cut" ${hasSelection?'':'style="opacity:0.4;pointer-events:none;"'}>
+                        <span>Ausschneiden</span><span class="ctx-shortcut">Strg+X</span></div>`;
+            html += `<div class="ctx-item" data-act="copy" ${hasSelection?'':'style="opacity:0.4;pointer-events:none;"'}>
+                        <span>Kopieren</span><span class="ctx-shortcut">Strg+C</span></div>`;
+            html += `<div class="ctx-item" data-act="paste">
+                        <span>Einfügen</span><span class="ctx-shortcut">Strg+V</span></div>`;
+            html += `<div class="ctx-item" data-act="selectAll">
+                        <span>Alles markieren</span><span class="ctx-shortcut">Strg+A</span></div>`;
+            html += `<div class="ctx-sep"></div>`;
+            html += `<div class="ctx-item" data-act="comment">
+                        <span>Zeile (aus-)kommentieren</span><span class="ctx-shortcut">Strg+/</span></div>`;
+            // Rename nur bei echtem Identifier, der in globalInputs/Outputs/Sticky-Pool vorkommt.
+            if (identifier) {
+                const exists = (Array.isArray(globalInputs)  && globalInputs.includes(identifier))
+                            || (Array.isArray(globalOutputs) && globalOutputs.includes(identifier))
+                            || (window._stickyVars && window._stickyVars.has(identifier));
+                if (exists) {
+                    html += `<div class="ctx-item" data-act="rename" data-id="${identifier}">
+                                <span>Variable „${identifier}" umbenennen…</span></div>`;
+                }
+            }
+            html += `<div class="ctx-sep"></div>`;
+            html += `<div class="ctx-section">Snippet einfügen</div>`;
+            window._CODE_SNIPPETS.forEach((s, i) => {
+                html += `<div class="ctx-item" data-act="snippet" data-idx="${i}">
+                            <span>${s.label}</span></div>`;
+            });
+            menu.innerHTML = html;
+            // Klick-Position des Menüs.
+            menu.style.display = 'block';
+            const mw = menu.offsetWidth  || 220;
+            const mh = menu.offsetHeight || 200;
+            let left = e.clientX, top = e.clientY;
+            if (left + mw > window.innerWidth)  left = window.innerWidth  - mw - 4;
+            if (top  + mh > window.innerHeight) top  = window.innerHeight - mh - 4;
+            menu.style.left = left + 'px';
+            menu.style.top  = top  + 'px';
+            // Klicks auf die Items abfangen.
+            menu.querySelectorAll('.ctx-item').forEach(item => {
+                item.onclick = (ev) => {
+                    ev.stopPropagation();
+                    const act = item.getAttribute('data-act');
+                    window._codeCtxAction(act, item);
+                    menu.style.display = 'none';
+                };
+            });
+        });
+        // Outside-Click schließt das Menü.
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('code-ctx-menu');
+            if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const menu = document.getElementById('code-ctx-menu');
+                if (menu) menu.style.display = 'none';
+            }
+        });
+        // === Variable umbenennen (Refactor) ===
+        // Tauscht ALLE Vorkommen eines Identifiers im Code-Editor aus + zieht die
+        // Factory-Bindungen + Sticky-Pool-Einträge nach + bewahrt den componentTypes-
+        // Eintrag. Wird vom Code-Editor-Rechtsklick und vom Sim-Panel-Doppelklick
+        // genutzt.
+        window._renameVariable = function(oldName) {
+            if (!oldName) return;
+            const newName = prompt(`Variable „${oldName}" umbenennen in:`, oldName);
+            if (newName === null) return;
+            const clean = newName.trim();
+            if (clean === '' || clean === oldName) return;
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(clean)) {
+                alert('Ungültiger Variablenname.\nErlaubt: Buchstaben, Ziffern, Unterstrich. Beginnt mit Buchstabe oder Unterstrich.');
+                return;
+            }
+            // Konflikt-Check: existiert der neue Name schon irgendwo?
+            const exists = (Array.isArray(globalInputs)  && globalInputs.includes(clean))
+                        || (Array.isArray(globalOutputs) && globalOutputs.includes(clean))
+                        || (window._stickyVars && window._stickyVars.has(clean));
+            if (exists) {
+                if (!confirm(`„${clean}" existiert bereits. Trotzdem zusammenführen?\n(Alle Vorkommen von „${oldName}" werden auf „${clean}" umgeleitet.)`)) return;
+            }
+            // 1) Code-Text: Wort-Grenzen-Regex um Teil-Treffer zu vermeiden.
+            const re = new RegExp('\\b' + oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+            textarea.value = textarea.value.replace(re, clean);
+            // 2) componentTypes: alten Typ rüberziehen, alten Key löschen.
+            if (typeof componentTypes !== 'undefined' && componentTypes[oldName]) {
+                if (!componentTypes[clean]) componentTypes[clean] = componentTypes[oldName];
+                delete componentTypes[oldName];
+                try { localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes)); } catch(_e) {}
+            }
+            // 3) inputKeyBindings: Key-Binding mitziehen.
+            if (window.inputKeyBindings && window.inputKeyBindings[oldName]) {
+                if (!window.inputKeyBindings[clean]) window.inputKeyBindings[clean] = window.inputKeyBindings[oldName];
+                delete window.inputKeyBindings[oldName];
+                try { localStorage.setItem('valisKeyBindings', JSON.stringify(window.inputKeyBindings)); } catch(_e) {}
+            }
+            // 4) Sticky-Pool: alten Eintrag entfernen, neuer kommt beim nächsten Parse von selbst.
+            if (window._stickyVars && window._stickyVars.has(oldName)) {
+                window._stickyVars.delete(oldName);
+                window._committedOrphans.delete(oldName);
+                if (typeof window._saveStickyVarsToStorage === 'function') window._saveStickyVarsToStorage();
+            }
+            // 5) Factory-Bindungen: alle linkedVar*-Felder, die auf oldName zeigen, umlenken.
+            if (typeof factoryObjects !== 'undefined' && window._STICKY_LINKED_KEYS) {
+                let anyChange = false;
+                factoryObjects.forEach(obj => {
+                    let changed = false;
+                    window._STICKY_LINKED_KEYS.forEach(k => {
+                        if (obj[k] === oldName) { obj[k] = clean; changed = true; }
+                    });
+                    // Auch User-Removed-Marker mitziehen (selten, aber konsistent).
+                    if (obj._removedBindings) {
+                        Object.keys(obj._removedBindings).forEach(prop => {
+                            if (obj._removedBindings[prop] === oldName) {
+                                obj._removedBindings[prop] = clean;
+                                changed = true;
+                            }
+                        });
+                    }
+                    if (changed && typeof window._refreshFactoryLabel === 'function') window._refreshFactoryLabel(obj);
+                    if (changed) anyChange = true;
+                });
+                if (anyChange && typeof saveFactoryState === 'function') saveFactoryState();
+            }
+            // 6) Pipeline neu anstoßen: Highlighting, Parser, Sim-UI, Schaltplan.
+            textarea.dispatchEvent(new Event('input'));
+        };
+        // === Code-Sprung: zur Definitions-Zeile einer Variable scrollen ===
+        // Sucht die erste Zeile mit `NAME :=` (Zuweisung) oder die erste Verwendung.
+        // Setzt Cursor + scrollt zur Zeile + temporäres Highlight.
+        window._jumpToVariableDef = function(varName) {
+            if (!varName) return;
+            const ta = textarea;
+            const text = ta.value;
+            const lines = text.split('\n');
+            // Bevorzugt: Definitions-Zeile (links vom :=). Fallback: erstes Vorkommen.
+            const reDef = new RegExp('^\\s*' + varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*(?::=|=|<-|IST|GLEICH)', 'i');
+            const reAny = new RegExp('\\b' + varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+            let lineIdx = lines.findIndex(l => reDef.test(l));
+            if (lineIdx < 0) lineIdx = lines.findIndex(l => reAny.test(l));
+            if (lineIdx < 0) return false;
+            // Char-Offset der Zeile berechnen.
+            let offset = 0;
+            for (let i = 0; i < lineIdx; i++) offset += lines[i].length + 1;
+            // Cursor in die Zeile setzen + Editor fokussieren.
+            ta.focus();
+            ta.selectionStart = offset;
+            ta.selectionEnd   = offset + lines[lineIdx].length;
+            // Scrolle die Zeile in den sichtbaren Bereich.
+            const cs = getComputedStyle(ta);
+            const lineHeight = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.5);
+            const padTop = parseFloat(cs.paddingTop) || 0;
+            const target = padTop + lineIdx * lineHeight - ta.clientHeight / 2 + lineHeight;
+            ta.scrollTop = Math.max(0, target);
+            if (window._updateCurrentLineHighlight) window._updateCurrentLineHighlight();
+            return true;
+        };
+        window._codeCtxAction = function(act, item) {
+            const ta = textarea;
+            ta.focus();
+            if (act === 'cut') {
+                try { document.execCommand('cut'); } catch(_e) {}
+            } else if (act === 'copy') {
+                try { document.execCommand('copy'); } catch(_e) {}
+            } else if (act === 'paste') {
+                // Async-Clipboard ist sicherer in modernen Browsern; Fallback execCommand.
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    navigator.clipboard.readText().then(t => {
+                        const s = ta.selectionStart, e_ = ta.selectionEnd;
+                        ta.value = ta.value.slice(0,s) + t + ta.value.slice(e_);
+                        ta.selectionStart = ta.selectionEnd = s + t.length;
+                        ta.dispatchEvent(new Event('input'));
+                    }).catch(()=>{ try { document.execCommand('paste'); } catch(_e) {} });
+                } else {
+                    try { document.execCommand('paste'); } catch(_e) {}
+                }
+            } else if (act === 'selectAll') {
+                ta.select();
+            } else if (act === 'comment') {
+                // Synthetisches Strg+/-Keydown wäre fragil; rufen wir den Code direkt.
+                const ev = new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true });
+                ta.dispatchEvent(ev);
+            } else if (act === 'snippet') {
+                const idx = parseInt(item.getAttribute('data-idx'), 10);
+                const snip = window._CODE_SNIPPETS[idx];
+                if (!snip) return;
+                const s = ta.selectionStart, e_ = ta.selectionEnd;
+                ta.value = ta.value.slice(0,s) + snip.code + ta.value.slice(e_);
+                ta.selectionStart = ta.selectionEnd = s + snip.code.length;
+                ta.dispatchEvent(new Event('input'));
+            } else if (act === 'rename') {
+                const id = item.getAttribute('data-id');
+                if (id && typeof window._renameVariable === 'function') window._renameVariable(id);
+            }
+        };
+        window._openCodeEditorSettings = function(ev) {
+            if (ev) ev.stopPropagation();
+            const popup = document.getElementById('code-editor-settings-popup');
+            const btn   = document.getElementById('btn-code-editor-settings');
+            if (!popup || !btn) return;
+            if (popup.style.display === 'block') { popup.style.display = 'none'; return; }
+            // Werte in die Inputs übernehmen.
+            const ces = window._codeEditorSettings;
+            const set = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+            set('settings-line-numbers',   ces.lineNumbers);
+            set('settings-no-wrap',        ces.noWrap);
+            set('settings-highlight-line', ces.highlightLine);
+            set('settings-bracket-match',  ces.bracketMatch);
+            set('settings-indent-guides',  ces.indentGuides);
+            set('settings-autocomplete',   ces.autocomplete);
+            set('settings-force-upper',    ces.forceUpper);
+            const fsInp = document.getElementById('settings-font-size');
+            const fsVal = document.getElementById('settings-font-size-val');
+            if (fsInp) fsInp.value = ces.fontSize || 13;
+            if (fsVal) fsVal.textContent = (ces.fontSize || 13) + ' px';
+            // Position rechts-am-Button-bündig unter dem Header platzieren.
+            const r = btn.getBoundingClientRect();
+            popup.style.display = 'block';
+            const w = popup.offsetWidth || 280;
+            let left = r.right - w;
+            if (left < 8) left = 8;
+            const maxLeft = window.innerWidth - w - 8;
+            if (left > maxLeft) left = maxLeft;
+            popup.style.left = left + 'px';
+            popup.style.top  = (r.bottom + 4) + 'px';
+        };
+        // Outside-Click schließt das Popup. Auf document, damit Clicks irgendwo
+        // außerhalb durchkommen — der Button selbst stoppt Propagation.
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('code-editor-settings-popup');
+            if (!popup || popup.style.display !== 'block') return;
+            if (popup.contains(e.target)) return;
+            const btn = document.getElementById('btn-code-editor-settings');
+            if (btn && btn.contains(e.target)) return;
+            popup.style.display = 'none';
+        });
 
         // Initialer Inspector-Refresh, falls beim Laden bereits Code vorhanden ist
         setTimeout(() => { try { window._updateCodeInspector(); } catch(e){} }, 200);
@@ -8513,46 +9680,46 @@ You must output exactly this JSON format. The logic code goes as a single string
             const usedAsSource = new Set(graph ? graph.edges.map(e => e.sourceId) : []);
             // Cleanup-Button-HTML — wird in beide Header injiziert. Klick = sanft (ohne
             // Bindungen weg), STRG+Klick = aggressiv (alle verwaisten, Bindungen werden
-            // rot markiert). Deaktiviert, wenn keine verwaisten Variablen existieren.
+            // rot markiert). Komplett ausgeblendet, wenn keine verwaisten Variablen
+            // existieren (z.B. bei aktivem hartem Auto-Aufräumen ist das praktisch immer).
             const _orphanCount = (window._committedOrphans && window._committedOrphans.size) || 0;
-            const _cleanupBtnHTML = `<button class="sim-cleanup-btn" title="Verwaiste Variablen aufräumen (STRG+Klick = aggressiv, auch mit Bindungen)" `
-                + `onclick="event.ctrlKey||event.metaKey?_cleanupStickyVars('aggressive'):_cleanupStickyVars('soft')" `
-                + (_orphanCount === 0 ? 'disabled' : '') + `>🧹 Aufräumen (${_orphanCount})</button>`;
+            const _cleanupBtnHTML = _orphanCount > 0
+                ? `<button class="sim-cleanup-btn" title="Verwaiste Variablen aufräumen (STRG+Klick = aggressiv, auch mit Bindungen)" `
+                  + `onclick="event.ctrlKey||event.metaKey?_cleanupStickyVars('aggressive'):_cleanupStickyVars('soft')">`
+                  + `🧹 Aufräumen (${_orphanCount})</button>`
+                : '';
             // 🌟 i18n Übersetzung für Header und Hinweis
             simInputsContainer.innerHTML = `<h3>${window.t('sim_inputs')}${_cleanupBtnHTML}</h3><div class="sim-hint">${window.t('sim_hint')}</div>`;
-            inputs.forEach(name => {
+            // Reihenfolge gemäß User-Setting (Code/Alpha/Typ).
+            const _orderedInputs = (typeof window._orderSimVars === 'function')
+                ? window._orderSimVars(inputs, 'in') : Array.from(inputs);
+            // Pro-Eingang Row-Builder. Liefert HTML-String, der vom Caller ans
+            // simInputsContainer-innerHTML angehängt wird.
+            const _buildInputRow = (name) => {
                 if (!componentTypes[name]) {
                     const isNotHalt = name === 'NH' || name === 'NA' || name.startsWith('NH_') || name.startsWith('NA_') || name.includes('NOTHALT') || name.includes('NOTAUS');
                     const isSchalter = name.includes('_SCHALTER');
                     componentTypes[name] = isNotHalt ? 'nothalt' : (isSchalter ? 'schalter' : 'taster');
                 }
                 let cType = componentTypes[name];
-                // Mode-abhängig: SPS-Modus invertiert die Variable für NC-Hardware (Ruhe=true),
-                // E-Pneu-Modus repräsentiert physischen Press-Zustand (Ruhe=false).
                 let isNCContact = window._variableIsNCInverted(cType);
                 let isMomentary = (cType === 'taster' || cType === 'taster_nc');
                 if (oldState.hasOwnProperty(name) && !isMomentary) {
-                    // Switches/sensors keep their state; tasters always reset to resting state
                     spsState[name] = oldState[name];
                 } else {
                     spsState[name] = isNCContact ? true : false;
                 }
                 let isActuated = isNCContact ? !spsState[name] : spsState[name];
                 let isSwitchUI = (cType === 'schalter' || cType === 'schalter_nc' || cType === 'nothalt' || cType === 'key_switch' || cType === 'light_curtain' || cType.startsWith('sensor_'));
-                // Eingänge-Dropdown — Optionen kommen aus window._inputTypeOptions, das im
-                // E-Pneumatik-Modus andere Labels liefert (Logischer Taster statt Taster (Schließer)).
                 let _optsHTML = window._inputTypeOptions(cType)
                     .map(([v, lbl]) => `<option value="${v}"${v === cType ? ' selected' : ''}>${lbl}</option>`)
                     .join('');
                 let selectHTML = `<select class="type-select" onchange="changeType('${name}', this.value)">${_optsHTML}</select>`;
-                let controlHTML = isSwitchUI 
+                let controlHTML = isSwitchUI
                     ? `<label class="switch"><input type="checkbox" id="sim_in_${name}" ${isActuated ? 'checked' : ''} onchange="toggleInput('${name}')"><span class="slider"></span></label>`
                     : `<button class="taster-btn ${isActuated ? 'pressed' : ''}" id="sim_taster_${name}" onmousedown="setTaster('${name}', true, event)" onmouseup="setTaster('${name}', false, event)" onmouseleave="setTaster('${name}', false, event)" ontouchstart="setTaster('${name}', true, event)" ontouchend="setTaster('${name}', false, event)">${window.t('btn_pushbutton')}</button>`;
                 let _bk = window.inputKeyBindings[name]; let boundKey = _bk ? `[${_bk === ' ' ? '␣' : _bk.toUpperCase()}]` : '⌨️';
                 let keyBtnHTML = `<button id="btn_key_${name}" class="key-bind-btn" onclick="assignKey('${name}')" title="Klicken, um Taste zuzuweisen (Entf zum Löschen)">${boundKey}</button>`;
-                // ⚠️-Marker: zeigt an, dass diese Variable mindestens einem 2D-Bauteil
-                // zugewiesen ist, dessen Bauteil-Typ nicht zum Komponenten-Typ passt
-                // (Variable wurde aus „Andere Variablen" im Zuweisungs-Menü gewählt).
                 const _mmIn = window._fctFindMismatchedAssignmentsForVar
                     ? window._fctFindMismatchedAssignmentsForVar(name) : [];
                 const _mmInLabels = _mmIn.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
@@ -8560,47 +9727,68 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmInLabels.join('&#10;• ')}`
                     : '';
                 const _mmInHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmIn.length > 0 ? '' : 'display:none;'}" title="${_mmInTitle}">⚠️</span>`;
-                simInputsContainer.innerHTML += `<div class="switch-row flex-col">
-                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
+                // .sim-var-name: clickable Variablen-Span (Click=Code-Sprung, Dblclick=Rename).
+                return `<div class="switch-row flex-col">
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;">${controlHTML}</div>
                 </div>`;
-            });
+            };
+            // Entweder gruppiert oder flach rendern.
+            if (window._simGroup) {
+                const groups = window._groupSimVars(_orderedInputs, 'in');
+                groups.forEach(grp => {
+                    simInputsContainer.innerHTML += `<div class="sim-group-header">${grp.name}</div>`;
+                    grp.items.forEach(name => { simInputsContainer.innerHTML += _buildInputRow(name); });
+                });
+            } else {
+                _orderedInputs.forEach(name => { simInputsContainer.innerHTML += _buildInputRow(name); });
+            }
             // 🌟 i18n Übersetzung für die Ausgänge
             simOutputsContainer.innerHTML = `<h3>${window.t('sim_outputs')}${_cleanupBtnHTML}</h3>`;
-            outputs.forEach(name => {
-                if(!name.match(/^[SR]\d+(_(?:SR|RS))?$/i)) {
-                    spsState[name] = oldState[name] || false;
-                    let selectHTML = "";
-                    if (name.match(/^Q\d+(_(?:SR|RS))?$/i)) {
-                        componentTypes[name] = 'relais'; 
-                        let lbl = name.includes('_SR') ? window.t('lbl_sr_out') : window.t('lbl_rs_out');
-                        selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${lbl}</span>`;
-                    } else if (usedAsSource.has(name)) {
-                        componentTypes[name] = 'relais'; 
-                        selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${window.t('lbl_aux_relay')}</span>`;
-                    } else {
-                        if (!componentTypes[name]) componentTypes[name] = 'led';
-                        let cType = componentTypes[name];
-                        // Output-Optionen via Helper (modus-abhängig: Redstone vs. normal).
-                        let _outOptsHTML = window._outputTypeOptions(cType)
-                            .map(([v, lbl]) => `<option value="${v}"${v === cType ? ' selected' : ''}>${lbl}</option>`)
-                            .join('');
-                        selectHTML = `<select class="type-select" onchange="changeType('${name}', this.value)">${_outOptsHTML}</select>`;
-                    }
-                    // ⚠️-Marker für Ausgänge — analog zu den Eingängen, gleiche Logik.
-                    const _mmOut = window._fctFindMismatchedAssignmentsForVar
-                        ? window._fctFindMismatchedAssignmentsForVar(name) : [];
-                    const _mmOutLabels = _mmOut.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
-                    const _mmOutTitle = _mmOut.length > 0
-                        ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
-                        : '';
-                    const _mmOutHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmOut.length > 0 ? '' : 'display:none;'}" title="${_mmOutTitle}">⚠️</span>`;
-                    simOutputsContainer.innerHTML += `<div class="led-row flex-col">
-                        <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;"><span style="text-overflow:ellipsis; overflow:hidden;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
-                        <div class="flex-row-between" style="justify-content: flex-end;"><div class="led" id="sim_out_${name}"></div></div>
-                    </div>`;
+            // S/R-Pin-Variablen vorab filtern (werden in der UI nicht gezeigt), dann
+            // gemäß Sort-Setting ordnen.
+            const _outputsFiltered = outputs.filter(name => !name.match(/^[SR]\d+(_(?:SR|RS))?$/i));
+            const _orderedOutputs = (typeof window._orderSimVars === 'function')
+                ? window._orderSimVars(_outputsFiltered, 'out') : _outputsFiltered;
+            const _buildOutputRow = (name) => {
+                spsState[name] = oldState[name] || false;
+                let selectHTML = "";
+                if (name.match(/^Q\d+(_(?:SR|RS))?$/i)) {
+                    componentTypes[name] = 'relais';
+                    let lbl = name.includes('_SR') ? window.t('lbl_sr_out') : window.t('lbl_rs_out');
+                    selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${lbl}</span>`;
+                } else if (usedAsSource.has(name)) {
+                    componentTypes[name] = 'relais';
+                    selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${window.t('lbl_aux_relay')}</span>`;
+                } else {
+                    if (!componentTypes[name]) componentTypes[name] = 'led';
+                    let cType = componentTypes[name];
+                    let _outOptsHTML = window._outputTypeOptions(cType)
+                        .map(([v, lbl]) => `<option value="${v}"${v === cType ? ' selected' : ''}>${lbl}</option>`)
+                        .join('');
+                    selectHTML = `<select class="type-select" onchange="changeType('${name}', this.value)">${_outOptsHTML}</select>`;
                 }
-            });
+                const _mmOut = window._fctFindMismatchedAssignmentsForVar
+                    ? window._fctFindMismatchedAssignmentsForVar(name) : [];
+                const _mmOutLabels = _mmOut.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
+                const _mmOutTitle = _mmOut.length > 0
+                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
+                    : '';
+                const _mmOutHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmOut.length > 0 ? '' : 'display:none;'}" title="${_mmOutTitle}">⚠️</span>`;
+                return `<div class="led-row flex-col">
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;"><span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
+                    <div class="flex-row-between" style="justify-content: flex-end;"><div class="led" id="sim_out_${name}"></div></div>
+                </div>`;
+            };
+            if (window._simGroup) {
+                const groups = window._groupSimVars(_orderedOutputs, 'out');
+                groups.forEach(grp => {
+                    simOutputsContainer.innerHTML += `<div class="sim-group-header">${grp.name}</div>`;
+                    grp.items.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+                });
+            } else {
+                _orderedOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+            }
             // 🔒 Verwaiste (sticky-aber-nicht-im-Code) Variablen anhängen — grau/kursiv,
             // mit „verwaist"-Badge und Trash-Icon. Eingaben oben, Ausgaben unten.
             if (window._stickyVars && window._committedOrphans && window._committedOrphans.size > 0) {
@@ -13456,6 +14644,38 @@ You must output exactly this JSON format. The logic code goes as a single string
             const lg = document.getElementById('check-result-legend');
             if (lg) { lg.classList.remove('active'); lg.innerHTML = ''; }
         }
+        // Sammel-Reset für die Fehler-/Check-Anzeige im Code-Editor. Wird von
+        // Code-Frischstart-Pfaden (Beispiel laden, Projekt importieren) aufgerufen,
+        // weil ein direktes `textarea.value = …` kein input-Event auslöst und der
+        // Auto-Clear-Hook daher nicht greift. Räumt:
+        // - _codeCheckResult (grün/gelb/rot-Marker aus Aufgaben-Check)
+        // - _customErrorExplanations (Erklärungen zu Custom-Cross-Line-Fehlern)
+        // - _errorLines (defensiv — werden gleich neu gefüllt, aber falls Parse
+        //   wirft, soll nichts vom alten Code überleben)
+        // - das Missing-Badge oben rechts im Editor
+        // - die Check-Result-Legende
+        // - ein evtl. offenes Error-Popup
+        window._resetCodeErrorUI = function() {
+            window._codeCheckResult = null;
+            if (window._customErrorExplanations && typeof window._customErrorExplanations.clear === 'function') {
+                window._customErrorExplanations.clear();
+            }
+            window._errorLines = new Set();
+            if (window._infoLines && typeof window._infoLines.clear === 'function') window._infoLines.clear();
+            const mb = document.getElementById('editor-missing-badge');
+            if (mb) mb.style.display = 'none';
+            if (typeof _hideCheckLegend === 'function') _hideCheckLegend();
+            if (typeof window._hideErrorPopup === 'function') window._hideErrorPopup();
+            // Error-Gutter-DOM direkt leeren. Die Icons werden sonst nur durch das
+            // input/keyup/scroll/resize-Event auf der Textarea aufgefrischt — beim
+            // programmatischen `textarea.value = …` feuert keines davon, und die alten
+            // Icons (mit rotem Glow, der visuell auf die Zeile blutet) bleiben hängen.
+            const gutter = document.getElementById('error-gutter');
+            if (gutter) {
+                gutter.innerHTML = '';
+                gutter._activeLine = null;
+            }
+        };
 
         // Auto-Clear: Bei Code-Änderung verschwinden alle Check-Markierungen.
         // Außerdem: Tipp-Button-Status aktualisieren (Markierbarkeit kann sich geändert haben).
@@ -14475,6 +15695,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
+                // currentGraph FRÜH zuweisen — der Sticky-Pool und _pruneStaleLinkedVars
+                // konsultieren ihn über _getTimerCounterIds(), um z.B. CTU_BOX_FULL nicht
+                // als verwaist zu flaggen, obwohl die Counter-Zeile aktiv im Code steht.
+                currentGraph = parsed.graph;
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
@@ -14489,7 +15713,6 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (typeof window._pruneStaleLinkedVars === 'function') window._pruneStaleLinkedVars();
                 window.circDuplicateOutputs = parsed.duplicates || [];
                 if (activeTask && !taskSolved) window._taskCheckConditions?.();
-                currentGraph = parsed.graph;
                 calculateLayout(parsed.graph);
                 let pFbs = customSvg.closest('.workspace-panel') || document.getElementById('fbs-wrapper');
                 if (pFbs && pFbs.style.display !== 'none') {
@@ -17441,7 +18664,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         <div class="f2d-siren-wave"></div>
                         <div class="f2d-siren-wave" style="animation-delay: 0.5s"></div>
                     `;
-                    let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Hupe (${var1})`; el.appendChild(label);
+                    let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Hupe (${var1 || '---'})`; el.appendChild(label);
                     let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
                     obj.useCollision = false;
                 },
@@ -22803,9 +24026,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 obj.rodEl = rod; obj.magnetEl = magnet;
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer;
                 let valve = document.createElement('div'); valve.className = 'f2d-valve';
-                if (type === 'zylinder_single') valve.innerHTML = `<span>▶ ${var1}</span><span>(Feder) ◀</span>`; else valve.innerHTML = `<span>▶ ${var1}</span><span style="color:#f44336;">|</span><span>${var2} ◀</span>`;
+                // Defensiv: null/undefined sauber in '' fallback, sonst rendert ${null}
+                // literal als "null" und bleibt nach Reload sichtbar.
+                const _v1 = var1 || ''; const _v2 = var2 || '';
+                if (type === 'zylinder_single') valve.innerHTML = `<span>▶ ${_v1}</span><span>(Feder) ◀</span>`; else valve.innerHTML = `<span>▶ ${_v1}</span><span style="color:#f44336;">|</span><span>${_v2} ◀</span>`;
                 housing.appendChild(magnet); el.appendChild(rod); el.appendChild(housing); el.appendChild(resizer); el.appendChild(valve);
-                let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Zyl (${var1})`; el.appendChild(label);
+                let label = document.createElement('div'); label.className = 'f2d-label'; label.textContent = `Zyl (${_v1})`; el.appendChild(label);
             } else if (type === 'conveyor') {
                 obj.linkedVar = var1; obj.width = 200; obj.height = 40; obj.beltOffset = 0; 
                 el.className = 'f2d-obj f2d-conveyor'; el.style.width = obj.width + 'px';
@@ -23418,6 +24644,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                             } else { sel.value = obj[varProp] || ''; return; }
                         }
                         obj[varProp] = (sel.value && sel.value !== '__new__') ? sel.value : null;
+                        // User-Removed-Warnung für diesen Slot löschen, sobald der User
+                        // aktiv eingreift (Neu-Zuweisung ODER bewusstes Entfernen
+                        // via „— Variable entfernen —"). Beides löst die ursprüngliche
+                        // Warnung „hier war mal X" sinnvoll auf.
+                        if (obj._removedBindings && obj._removedBindings[varProp]) {
+                            delete obj._removedBindings[varProp];
+                            if (Object.keys(obj._removedBindings).length === 0) delete obj._removedBindings;
+                        }
                         if (typeof window._refreshFactoryLabel === 'function') window._refreshFactoryLabel(obj);
                         saveFactoryState();
                         // Code-First: Variable in Code eintragen wenn noch nicht vorhanden
@@ -26558,7 +27792,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     torView: o.torView || null, torSpeed: o.torSpeed !== undefined ? o.torSpeed : null,
                     linkedVarSensorAuf: o.linkedVarSensorAuf || null, linkedVarSensorZu: o.linkedVarSensorZu || null,
                     torNoEndstop: o.torNoEndstop || false,
-                    noteHTML: o.noteHTML || null, noteTextColor: o.noteTextColor || null, noteBgColor: o.noteBgColor || null, noteFontSize: o.noteFontSize || null
+                    noteHTML: o.noteHTML || null, noteTextColor: o.noteTextColor || null, noteBgColor: o.noteBgColor || null, noteFontSize: o.noteFontSize || null,
+                    _removedBindings: (o._removedBindings && Object.keys(o._removedBindings).length > 0) ? o._removedBindings : null
                 })),
                 pneuConnections:     window.pneuConnections     || [],
                 fluidPipeConnections: window.fluidPipeConnections || [],
@@ -26600,19 +27835,40 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (!obj || !obj.el) return;
             let v1 = obj.linkedVar || obj.linkedVarExt || '';
             let v2 = obj.linkedVarRet || '';
+            let v3 = obj.linkedVar3 || '';
+            const t = obj.type;
+            // 1) Plugin-Hook hat Vorrang. Plugins können `refreshLabel(obj, v1, v2, v3)`
+            //    registrieren, um ihre eigene (oft individuelle) Label-Logik abzubilden.
+            //    Wenn das Plugin nicht explizit `false` zurückgibt, sind wir fertig.
+            if (typeof ComponentRegistry !== 'undefined' && t && ComponentRegistry[t]
+                && typeof ComponentRegistry[t].refreshLabel === 'function') {
+                try {
+                    if (ComponentRegistry[t].refreshLabel(obj, v1, v2, v3) !== false) return;
+                } catch(_e) { /* Plugin-Fehler nicht propagieren */ }
+            }
+            // 2) Bekannte Built-in-Pattern für Kern-Bauteile und Standard-Plugins.
             let lbl = obj.el.querySelector('.f2d-label');
             if (lbl) {
-                if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(obj.type)) lbl.textContent = v1 || '---';
-                else if (obj.type.startsWith('sensor_') || obj.type === 'bottle_sensor') lbl.textContent = v1 || '---';
-                else if (obj.type.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
-                else if (obj.type === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
-                else if (obj.type.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
-                else if (obj.type === 'rolltor') lbl.textContent = v1 ? `🚧 ${v1}` : '🚧 Rolltor';
+                if (['taster', 'schalter', 'nothalt', 'led', 'key_switch'].includes(t)) lbl.textContent = v1 || '---';
+                else if (t && (t.startsWith('sensor_') || t === 'bottle_sensor' || t === 'mech_sensor' || t === 'light_curtain' || t === 'heater')) lbl.textContent = v1 || '---';
+                else if (t && t.startsWith('zylinder')) lbl.textContent = `Zyl (${v1})`;
+                else if (t === 'conveyor') lbl.textContent = v1 ? `Band (${v1})` : 'Band (Immer AN)';
+                else if (t && t.startsWith('spawner_')) lbl.textContent = v1 ? `${v1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
+                else if (t === 'rolltor') lbl.textContent = v1 ? `🚧 ${v1}` : '🚧 Rolltor';
+                else if (t === 'siren') lbl.textContent = `Hupe (${v1 || '---'})`;
+                else if (t === 'inspection_camera' || t === 'insp_cam') lbl.textContent = v1 ? `📷 (${v1})` : '📷 Kamera';
+                // 3) Fallback für Plugin-Komponenten ohne spezifisches Pattern: einfach
+                //    den Variablennamen anzeigen. Plugins, deren Label-Format komplexer
+                //    ist (Roboter-Achsen, Mehrkomponenten etc.), sollten refreshLabel
+                //    implementieren.
+                else if (typeof ComponentRegistry !== 'undefined' && t && ComponentRegistry[t]) {
+                    lbl.textContent = v1 || '---';
+                }
             }
             let valve = obj.el.querySelector('.f2d-valve');
             if (valve) {
-                if (obj.type === 'zylinder_single') valve.innerHTML = `<span>▶ ${v1}</span><span>(Feder) ◀</span>`;
-                else if (obj.type === 'zylinder_double') valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
+                if (t === 'zylinder_single') valve.innerHTML = `<span>▶ ${v1}</span><span>(Feder) ◀</span>`;
+                else if (t === 'zylinder_double') valve.innerHTML = `<span>▶ ${v1}</span><span style="color:#f44336;">|</span><span>${v2} ◀</span>`;
             }
         };
         // ==========================================
@@ -26650,6 +27906,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             'linkedVarWind','linkedVarWindSensor','linkedVarPendel',
             'linkedVarSensorAuf','linkedVarSensorZu','cycleCountVar'
         ];
+        // Validator: nur echte SPS-Variablen-Namen dürfen in den Sticky-Pool.
+        // Muss mit Buchstabe/Underscore beginnen, nur alphanumerisch + Underscore.
+        // Filtert Whitespace-Strings, Sonderwerte ('solid', 'normal' für Spawner),
+        // Bool-Literale und alles, was kein gültiger Identifier ist.
+        window._isValidStickyName = function(name) {
+            return typeof name === 'string'
+                && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+                && name !== 'solid' && name !== 'normal'
+                && name !== 'true'  && name !== 'false';
+        };
         // Map<varName, { role:'in'|'out', compType:string }>
         window._stickyVars = new Map();
         // Set<varName> — Variablen, die als verwaist im UI sichtbar werden sollen.
@@ -26667,15 +27933,22 @@ You must output exactly this JSON format. The logic code goes as a single string
         window._STICKY_PROMOTE_MS = 2500;
         // Auto-Aufräumen-Modus (User-Setting): wenn true, werden auch verwaiste
         // Variablen OHNE Bauteil-Bindung stumm entfernt (statt als Verwaist-Zeile
-        // angezeigt). Mit Bindung bleiben sie immer sichtbar, damit keine Bauteil-
-        // Verknüpfungen unbemerkt verschwinden.
-        window._stickyAutoCleanup = false;
+        // angezeigt). Mit Bindung bleiben sie sichtbar — es sei denn, der „harte"
+        // Modus ist zusätzlich aktiv, dann werden auch gebundene entfernt (Bauteile
+        // glühen danach rot wegen fehlender Variable).
+        // Auto-Aufräumen: Standard AN (nur explizites '0' im localStorage schaltet es ab).
+        // Hartes Auto-Aufräumen bleibt AUS (destruktiv — würde auch gebundene Bauteile lösen).
+        window._stickyAutoCleanup = true;
+        window._stickyAutoCleanupHard = false;
         window._stickyDebounceTimer = null;
         // User-Settings aus localStorage initialisieren (Defaults fallen zurück).
         (function _initStickySettings() {
             try {
                 const ac = localStorage.getItem('valisStickyAutoCleanup');
-                if (ac === '1') window._stickyAutoCleanup = true;
+                if (ac === '0') window._stickyAutoCleanup = false;
+                else if (ac === '1') window._stickyAutoCleanup = true;
+                const ah = localStorage.getItem('valisStickyAutoCleanupHard');
+                if (ah === '1') window._stickyAutoCleanupHard = true;
                 const ms = parseInt(localStorage.getItem('valisStickyCarenzMs'), 10);
                 if (Number.isFinite(ms) && ms >= 200 && ms <= 60000) {
                     window._STICKY_DEBOUNCE_MS = ms;
@@ -26685,12 +27958,117 @@ You must output exactly this JSON format. The logic code goes as a single string
         })();
         // Setter, die das Setting persistieren und (für Karenzzeit) auch alle laufenden
         // Timer neu starten, damit die neue Schwelle sofort greift.
+        // Sim-Panel-Anzeige-Settings: Sortierung + Gruppierung. Standard-Defaults
+        // entsprechen dem bisherigen Verhalten (Code-Reihenfolge, keine Gruppen).
+        window._simSort  = localStorage.getItem('valisSimSort') || 'code';
+        window._simGroup = localStorage.getItem('valisSimGroup') === '1';
+        window._setSimSort = function(mode) {
+            if (!['code','alpha','type'].includes(mode)) return;
+            window._simSort = mode;
+            try { localStorage.setItem('valisSimSort', mode); } catch(_e) {}
+            // Sim-UI neu zeichnen.
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
+        };
+        window._setSimGroup = function(on) {
+            window._simGroup = !!on;
+            try { localStorage.setItem('valisSimGroup', on ? '1' : '0'); } catch(_e) {}
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
+            }
+        };
+        // Hilfsfunktion: gibt die richtige Reihenfolge der Variablen für die Sim-UI
+        // zurück (kopiert das Original-Array, damit es nicht in-place sortiert wird).
+        // role: 'in' für Inputs, 'out' für Outputs — relevant für die Typ-Gruppe.
+        window._orderSimVars = function(names, role) {
+            const arr = Array.from(names);
+            const mode = window._simSort || 'code';
+            if (mode === 'alpha') {
+                arr.sort((a,b) => a.localeCompare(b));
+            } else if (mode === 'type') {
+                const typeRank = (name) => {
+                    const t = (typeof componentTypes !== 'undefined') ? componentTypes[name] : undefined;
+                    if (role === 'in') {
+                        if (t === 'nothalt') return 0;
+                        if (t === 'taster' || t === 'taster_nc') return 1;
+                        if (t === 'schalter' || t === 'schalter_nc' || t === 'key_switch') return 2;
+                        if (t && t.startsWith('sensor_')) return 3;
+                        if (t === 'light_curtain' || t === 'mech_sensor') return 3;
+                        return 9;
+                    } else {
+                        if (t === 'relais') return 9;       // Hilfsrelais zuletzt
+                        if (t === 'led') return 0;
+                        if (t === 'siren' || t === 'heater') return 1;
+                        if (t === 'motor' || t === 'contactor' || t === 'conveyor') return 2;
+                        if (t === 'valve') return 3;
+                        return 4;
+                    }
+                };
+                arr.sort((a,b) => {
+                    const ra = typeRank(a), rb = typeRank(b);
+                    if (ra !== rb) return ra - rb;
+                    return a.localeCompare(b);
+                });
+            }
+            // 'code' → kein Sort, Reihenfolge bleibt wie übergeben.
+            return arr;
+        };
+        // Gruppierungs-Buckets für die Sub-Überschriften. role: 'in'/'out'.
+        window._groupSimVars = function(names, role) {
+            const groups = {};
+            const groupOrder = role === 'in'
+                ? ['Not-Aus', 'Taster', 'Schalter', 'Sensoren', 'Sonstige']
+                : ['LEDs', 'Sirenen / Heizungen', 'Motoren / Bänder', 'Ventile', 'Hilfsrelais', 'Sonstige'];
+            const bucket = (name) => {
+                const t = (typeof componentTypes !== 'undefined') ? componentTypes[name] : undefined;
+                if (role === 'in') {
+                    if (t === 'nothalt') return 'Not-Aus';
+                    if (t === 'taster' || t === 'taster_nc') return 'Taster';
+                    if (t === 'schalter' || t === 'schalter_nc' || t === 'key_switch') return 'Schalter';
+                    if ((t && t.startsWith('sensor_')) || t === 'light_curtain' || t === 'mech_sensor') return 'Sensoren';
+                    return 'Sonstige';
+                } else {
+                    if (t === 'relais') return 'Hilfsrelais';
+                    if (t === 'led') return 'LEDs';
+                    if (t === 'siren' || t === 'heater') return 'Sirenen / Heizungen';
+                    if (t === 'motor' || t === 'contactor' || t === 'conveyor') return 'Motoren / Bänder';
+                    if (t === 'valve') return 'Ventile';
+                    return 'Sonstige';
+                }
+            };
+            names.forEach(n => {
+                const g = bucket(n);
+                if (!groups[g]) groups[g] = [];
+                groups[g].push(n);
+            });
+            // Innerhalb jeder Gruppe alphabetisch sortieren.
+            Object.keys(groups).forEach(g => groups[g].sort());
+            return groupOrder.filter(g => groups[g] && groups[g].length).map(g => ({ name: g, items: groups[g] }));
+        };
         window._setStickyAutoCleanup = function(on) {
             window._stickyAutoCleanup = !!on;
             try { localStorage.setItem('valisStickyAutoCleanup', on ? '1' : '0'); } catch(_e) {}
+            // UI-Sync: harte Checkbox je nach Auto-Modus enabled/disabled + visuell
+            // klar (Opacity der Zeile). Beim Ausschalten von Auto wird die Hart-
+            // Checkbox optisch deaktiviert, der gespeicherte Wert bleibt aber erhalten.
+            const hardRow = document.getElementById('settings-auto-cleanup-hard-row');
+            const hardCb  = document.getElementById('settings-auto-cleanup-hard');
+            if (hardRow) hardRow.style.opacity = on ? '1' : '0.45';
+            if (hardCb)  hardCb.disabled = !on;
             // Wenn gerade aktiviert: sofort einmal eine Cleanup-Runde laufen lassen,
-            // damit bestehende ungebundene Verwaiste verschwinden.
+            // damit bestehende Verwaiste passend zur Modus-Konfiguration verschwinden.
             if (on && typeof window._stickyAutoCleanupSweep === 'function') {
+                window._stickyAutoCleanupSweep();
+            }
+        };
+        window._setStickyAutoCleanupHard = function(on) {
+            window._stickyAutoCleanupHard = !!on;
+            try { localStorage.setItem('valisStickyAutoCleanupHard', on ? '1' : '0'); } catch(_e) {}
+            // Beim Aktivieren des harten Modus (nur sinnvoll, wenn Auto an) direkt
+            // einen Sweep nachziehen — sonst bleiben aktuell sichtbare gebundene
+            // Verwaiste stehen, bis der nächste Code-Edit kommt.
+            if (on && window._stickyAutoCleanup && typeof window._stickyAutoCleanupSweep === 'function') {
                 window._stickyAutoCleanupSweep();
             }
         };
@@ -26716,6 +28094,13 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Aktuelle Werte in die Inputs übernehmen, bevor wir das Popup zeigen.
             const ac = document.getElementById('settings-auto-cleanup');
             if (ac) ac.checked = !!window._stickyAutoCleanup;
+            const ah = document.getElementById('settings-auto-cleanup-hard');
+            if (ah) {
+                ah.checked  = !!window._stickyAutoCleanupHard;
+                ah.disabled = !window._stickyAutoCleanup;
+            }
+            const ahRow = document.getElementById('settings-auto-cleanup-hard-row');
+            if (ahRow) ahRow.style.opacity = window._stickyAutoCleanup ? '1' : '0.45';
             const ms = window._STICKY_DEBOUNCE_MS || 2500;
             const inpN = document.getElementById('settings-carenz-num');
             const inpS = document.getElementById('settings-carenz-slider');
@@ -26748,17 +28133,23 @@ You must output exactly this JSON format. The logic code goes as a single string
         // Modus aufgerufen und am Ende von _updateStickyAndRefresh, falls der Modus an ist).
         window._stickyAutoCleanupSweep = function() {
             if (!window._stickyAutoCleanup) return;
-            let mapChanged = false, visualChanged = false;
+            let mapChanged = false, visualChanged = false, totalBindings = 0;
             const toRemove = [];
             window._committedOrphans.forEach(name => {
-                if (window._findFactoryBindingsForVar(name).length === 0) toRemove.push(name);
+                // Sanft: nur ohne Bindung. Hart: alle.
+                if (window._stickyAutoCleanupHard ||
+                    window._findFactoryBindingsForVar(name).length === 0) {
+                    toRemove.push(name);
+                }
             });
             toRemove.forEach(name => {
-                window._stickyVars.delete(name);
-                window._committedOrphans.delete(name);
+                totalBindings += window._removeStickyVarHard(name);
                 mapChanged = true; visualChanged = true;
             });
             if (mapChanged) window._saveStickyVarsToStorage();
+            if (totalBindings > 0 && typeof saveFactoryState === 'function') {
+                try { saveFactoryState(); } catch(_e) {}
+            }
             if (visualChanged) {
                 if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
                     try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
@@ -26775,7 +28166,22 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!raw) return;
                 const data = JSON.parse(raw);
                 if (!data || !Array.isArray(data.entries)) return;
-                window._stickyVars = new Map(data.entries);
+                // Defensiv: kaputte Einträge (Whitespace, leere Strings, Nicht-Identifier)
+                // aus alten Storage-Versionen aussortieren. Sonst bleiben sie hängen und
+                // tauchen bei jedem Reload als verwaiste auf, lassen sich aber per
+                // Trash-Klick nicht zuverlässig löschen (HTML-Quoting-Probleme).
+                const validEntries = data.entries.filter(
+                    e => Array.isArray(e) && window._isValidStickyName(e[0])
+                );
+                window._stickyVars = new Map(validEntries);
+                if (validEntries.length !== data.entries.length) {
+                    // Bereinigten Stand sofort zurückschreiben, damit der nächste Load
+                    // gar nichts mehr findet.
+                    try {
+                        localStorage.setItem('valisStickyVars',
+                            JSON.stringify({ entries: validEntries }));
+                    } catch (_e) {}
+                }
                 // Committed-Status wiederherstellen — alle Sticky-Vars sind beim Laden
                 // erstmal als „committed orphan" eingestuft; der erste updateEditor-Lauf
                 // räumt diejenigen wieder raus, die jetzt im Code stehen.
@@ -26817,10 +28223,26 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Sichtbarer (committed) Verwaist-Status, NICHT der rohe Computed-Status.
             return window._committedOrphans.has(varName);
         };
+        // Timer/Zähler-Node-IDs aus dem aktuellen Logikplan. Diese Namen sind
+        // KEINE SPS-Eingänge/-Ausgänge, dürfen aber an Display-Bauteile gebunden
+        // werden (Liste „timers" im Rechtsklick) und gelten daher als gültige,
+        // aktive Variablen. Werden gleichberechtigt zu globalInputs/Outputs in
+        // den Orphan-/Missing-/Prune-Checks behandelt.
+        window._getTimerCounterIds = function() {
+            const out = new Set();
+            if (typeof currentGraph === 'undefined' || !currentGraph || !currentGraph.nodes) return out;
+            try {
+                currentGraph.nodes.forEach(node => {
+                    if (node && ['TON','TOF','TP','CTU'].includes(node.type)) out.add(node.id);
+                });
+            } catch(_e) {}
+            return out;
+        };
         window._isVarMissing = function(varName) {
             if (!varName) return false;
             const inCode = (Array.isArray(globalInputs)  && globalInputs.includes(varName))
-                       || (Array.isArray(globalOutputs) && globalOutputs.includes(varName));
+                       || (Array.isArray(globalOutputs) && globalOutputs.includes(varName))
+                       || window._getTimerCounterIds().has(varName);
             return !inCode && !window._stickyVars.has(varName);
         };
         // Welche Bauteile sind aktuell an Variable `varName` gebunden? (für Cleanup,
@@ -26842,20 +28264,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (typeof factoryObjects === 'undefined') return out;
             const inputKeys = ['linkedVar','linkedVarSensorAuf','linkedVarSensorZu',
                 'linkedVarWindSensor','linkedVarHubOben','linkedVarPendel'];
-            // SPS-Variablen-Pattern: muss mit Buchstabe/Underscore beginnen, nur
-            // alphanumerisch + Underscore. Filtert Special-Werte wie 'solid', 'normal'
-            // (Spawner-Block-Property) aus, die nicht als SPS-Variable behandelt werden
-            // dürfen.
-            const _isValidVarName = (name) =>
-                typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
-                && name !== 'solid' && name !== 'normal' && name !== 'true' && name !== 'false';
+            // Validator-Quelle: window._isValidStickyName (global, identisch mit Code-
+            // Parse-Pfad). Filtert Whitespace, leere Strings, Spawner-Sonderwerte
+            // (solid/normal), Bool-Literale.
             factoryObjects.forEach(obj => {
                 // Spawner-Bauteile speichern in linkedVarRet 'solid'/'normal' — Special-
                 // Werte, keine Variable. Wir überspringen das Feld bei Spawnern bewusst.
                 const isSpawner = obj.type && obj.type.startsWith('spawner_');
                 window._STICKY_LINKED_KEYS.forEach(k => {
                     if (isSpawner && k === 'linkedVarRet') return;
-                    const v = obj[k]; if (!v || !_isValidVarName(v)) return;
+                    const v = obj[k]; if (!v || !window._isValidStickyName(v)) return;
                     // Rolle aus Bauteil-Typ + Feldnamen herleiten:
                     // Sensor-/Taster-/Schalter-Bauteile + bekannte Input-Felder → 'in',
                     // sonst → 'out' (Default für Aktoren / Hilfsfelder).
@@ -26890,7 +28308,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             let mapChanged = false;
             // 1) Alle aktiven (in-Code) Variablen sticky registrieren bzw. updaten.
             //    Neue Einträge bekommen addedAt=now; Reappearance löscht firstMissingAt.
+            //    NUR valide Identifier (kein Whitespace, kein leerer String, keine
+            //    Sonderwerte) dürfen in den Pool — sonst entstehen Verwaiste, die
+            //    der User nicht mehr löschen kann.
             const _registerInCode = (name, role) => {
+                if (!window._isValidStickyName(name)) return;
                 const compType = (typeof componentTypes !== 'undefined') ? componentTypes[name] : undefined;
                 const prev = window._stickyVars.get(name);
                 if (!prev) {
@@ -26907,8 +28329,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             inputs.forEach(name  => _registerInCode(name, 'in'));
             outputs.forEach(name => _registerInCode(name, 'out'));
             // 2) Variablen, die jetzt wieder im Code sind, SOFORT aus den Committed-Orphans
-            //    entfernen (kein Debounce).
-            const allInCode = new Set([...inputs, ...outputs]);
+            //    entfernen (kein Debounce). Timer-/Zähler-Node-IDs (z.B. CTU_BOX_FULL)
+            //    sind ebenfalls aktive Variablen — Display-Bauteile binden direkt auf
+            //    sie. Ohne diese Zeile würden sie als verwaist auftauchen, obwohl sie
+            //    im Code aktiv sind.
+            const timerIds = window._getTimerCounterIds();
+            const allInCode = new Set([...inputs, ...outputs, ...timerIds]);
             let visualChanged = false;
             window._committedOrphans.forEach(name => {
                 if (allInCode.has(name)) { window._committedOrphans.delete(name); visualChanged = true; }
@@ -26926,11 +28352,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (window._stickyDebounceTimer) clearTimeout(window._stickyDebounceTimer);
                 window._stickyDebounceTimer = setTimeout(() => {
                     window._stickyDebounceTimer = null;
-                    let changed = false, mapChanged2 = false;
+                    let changed = false, mapChanged2 = false, hardBindings = 0;
                     const _commitNow = Date.now();
                     const _allInCodeNow = new Set([
                         ...(Array.isArray(globalInputs)  ? globalInputs  : []),
-                        ...(Array.isArray(globalOutputs) ? globalOutputs : [])
+                        ...(Array.isArray(globalOutputs) ? globalOutputs : []),
+                        ...window._getTimerCounterIds()
                     ]);
                     // Sammeln vor dem Iterieren, damit wir gefahrlos delete() während
                     // forEach machen können.
@@ -26946,10 +28373,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         const lifeMs = (info.firstMissingAt || _commitNow) - (info.addedAt || _commitNow);
                         const hasBinding = window._findFactoryBindingsForVar(name).length > 0;
                         const oldEnough  = lifeMs >= window._STICKY_PROMOTE_MS;
-                        // Auto-Aufräumen-Modus + keine Bindung → stumm raus (egal ob
-                        // alt genug oder Tipp-Artefakt). Mit Bindung bleibt sichtbar.
-                        if (window._stickyAutoCleanup && !hasBinding) {
-                            window._stickyVars.delete(name);
+                        // Auto-Aufräumen-Modus: stumm raus.
+                        //   - Sanft (Default): nur ohne Bindung. Mit Bindung bleibt sichtbar.
+                        //   - Hart: auch mit Bindung. Bindungen werden ebenfalls gelöst,
+                        //     damit der Reload-Pfad die Variable nicht über
+                        //     _collectBoundVarsFromFactory wieder einsammelt.
+                        if (window._stickyAutoCleanup && (window._stickyAutoCleanupHard || !hasBinding)) {
+                            hardBindings += window._removeStickyVarHard(name);
                             mapChanged2 = true;
                             return;
                         }
@@ -26964,6 +28394,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                     });
                     if (mapChanged2) window._saveStickyVarsToStorage();
+                    // Bei Hart-Pfad wurden Bindungen genullt → Factory-State sichern,
+                    // sonst kommt die Variable beim Reload als verwaiste zurück.
+                    if (hardBindings > 0 && typeof saveFactoryState === 'function') {
+                        try { saveFactoryState(); } catch(_e) {}
+                    }
                     if (changed || mapChanged2) {
                         if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
                             try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
@@ -26995,13 +28430,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (window._isVarMissing(v))      { hasMissing = true; missingNames.push(v); }
                     else if (window._isVarOrphaned(v)) { hasOrphan  = true; orphanNames.push(v); }
                 });
-                obj.el.classList.toggle('fac-orphan-var',  hasOrphan && !hasMissing);
-                obj.el.classList.toggle('fac-missing-var', hasMissing);
+                // User-Removed-Marker: vom User per Trash/Aggressiv/Hart-Auto explizit
+                // gelöschte Variablen. Bindung am Bauteil ist genullt, aber der vorherige
+                // Name hängt in obj._removedBindings — Glow + Tooltip erinnern daran.
+                const removedMap = obj._removedBindings || {};
+                const removedNames = Object.values(removedMap).filter(Boolean);
+                const hasRemoved = removedNames.length > 0;
+                // Rot dominiert: echtes Missing > User-Removed-Erinnerung > Orphan.
+                obj.el.classList.toggle('fac-orphan-var',  hasOrphan && !hasMissing && !hasRemoved);
+                obj.el.classList.toggle('fac-missing-var', hasMissing || hasRemoved);
                 // Tooltip ergänzen, ohne bestehenden Titel zu zerstören.
                 const baseTitle = obj.el.dataset._origTitle !== undefined
                     ? obj.el.dataset._origTitle
                     : (obj.el.title || '');
-                if (obj.el.dataset._origTitle === undefined && (hasOrphan || hasMissing)) {
+                if (obj.el.dataset._origTitle === undefined && (hasOrphan || hasMissing || hasRemoved)) {
                     obj.el.dataset._origTitle = baseTitle;
                 }
                 if (hasMissing) {
@@ -27009,6 +28451,11 @@ You must output exactly this JSON format. The logic code goes as a single string
                         '⛔ Diese Komponente ist Variable(n) zugewiesen, die nicht mehr existieren:\n• ' +
                         missingNames.join('\n• ') +
                         '\nBitte neu zuweisen oder Variable im Code/Liste wieder anlegen.';
+                } else if (hasRemoved) {
+                    obj.el.title = (baseTitle ? baseTitle + '\n\n' : '') +
+                        '⛔ Hier war mal eine Variable zugewiesen, die du gelöscht hast:\n• ' +
+                        removedNames.join('\n• ') +
+                        '\nNeue Variable zuweisen löscht die Warnung.';
                 } else if (hasOrphan) {
                     obj.el.title = (baseTitle ? baseTitle + '\n\n' : '') +
                         '⚠️ Diese Komponente ist Variable(n) zugewiesen, die aktuell nicht im Code stehen:\n• ' +
@@ -27021,8 +28468,37 @@ You must output exactly this JSON format. The logic code goes as a single string
             });
         };
 
+        // Helper: Variable „hart" aus dem Sticky-Pool und ALLEN Bauteil-Bindungen
+        // entfernen. Wird von Trash-Icon, aggressivem Aufräumen, hartem Auto-Mode
+        // und Hart-Debounce-Commit genutzt. Liefert die Anzahl der genullten Bindungen.
+        //
+        // Warum die Bindungen mitgenullt werden: Sonst bleibt obj.linkedVar=„X" am
+        // Bauteil bestehen, das Label zeigt weiter „X", und beim nächsten Reload
+        // sammelt _collectBoundVarsFromFactory die Bindung wieder ein → Variable
+        // taucht als verwaist erneut auf. „Aufräumen" muss heißen: weg ist weg.
+        window._removeStickyVarHard = function(varName) {
+            if (!varName) return 0;
+            const bindings = window._findFactoryBindingsForVar(varName);
+            bindings.forEach(({obj, prop}) => {
+                // Vor dem Nullen den alten Namen in einem User-Removed-Marker
+                // konservieren. Damit kommt der rote Glow als Erinnerung „hier war
+                // mal die Variable X" wieder zurück, OHNE dass die Bindung beim
+                // Reload als verwaiste neu eingesammelt wird (linkedVar ist null,
+                // _collectBoundVarsFromFactory ignoriert das Feld).
+                if (!obj._removedBindings) obj._removedBindings = {};
+                obj._removedBindings[prop] = varName;
+                obj[prop] = null;
+                if (typeof window._refreshFactoryLabel === 'function') {
+                    try { window._refreshFactoryLabel(obj); } catch(_e) {}
+                }
+            });
+            window._stickyVars.delete(varName);
+            window._committedOrphans.delete(varName);
+            return bindings.length;
+        };
         // Variable manuell aus dem Sticky-Pool entfernen (Trash-Icon im Sim-Panel).
         // Wenn confirmIfBound===true und es noch Bindungen gibt, vorher fragen.
+        // Bindungen werden mitgelöscht — die Variable verschwindet komplett.
         window._deleteStickyVar = function(varName, confirmIfBound) {
             if (!varName) return false;
             const bindings = window._findFactoryBindingsForVar(varName);
@@ -27031,12 +28507,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ? _getObjectTypeLabel(b.obj.type) : b.obj.type));
                 const ok = confirm(`Variable „${varName}" ist noch ${bindings.length} Bauteil(en) zugewiesen:\n• `
                     + labels.join('\n• ')
-                    + `\n\nTrotzdem aus der Liste entfernen?\n(Die Bauteile werden danach rot markiert.)`);
+                    + `\n\nVariable entfernen?\n(Die Bauteil-Zuweisungen werden ebenfalls aufgehoben.)`);
                 if (!ok) return false;
             }
-            window._stickyVars.delete(varName);
-            window._committedOrphans.delete(varName);
+            const removedBindings = window._removeStickyVarHard(varName);
             window._saveStickyVarsToStorage();
+            // Factory-State sichern, wenn Bindungen verändert wurden, damit der
+            // Reload-Pfad die alte Bindung nicht wieder einsammelt.
+            if (removedBindings > 0 && typeof saveFactoryState === 'function') {
+                try { saveFactoryState(); } catch(_e) {}
+            }
             // Sim-UI + Factory-Glow neu zeichnen.
             if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
                 try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
@@ -27073,7 +28553,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 msg = `Alle ${removed.length} verwaisten Variablen löschen?\n`;
                 const withBindings = removed.filter(n => window._findFactoryBindingsForVar(n).length > 0);
                 if (withBindings.length > 0) {
-                    msg += `\n⚠️ ${withBindings.length} davon ist/sind Bauteilen zugewiesen — die Bauteile werden rot markiert:\n• `
+                    msg += `\n⚠️ ${withBindings.length} davon ist/sind Bauteilen zugewiesen — die Bauteil-Zuweisungen werden ebenfalls aufgehoben:\n• `
                          + withBindings.join('\n• ');
                 }
             } else {
@@ -27085,11 +28565,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             }
             if (!confirm(msg)) return;
+            let totalBindings = 0;
             removed.forEach(name => {
-                window._stickyVars.delete(name);
-                window._committedOrphans.delete(name);
+                totalBindings += window._removeStickyVarHard(name);
             });
             window._saveStickyVarsToStorage();
+            if (totalBindings > 0 && typeof saveFactoryState === 'function') {
+                try { saveFactoryState(); } catch(_e) {}
+            }
             if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
                 try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_e) {}
             }
@@ -27124,11 +28607,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 window._updateStickyAndRefresh();
             }
             if (typeof factoryObjects === 'undefined') return;
-            // „Erlaubt" = im Code ODER im Sticky-Pool.
+            // „Erlaubt" = im Code ODER im Sticky-Pool ODER aktive Timer/Zähler-Node-IDs
+            // (Display-Bindungen verweisen direkt auf z.B. CTU_BOX_FULL, die NICHT in
+            // globalInputs/Outputs liegen — ohne diesen Eintrag würde die Bindung
+            // beim nächsten Code-Edit fälschlich genullt).
             const allowed = new Set([
                 ...(Array.isArray(globalInputs)  ? globalInputs  : []),
                 ...(Array.isArray(globalOutputs) ? globalOutputs : []),
-                ...window._stickyVars.keys()
+                ...window._stickyVars.keys(),
+                ...window._getTimerCounterIds()
             ]);
             const linkedKeys = window._STICKY_LINKED_KEYS;
             let anyChange = false;
@@ -27285,6 +28772,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (o.linkedVarPendel) newObj.linkedVarPendel = o.linkedVarPendel;
                     if (o.pendelThreshold) newObj.pendelThreshold = o.pendelThreshold;
                     if (o.linkedFormula) newObj.linkedFormula = o.linkedFormula;
+                    // User-Removed-Marker wiederherstellen → roter Glow erinnert nach
+                    // dem Reload weiter daran, dass hier mal eine Variable war.
+                    if (o._removedBindings && typeof o._removedBindings === 'object'
+                        && Object.keys(o._removedBindings).length > 0) {
+                        newObj._removedBindings = Object.assign({}, o._removedBindings);
+                    }
                     if (o.posX !== undefined) { newObj.posX = o.posX; newObj.posY = o.posY; }
                     if (o.showKeyBadge) {
                         newObj.showKeyBadge = true;
@@ -27550,6 +29043,16 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (typeof window._refreshFactoryGlowMarkers === 'function') {
                 try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
             }
+            // Alle Labels einmal neu rendern. Schützt vor stehengebliebenen "null"-
+            // Strings o.ä. aus Build-Code-Pfaden, die intern Template-Literals ohne
+            // null-Guard verwendet haben (z.B. ältere Zylinder-Saves mit null in
+            // linkedVarRet). _refreshFactoryLabel ist null-safe und überschreibt
+            // den Label-Inhalt deterministisch.
+            try {
+                factoryObjects.forEach(o => {
+                    if (typeof window._refreshFactoryLabel === 'function') window._refreshFactoryLabel(o);
+                });
+            } catch(_e) {}
         };
         // ==========================================
         // KOMMENTAR-PINS
@@ -29054,6 +30557,12 @@ You must output exactly this JSON format. The logic code goes as a single string
             try {
                 // Versucht das JSON aus dem Textfeld zu parsen
                 const data = JSON.parse(document.getElementById('saveload-text').value);
+                // Import = vollständiger Frischstart. Sticky-Pool leeren, sonst tauchen
+                // Variablen aus dem zuvor offenen Projekt als verwaist im neuen auf.
+                if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
+                // Fehler-/Check-UI ebenfalls leeren (Aufgaben-Markierungen, Badge,
+                // Error-Popup) — sonst überleben sie den Import des neuen Projekts.
+                if (typeof window._resetCodeErrorUI === 'function') window._resetCodeErrorUI();
                 if (data.code !== undefined) textarea.value = data.code;
                 if (data.types !== undefined) componentTypes = data.types;
                 // 🌟 FIX: Tasten laden
@@ -29089,7 +30598,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 window.fbsNodeColors = {}; 
                 window.fbsColorCounter = 0;
                 updateHighlighting();
-                updateEditor(); 
+                updateEditor();
+                // Error-Gutter manuell auffrischen — hört nur auf input/keyup/scroll/resize,
+                // wird also durch das programmatische Setzen von textarea.value nicht erreicht.
+                if (typeof window._updateErrorGutter === 'function') window._updateErrorGutter();
                 // Factory neu aufbauen
                 if (data.factory) {
                     localStorage.setItem('logikFactoryState', JSON.stringify(data.factory));
@@ -29114,7 +30626,54 @@ You must output exactly this JSON format. The logic code goes as a single string
                 console.error(e);
             }
         };
-        textarea.addEventListener('input', () => { updateHighlighting(); updateEditor(); saveToStorage(); });
+        textarea.addEventListener('input', () => { if (window._applyForceUpper) window._applyForceUpper(); updateHighlighting(); updateEditor(); saveToStorage(); if (window._renderLineNumbers) window._renderLineNumbers(); if (window._refreshBracketMatch) window._refreshBracketMatch(); if (window._updateCurrentLineHighlight) window._updateCurrentLineHighlight(); });
+        textarea.addEventListener('scroll', () => { if (window._syncLineGutterScroll) window._syncLineGutterScroll(); if (window._updateCurrentLineHighlight) window._updateCurrentLineHighlight(); });
+        // Cursor-Bewegungs-Tracker: Bracket-Match + Current-Line nachziehen, wenn der
+        // User mit Pfeiltasten/Klick die Position ändert (input feuert dann nicht).
+        const _cursorMoveHandler = () => {
+            if (window._refreshBracketMatch) window._refreshBracketMatch();
+            if (window._updateCurrentLineHighlight) window._updateCurrentLineHighlight();
+        };
+        textarea.addEventListener('keyup',   _cursorMoveHandler);
+        textarea.addEventListener('click',   _cursorMoveHandler);
+        textarea.addEventListener('focus',   _cursorMoveHandler);
+        // ===== Tastatur-Shortcuts in der Code-Textarea =====
+        // Aktuell: Strg+/ kommentiert/dekommentiert die aktuelle Zeile bzw. den
+        // markierten Block. Bei Mehrfach-Selektion gilt: hat MINDESTENS eine Zeile
+        // kein `//`-Präfix, werden alle Zeilen kommentiert; sind alle kommentiert,
+        // wird das Präfix entfernt.
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key !== '/' || !(e.ctrlKey || e.metaKey)) return;
+            if (textarea.readOnly) return;
+            e.preventDefault();
+            const ta = textarea;
+            const val = ta.value;
+            const selStart = ta.selectionStart;
+            const selEnd   = ta.selectionEnd;
+            // Zeilen-Grenzen rund um die Selektion finden.
+            let lineStart = val.lastIndexOf('\n', selStart - 1) + 1;
+            let lineEnd   = val.indexOf('\n', selEnd);
+            if (lineEnd === -1) lineEnd = val.length;
+            const block = val.slice(lineStart, lineEnd);
+            const lines = block.split('\n');
+            // „Alle kommentiert?" — Zeilen mit nur Whitespace ignorieren.
+            const _commPrefix = /^(\s*)\/\/\s?/;
+            const allCommented = lines.every(l => l.trim() === '' || _commPrefix.test(l));
+            const newLines = allCommented
+                ? lines.map(l => l.replace(_commPrefix, '$1'))
+                : lines.map(l => {
+                    if (l.trim() === '') return l;
+                    // `// ` direkt nach führendem Whitespace einsetzen.
+                    const m = l.match(/^(\s*)(.*)$/);
+                    return m[1] + '// ' + m[2];
+                });
+            const newBlock = newLines.join('\n');
+            ta.value = val.slice(0, lineStart) + newBlock + val.slice(lineEnd);
+            // Selektion über den modifizierten Block legen.
+            ta.selectionStart = lineStart;
+            ta.selectionEnd   = lineStart + newBlock.length;
+            ta.dispatchEvent(new Event('input'));
+        });
         // Cursor-Bewegung: Fehler-Highlight verschwindet wenn Cursor in die Zeile wechselt
         textarea.addEventListener('keyup', updateHighlighting);
         textarea.addEventListener('mouseup', updateHighlighting);
@@ -32035,14 +33594,42 @@ You must output exactly this JSON format. The logic code goes as a single string
                 btn.style.color = '#fff';
                 btn.textContent = '📊 Drücke anzeigen: AN';
             }
-            // Editor-Settings-Dropdown initial befüllen (Auto-Aufräumen + Karenzzeit).
+            // Editor-Settings-Popup initial befüllen (Auto-Aufräumen + Karenzzeit).
             const ac = document.getElementById('settings-auto-cleanup');
             if (ac) ac.checked = !!window._stickyAutoCleanup;
+            const ah = document.getElementById('settings-auto-cleanup-hard');
+            if (ah) {
+                ah.checked  = !!window._stickyAutoCleanupHard;
+                ah.disabled = !window._stickyAutoCleanup;
+            }
+            const ahRow = document.getElementById('settings-auto-cleanup-hard-row');
+            if (ahRow) ahRow.style.opacity = window._stickyAutoCleanup ? '1' : '0.45';
             const carenzN = document.getElementById('settings-carenz-num');
             const carenzS = document.getElementById('settings-carenz-slider');
             const ms = window._STICKY_DEBOUNCE_MS || 2500;
             if (carenzN) carenzN.value = ms;
             if (carenzS) carenzS.value = ms;
+            // Sim-Panel-Anzeige-Settings initial in die Inputs übernehmen.
+            const simSort = document.getElementById('settings-sim-sort');
+            if (simSort && window._simSort) simSort.value = window._simSort;
+            const simGrp = document.getElementById('settings-sim-group');
+            if (simGrp) simGrp.checked = !!window._simGroup;
+            // Code-Editor-Settings aus localStorage anwenden.
+            const ces = window._codeEditorSettings;
+            if (ces) {
+                try {
+                    if (ces.lineNumbers)    window._setLineNumbers(true);
+                    if (ces.noWrap)         window._setCodeNoWrap(true);
+                    if (ces.highlightLine)  window._setHighlightLine(true);
+                    if (ces.bracketMatch)   window._setBracketMatch(true);
+                    if (ces.indentGuides)   window._setIndentGuides(true);
+                    if (ces.autocomplete)   window._setAutocomplete(true);
+                    // forceUpper ist standardmäßig aktiv — keine Sonderbehandlung
+                    // beim Start, damit existierender Code nicht still überschrieben wird.
+                    // Die Transformation greift erst beim nächsten input-Event.
+                    if (ces.fontSize && ces.fontSize !== 13) window._setCodeFontSize(ces.fontSize);
+                } catch(_e) {}
+            }
         });
         window.toggleFbsOptions = function() {
             let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
@@ -34257,14 +35844,27 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Trigger after each keystroke (deferred so value is updated).
             // Nur wenn textarea wirklich fokussiert ist — sonst öffnet das Dropdown auch bei
             // programmatischem Code-Update (z.B. vom Schaltplan-Editor).
+            // Toggle: Auto-Vervollständigung kann im Editor-Verhalten-Popup aus-/eingeschaltet
+            // werden (`window._codeEditorSettings.autocomplete`). Default: aktiv.
             textarea.addEventListener('input', () => setTimeout(() => {
                 if (document.activeElement !== textarea) return;
+                if (!window._codeEditorSettings || !window._codeEditorSettings.autocomplete) { _close(); return; }
                 _open();
             }, 0));
 
             document.addEventListener('mousedown', e => { const drop = _getDrop(); if (!drop || !drop.contains(e.target)) _close(); });
             textarea.addEventListener('blur',   () => setTimeout(_close, 150));
             textarea.addEventListener('scroll', _close);
+
+            // Öffentlicher Setter — wird vom Settings-Popup-Toggle aufgerufen.
+            // Speichert den Zustand persistent (Default aktiv: nur '0' bedeutet aus).
+            window._setAutocomplete = function(on) {
+                if (window._codeEditorSettings) window._codeEditorSettings.autocomplete = !!on;
+                try { localStorage.setItem('valisCodeAutocomplete', on ? '1' : '0'); } catch(_e) {}
+                if (!on) _close();
+            };
+            // Rückwärtskompatibler Alias — wird teils noch von älteren Code-Pfaden referenziert.
+            window._hideAutocomplete = function() { _close(); };
         })();
 
         // ==========================================

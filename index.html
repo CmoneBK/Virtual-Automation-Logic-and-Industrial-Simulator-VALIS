@@ -3018,6 +3018,43 @@
             .sk-action-box text {
                 fill: #1a1a1a; font-family: 'Consolas', monospace; font-size: 10px;
             }
+            /* INTERLOCK / SUPERVISION-Badges unterhalb des Step-Kastens.
+               Interlock blau (Sperr-Bedingung), Supervision rot (Watchdog).
+               Wenn der Step gerade einen Fault hat (Q && SV-Expr), färbt JS
+               die SV-Badge zusätzlich an (Klasse `.faulted`). */
+            .sk-step-il-badge {
+                font-family: 'Consolas', monospace; font-size: 10px;
+                fill: #0d47a1; font-weight: bold;
+            }
+            .sk-step-sv-badge {
+                font-family: 'Consolas', monospace; font-size: 10px;
+                fill: #b71c1c; font-weight: bold;
+            }
+            .sk-step-sv-badge.faulted {
+                fill: #fff; font-size: 11px;
+            }
+            .sk-step.faulted rect {
+                fill: #ffcdd2 !important; stroke: #b71c1c !important;
+                animation: sk-step-fault-blink 0.6s ease-in-out infinite;
+            }
+            @keyframes sk-step-fault-blink {
+                0%, 100% { filter: drop-shadow(0 0 4px rgba(183,28,28,0.65)); }
+                50%      { filter: drop-shadow(0 0 14px rgba(183,28,28,1)); }
+            }
+            /* Editierbare Step-Labels / Transition-Bedingungen — Klick öffnet
+               einen Inline-Text-Input über der SVG-Position. */
+            .sk-editable { cursor: text; }
+            .sk-editable:hover {
+                fill: #1976d2 !important;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+            /* Tool-Buttons (×, ↑, ↓, +): standardmäßig halbtransparent, beim
+               Hover über die SVG voll sichtbar. Eigene Hover-Vergrößerung. */
+            .sk-tool-btn { cursor: pointer; opacity: 0.25; transition: opacity 0.15s, transform 0.1s; }
+            #sk-svg:hover .sk-tool-btn { opacity: 0.85; }
+            .sk-tool-btn:hover { opacity: 1 !important; transform-box: fill-box; }
+            .sk-tool-btn:hover circle { fill: #1976d2; }
         </style>
         <div id="saveload-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 25px rgba(0,0,0,0.9); z-index: 2000; width: 860px; max-width: 97vw; max-height: 92vh; overflow: hidden; display: none; flex-direction: column;">
             <h3 style="margin:0 0 14px; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px; flex-shrink:0;" data-i18n="sl_title">💾 Speichern / Laden / Exportieren</h3>
@@ -4921,6 +4958,150 @@ You must output exactly this JSON format. The logic code goes as a single string
                         { id:"ak_motorz",  type:"motor",    x:185, y:220, width:50, rotation:0, linkedVar:"A_MOTOR_ZURUECK", color:"blue",   useCollision:true, labelPinned:true }
                     ]
                 }
+            },
+            // ==========================================
+            // SCHRITTKETTE MISCHANLAGE (Vollausstattung)
+            // ==========================================
+            // 6-Schritt-Mischanlage, die jeden Schrittketten-Baustein einsetzt:
+            //   - INTERLOCK pro Step (Sicherheits-Verriegelung — sperrt C-Aktionen)
+            //   - SUPERVISION pro Step (Watchdog — blockiert Übergang im Fehlerfall)
+            //   - Action-Qualifier N / C / P / D / L
+            //   - AFTER <t> als Übergangs-Timer (S7-GRAPH-Style)
+            //   - AFTER <t> auch IN der SUPERVISION (Cycle-Time-Watchdog)
+            //
+            // Plant: Tank mit Pumpe, Mischer, Heizung, Auslassventil, Spülventil,
+            // Deckel-Schalter und einigen Sensoren als Schalter zum manuellen Test.
+            // Tasten: SPACE = START, ESC = NOT-AUS, 1..5 = Sensoren togglen.
+            // ==========================================
+            schrittkette_mischer: {
+                layout: "grid-sim-bottom",
+                code:
+                    "// ===========================================================\n" +
+                    "// MISCHANLAGE — Vollausstattungs-Schrittkette\n" +
+                    "// ===========================================================\n" +
+                    "//\n" +
+                    "// Features in dieser Kette (alle drin):\n" +
+                    "//   • INTERLOCK   — Verriegelungs-Bedingung. Sperrt C-Aktionen,\n" +
+                    "//                   wenn FALSE. Step bleibt aktiv, Aktoren werden\n" +
+                    "//                   aber nicht angesteuert.\n" +
+                    "//   • SUPERVISION — Überwachung. Wenn TRUE während Step aktiv,\n" +
+                    "//                   setzt einen Fault-Flag und blockiert den\n" +
+                    "//                   Übergang aus diesem Step. Die Step-Box blinkt\n" +
+                    "//                   im Panel rot. Geht die Bedingung wieder FALSE,\n" +
+                    "//                   verschwindet der Fault automatisch.\n" +
+                    "//   • Qualifier N — Standard-Aktion (solange Step aktiv).\n" +
+                    "//   • Qualifier C — wie N, aber zusätzlich UND-verknüpft mit dem\n" +
+                    "//                   INTERLOCK des Steps (Conditional / S7-NC).\n" +
+                    "//   • Qualifier P — Puls (~100 ms) beim Eintritt in den Step.\n" +
+                    "//   • Qualifier D <t> — Delayed: Aktor schaltet erst nach <t> s.\n" +
+                    "//   • Qualifier L <t> — Limited: Aktor schaltet für <t> s als Puls.\n" +
+                    "//   • AFTER <t>   — Übergangs-Timer. Wartet <t> s nach Step-Eintritt.\n" +
+                    "//                   Funktioniert auch innerhalb SUPERVISION (Watchdog!).\n" +
+                    "//\n" +
+                    "// Tasten: SPACE=START, ESC=NOT-AUS,\n" +
+                    "//         1=DECKEL, 2=SAFETY, 3=VOLL, 4=TEMP_OK, 5=ÜBERHITZT\n" +
+                    "//\n" +
+                    "// Anzeige im Schrittketten-Panel:\n" +
+                    "//   - grüner Doppelrand = aktiver Schritt (animiert)\n" +
+                    "//   - 🔒 IL: …          = Verriegelungs-Bedingung\n" +
+                    "//   - ⚠ SV: …          = Supervision; rot blinkend wenn Fault aktiv\n" +
+                    "//   - Rechtsklick in den Block → Form-Wechsel DSL ↔ RS-Glieder\n" +
+                    "// ===========================================================\n" +
+                    "\n" +
+                    "SCHRITTKETTE MISCHANLAGE:\n" +
+                    "  STEP S1 (BEREIT):\n" +
+                    "    A_LAMPE_BEREIT := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    START && ¬NOT_AUS && SAFETY_OK -> S2\n" +
+                    "\n" +
+                    "  STEP S2 (FUELLEN):\n" +
+                    "    INTERLOCK: ¬NOT_AUS && DECKEL_ZU\n" +
+                    "    SUPERVISION: AFTER 15.0\n" +
+                    "    C: A_PUMPE := TRUE\n" +
+                    "    P: A_HUPE := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    SENSOR_VOLL -> S3\n" +
+                    "\n" +
+                    "  STEP S3 (MISCHEN):\n" +
+                    "    INTERLOCK: DECKEL_ZU && ¬NOT_AUS\n" +
+                    "    C: A_MISCHER := TRUE\n" +
+                    "    D 1.0: A_LED_MISCH := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    AFTER 4.0 -> S4\n" +
+                    "\n" +
+                    "  STEP S4 (HEIZEN):\n" +
+                    "    INTERLOCK: DECKEL_ZU\n" +
+                    "    SUPERVISION: SENSOR_UEBERHITZT\n" +
+                    "    C: A_HEIZUNG := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    SENSOR_TEMP_OK && AFTER 2.0 -> S5\n" +
+                    "\n" +
+                    "  STEP S5 (ABFUELLEN):\n" +
+                    "    L 3.0: A_AUSLASS := TRUE\n" +
+                    "    P: A_SIGNAL_FERTIG := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    AFTER 3.0 -> S6\n" +
+                    "\n" +
+                    "  STEP S6 (SPUELEN):\n" +
+                    "    INTERLOCK: DECKEL_ZU\n" +
+                    "    C: A_SPUELVENTIL := TRUE\n" +
+                    "  TRANS:\n" +
+                    "    AFTER 2.0 -> S1\n" +
+                    "END",
+                types: {
+                    "START":              "taster",
+                    "NOT_AUS":            "nothalt",
+                    "DECKEL_ZU":          "schalter",
+                    "SAFETY_OK":          "schalter",
+                    "SENSOR_VOLL":        "schalter",
+                    "SENSOR_TEMP_OK":     "schalter",
+                    "SENSOR_UEBERHITZT":  "schalter",
+                    "A_LAMPE_BEREIT":     "led",
+                    "A_PUMPE":            "motor",
+                    "A_HUPE":             "led",
+                    "A_MISCHER":          "motor",
+                    "A_LED_MISCH":        "led",
+                    "A_HEIZUNG":          "led",
+                    "A_AUSLASS":          "valve",
+                    "A_SIGNAL_FERTIG":    "led",
+                    "A_SPUELVENTIL":      "valve"
+                },
+                keyBindings: {
+                    "START":             " ",
+                    "NOT_AUS":           "Escape",
+                    "DECKEL_ZU":         "1",
+                    "SAFETY_OK":         "2",
+                    "SENSOR_VOLL":       "3",
+                    "SENSOR_TEMP_OK":    "4",
+                    "SENSOR_UEBERHITZT": "5"
+                },
+                factory: {
+                    globalViewMode: "side",
+                    items: [],
+                    objects: [
+                        // ---- Bedienpult (oben links) ----
+                        { id:"bp_start",   type:"taster",   x: 20, y: 20, width:42, rotation:0, linkedVar:"START",          color:"green", useCollision:true, labelPinned:true },
+                        { id:"bp_naus",    type:"nothalt",  x: 80, y: 20, width:52, rotation:0, linkedVar:"NOT_AUS",        color:"red",   useCollision:true, labelPinned:true },
+                        // ---- Status-Lampen (oben rechts) ----
+                        { id:"sl_bereit",  type:"led",      x:160, y: 28, width:30, rotation:0, linkedVar:"A_LAMPE_BEREIT", color:"green",  useCollision:true, labelPinned:true },
+                        { id:"sl_hupe",    type:"led",      x:200, y: 28, width:30, rotation:0, linkedVar:"A_HUPE",         color:"yellow", useCollision:true, labelPinned:true },
+                        { id:"sl_fertig",  type:"led",      x:240, y: 28, width:30, rotation:0, linkedVar:"A_SIGNAL_FERTIG",color:"blue",   useCollision:true, labelPinned:true },
+                        // ---- Sicherheits-Schalter (zweite Reihe links) ----
+                        { id:"sw_deckel",  type:"schalter", x: 20, y: 95, width:42, rotation:0, linkedVar:"DECKEL_ZU",      color:"blue",   useCollision:true, labelPinned:true },
+                        { id:"sw_safety",  type:"schalter", x: 80, y: 95, width:42, rotation:0, linkedVar:"SAFETY_OK",      color:"blue",   useCollision:true, labelPinned:true },
+                        // ---- Prozess-Sensoren (zweite Reihe rechts) ----
+                        { id:"sw_voll",    type:"schalter", x:160, y: 95, width:42, rotation:0, linkedVar:"SENSOR_VOLL",      color:"yellow", useCollision:true, labelPinned:true },
+                        { id:"sw_tempok",  type:"schalter", x:215, y: 95, width:42, rotation:0, linkedVar:"SENSOR_TEMP_OK",   color:"yellow", useCollision:true, labelPinned:true },
+                        { id:"sw_heiss",   type:"schalter", x:270, y: 95, width:42, rotation:0, linkedVar:"SENSOR_UEBERHITZT",color:"red",    useCollision:true, labelPinned:true },
+                        // ---- Anlagen-Aktoren (untere Reihen) ----
+                        { id:"ak_pumpe",   type:"motor",    x: 20, y:185, width:50, rotation:0, linkedVar:"A_PUMPE",        color:"blue",   useCollision:true, labelPinned:true },
+                        { id:"ak_mischer", type:"motor",    x: 90, y:185, width:50, rotation:0, linkedVar:"A_MISCHER",      color:"orange", useCollision:true, labelPinned:true },
+                        { id:"ak_mischled",type:"led",      x:155, y:195, width:30, rotation:0, linkedVar:"A_LED_MISCH",    color:"orange", useCollision:true, labelPinned:true },
+                        { id:"ak_heiz",    type:"led",      x:200, y:195, width:30, rotation:0, linkedVar:"A_HEIZUNG",      color:"red",    useCollision:true, labelPinned:true },
+                        { id:"ak_auslass", type:"valve",    x:245, y:185, width:50, rotation:0, linkedVar:"A_AUSLASS",      color:"green",  useCollision:true, labelPinned:true },
+                        { id:"ak_spuel",   type:"valve",    x:310, y:185, width:50, rotation:0, linkedVar:"A_SPUELVENTIL",  color:"blue",   useCollision:true, labelPinned:true }
+                    ]
+                }
             }
         }; // <-- Hier endet das gesamte EXAMPLES Objekt
         const DEFAULT_CODE = EXAMPLES.code; // Standard beim allerersten Öffnen
@@ -6477,8 +6658,22 @@ You must output exactly this JSON format. The logic code goes as a single string
             const RE_STEP       = /^STEP\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]+)\))?\s*:\s*$/i;
             const RE_TRANS_HDR  = /^TRANS\s*:\s*$/i;
             const RE_END        = /^END(?:\s+([A-Za-z_][A-Za-z0-9_]*))?\s*$/i;
-            const RE_TRANSITION = /^(.+?)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
-            const RE_ASSIGN     = /^([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/;
+            const RE_TRANSITION     = /^(.+?)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
+            // Parallele Verzweigung: `cond -> [S2, S3, ...]` aktiviert alle Ziele
+            // simultan. Mindestens zwei Ziele in den eckigen Klammern.
+            const RE_TRANSITION_PAR = /^(.+?)\s*->\s*\[\s*([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)+)\s*\]\s*$/;
+            const RE_ASSIGN         = /^([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/;
+            // Action-Qualifier: `N:`, `S:`, `R:`, `P:`, `C:` (ohne Zeit) ODER
+            // `D <time>:`, `L <time>:` (mit Sekunden-Wert). Default ohne Prefix = N.
+            // `C:` (Conditional/Interlocked) = klassische Aktion, aber zusätzlich
+            // mit dem Step-INTERLOCK UND-verknüpft (S7-GRAPH NC-Qualifier).
+            const RE_ASSIGN_Q       = /^(?:([NSRPC])\s*:\s*|([DL])\s+([\d.]+)\s*:\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/i;
+            // INTERLOCK / SUPERVISION (S7-GRAPH-Style): pro STEP optional eine
+            // Verriegelungs- und/oder Überwachungs-Bedingung. INTERLOCK FALSE
+            // unterdrückt alle C-Qualifier-Aktionen; SUPERVISION TRUE setzt einen
+            // Fault-Flag, der die ausgehenden Übergänge blockiert.
+            const RE_INTERLOCK      = /^INTERLOCK\s*:\s*(.+)$/i;
+            const RE_SUPERVISION    = /^SUPERVISION\s*:\s*(.+)$/i;
 
             // Parser: liest den Code Zeile für Zeile als State-Machine.
             // Liefert { chains: [{name, steps, transitions, startLine, endLine}], errors }.
@@ -6513,7 +6708,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (state === 'IN_BLOCK') {
                         const sm = line.match(RE_STEP);
                         if (sm) {
-                            step = { name: sm[1].toUpperCase(), label: sm[2] ? sm[2].trim() : '', actions: [], startLine: i };
+                            step = {
+                                name: sm[1].toUpperCase(),
+                                label: sm[2] ? sm[2].trim() : '',
+                                actions: [],
+                                interlock: null,     // null oder { expr, line }
+                                supervision: null,   // null oder { expr, line }
+                                startLine: i
+                            };
                             state = 'IN_STEP';
                             continue;
                         }
@@ -6530,9 +6732,41 @@ You must output exactly this JSON format. The logic code goes as a single string
 
                     if (state === 'IN_STEP') {
                         if (RE_TRANS_HDR.test(line)) { state = 'IN_TRANS'; continue; }
+                        // INTERLOCK / SUPERVISION zuerst probieren (Schlüsselwort am
+                        // Zeilenanfang). Sonst würde z.B. „INTERLOCK := ..." vom
+                        // generischen RE_ASSIGN gefressen — wir wollen es als
+                        // Step-Property, nicht als Aktor-Zuweisung.
+                        const im = line.match(RE_INTERLOCK);
+                        if (im) {
+                            if (step.interlock) errAt(i, 'INTERLOCK in Step "' + step.name + '" mehrfach definiert.');
+                            step.interlock = { expr: im[1].trim(), line: i };
+                            continue;
+                        }
+                        const vm = line.match(RE_SUPERVISION);
+                        if (vm) {
+                            if (step.supervision) errAt(i, 'SUPERVISION in Step "' + step.name + '" mehrfach definiert.');
+                            step.supervision = { expr: vm[1].trim(), line: i };
+                            continue;
+                        }
+                        // Qualifier-Variante zuerst probieren (P/D/L/S/R/N/C-Prefix)
+                        const aqm = line.match(RE_ASSIGN_Q);
+                        if (aqm) {
+                            const q = aqm[1]
+                                ? { kind: aqm[1].toUpperCase() }
+                                : { kind: aqm[2].toUpperCase(), time: parseFloat(aqm[3]) };
+                            step.actions.push({
+                                lhs: aqm[4].toUpperCase(), rhs: aqm[5].trim(),
+                                qualifier: q, line: i
+                            });
+                            continue;
+                        }
                         const am = line.match(RE_ASSIGN);
                         if (am) {
-                            step.actions.push({ lhs: am[1].toUpperCase(), rhs: am[2].trim(), line: i });
+                            // Default-Qualifier N: normaler Aktor solange Step aktiv.
+                            step.actions.push({
+                                lhs: am[1].toUpperCase(), rhs: am[2].trim(),
+                                qualifier: { kind: 'N' }, line: i
+                            });
                             continue;
                         }
                         errAt(i, 'Erwartet Aktions-Zuweisung (z.B. A := TRUE) oder "TRANS:" — gefunden: ' + line);
@@ -6540,6 +6774,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
 
                     if (state === 'IN_TRANS') {
+                        // Parallele Verzweigung zuerst probieren (bricht sonst auf
+                        // das erste Komma im Bedingungs-Ausdruck zurück).
+                        const tpm = line.match(RE_TRANSITION_PAR);
+                        if (tpm) {
+                            const targets = tpm[2].split(/\s*,\s*/).map(t => t.toUpperCase());
+                            targets.forEach(target => {
+                                cur.transitions.push({
+                                    from: step.name, to: target,
+                                    cond: tpm[1].trim(),
+                                    parallel: true, parallelGroup: targets.slice(),
+                                    line: i
+                                });
+                            });
+                            continue;
+                        }
                         const tm = line.match(RE_TRANSITION);
                         if (tm) {
                             cur.transitions.push({ from: step.name, to: tm[2].toUpperCase(), cond: tm[1].trim(), line: i });
@@ -6619,6 +6868,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const resets = new Map();
                 c.steps.forEach(s => { sets.set(s.name, []); resets.set(s.name, []); });
 
+                // AFTER-Übergangs-Timer: jeder `AFTER <t>`-Term im Übergangs-Code
+                // wird durch eine `_TMR_<chain>_<from>_<x>`-Hilfsvariable ersetzt,
+                // die einen TON gated auf Q<from> hält. Vor den S/R-Zeilen
+                // emittiert, damit VALIS' single-pass-Evaluation den Wert sieht.
+                const timerHelpers = new Map(); // helperName → { time, fromStep }
+                function processAfter(cond, fromStep) {
+                    return cond.replace(/\bAFTER\s+([\d.]+)\b/gi, (m, timeStr) => {
+                        const time = parseFloat(timeStr);
+                        const safeTime = String(time).replace('.', '_');
+                        const helperName = '_TMR_' + c.name + '_' + fromStep + '_' + safeTime;
+                        timerHelpers.set(helperName, { time, fromStep });
+                        return helperName;
+                    });
+                }
+
                 // Init-Schritt: selbstheilende Semantik über `¬(Q1 || Q2 || ... || Qn)`.
                 // Wenn KEIN Q der Kette aktiv ist, fängt der Init-Schritt an.
                 // Vorteil gegenüber dem alten `_INIT_<NAME>`-Flag: der State muss
@@ -6628,13 +6892,65 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const initStep = c.steps[0].name;
                 sets.get(initStep).push('¬(' + allQs.join(' || ') + ')');
 
+                // Interlock-/Supervision-Helper-Namen pro Step. Wir nutzen den
+                // Q-Pin-Suffix statt des DSL-Step-Namens — so überleben
+                // umbenannte Steps („MOVE_DOWN"…) den DSL→RS→DSL-Roundtrip.
+                const ilName  = (stepName) => '_IL_'    + c.name + '_' + Q(stepName);
+                const fltName = (stepName) => '_FAULT_' + c.name + '_' + Q(stepName);
+
+                // Erst Transitionen + IL/SV AFTER-Substitutionen sammeln (mutiert
+                // `timerHelpers`), DANN die Timer-Helper en bloc emittieren — sonst
+                // würden SUPERVISION-AFTER-Timer nie in den Code geschrieben.
+                const guardedTransConds = [];
                 c.transitions.forEach(t => {
                     if (!sets.has(t.to))   return;
                     if (!resets.has(t.from)) return;
-                    const cond = t.cond && t.cond.trim().length ? t.cond : 'TRUE';
-                    sets.get(t.to).push('(' + Q(t.from) + ' && (' + cond + '))');
+                    let cond = t.cond && t.cond.trim().length ? t.cond : 'TRUE';
+                    cond = processAfter(cond, t.from);
+                    // Wenn Quelle-Step eine SUPERVISION hat, blockiert ein gesetzter
+                    // Fault die Transition — die Kette bleibt stehen, bis der Fehler
+                    // verschwindet (Supervision-Expr wieder FALSE).
+                    const fromStep = c.steps.find(s => s.name === t.from);
+                    const guardedCond = (fromStep && fromStep.supervision)
+                        ? '¬' + fltName(t.from) + ' && (' + cond + ')'
+                        : cond;
+                    sets.get(t.to).push('(' + Q(t.from) + ' && (' + guardedCond + '))');
                     resets.get(t.from).push(Q(t.to));
                 });
+
+                // IL/SV-AFTER vorab substituieren, damit auch Watchdog-Timer in der
+                // SUPERVISION-Bedingung in `timerHelpers` landen.
+                const ilSteps = c.steps.filter(s => s.interlock);
+                const svSteps = c.steps.filter(s => s.supervision);
+                const ilProcessed  = new Map(); // stepName → substituierte Expr
+                const svProcessed  = new Map();
+                ilSteps.forEach(s => ilProcessed.set(s.name, processAfter(s.interlock.expr, s.name)));
+                svSteps.forEach(s => svProcessed.set(s.name, processAfter(s.supervision.expr, s.name)));
+
+                // Übergangs-Timer VOR den S/R-Zeilen emittieren — die S<n>-
+                // Set-Zeilen referenzieren diese Variablen.
+                if (timerHelpers.size) {
+                    lines.push('// --- Übergangs-Timer (AFTER) ---');
+                    timerHelpers.forEach((info, name) => {
+                        lines.push(name + ' := TON(' + Q(info.fromStep) + ', ' + info.time + ')');
+                    });
+                }
+
+                // INTERLOCK/SUPERVISION-Helper VOR den S/R-Zeilen emittieren.
+                // _IL_<chain>_Q<n> ist die reine Verriegelungs-Bedingung;
+                // _FAULT_<chain>_Q<n> ist `Q<n> && SUPERVISION_EXPR` — nur
+                // aktiv, wenn der überwachte Step gerade läuft. Damit
+                // bleibt der Fault nicht hängen, sondern verschwindet beim
+                // Step-Wechsel oder wenn die Bedingung wieder FALSE wird.
+                if (ilSteps.length || svSteps.length) {
+                    lines.push('// --- Interlock / Supervision ---');
+                    ilSteps.forEach(s => {
+                        lines.push(ilName(s.name) + ' := ' + ilProcessed.get(s.name));
+                    });
+                    svSteps.forEach(s => {
+                        lines.push(fltName(s.name) + ' := ' + Q(s.name) + ' && (' + svProcessed.get(s.name) + ')');
+                    });
+                }
 
                 c.steps.forEach(s => {
                     const lbl = s.label ? '   // ' + s.label : '';
@@ -6644,27 +6960,72 @@ You must output exactly this JSON format. The logic code goes as a single string
                     lines.push(R(s.name) + ' := ' + resetStr);
                 });
 
-                // Aktionen sammeln: pro Variable die ODER-Aggregation aller Step-Beiträge.
-                // Vereinfachungen:
-                //   - RHS = TRUE  → Beitrag ist nur `Q<n>` (kein `&& (TRUE)`)
-                //   - RHS = FALSE → Beitrag entfällt komplett (würde sowieso 0 ergeben)
-                //   - Wenn ALLE Beiträge entfallen, bekommt der Ausgang `FALSE`.
+                // Aktionen sammeln: pro Variable die Beiträge mit ihrem Qualifier.
+                // Qualifier-Behandlung:
+                //   - N (default): klassische ODER-Aggregation
+                //   - C:           wie N, aber UND-verknüpft mit _IL_<chain>_<step>
+                //                  (Interlock). Wenn der Step kein INTERLOCK hat,
+                //                  fällt C auf N zurück.
+                //   - P (Pulse):   `A := TP(Q<n>, 0.1)` — ~100 ms Puls
+                //   - D <t>:       `A := TON(Q<n>, t)`  — verzögerter Ein
+                //   - L <t>:       `A := TP(Q<n>, t)`   — zeitbegrenzter Puls
+                //   - S/R:         derzeit nicht unterstützt — Warn-Kommentar
+                // Mehrere Beiträge derselben Aktor-Variable mit Timer-Qualifier
+                // schreiben jeweils eine eigene Zeile; VALIS warnt dann ggf. vor
+                // doppelter Ausgangs-Definition. Das ist semantisch korrekt — pro
+                // Variable kann effektiv nur EIN Timer-Instanzname existieren.
+                const stepByName = new Map();
+                c.steps.forEach(s => stepByName.set(s.name, s));
                 const actions = new Map();
                 c.steps.forEach(s => {
                     s.actions.forEach(a => {
                         if (!actions.has(a.lhs)) actions.set(a.lhs, []);
-                        actions.get(a.lhs).push({ qVar: Q(s.name), rhs: a.rhs });
+                        const q = a.qualifier || { kind: 'N' };
+                        actions.get(a.lhs).push({ qVar: Q(s.name), stepName: s.name, rhs: a.rhs, q });
                     });
                 });
                 actions.forEach((contribs, lhs) => {
-                    const parts = [];
-                    contribs.forEach(x => {
-                        const rhsT = x.rhs.trim().toUpperCase();
-                        if (rhsT === 'FALSE') return;             // Dead-Code: skip
-                        if (rhsT === 'TRUE')  { parts.push(x.qVar); return; } // Q<n> reicht
-                        parts.push('(' + x.qVar + ' && (' + x.rhs + '))');
+                    // N und C werden gemeinsam als ODER aggregiert; C-Terme bekommen
+                    // zusätzlich den _IL_<chain>_<step>-Faktor.
+                    const ncContribs   = contribs.filter(c => c.q.kind === 'N' || c.q.kind === 'C');
+                    const timerContribs = contribs.filter(c => c.q.kind === 'P' || c.q.kind === 'D' || c.q.kind === 'L');
+                    const srContribs  = contribs.filter(c => c.q.kind === 'S' || c.q.kind === 'R');
+                    // 1) Normal-/Conditional-Aktionen als ODER-Aggregation
+                    if (ncContribs.length) {
+                        const parts = [];
+                        ncContribs.forEach(x => {
+                            const rhsT = x.rhs.trim().toUpperCase();
+                            const st = stepByName.get(x.stepName);
+                            const isC = (x.q.kind === 'C' && st && st.interlock);
+                            const ilFactor = isC ? ilName(x.stepName) : null;
+                            if (rhsT === 'FALSE') return;
+                            if (rhsT === 'TRUE') {
+                                parts.push(ilFactor ? '(' + x.qVar + ' && ' + ilFactor + ')' : x.qVar);
+                                return;
+                            }
+                            if (ilFactor) {
+                                parts.push('(' + x.qVar + ' && ' + ilFactor + ' && (' + x.rhs + '))');
+                            } else {
+                                parts.push('(' + x.qVar + ' && (' + x.rhs + '))');
+                            }
+                        });
+                        if (parts.length) lines.push(lhs + ' := ' + parts.join(' || '));
+                        else if (!timerContribs.length && !srContribs.length) lines.push(lhs + ' := FALSE');
+                    }
+                    // 2) Timer-Aktionen: jeweils eine eigene Zeile
+                    timerContribs.forEach(x => {
+                        if (x.q.kind === 'P') {
+                            lines.push(lhs + ' := TP(' + x.qVar + ', 0.1)   // Pulse');
+                        } else if (x.q.kind === 'D') {
+                            lines.push(lhs + ' := TON(' + x.qVar + ', ' + (x.q.time || 1.0) + ')   // Delayed');
+                        } else if (x.q.kind === 'L') {
+                            lines.push(lhs + ' := TP(' + x.qVar + ', ' + (x.q.time || 1.0) + ')   // Limited');
+                        }
                     });
-                    lines.push(lhs + ' := ' + (parts.length ? parts.join(' || ') : 'FALSE'));
+                    // 3) S/R-Aktionen (noch nicht implementiert — Hinweiskommentar)
+                    srContribs.forEach(x => {
+                        lines.push('// TODO ' + x.q.kind + '-Qualifier nicht implementiert: ' + lhs + ' ' + x.q.kind + ': ' + x.rhs);
+                    });
                 });
                 lines.push('// === END ' + c.name + ' ===');
                 return lines;
@@ -6766,6 +7127,20 @@ You must output exactly this JSON format. The logic code goes as a single string
             // AST → DSL-Quelltext. Eingabe ist eine `chain` aus parseChains().
             // Optionale `opts.includeMarker` setzt einen Magic-Comment-Header
             // zur eindeutigen Wiedererkennung.
+            // Pretty-Printer für eine einzelne Aktion. Berücksichtigt den
+            // Qualifier-Prefix (N ist Default ohne Prefix; P/S/R schreiben
+            // `X:`; D/L schreiben `X <t>:`).
+            function formatAction(a) {
+                const q = a.qualifier || { kind: 'N' };
+                let prefix = '';
+                if (q.kind === 'P' || q.kind === 'S' || q.kind === 'R' || q.kind === 'C') {
+                    prefix = q.kind + ': ';
+                } else if (q.kind === 'D' || q.kind === 'L') {
+                    prefix = q.kind + ' ' + (q.time != null ? q.time : 1.0) + ': ';
+                }
+                return prefix + a.lhs + ' := ' + a.rhs;
+            }
+
             function printAsDSL(chain, opts) {
                 const lines = [];
                 if (opts && opts.includeMarker) {
@@ -6776,11 +7151,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (idx > 0) lines.push('');
                     const lbl = s.label ? ' (' + s.label + ')' : '';
                     lines.push('  STEP ' + s.name + lbl + ':');
-                    s.actions.forEach(a => lines.push('    ' + a.lhs + ' := ' + a.rhs));
+                    if (s.interlock)   lines.push('    INTERLOCK: '   + s.interlock.expr);
+                    if (s.supervision) lines.push('    SUPERVISION: ' + s.supervision.expr);
+                    s.actions.forEach(a => lines.push('    ' + formatAction(a)));
                     const myTrans = chain.transitions.filter(t => t.from === s.name);
                     if (myTrans.length) {
                         lines.push('  TRANS:');
-                        myTrans.forEach(t => lines.push('    ' + (t.cond || 'TRUE') + ' -> ' + t.to));
+                        // Parallele Verzweigungen: Übergänge mit selber Bedingung
+                        // UND selber parallelGroup zur Bracket-Syntax `cond -> [..]`
+                        // zusammenfassen.
+                        const printed = new Set();
+                        myTrans.forEach(t => {
+                            if (printed.has(t)) return;
+                            if (t.parallel && t.parallelGroup && t.parallelGroup.length > 1) {
+                                const groupTransitions = myTrans.filter(x =>
+                                    x.parallel && x.cond === t.cond
+                                    && x.parallelGroup && x.parallelGroup.join(',') === t.parallelGroup.join(','));
+                                groupTransitions.forEach(g => printed.add(g));
+                                lines.push('    ' + (t.cond || 'TRUE') + ' -> [' + t.parallelGroup.join(', ') + ']');
+                            } else {
+                                printed.add(t);
+                                lines.push('    ' + (t.cond || 'TRUE') + ' -> ' + t.to);
+                            }
+                        });
                     }
                 });
                 lines.push('END');
@@ -6948,16 +7341,102 @@ You must output exactly this JSON format. The logic code goes as a single string
                     // oder beliebige Nummern — wir nutzen sie 1:1 weiter).
                     const baseNum = Math.min.apply(null, stepNums);
 
-                    // Schritt-AST aufbauen
+                    // Übergangs-Timer-Helfer (`_TMR_<chain>_<from>_<x> := TON(Q<from>, t)`)
+                    // identifizieren, damit Cond-Substrings darauf wieder als
+                    // `AFTER <t>` ausgegeben werden können.
+                    const tmrMap = new Map(); // helperName → "AFTER <time>"
+                    const tmrLineIdx = [];
+                    stmts.forEach(s => {
+                        if (!/^_TMR_/.test(s.lhs)) return;
+                        const tm = s.rhs.match(/^TON\s*\(\s*Q\d+\s*,\s*([\d.]+)\s*\)$/i);
+                        if (!tm) return;
+                        tmrMap.set(s.lhs, 'AFTER ' + tm[1]);
+                        tmrLineIdx.push(s.idx);
+                    });
+                    function restoreAfter(cond) {
+                        if (!tmrMap.size) return cond;
+                        let result = cond;
+                        tmrMap.forEach((replacement, helperName) => {
+                            const re = new RegExp('\\b' + helperName + '\\b', 'g');
+                            result = result.replace(re, replacement);
+                        });
+                        return result;
+                    }
+
+                    // INTERLOCK-/SUPERVISION-Helper:
+                    //   `_IL_<chain>_Q<n>    := <expr>`
+                    //   `_FAULT_<chain>_Q<n> := Q<n> && (<expr>)`
+                    // Wir extrahieren beide Mappings, um sie später am AST-Step
+                    // wieder anzuhängen und die Cond-Strings davon zu befreien.
+                    // Die Maps sind nach Q-Pin-Nummer indiziert.
+                    const ilExprByQ   = new Map(); // qNum → expr-string
+                    const fltExprByQ  = new Map();
+                    const ilFltLineIdx   = [];
+                    const ilPrefix  = '_IL_'    + chainName + '_Q';
+                    const fltPrefix = '_FAULT_' + chainName + '_Q';
+                    stmts.forEach(s => {
+                        if (s.lhs.indexOf(ilPrefix) === 0) {
+                            const qNum = parseInt(s.lhs.slice(ilPrefix.length), 10);
+                            if (!isNaN(qNum)) ilExprByQ.set(qNum, restoreAfter(s.rhs.trim()));
+                            ilFltLineIdx.push(s.idx);
+                        } else if (s.lhs.indexOf(fltPrefix) === 0) {
+                            const qNum = parseInt(s.lhs.slice(fltPrefix.length), 10);
+                            // RHS hat Form `Q<n> && (<expr>)` — wir wollen <expr>.
+                            const m = s.rhs.match(/^Q\d+\s*&&\s*\((.+)\)\s*$/);
+                            const expr = m ? m[1].trim() : s.rhs.trim();
+                            if (!isNaN(qNum)) fltExprByQ.set(qNum, restoreAfter(expr));
+                            ilFltLineIdx.push(s.idx);
+                        }
+                    });
+                    // Schritt-AST aufbauen — nach der IL/SV-Extraktion, damit wir
+                    // die Maps für die Step-Properties direkt füllen können.
                     const steps = stepNums.map(n => {
                         const sStmt = stmts.find(s => s.lhs === 'S' + n);
+                        const sName = 'S' + n;
                         return {
-                            name: 'S' + n,
+                            name: sName,
                             label: (sStmt && sStmt.label) || '',
                             actions: [], // werden gleich noch eingesammelt
+                            interlock:   ilExprByQ.has(n)  ? { expr: ilExprByQ.get(n) }  : null,
+                            supervision: fltExprByQ.has(n) ? { expr: fltExprByQ.get(n) } : null,
                             startLine: sStmt ? sStmt.idx : -1
                         };
                     });
+
+                    // Balancierter Klammer-Extractor: nach einem `(`-Index die zugehörige
+                    // `)`-Position finden (paren depth = 0). Brauchen wir, weil der
+                    // Generator Bedingungen wie `(Q<n> && (... AND (foo)))` schreibt —
+                    // ein lazy `(.+?)\)\)` greift zu wenig, sobald `cond` selbst Klammern hat.
+                    function balancedClose(str, openPos) {
+                        if (str[openPos] !== '(') return -1;
+                        let depth = 1;
+                        for (let i = openPos + 1; i < str.length; i++) {
+                            if (str[i] === '(') depth++;
+                            else if (str[i] === ')') { depth--; if (depth === 0) return i; }
+                        }
+                        return -1;
+                    }
+                    // Aus der Cond eines Übergangs den `¬_FAULT_<chain>_Q<from> && `-
+                    // Präfix entfernen, falls vorhanden. Wir nehmen nur die
+                    // konkrete Form, die der Generator schreibt.
+                    function stripFaultGuard(cond, fromQNum) {
+                        const guard = '¬' + fltPrefix + fromQNum + ' && ';
+                        const idx = cond.indexOf(guard);
+                        if (idx === -1) return cond;
+                        let inner = cond.slice(idx + guard.length).trim();
+                        // Der Generator klammert den ursprünglichen cond explizit,
+                        // also beginnt der Rest häufig mit `(...)` — diese Klammer
+                        // wieder entfernen, wenn sie das gesamte Restwort umfasst.
+                        if (inner.startsWith('(') && inner.endsWith(')')) {
+                            let depth = 0, closesAtEnd = true;
+                            for (let k = 0; k < inner.length; k++) {
+                                if (inner[k] === '(') depth++;
+                                else if (inner[k] === ')') { depth--; if (depth === 0 && k < inner.length - 1) { closesAtEnd = false; break; } }
+                            }
+                            if (closesAtEnd) inner = inner.slice(1, -1).trim();
+                        }
+                        return inner;
+                    }
 
                     // Übergänge: für jedes (i → j) den passenden Term `(Q<i> && (cond))`
                     // in S<j>.rhs finden.
@@ -6967,46 +7446,82 @@ You must output exactly this JSON format. The logic code goes as a single string
                         const to   = stepNums[(k + 1) % stepNums.length];
                         const sToStmt = stmts.find(s => s.lhs === 'S' + to);
                         if (!sToStmt) continue;
-                        // Suche Term der Form `(Q<from> && (<cond>))` ODER `Q<from> && <cond>`
-                        // Wir nehmen die maximale geklammerte Form mit balancierten Klammern;
-                        // Heuristik: regulärer Ausdruck mit lazy match auf alles bis zur
-                        // schließenden Klammer + ggf. die nächste schließende.
-                        const reFull = new RegExp('\\(\\s*Q' + from + '\\s*&&\\s*\\((.+?)\\)\\s*\\)');
-                        const reLoose = new RegExp('Q' + from + '\\s*&&\\s*(.+?)(?:\\)\\s*\\||\\)$|$)');
+                        // Suche Term der Form `(Q<from> && (<cond>))` mit balancierten
+                        // Klammern. Fallback: `Q<from> && <token>` (Bare-Token, ohne Klammer).
                         let cond = null;
-                        let mFull = sToStmt.rhs.match(reFull);
-                        if (mFull) cond = mFull[1].trim();
-                        else {
+                        const reFullStart = new RegExp('\\(\\s*Q' + from + '\\s*&&\\s*\\(');
+                        const mStart = sToStmt.rhs.match(reFullStart);
+                        if (mStart) {
+                            const innerOpen = mStart.index + mStart[0].length - 1;
+                            const innerClose = balancedClose(sToStmt.rhs, innerOpen);
+                            if (innerClose !== -1) cond = sToStmt.rhs.slice(innerOpen + 1, innerClose).trim();
+                        }
+                        if (cond == null) {
+                            const reLoose = new RegExp('Q' + from + '\\s*&&\\s*(.+?)(?:\\)\\s*\\||\\)$|$)');
                             const mLoose = sToStmt.rhs.match(reLoose);
                             if (mLoose) cond = mLoose[1].trim().replace(/\)+$/, '').trim();
                         }
+                        // Erst `¬_FAULT_<chain>_Q<from>`-Guard rauspulen (falls
+                        // SUPERVISION aktiv), dann AFTER-Substitution.
+                        const stripped = stripFaultGuard(cond || 'TRUE', from);
                         transitions.push({
-                            from: 'S' + from, to: 'S' + to, cond: cond || 'TRUE',
+                            from: 'S' + from, to: 'S' + to, cond: restoreAfter(stripped),
                             line: sToStmt.idx
                         });
                     }
 
                     // Aktionen: Zuweisungen, deren RHS Terme `(Q<n> && (rhs))` enthält
-                    // und deren LHS keiner S/R/Q/_INIT_-Pin ist.
+                    // und deren LHS keiner S/R/Q/_INIT_/_TMR_/_IL_/_FAULT_-Pin ist.
                     stmts.forEach(s => {
                         if (RE_SR_PIN.test(s.lhs)) return;
                         if (/^Q\d+/.test(s.lhs)) return;
                         if (RE_INIT_TRUE.test(s.lhs)) return;
-                        // Pro Step zwei Patterns versuchen:
-                        //   1) (Q<n> && (rhs))  → Aktion mit individueller RHS
-                        //   2) bare Q<n>        → Aktion mit RHS = TRUE
-                        // Damit erkennen wir auch die simplifizierte Form, die der
-                        // Generator für `A := TRUE` mittlerweile erzeugt.
+                        if (/^_TMR_/.test(s.lhs)) return;
+                        if (/^_IL_/.test(s.lhs)) return;
+                        if (/^_FAULT_/.test(s.lhs)) return;
+                        // Pro Step vier Patterns versuchen — alle mit balancierter
+                        // Klammer-Erkennung statt lazy regex:
+                        //   1a) (Q<n> && _IL_<chain>_Q<n> && (rhs)) → C-Aktion mit RHS
+                        //   1b) (Q<n> && _IL_<chain>_Q<n>)          → C-Aktion mit RHS = TRUE
+                        //   2)  (Q<n> && (rhs))                     → N-Aktion mit RHS
+                        //   3)  bare Q<n>                           → N-Aktion mit RHS = TRUE
                         stepNums.forEach((n, idx) => {
-                            const reTerm = new RegExp('\\(\\s*Q' + n + '\\s*&&\\s*\\((.+?)\\)\\s*\\)');
-                            const m = s.rhs.match(reTerm);
-                            if (m) {
-                                steps[idx].actions.push({ lhs: s.lhs, rhs: m[1].trim(), line: s.idx });
+                            const ilTok = '_IL_' + chainName + '_Q' + n;
+                            // 1a) C-Aktion mit RHS
+                            const reCStart = new RegExp('\\(\\s*Q' + n + '\\s*&&\\s*' + ilTok + '\\s*&&\\s*\\(');
+                            const mCStart = s.rhs.match(reCStart);
+                            if (mCStart) {
+                                const innerOpen = mCStart.index + mCStart[0].length - 1;
+                                const innerClose = balancedClose(s.rhs, innerOpen);
+                                if (innerClose !== -1) {
+                                    steps[idx].actions.push({
+                                        lhs: s.lhs, rhs: s.rhs.slice(innerOpen + 1, innerClose).trim(),
+                                        qualifier: { kind: 'C' }, line: s.idx
+                                    });
+                                    return;
+                                }
+                            }
+                            // 1b) C-Aktion mit RHS = TRUE
+                            const reCTrue = new RegExp('\\(\\s*Q' + n + '\\s*&&\\s*' + ilTok + '\\s*\\)');
+                            if (reCTrue.test(s.rhs)) {
+                                steps[idx].actions.push({ lhs: s.lhs, rhs: 'TRUE', qualifier: { kind: 'C' }, line: s.idx });
                                 return;
                             }
-                            // bare Q<n> als ODER-Term: am Anfang ODER nach `||`,
-                            // gefolgt von `||` oder Ende — Q<n> innerhalb von
-                            // `(Q<n> && …)` wird so NICHT versehentlich gematcht.
+                            // 2) N-Aktion mit RHS
+                            const reTermStart = new RegExp('\\(\\s*Q' + n + '\\s*&&\\s*\\(');
+                            const mTermStart = s.rhs.match(reTermStart);
+                            if (mTermStart) {
+                                const innerOpen = mTermStart.index + mTermStart[0].length - 1;
+                                const innerClose = balancedClose(s.rhs, innerOpen);
+                                if (innerClose !== -1) {
+                                    steps[idx].actions.push({
+                                        lhs: s.lhs, rhs: s.rhs.slice(innerOpen + 1, innerClose).trim(),
+                                        line: s.idx
+                                    });
+                                    return;
+                                }
+                            }
+                            // 3) bare Q<n>
                             const reBare = new RegExp('(?:^|\\|\\|)\\s*Q' + n + '\\s*(?:\\|\\||$)');
                             if (reBare.test(s.rhs)) {
                                 steps[idx].actions.push({ lhs: s.lhs, rhs: 'TRUE', line: s.idx });
@@ -7015,11 +7530,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     });
 
                     // Block-Linenrange: alle relevanten Zeilen (Anker, S/R der
-                    // Kette, Aktionen) plus optional ein `// === END NAME ===`-
-                    // Marker am Ende.
+                    // Kette, Aktionen, AFTER-Timer-Helper, IL/FAULT-Helper)
+                    // plus optional ein `// === END NAME ===`-Marker am Ende.
                     const allLines = [anchor.idx, initStepStmt.idx]
                         .concat(stmts.filter(s => RE_SR_PIN.test(s.lhs) && stepNums.includes(parseInt(s.lhs.slice(1), 10))).map(s => s.idx))
-                        .concat(steps.flatMap(st => st.actions.map(a => a.line)));
+                        .concat(steps.flatMap(st => st.actions.map(a => a.line)))
+                        .concat(tmrLineIdx)
+                        .concat(ilFltLineIdx);
                     lines.forEach((line, idx) => {
                         if (new RegExp('^\\s*\\/\\/\\s*=+\\s*END\\s+' + chainName + '\\b', 'i').test(line)) {
                             allLines.push(idx);
@@ -7080,7 +7597,35 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Grafcet-Layout: vertikale Schritt-Kette, Init-Schritt mit Doppelrand,
             // Aktionen rechts daneben als gelbe Box, Transitionen als horizontaler
             // Balken mit Bedingung daneben. Returns total content height.
-            function renderGrafcet(svg, chains, baseMap) {
+            // Hilfs-Factory für SVG-Tool-Buttons (×, ↑, ↓, +). data-tool kodiert die
+            // Operation; data-chain-name und data-step-name die Adressierung.
+            function renderToolBtn(parent, cx, cy, glyph, tool, chainName, stepName, actionIdx) {
+                const g = document.createElementNS(SVG_NS, 'g');
+                g.setAttribute('class', 'sk-tool-btn');
+                g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+                g.setAttribute('data-tool', tool);
+                if (chainName) g.setAttribute('data-chain-name', chainName);
+                if (stepName)  g.setAttribute('data-step-name',  stepName);
+                if (actionIdx != null) g.setAttribute('data-action-idx', actionIdx);
+                const c = document.createElementNS(SVG_NS, 'circle');
+                c.setAttribute('r', '9');
+                c.setAttribute('fill', '#37474f');
+                c.setAttribute('stroke', '#1a1a1a');
+                c.setAttribute('stroke-width', '1');
+                g.appendChild(c);
+                const t = document.createElementNS(SVG_NS, 'text');
+                t.setAttribute('text-anchor', 'middle');
+                t.setAttribute('y', '4');
+                t.setAttribute('fill', '#fff');
+                t.setAttribute('font-size', '12');
+                t.setAttribute('font-weight', 'bold');
+                t.setAttribute('font-family', "'Segoe UI', Tahoma, sans-serif");
+                t.textContent = glyph;
+                g.appendChild(t);
+                parent.appendChild(g);
+                return g;
+            }
+            function renderGrafcet(svg, chains, baseMap, editableSet) {
                 const W = 130, H = 36, VSP = 32, PAD = 16;
                 const colX = PAD + W / 2 + 30; // Step-Box-Mitte (etwas eingerückt für Step-Label links)
                 let y = PAD;
@@ -7089,6 +7634,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 chains.forEach(chain => {
                     const base = baseMap.get(chain.name);
                     if (base == null) return;
+                    const isEditable = editableSet && editableSet.has(chain);
                     // Step-Name → Q-Nummer für Übergangs-Mapping
                     const nameToQ = new Map();
                     chain.steps.forEach((s, i) => nameToQ.set(s.name, 'Q' + (base + i)));
@@ -7103,28 +7649,82 @@ You must output exactly this JSON format. The logic code goes as a single string
                     chain.steps.forEach((step, si) => {
                         const num = base + si;
                         const isInit = si === 0;
-                        const g = el('g', { class: 'sk-step' + (isInit ? ' init' : ''), 'data-q': 'Q' + num }, svg);
+                        const g = el('g', {
+                            class: 'sk-step' + (isInit ? ' init' : ''),
+                            'data-q': 'Q' + num,
+                            'data-fault-var': step.supervision ? ('_FAULT_' + chain.name + '_Q' + num) : ''
+                        }, svg);
                         el('rect', { x: colX - W/2, y, width: W, height: H, rx: 2 }, g);
                         if (isInit) {
                             el('rect', { class: 'sk-inner-rect', x: colX - W/2 + 3, y: y + 3, width: W - 6, height: H - 6, rx: 1 }, g);
                         }
                         el('text', { class: 'sk-step-num',  x: colX - W/2 + 8, y: y + H/2 + 4 }, g).textContent = 'S' + num;
-                        const lbl = el('text', { class: 'sk-step-label', x: colX, y: y + H/2 + 4, 'text-anchor': 'middle' }, g);
+                        const lbl = el('text', {
+                            class: 'sk-step-label' + (isEditable ? ' sk-editable' : ''),
+                            x: colX, y: y + H/2 + 4, 'text-anchor': 'middle',
+                            'data-edit-kind': isEditable ? 'step-label' : '',
+                            'data-chain-name': chain.name,
+                            'data-step-name':  step.name
+                        }, g);
                         lbl.textContent = step.label || step.name;
 
-                        // Aktionen-Box rechts daneben
-                        if (step.actions.length) {
-                            const ax = colX + W/2 + 10;
-                            const aH = Math.max(H, step.actions.length * 14 + 6);
+                        // Aktionen-Box rechts daneben — alle Aktionen sind klickbar,
+                        // jede mit eigenem ×-Button. Unten ein „+"-Button für neue
+                        // Aktionen. Nur bei editierbaren Ketten.
+                        const hasActions = step.actions.length;
+                        const ax = colX + W/2 + 10;
+                        const aRows = Math.max(1, step.actions.length);
+                        const addBtnSpace = isEditable ? 16 : 0;
+                        const aH = Math.max(H, aRows * 14 + 6 + addBtnSpace);
+                        if (hasActions || isEditable) {
                             const aBox = el('g', { class: 'sk-action-box' }, svg);
-                            el('rect', { x: ax, y: y, width: 200, height: aH, rx: 2 }, aBox);
+                            el('rect', { x: ax, y: y, width: 220, height: aH, rx: 2 }, aBox);
                             step.actions.forEach((a, ai) => {
-                                const t = el('text', { x: ax + 6, y: y + 14 + ai * 14 }, aBox);
-                                t.textContent = a.lhs + ' := ' + a.rhs;
+                                const t = el('text', {
+                                    x: ax + 6, y: y + 14 + ai * 14,
+                                    class: isEditable ? 'sk-editable' : '',
+                                    'data-edit-kind': isEditable ? 'action' : '',
+                                    'data-chain-name': chain.name,
+                                    'data-step-name': step.name,
+                                    'data-action-idx': ai
+                                }, aBox);
+                                t.textContent = formatActionInline(a);
+                                if (isEditable) {
+                                    renderToolBtn(svg, ax + 220 - 10, y + 12 + ai * 14, '×', 'action-del', chain.name, step.name, ai);
+                                }
                             });
-                            maxX = Math.max(maxX, ax + 200);
+                            if (isEditable) {
+                                // „+ Aktion" Button am unteren Rand der Action-Box
+                                renderToolBtn(svg, ax + 12, y + aH - 8, '+', 'action-add', chain.name, step.name);
+                            }
+                            maxX = Math.max(maxX, ax + 220);
+                        }
+                        // Step-Tool-Buttons rechts oberhalb der Step-Box (×, ↑, ↓)
+                        if (isEditable) {
+                            const tY = y - 10;
+                            renderToolBtn(svg, colX - W/2 - 14, tY, '↑', 'step-up',   chain.name, step.name);
+                            renderToolBtn(svg, colX - W/2 + 4,  tY, '↓', 'step-down', chain.name, step.name);
+                            renderToolBtn(svg, colX + W/2 - 4,  tY, '×', 'step-del',  chain.name, step.name);
                         }
                         y += H;
+
+                        // INTERLOCK-/SUPERVISION-Badges direkt unter dem Step-Kasten,
+                        // damit sie zur Step-Visualisierung gehören (Init-Doppelrand etc.
+                        // bleibt sauber).
+                        const badgeLines = [];
+                        if (step.interlock)   badgeLines.push({ cls: 'sk-step-il-badge', text: '🔒 IL: ' + step.interlock.expr });
+                        if (step.supervision) badgeLines.push({ cls: 'sk-step-sv-badge', text: '⚠ SV: '  + step.supervision.expr,
+                                                                faultVar: '_FAULT_' + chain.name + '_Q' + num });
+                        badgeLines.forEach((b, bi) => {
+                            const t = el('text', {
+                                x: colX - W/2, y: y + 10 + bi * 12,
+                                class: b.cls
+                            }, svg);
+                            if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
+                            t.textContent = b.text;
+                            maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
+                        });
+                        if (badgeLines.length) y += 12 * badgeLines.length + 2;
 
                         // Übergänge ausgehend von diesem Schritt — alle Visuals in
                         // einer .sk-transition-Gruppe für die Firing-Animation.
@@ -7142,10 +7742,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                             el('line', { class: 'sk-trans-bar', x1: colX - 16, y1: barY, x2: colX + 16, y2: barY }, tg);
                             outs.forEach((t, ti) => {
                                 const cond = el('text', {
-                                    class: 'sk-trans-cond',
+                                    class: 'sk-trans-cond' + (isEditable ? ' sk-editable' : ''),
                                     x: colX + 22,
                                     y: barY + 4 + ti * 14,
-                                    'data-to-q': nameToQ.get(t.to) || ''
+                                    'data-to-q': nameToQ.get(t.to) || '',
+                                    'data-edit-kind': isEditable ? 'trans-cond' : '',
+                                    'data-chain-name': chain.name,
+                                    'data-from-step':  t.from,
+                                    'data-to-step':    t.to
                                 }, tg);
                                 cond.textContent = (t.cond || 'TRUE') + ' → ' + t.to;
                             });
@@ -7153,6 +7757,18 @@ You must output exactly this JSON format. The logic code goes as a single string
                             y += VSP;
                         }
                     });
+                    // „+ Schritt am Ende" — nur bei editierbaren Ketten.
+                    if (isEditable) {
+                        renderToolBtn(svg, colX, y + 12, '+', 'step-add-end', chain.name);
+                        const txt = el('text', {
+                            x: colX + 16, y: y + 16,
+                            class: 'sk-tool-label',
+                            fill: '#90caf9', 'font-size': 11,
+                            'font-family': "'Segoe UI', Tahoma, sans-serif"
+                        }, svg);
+                        txt.textContent = 'Schritt am Ende';
+                        y += 28;
+                    }
                     y += 16; // Abstand zwischen Ketten
                 });
                 return { totalY: y + PAD, totalX: Math.ceil(maxX + PAD) };
@@ -7161,7 +7777,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // S7-GRAPH-Stil: gleicher AST, andere Anmutung. Steps als Rechtecke mit
             // „S<n>" links und Label in der Mitte, aktiv = blau gefüllt. Bedingungen
             // sitzen in einer eigenen kleinen Box neben dem Übergangsbalken.
-            function renderS7Graph(svg, chains, baseMap) {
+            function renderS7Graph(svg, chains, baseMap, editableSet) {
                 const W = 160, H = 32, VSP = 30, PAD = 16;
                 const colX = PAD + W / 2 + 10;
                 let y = PAD;
@@ -7170,6 +7786,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 chains.forEach(chain => {
                     const base = baseMap.get(chain.name);
                     if (base == null) return;
+                    const isEditable = editableSet && editableSet.has(chain);
                     const nameToQ = new Map();
                     chain.steps.forEach((s, i) => nameToQ.set(s.name, 'Q' + (base + i)));
                     const title = el('text', {
@@ -7182,14 +7799,25 @@ You must output exactly this JSON format. The logic code goes as a single string
                     chain.steps.forEach((step, si) => {
                         const num = base + si;
                         const isInit = si === 0;
-                        const g = el('g', { class: 'sk-step' + (isInit ? ' init' : ''), 'data-q': 'Q' + num }, svg);
+                        const g = el('g', {
+                            class: 'sk-step' + (isInit ? ' init' : ''),
+                            'data-q': 'Q' + num,
+                            'data-fault-var': step.supervision ? ('_FAULT_' + chain.name + '_Q' + num) : ''
+                        }, svg);
                         // Eckiges Rechteck (kein gerundetes), TIA-Look.
                         el('rect', { x: colX - W/2, y, width: W, height: H }, g);
                         el('text', { class: 'sk-step-num', x: colX - W/2 + 8, y: y + H/2 + 4 }, g).textContent = 'S' + num;
-                        const lbl = el('text', { class: 'sk-step-label', x: colX + 6, y: y + H/2 + 4 }, g);
+                        const lbl = el('text', {
+                            class: 'sk-step-label' + (isEditable ? ' sk-editable' : ''),
+                            x: colX + 6, y: y + H/2 + 4,
+                            'data-edit-kind': isEditable ? 'step-label' : '',
+                            'data-chain-name': chain.name,
+                            'data-step-name':  step.name
+                        }, g);
                         lbl.textContent = step.label || step.name;
 
-                        // Aktionen als TIA-Qualifier-Liste rechts (N = normal)
+                        // Aktionen als TIA-Qualifier-Liste rechts. Qualifier-Prefix
+                        // entspricht der DSL — N (Default), C, P, S, R, D <t>, L <t>.
                         if (step.actions.length) {
                             const ax = colX + W/2 + 14;
                             const aH = Math.max(H, step.actions.length * 14 + 6);
@@ -7197,11 +7825,34 @@ You must output exactly this JSON format. The logic code goes as a single string
                             el('rect', { x: ax, y: y, width: 230, height: aH }, aBox);
                             step.actions.forEach((a, ai) => {
                                 const t = el('text', { x: ax + 6, y: y + 14 + ai * 14 }, aBox);
-                                t.textContent = 'N  ' + a.lhs + ' := ' + a.rhs;
+                                const q = a.qualifier || { kind: 'N' };
+                                let qPrefix;
+                                if (q.kind === 'D' || q.kind === 'L') {
+                                    qPrefix = q.kind + (q.time != null ? q.time : 1.0);
+                                } else {
+                                    qPrefix = q.kind;
+                                }
+                                t.textContent = qPrefix.padEnd(4, ' ') + a.lhs + ' := ' + a.rhs;
                             });
                             maxX = Math.max(maxX, ax + 230);
                         }
                         y += H;
+
+                        // INTERLOCK-/SUPERVISION-Badges unter dem Step.
+                        const badgeLines = [];
+                        if (step.interlock)   badgeLines.push({ cls: 'sk-step-il-badge', text: '🔒 V: ' + step.interlock.expr });
+                        if (step.supervision) badgeLines.push({ cls: 'sk-step-sv-badge', text: '⚠ S: '  + step.supervision.expr,
+                                                                faultVar: '_FAULT_' + chain.name + '_Q' + num });
+                        badgeLines.forEach((b, bi) => {
+                            const t = el('text', {
+                                x: colX - W/2, y: y + 10 + bi * 12,
+                                class: b.cls
+                            }, svg);
+                            if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
+                            t.textContent = b.text;
+                            maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
+                        });
+                        if (badgeLines.length) y += 12 * badgeLines.length + 2;
 
                         const outs = chain.transitions.filter(t => t.from === step.name);
                         if (outs.length) {
@@ -7220,10 +7871,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                             tn.textContent = 'T' + (si + 1);
                             outs.forEach((t, ti) => {
                                 const cond = el('text', {
-                                    class: 'sk-trans-cond',
+                                    class: 'sk-trans-cond' + (isEditable ? ' sk-editable' : ''),
                                     x: colX + 28,
                                     y: barY + 4 + ti * 14,
-                                    'data-to-q': nameToQ.get(t.to) || ''
+                                    'data-to-q': nameToQ.get(t.to) || '',
+                                    'data-edit-kind': isEditable ? 'trans-cond' : '',
+                                    'data-chain-name': chain.name,
+                                    'data-from-step':  t.from,
+                                    'data-to-step':    t.to
                                 }, tg);
                                 cond.textContent = (t.cond || 'TRUE') + ' → ' + t.to;
                             });
@@ -7272,9 +7927,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return;
                 }
                 while (svg.firstChild) svg.removeChild(svg.firstChild);
+                // Editierbarkeits-Set: nur DSL-Ketten dürfen via Grafcet-Klick
+                // editiert werden, weil nur sie eine `startLine`/`endLine` im
+                // DSL-Quelltext haben. Recognized RS-Ketten sind read-only.
+                const editableSet = new Set(dslChains);
                 const dims = (renderMode === 's7graph')
-                    ? renderS7Graph(svg, allChains, baseMap)
-                    : renderGrafcet(svg, allChains, baseMap);
+                    ? renderS7Graph(svg, allChains, baseMap, editableSet)
+                    : renderGrafcet(svg, allChains, baseMap, editableSet);
                 svg.setAttribute('viewBox', '0 0 ' + dims.totalX + ' ' + dims.totalY);
                 svg.style.minWidth  = dims.totalX + 'px';
                 svg.style.minHeight = dims.totalY + 'px';
@@ -7300,7 +7959,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const svg = $svg();
                 if (!svg) return;
                 const state = (typeof spsState !== 'undefined') ? spsState : (window.spsState || {});
-                // Step-Aktiv-Markierung
+                // Step-Aktiv-Markierung + Fault-Markierung. Wenn eine SUPERVISION
+                // einen Fault-Helper hat und der gerade TRUE ist, blinkt der Step rot.
                 const currentQ = new Map();
                 svg.querySelectorAll('.sk-step').forEach(g => {
                     const q = g.getAttribute('data-q');
@@ -7308,6 +7968,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     const isActive = !!state[q];
                     g.classList.toggle('active', isActive);
                     currentQ.set(q, isActive);
+                    const fv = g.getAttribute('data-fault-var');
+                    if (fv) g.classList.toggle('faulted', !!state[fv]);
+                });
+                // SV-Badges: bei Fault Klasse `.faulted` setzen — CSS macht den Rest.
+                svg.querySelectorAll('.sk-step-sv-badge[data-fault-var]').forEach(b => {
+                    const fv = b.getAttribute('data-fault-var');
+                    if (fv) b.classList.toggle('faulted', !!state[fv]);
                 });
                 // Übergangs-Firing: jede Transition trägt data-from-q + data-to-q.
                 // Wir feuern, sobald Q_to von false → true wechselt UND Q_from
@@ -7357,6 +8024,282 @@ You must output exactly this JSON format. The logic code goes as a single string
                     b.classList.toggle('active', b.getAttribute('data-mode') === renderMode);
                 });
                 render();
+            });
+
+            // === Phase 5: Grafcet-Interaktivität ===
+            // Inline-Edit für editierbare Step-Labels und Transition-Bedingungen.
+            // Klick auf ein .sk-editable-Element öffnet einen Text-Input direkt
+            // über der SVG-Position. Enter übernimmt, Esc bricht ab. Während der
+            // Edit aktiv ist, ist die Code-Textarea readonly — sonst könnten User
+            // simultan im Code tippen und der Sync würde überschreiben.
+            let _activeEditInput = null;
+            function openInlineEdit(svgTextEl, initial, applyCb) {
+                if (_activeEditInput) _activeEditInput.remove();
+                const bbox = svgTextEl.getBoundingClientRect();
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = initial;
+                input.style.cssText = [
+                    'position:fixed',
+                    'left:'   + Math.max(8, bbox.left - 4) + 'px',
+                    'top:'    + Math.max(8, bbox.top - 4) + 'px',
+                    'min-width:' + Math.max(120, bbox.width + 40) + 'px',
+                    'height:' + Math.max(22, bbox.height + 8) + 'px',
+                    'z-index:6000',
+                    'background:#ffffe0',
+                    'border:2px solid #007acc',
+                    'border-radius:3px',
+                    'padding:0 8px',
+                    'font-family:Consolas, "Courier New", monospace',
+                    'font-size:12px',
+                    'color:#1a1a1a',
+                    'outline:none',
+                    'box-shadow:0 4px 14px rgba(0,0,0,0.5)'
+                ].join(';');
+                document.body.appendChild(input);
+                _activeEditInput = input;
+                const ta = document.getElementById('code');
+                const prevReadOnly = ta ? ta.readOnly : false;
+                if (ta) ta.readOnly = true;
+                input.focus();
+                input.select();
+                let done = false;
+                const close = (apply) => {
+                    if (done) return;
+                    done = true;
+                    if (ta) ta.readOnly = prevReadOnly;
+                    if (apply) {
+                        const val = input.value.trim();
+                        if (val !== initial) applyCb(val);
+                    }
+                    input.remove();
+                    if (_activeEditInput === input) _activeEditInput = null;
+                };
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter')  { e.preventDefault(); close(true);  }
+                    if (e.key === 'Escape') { e.preventDefault(); close(false); }
+                });
+                input.addEventListener('blur', () => close(true));
+            }
+
+            // Sync: schreibt die Chain im AST über `_printSchrittketteAsDSL`
+            // pretty-printed zurück in die Textarea und feuert ein `input`-Event,
+            // damit die übliche Re-Parse-/Re-Render-Pipeline anläuft.
+            function syncChainToEditor(chain) {
+                const ta = document.getElementById('code');
+                if (!ta) return;
+                if (chain.startLine == null || chain.endLine == null) return;
+                if (typeof window._printSchrittketteAsDSL !== 'function') return;
+                const lines = ta.value.split('\n');
+                if (chain.startLine < 0 || chain.endLine >= lines.length) return;
+                const dslText = window._printSchrittketteAsDSL(chain);
+                const newLines = dslText.split('\n');
+                lines.splice(chain.startLine, chain.endLine - chain.startLine + 1, ...newLines);
+                ta.value = lines.join('\n');
+                let off = 0;
+                for (let i = 0; i < chain.startLine; i++) off += lines[i].length + 1;
+                try { ta.selectionStart = ta.selectionEnd = off; } catch(_e) {}
+                ta.dispatchEvent(new Event('input'));
+            }
+
+            // Klick-Delegation auf das SVG: identifiziert das editierbare Element
+            // über data-edit-kind und reicht an die Inline-Edit-Logik weiter.
+            function findChainByName(name) {
+                if (!name) return null;
+                const chains = window._schrittkettenChains || [];
+                return chains.find(c => c.name === name) || null;
+            }
+
+            // ===== AST-Mutationen für Grafcet-Editor =====
+            // Jede Mutation modifiziert die chain in-place und ruft danach
+            // syncChainToEditor → DSL-Pretty-Print → textarea → updateEditor →
+            // Re-Render. Step-Namen bleiben stabil; Q-Nummern leiten sich aus
+            // der Array-Position ab.
+            function nextStepName(chain) {
+                let n = 1;
+                const used = new Set(chain.steps.map(s => s.name));
+                while (used.has('S' + n)) n++;
+                return 'S' + n;
+            }
+            function moveStep(chain, stepName, dir) {
+                const idx = chain.steps.findIndex(s => s.name === stepName);
+                if (idx < 0) return false;
+                const newIdx = idx + dir;
+                if (newIdx < 0 || newIdx >= chain.steps.length) return false;
+                const [s] = chain.steps.splice(idx, 1);
+                chain.steps.splice(newIdx, 0, s);
+                return true;
+            }
+            function removeStep(chain, stepName) {
+                if (chain.steps.length <= 1) {
+                    alert('Eine Kette muss mindestens einen Schritt haben.');
+                    return false;
+                }
+                const idx = chain.steps.findIndex(s => s.name === stepName);
+                if (idx < 0) return false;
+                chain.steps.splice(idx, 1);
+                // Übergänge umlenken: Vorgänger zeigt jetzt auf den Nachfolger des
+                // entfernten Schritts. Wir nehmen das erste ausgehende Trans-Ziel
+                // des entfernten Schritts als neuen Zielpunkt.
+                const incoming = chain.transitions.filter(t => t.to === stepName);
+                const outgoing = chain.transitions.filter(t => t.from === stepName);
+                if (incoming.length && outgoing.length) {
+                    const newTarget = outgoing[0].to;
+                    incoming.forEach(t => { t.to = newTarget; });
+                }
+                chain.transitions = chain.transitions.filter(t => t.from !== stepName && t.to !== stepName);
+                return true;
+            }
+            function addStepAtEnd(chain) {
+                const name = nextStepName(chain);
+                const newStep = { name, label: '', actions: [] };
+                if (!chain.steps.length) {
+                    chain.steps.push(newStep);
+                    return true;
+                }
+                const lastStep = chain.steps[chain.steps.length - 1];
+                chain.steps.push(newStep);
+                // Bestehenden Trans des letzten Schritts auf den neuen Schritt
+                // umlenken (bei einer Zyklus-Kette: alter S_last→S_first wird
+                // S_last→S_new, und S_new→S_first als neuer Übergang).
+                const lastOut = chain.transitions.filter(t => t.from === lastStep.name);
+                if (lastOut.length) {
+                    const t = lastOut[0];
+                    const oldTo = t.to;
+                    t.to = name;
+                    chain.transitions.push({ from: name, to: oldTo, cond: 'TRUE' });
+                } else {
+                    chain.transitions.push({ from: lastStep.name, to: name, cond: 'TRUE' });
+                }
+                return true;
+            }
+            function addStepAfter(chain, stepName) {
+                const idx = chain.steps.findIndex(s => s.name === stepName);
+                if (idx < 0) return false;
+                const name = nextStepName(chain);
+                const newStep = { name, label: '', actions: [] };
+                chain.steps.splice(idx + 1, 0, newStep);
+                // Übergang(e) von stepName auf newStep umleiten, newStep bekommt
+                // die alten Übergänge als seine eigenen.
+                const outgoing = chain.transitions.filter(t => t.from === stepName);
+                outgoing.forEach(t => {
+                    const oldTo = t.to;
+                    t.from = name;
+                    t.to = oldTo;
+                });
+                chain.transitions.push({ from: stepName, to: name, cond: 'TRUE' });
+                return true;
+            }
+            function parseActionText(text) {
+                // Akzeptiert „[QUAL: ]LHS := RHS" — Qualifier-Prefixe wie in der DSL.
+                const m1 = text.match(/^(?:([NSRP])\s*:\s*|([DL])\s+([\d.]+)\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/i);
+                if (!m1) return null;
+                const q = m1[1] ? { kind: m1[1].toUpperCase() }
+                    : (m1[2] ? { kind: m1[2].toUpperCase(), time: parseFloat(m1[3]) }
+                             : { kind: 'N' });
+                return { lhs: m1[4].toUpperCase(), rhs: m1[5].trim(), qualifier: q };
+            }
+            function editAction(chain, stepName, actionIdx, newText) {
+                const step = chain.steps.find(s => s.name === stepName);
+                if (!step || !step.actions[actionIdx]) return false;
+                const p = parseActionText(newText);
+                if (!p) return false;
+                step.actions[actionIdx].lhs = p.lhs;
+                step.actions[actionIdx].rhs = p.rhs;
+                step.actions[actionIdx].qualifier = p.qualifier;
+                return true;
+            }
+            function removeAction(chain, stepName, actionIdx) {
+                const step = chain.steps.find(s => s.name === stepName);
+                if (!step) return false;
+                step.actions.splice(actionIdx, 1);
+                return true;
+            }
+            function addAction(chain, stepName, text) {
+                const step = chain.steps.find(s => s.name === stepName);
+                if (!step) return false;
+                const p = parseActionText(text);
+                if (!p) return false;
+                step.actions.push(p);
+                return true;
+            }
+            // Wrapper: mutation + sync. Liefert true wenn sich etwas änderte.
+            function mutateChain(chain, mutationFn) {
+                if (mutationFn(chain)) syncChainToEditor(chain);
+            }
+
+            // Hilfs-Action-Formatter (gleiche Logik wie in printAsDSL).
+            function formatActionInline(a) {
+                const q = a.qualifier || { kind: 'N' };
+                let prefix = '';
+                if (q.kind === 'P' || q.kind === 'S' || q.kind === 'R' || q.kind === 'C') prefix = q.kind + ': ';
+                else if (q.kind === 'D' || q.kind === 'L') prefix = q.kind + ' ' + (q.time != null ? q.time : 1.0) + ': ';
+                return prefix + a.lhs + ' := ' + a.rhs;
+            }
+
+            $svg() && $svg().addEventListener('click', (e) => {
+                // Erst Tool-Buttons (×, ↑, ↓, +) prüfen — die brauchen kein Inline-Edit.
+                const tool = e.target.closest('.sk-tool-btn');
+                if (tool) {
+                    e.stopPropagation();
+                    const op   = tool.getAttribute('data-tool');
+                    const chainName = tool.getAttribute('data-chain-name');
+                    const stepName  = tool.getAttribute('data-step-name');
+                    const actionIdx = tool.getAttribute('data-action-idx');
+                    const chain = findChainByName(chainName);
+                    if (!chain) return;
+                    if (op === 'step-up')        mutateChain(chain, c => moveStep(c, stepName, -1));
+                    else if (op === 'step-down') mutateChain(chain, c => moveStep(c, stepName, +1));
+                    else if (op === 'step-del') {
+                        if (confirm('Schritt „' + stepName + '" löschen?')) {
+                            mutateChain(chain, c => removeStep(c, stepName));
+                        }
+                    } else if (op === 'step-add-end') {
+                        mutateChain(chain, c => addStepAtEnd(c));
+                    } else if (op === 'step-add-after') {
+                        mutateChain(chain, c => addStepAfter(c, stepName));
+                    } else if (op === 'action-del') {
+                        mutateChain(chain, c => removeAction(c, stepName, parseInt(actionIdx, 10)));
+                    } else if (op === 'action-add') {
+                        // Inline-Edit mit leerem Initial-Wert; bei Apply parsen.
+                        openInlineEdit(tool, 'NEU := TRUE', (val) => {
+                            mutateChain(chain, c => addAction(c, stepName, val));
+                        });
+                    }
+                    return;
+                }
+                const t = e.target.closest('.sk-editable');
+                if (!t) return;
+                const kind = t.getAttribute('data-edit-kind');
+                const chainName = t.getAttribute('data-chain-name');
+                const chain = findChainByName(chainName);
+                if (!chain) return;
+                if (kind === 'step-label') {
+                    const stepName = t.getAttribute('data-step-name');
+                    const step = chain.steps.find(s => s.name === stepName);
+                    if (!step) return;
+                    openInlineEdit(t, step.label || '', (newVal) => {
+                        step.label = newVal;
+                        syncChainToEditor(chain);
+                    });
+                } else if (kind === 'trans-cond') {
+                    const fromName = t.getAttribute('data-from-step');
+                    const toName   = t.getAttribute('data-to-step');
+                    const trans = chain.transitions.find(x => x.from === fromName && x.to === toName);
+                    if (!trans) return;
+                    openInlineEdit(t, trans.cond || 'TRUE', (newVal) => {
+                        trans.cond = newVal || 'TRUE';
+                        syncChainToEditor(chain);
+                    });
+                } else if (kind === 'action') {
+                    const stepName = t.getAttribute('data-step-name');
+                    const actionIdx = parseInt(t.getAttribute('data-action-idx'), 10);
+                    const step = chain.steps.find(s => s.name === stepName);
+                    if (!step || !step.actions[actionIdx]) return;
+                    openInlineEdit(t, formatActionInline(step.actions[actionIdx]), (newVal) => {
+                        if (editAction(chain, stepName, actionIdx, newVal)) syncChainToEditor(chain);
+                    });
+                }
             });
 
             window._renderSchrittketten = render;
@@ -8100,6 +9043,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 title: 'Schrittkette (Bohrmaschine)',   title_en: 'Step Chain (Drilling Machine)',
                 desc:  '4-Schritt-Sequenz Grundstellung → Fahren → Bohren → Zurück in der SCHRITTKETTE-DSL. Tastatursteuerung: SPACE/ESC/1/2/3.',
                 desc_en: '4-step sequence home → move → drill → return in the SCHRITTKETTE DSL. Keyboard: SPACE/ESC/1/2/3.',
+            },
+            {
+                key: 'schrittkette_mischer',
+                title: 'Schrittkette (Vollausstattung)', title_en: 'Step Chain (Full-Featured)',
+                desc:  '6-Schritt-Mischanlage mit INTERLOCK, SUPERVISION, allen Action-Qualifiern (N/C/P/D/L) und AFTER-Timern. Großes Demo-Beispiel.',
+                desc_en: '6-step mixing plant with INTERLOCK, SUPERVISION, all action qualifiers (N/C/P/D/L) and AFTER timers. Large showcase example.',
             },
         ];
         function renderFactoryPreview(canvas, objects) {

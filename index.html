@@ -70,6 +70,10 @@
         .legend-box { background-color: #1e1e1e; border: 1px solid #444; padding: 10px; font-size: 12px; line-height: 1.4; color: #ccc; border-radius: 4px; display: flex; flex-direction: column; gap: 8px; }
         .legend-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 5px 15px; align-items: center; }
         .legend-code { font-family: 'Courier New', Courier, monospace; background: #2d2d30; padding: 2px 6px; border-radius: 3px; font-weight: bold; color: #569CD6; user-select: all; cursor: pointer; border: 1px solid #555; }
+        /* SK-only-Operatoren (`->`): nur sichtbar wenn der Editor eine SCHRITTKETTE-DSL
+           enthält. JS togglet `legend-grid.has-sk` nach jedem Parse. */
+        .legend-sk-only { display: none; }
+        .legend-grid.has-sk .legend-sk-only { display: block; }
         .legend-code.assign { color: #C586C0; }
         .legend-code.rs { color: #CE9178; border-color: transparent; background: transparent; padding: 0;}
         .legend-rs-note { padding-top: 8px; border-top: 1px dashed #444; font-size: 11.5px; }
@@ -122,21 +126,21 @@
 		/* ===================================================================== */
         /* 🌟 NEU: ANIMATIONEN FÜR BEIDE EINKLAPPBAREN LEISTEN (LOGIK & IEC) 🌟 */
         /* ===================================================================== */
-        #fbs-button-group, #fbs-options-group, #iec-button-group, #pneu-options-group {
+        #fbs-button-group, #fbs-options-group, #iec-button-group, #pneu-options-group, #sk-options-group {
             display: flex; gap: 5px; overflow: hidden;
             max-width: 0; max-height: 38px; opacity: 0;
             flex-wrap: wrap; /* 🌟 DER FIX: Erlaubt den Umbruch in die nächste Zeile! */
             transition: max-width 0.4s ease, max-height 0.4s ease, opacity 0.3s ease;
             pointer-events: auto; /* Buttons bleiben klickbar */
         }
-        #fbs-button-group.expanded, #fbs-options-group.expanded, #iec-button-group.expanded, #pneu-options-group.expanded {
+        #fbs-button-group.expanded, #fbs-options-group.expanded, #iec-button-group.expanded, #pneu-options-group.expanded, #sk-options-group.expanded {
             max-width: 800px;
             max-height: 300px; /* Gibt der Box Raum, nach unten zu wachsen */
             opacity: 1;
             overflow: visible; /* Keine Scrollbalken mehr! */
         }
         /* 🌟 DER FIX: Buttons haben exakt dieselbe Höhe und zentrieren ihren Text */
-        #fbs-button-group .tool-btn, #fbs-options-group button, #iec-button-group button, #pneu-options-group button {
+        #fbs-button-group .tool-btn, #fbs-options-group button, #iec-button-group button, #pneu-options-group button, #sk-options-group button {
             flex: 0 0 auto !important;
             width: max-content;
             white-space: nowrap;
@@ -223,6 +227,31 @@
         }
         #btn-fbs-options.expanded {
             background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
+        }
+        /* --- Spezifisch: Optionen-Button Schrittketten-Panel (analog Logikplan) --- */
+        #btn-sk-options {
+            flex: 0 0 auto !important;
+            height: 26px !important;
+            padding: 0 10px !important;
+            white-space: nowrap;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px;
+            transition: background-color 0.2s, color 0.2s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+            color: #fff;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #btn-sk-options.expanded {
+            background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
+        }
+        /* Tool-Buttons während aktiver Sim ausblenden — Klasse `sk-hide-tools` setzt
+           der JS-Toggle aufs Wrapper, sobald die Option AN ist UND `isSimulationActive`.
+           Greift auf alle Edit-Tool-Buttons (×, ↑, ↓, +) und ihre Label gleichzeitig. */
+        #sk-wrapper.sk-hide-tools .sk-tool-btn,
+        #sk-wrapper.sk-hide-tools .sk-tool-label {
+            display: none !important;
         }
         /* 2D Toolbar: Feste Höhe aufheben, damit sie umbrechen kann */
         #factory-toolbar {
@@ -1894,17 +1923,21 @@
         </div>
         <div id="editor-container">
             <div class="legend-box">
-                <div class="legend-grid">
+                <div class="legend-grid" id="legend-grid">
                     <span class="legend-code assign" title="Klicken zum Einfügen" onclick="insertSymbol(' := ')">:=</span> <span data-i18n="leg_assign">Zuweisung (auch =, <-, IST, GLEICH)</span>
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' && ')">&amp;&amp;</span> <span data-i18n="leg_and">UND (auch &amp;, ∧, AND)</span>
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' || ')">||</span> <span data-i18n="leg_or">ODER (auch |, ∨, OR)</span>
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol('¬')">¬</span> <span data-i18n="leg_not">NICHT (auch !, NOT)</span>
+                    <span class="legend-code assign legend-sk-only" title="Klicken zum Einfügen" onclick="insertSymbol(' -> ')">-&gt;</span> <span class="legend-sk-only" data-i18n="leg_arrow">Übergang (Bedingung -&gt; Sn)</span>
                 </div>
                 <details style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #444; font-size: 11px; position: relative;">
-                    <summary style="cursor: pointer; color: #569CD6; font-weight: bold; outline: none; user-select: none; padding-right: 90px;" data-i18n="leg_ext_sum">
-                        Erweiterte Befehle (Speicher, Zeiten, Zähler)
+                    <summary style="cursor: pointer; color: #569CD6; font-weight: bold; outline: none; user-select: none; padding-right: 200px;">
+                        <span id="leg-ext-sum-text">Erweiterte Befehle (Speicher, Zeiten, Zähler)</span>
                     </summary>
-                    <button id="btn-sk-docs" onclick="event.stopPropagation(); event.preventDefault(); window._openSkDocsModal();" title="Schrittketten-Dokumentation: DSL-Syntax, Aktions-Qualifier, AFTER-Timer, INTERLOCK/SUPERVISION, CONTROL-Block, Grafcet/S7-GRAPH-Panel." style="display:none;position:absolute;top:5px;right:0;background:#7b1fa2;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.4;z-index:5;">📘 SK-Doku</button>
+                    <div style="display:none; position:absolute; top:5px; right:0; z-index:5; gap:4px; align-items:center;" id="pro-docs-btn-row">
+                        <button id="btn-sk-docs" onclick="event.stopPropagation(); event.preventDefault(); window._openSkDocsModal();" title="Schrittketten-Dokumentation: DSL-Syntax, Aktions-Qualifier, AFTER-Timer, INTERLOCK/SUPERVISION, CONTROL-Block, Grafcet/S7-GRAPH-Panel." style="background:#7b1fa2;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.4;">📘 SK-Doku</button>
+                        <button id="btn-arith-docs" onclick="event.stopPropagation(); event.preventDefault(); window._openArithDocsModal();" title="Arithmetik-Dokumentation: Operatoren +/*, Koerzionsregeln, 7-Seg-Display-Anbindung, SK-Integration über OUT_S_NO." style="background:#1976d2;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.4;">📐 Arith-Doku</button>
+                    </div>
                     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding-left: 5px; color: #ccc; line-height: 1.4;">
                         <div>
                             <strong style="color: #fff;" data-i18n="leg_ff_title">🧲 Speicherglieder (Flip-Flops)</strong><br>
@@ -2248,6 +2281,10 @@
                     <div class="sk-mode-toggle">
                         <button class="sk-mode-btn active" data-mode="grafcet" type="button">Grafcet</button>
                         <button class="sk-mode-btn" data-mode="s7graph" type="button">S7-GRAPH</button>
+                    </div>
+                    <button id="btn-sk-options" class="btn-export" style="background-color:#607d8b;border:1px solid #455a64;" onclick="window._toggleSkOptions()">⚙️ Optionen</button>
+                    <div id="sk-options-group">
+                        <button id="btn-sk-hide-tools" class="btn-export" style="background-color:#555;border:1px solid #333;" onclick="window._toggleSkHideToolsOnSim()" title="Bei aktiver Simulation die runden Edit-Buttons (×, ↑, ↓, +) im Grafcet ausblenden, damit das Panel aufgeräumt bleibt.">🛠 Tool-Buttons bei Sim: EIN</button>
                     </div>
                     <span id="sk-panel-info" style="color:#90caf9;font-size:10px;margin-left:auto;"></span>
                 </div>
@@ -2916,109 +2953,109 @@
         </div>
         <!-- Schrittketten-Dokumentations-Modal (nur bei PRO-Mode erreichbar) -->
         <style>
-            #sk-docs-overlay {
+            #sk-docs-overlay, #arith-docs-overlay {
                 display: none; position: fixed; inset: 0;
                 background: rgba(0,0,0,0.72); z-index: 3000;
                 align-items: center; justify-content: center;
                 padding: 20px;
             }
-            #sk-docs-overlay.open { display: flex; }
-            #sk-docs-modal {
+            #sk-docs-overlay.open, #arith-docs-overlay.open { display: flex; }
+            .sk-docs-shell {
                 background: #1e1e1e; color: #d4d4d4;
                 width: min(1100px, 96vw); height: min(720px, 92vh);
                 border: 1px solid #444; border-radius: 6px;
                 box-shadow: 0 8px 40px rgba(0,0,0,0.9);
                 display: flex; flex-direction: column; overflow: hidden;
             }
-            #sk-docs-modal .sk-docs-head {
+            .sk-docs-shell .sk-docs-head {
                 display: flex; align-items: center; justify-content: space-between;
                 padding: 10px 14px; border-bottom: 1px solid #333;
                 background: #252526;
             }
-            #sk-docs-modal .sk-docs-head h3 {
+            .sk-docs-shell .sk-docs-head h3 {
                 margin: 0; color: #fff; font-size: 15px; font-weight: 600;
             }
-            #sk-docs-modal .sk-docs-close {
+            .sk-docs-shell .sk-docs-close {
                 background: none; border: none; color: #aaa;
                 font-size: 22px; cursor: pointer; padding: 0 4px;
             }
-            #sk-docs-modal .sk-docs-close:hover { color: #fff; }
-            #sk-docs-modal .sk-docs-body {
+            .sk-docs-shell .sk-docs-close:hover { color: #fff; }
+            .sk-docs-shell .sk-docs-body {
                 display: flex; flex: 1; min-height: 0;
             }
-            #sk-docs-modal .sk-docs-tabs {
+            .sk-docs-shell .sk-docs-tabs {
                 width: 220px; flex-shrink: 0;
                 background: #252526; border-right: 1px solid #333;
                 overflow-y: auto; padding: 8px 0;
             }
-            #sk-docs-modal .sk-docs-tab {
+            .sk-docs-shell .sk-docs-tab {
                 display: flex; align-items: center; gap: 6px;
                 padding: 8px 14px; cursor: pointer;
                 color: #ccc; font-size: 12px;
                 border-left: 3px solid transparent;
                 transition: background 0.12s, border-color 0.12s;
             }
-            #sk-docs-modal .sk-docs-tab:hover { background: #2a2d2e; }
-            #sk-docs-modal .sk-docs-tab.active {
+            .sk-docs-shell .sk-docs-tab:hover { background: #2a2d2e; }
+            .sk-docs-shell .sk-docs-tab.active {
                 background: #094771; color: #fff;
                 border-left-color: #569cd6; font-weight: 600;
             }
-            #sk-docs-modal .sk-docs-content {
+            .sk-docs-shell .sk-docs-content {
                 flex: 1; padding: 20px 26px; overflow-y: auto;
                 font-size: 13px; line-height: 1.6;
             }
-            #sk-docs-modal .sk-docs-content h4 {
+            .sk-docs-shell .sk-docs-content h4 {
                 margin: 0 0 10px; color: #569cd6;
                 font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 6px;
             }
-            #sk-docs-modal .sk-docs-content h5 {
+            .sk-docs-shell .sk-docs-content h5 {
                 margin: 18px 0 6px; color: #c586c0; font-size: 13px;
             }
-            #sk-docs-modal .sk-docs-content p { margin: 6px 0; color: #d4d4d4; }
-            #sk-docs-modal .sk-docs-content ul { margin: 6px 0; padding-left: 22px; }
-            #sk-docs-modal .sk-docs-content li { margin: 3px 0; }
-            #sk-docs-modal .sk-docs-content code {
+            .sk-docs-shell .sk-docs-content p { margin: 6px 0; color: #d4d4d4; }
+            .sk-docs-shell .sk-docs-content ul { margin: 6px 0; padding-left: 22px; }
+            .sk-docs-shell .sk-docs-content li { margin: 3px 0; }
+            .sk-docs-shell .sk-docs-content code {
                 background: #2d2d30; color: #ce9178;
                 padding: 1px 5px; border-radius: 3px;
                 font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
             }
-            #sk-docs-modal .sk-docs-content pre {
+            .sk-docs-shell .sk-docs-content pre {
                 background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
                 padding: 10px 12px; margin: 10px 0;
                 overflow-x: auto;
                 font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
                 line-height: 1.5; color: #d4d4d4;
             }
-            #sk-docs-modal .sk-docs-content pre .kw  { color: #569cd6; font-weight: bold; }
-            #sk-docs-modal .sk-docs-content pre .cm  { color: #6a9955; font-style: italic; }
-            #sk-docs-modal .sk-docs-content pre .num { color: #b5cea8; }
-            #sk-docs-modal .sk-docs-content pre .str { color: #ce9178; }
-            #sk-docs-modal .sk-docs-content .sk-tip {
+            .sk-docs-shell .sk-docs-content pre .kw  { color: #569cd6; font-weight: bold; }
+            .sk-docs-shell .sk-docs-content pre .cm  { color: #6a9955; font-style: italic; }
+            .sk-docs-shell .sk-docs-content pre .num { color: #b5cea8; }
+            .sk-docs-shell .sk-docs-content pre .str { color: #ce9178; }
+            .sk-docs-shell .sk-docs-content .sk-tip {
                 background: rgba(86,156,214,0.1); border-left: 3px solid #569cd6;
                 padding: 8px 12px; margin: 10px 0; border-radius: 3px;
                 font-size: 12px; color: #d4d4d4;
             }
-            #sk-docs-modal .sk-docs-content .sk-warn {
+            .sk-docs-shell .sk-docs-content .sk-warn {
                 background: rgba(255,167,38,0.1); border-left: 3px solid #ffa726;
                 padding: 8px 12px; margin: 10px 0; border-radius: 3px;
                 font-size: 12px; color: #d4d4d4;
             }
-            #sk-docs-modal .sk-docs-content table {
+            .sk-docs-shell .sk-docs-content table {
                 width: 100%; border-collapse: collapse; margin: 10px 0;
                 font-size: 12px;
             }
-            #sk-docs-modal .sk-docs-content th,
-            #sk-docs-modal .sk-docs-content td {
+            .sk-docs-shell .sk-docs-content th,
+            .sk-docs-shell .sk-docs-content td {
                 border: 1px solid #333; padding: 6px 10px;
                 text-align: left; vertical-align: top;
             }
-            #sk-docs-modal .sk-docs-content th {
+            .sk-docs-shell .sk-docs-content th {
                 background: #252526; color: #569cd6; font-weight: 600;
             }
-            #sk-docs-modal .sk-docs-content td code { font-size: 11px; }
+            .sk-docs-shell .sk-docs-content td code { font-size: 11px; }
         </style>
         <div id="sk-docs-overlay" onclick="if(event.target===this)window._closeSkDocsModal()">
-            <div id="sk-docs-modal">
+            <div class="sk-docs-shell">
                 <div class="sk-docs-head">
                     <h3>📘 Schrittketten — Dokumentation</h3>
                     <button class="sk-docs-close" onclick="window._closeSkDocsModal()" title="Schließen">✕</button>
@@ -3026,6 +3063,21 @@
                 <div class="sk-docs-body">
                     <div class="sk-docs-tabs" id="sk-docs-tabs"></div>
                     <div class="sk-docs-content" id="sk-docs-content"></div>
+                </div>
+            </div>
+        </div>
+        <!-- Arithmetik-Dokumentations-Modal (PRO-only, gleiche CSS-Klassen wie SK-Doku).
+             Wichtig: KEINE Inline-`display:none` — die CSS-Regel `#arith-docs-overlay` setzt
+             den Default; `.open` schaltet auf flex. Inline würde die Klassen-Regel schlagen. -->
+        <div id="arith-docs-overlay" onclick="if(event.target===this)window._closeArithDocsModal()">
+            <div class="sk-docs-shell">
+                <div class="sk-docs-head">
+                    <h3>📐 Arithmetik (+, *) — Dokumentation</h3>
+                    <button class="sk-docs-close" onclick="window._closeArithDocsModal()" title="Schließen">✕</button>
+                </div>
+                <div class="sk-docs-body">
+                    <div class="sk-docs-tabs" id="arith-docs-tabs"></div>
+                    <div class="sk-docs-content" id="arith-docs-content"></div>
                 </div>
             </div>
         </div>
@@ -4061,6 +4113,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "leg_and": "UND (auch &amp;, ∧, AND)",
                 "leg_or": "ODER (auch |, ∨, OR)",
                 "leg_not": "NICHT (auch !, NOT)",
+                "leg_arrow": "Übergang (Bedingung -&gt; Sn)",
                 "leg_ext_sum": "Erweiterte Befehle (Speicher, Zeiten, Zähler)",
                 "leg_ff_title": "🧲 Speicherglieder (Flip-Flops)",
                 "leg_ff_desc": "Der Ausgang (Q) wird automatisch generiert. Nummern sind beliebig hochzählbar.",
@@ -4096,6 +4149,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "type_motor": "Motor (-M)",
                 "type_heater": "Heizung (-E)",
                 "type_siren": "Sirene (-H)",
+                "plug_bohrspindel_name": "Bohrspindel",
                 "lbl_sr_out": "SR-Ausgang",
                 "lbl_rs_out": "RS-Ausgang",
                 "lbl_aux_relay": "Hilfsrelais",
@@ -4412,6 +4466,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "leg_and": "AND (also &amp;, ∧, UND)",
                 "leg_or": "OR (also |, ∨, ODER)",
                 "leg_not": "NOT (also !, NICHT)",
+                "leg_arrow": "Transition (condition -&gt; Sn)",
                 "leg_ext_sum": "Extended Commands (Memory, Timers, Counters)",
                 "leg_ff_title": "🧲 Memory Elements (Flip-Flops)",
                 "leg_ff_desc": "The output (Q) is generated automatically. Numbers can be incremented arbitrarily.",
@@ -4447,6 +4502,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "type_motor": "Motor (-M)",
                 "type_heater": "Heater (-E)",
                 "type_siren": "Siren (-H)",
+                "plug_bohrspindel_name": "Drill Spindle",
                 "lbl_sr_out": "SR Output",
                 "lbl_rs_out": "RS Output",
                 "lbl_aux_relay": "Aux Relay",
@@ -5001,8 +5057,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             // SCHRITTKETTE BOHRER (4 Schritte)
             // Demo für die SCHRITTKETTE-DSL: klassische Bohrmaschine-Sequenz
             // Grundstellung → Positionieren → Bohren → Zurückfahren → Grundstellung.
-            // Bedienpult oben links, Sensoren als rastende Schalter zum manuellen
-            // Durchschalten der Kette. Tastenbelegung erlaubt Tastatursteuerung.
+            // Bedienpult links im HMI-Rahmen. Rechts steht die echte Maschine:
+            // Förderband (mit A_MOTOR_X) bringt Werkstücke zum Part-Holder
+            // (triggert SENSOR_POS), darüber fährt ein Pneumatik-Zylinder mit
+            // angesetzter Bohrspindel runter. Zwei sensor_mag am Zylinder
+            // detektieren SENSOR_TIEF (unten) und SENSOR_HOME (oben).
             // ==========================================
             schrittkette_bohrer: {
                 layout: "grid-sim-bottom",
@@ -5011,15 +5070,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "// Aktiv: Cursor in den Block setzen → Rechtsklick → „RS-Glied-Code anzeigen“\n" +
                     "// um die VALIS-interne Übersetzung in S/R/Q-Form zu sehen.\n" +
                     "//\n" +
-                    "// Tasten: SPACE = START, ESC = NOT-AUS, 1/2/3 = Sensoren\n" +
-                    "//         Sim ein und START drücken — beobachte die aktiven Schritte\n" +
-                    "//         im Schrittketten-Panel und das Aufblitzen der Übergänge.\n" +
+                    "// Tasten: SPACE = START, ESC = NOT-AUS\n" +
+                    "//         Sim ein und START drücken — Werkstücke laufen automatisch,\n" +
+                    "//         die Sensoren feuern wenn das Teil unter der Bohrspindel ist\n" +
+                    "//         bzw. die Spindel die Endlagen erreicht. Im Schrittketten-Panel\n" +
+                    "//         siehst du den aktiven Step und die feuernden Übergänge.\n" +
                     "\n" +
                     "SCHRITTKETTE BOHRER:\n" +
                     "  STEP S1 (GRUNDSTELLUNG):\n" +
                     "    A_LAMPE_BEREIT := TRUE\n" +
                     "  TRANS:\n" +
-                    "    START && ¬NOT_AUS -> S2\n" +
+                    "    START && NOT_AUS -> S2\n" +
                     "\n" +
                     "  STEP S2 (POSITIONIEREN):\n" +
                     "    A_MOTOR_X := TRUE\n" +
@@ -5029,25 +5090,26 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "  STEP S3 (BOHREN):\n" +
                     "    A_BOHRER := TRUE\n" +
                     "    A_VORSCHUB := TRUE\n" +
+                    "    A_LAMPE_BOHREN := TRUE          // HMI-Indikator „Bohren läuft\"\n" +
                     "  TRANS:\n" +
                     "    SENSOR_TIEF -> S4\n" +
                     "\n" +
-                    "  STEP S4 (ZURUECK):\n" +
-                    "    A_MOTOR_ZURUECK := TRUE\n" +
+                    "  STEP S4 (AUSWURF):\n" +
+                    "    A_MOTOR_X := TRUE          // Förderband weiterlaufen lassen — fertiges Teil zum Despawner\n" +
                     "  TRANS:\n" +
-                    "    SENSOR_HOME -> S1\n" +
+                    "    SENSOR_HOME -> S1          // Zylinder oben angekommen → Zyklus beendet\n" +
                     "END",
                 types: {
                     "START":          "taster",
                     "NOT_AUS":        "nothalt",
                     "SENSOR_POS":     "schalter",
-                    "SENSOR_TIEF":    "schalter",
-                    "SENSOR_HOME":    "schalter",
+                    "SENSOR_TIEF":    "sensor_mag",
+                    "SENSOR_HOME":    "sensor_mag",
                     "A_LAMPE_BEREIT": "led",
+                    "A_LAMPE_BOHREN": "led",
                     "A_MOTOR_X":      "motor",
-                    "A_BOHRER":       "valve",
-                    "A_VORSCHUB":     "valve",
-                    "A_MOTOR_ZURUECK":"motor"
+                    "A_BOHRER":       "motor",
+                    "A_VORSCHUB":     "valve"
                 },
                 keyBindings: {
                     "START":       " ",
@@ -5058,21 +5120,33 @@ You must output exactly this JSON format. The logic code goes as a single string
                 },
                 factory: {
                     globalViewMode: "side",
-                    items: [],
+                    // Zwei vorplatzierte Metall-Werkstücke beim Spawner und am
+                    // Part-Holder, damit die Demo direkt loslaufen kann.
+                    items: [
+                        { x:403, y:268, vx:0, vy:0, material:"metall", useGravity:true, useCollision:true, isSolid:true, meltTemp:1200, temperature:20 },
+                        { x:245, y:268, vx:0, vy:0, material:"metall", useGravity:true, useCollision:true, isSolid:true, meltTemp:1200, temperature:20 }
+                    ],
                     objects: [
-                        // ---- Bedienpult (oben) ----
-                        { id:"bp_start",   type:"taster",   x: 20, y: 20, width:42, rotation:0, linkedVar:"START",          color:"green",  useCollision:true, labelPinned:true },
-                        { id:"bp_naus",    type:"nothalt",  x: 80, y: 20, width:52, rotation:0, linkedVar:"NOT_AUS",        color:"red",    useCollision:true, labelPinned:true },
-                        { id:"bp_bereit",  type:"led",      x:160, y: 28, width:30, rotation:0, linkedVar:"A_LAMPE_BEREIT", color:"green",  useCollision:true, labelPinned:true },
-                        // ---- Sensoren als Schalter zum manuellen Schritt-Auslösen ----
-                        { id:"sw_pos",     type:"schalter", x: 20, y:120, width:42, rotation:0, linkedVar:"SENSOR_POS",  color:"yellow", useCollision:true, labelPinned:true },
-                        { id:"sw_tief",    type:"schalter", x: 80, y:120, width:42, rotation:0, linkedVar:"SENSOR_TIEF", color:"yellow", useCollision:true, labelPinned:true },
-                        { id:"sw_home",    type:"schalter", x:140, y:120, width:42, rotation:0, linkedVar:"SENSOR_HOME", color:"yellow", useCollision:true, labelPinned:true },
-                        // ---- Aktoren (Anzeige der aktiven Schritt-Ausgaben) ----
-                        { id:"ak_motorx",  type:"motor",    x: 20, y:220, width:50, rotation:0, linkedVar:"A_MOTOR_X",       color:"blue",   useCollision:true, labelPinned:true },
-                        { id:"ak_bohrer",  type:"led",      x: 95, y:228, width:30, rotation:0, linkedVar:"A_BOHRER",        color:"orange", useCollision:true, labelPinned:true },
-                        { id:"ak_vor",     type:"led",      x:140, y:228, width:30, rotation:0, linkedVar:"A_VORSCHUB",      color:"orange", useCollision:true, labelPinned:true },
-                        { id:"ak_motorz",  type:"motor",    x:185, y:220, width:50, rotation:0, linkedVar:"A_MOTOR_ZURUECK", color:"blue",   useCollision:true, labelPinned:true }
+                        // ---- HMI-Rahmen (Hintergrund-Panel für das Bedienpult, localZ:-200) ----
+                        { id:"pnl_bp",     type:"hmi_panel",   x: 21, y: 31, width:166, height:184, rotation:0, color:"green", useCollision:false, labelPinned:false, localZ:-200, useGravity:false },
+                        // ---- Bedienpult (links im HMI-Rahmen) ----
+                        { id:"bp_start",   type:"taster",      x: 45, y: 70, width:42, height:40, rotation:0, linkedVar:"START",          color:"green",  useCollision:true, labelPinned:true },
+                        { id:"bp_naus",    type:"nothalt",     x:110, y: 70, width:52, height:45, rotation:0, linkedVar:"NOT_AUS",        color:"red",    useCollision:true, labelPinned:true },
+                        { id:"bp_bereit",  type:"led",         x:120, y:140, width:30, height:30, rotation:0, linkedVar:"A_LAMPE_BEREIT", color:"green",  useCollision:true, labelPinned:true },
+                        { id:"ak_vor",     type:"led",         x: 45, y:140, width:30, height:30, rotation:0, linkedVar:"A_LAMPE_BOHREN", color:"orange", useCollision:true, labelPinned:true },
+                        // ---- Förderband-Motor (Status-LED, das echte Band hängt unten am Conveyor) ----
+                        { id:"ak_motorx",  type:"motor",       x: 20, y:220, width:50, height:40, rotation:0, linkedVar:"A_MOTOR_X", color:"blue", useCollision:true, labelPinned:true },
+                        // ---- Vorschub-Zylinder mit Bohrspindel am Kolben + zwei Endlagen-Sensoren ----
+                        { id:"0j8sbaroa",  type:"zylinder_single", x:382, y: 75, width:80, height:30, rotation:90, speed:0.6, extension:0, linkedVarExt:"A_VORSCHUB", color:"green", useCollision:true, labelPinned:false },
+                        { id:"ak_bohrer",  type:"bohrspindel", x:409, y:131, width:28, height:80, rotation:0, linkedVar:"A_BOHRER", color:"silver", useCollision:false, labelPinned:true, parentId:"0j8sbaroa", attachmentType:"rod" },
+                        { id:"sldthtjl0",  type:"sensor_mag",  x:402, y: 90, width:20, height:40, rotation:90, linkedVar:"SENSOR_TIEF", color:"green", useCollision:false, labelPinned:false, parentId:"0j8sbaroa", rangeW:10 },
+                        { id:"7xt2ic8eu",  type:"sensor_mag",  x:402, y: 40, width:20, height:40, rotation:90, linkedVar:"SENSOR_HOME", color:"green", useCollision:false, labelPinned:false, parentId:"0j8sbaroa", rangeW:10 },
+                        // ---- Förderband + Werkstück-Halter (Part-Holder triggert SENSOR_POS) ----
+                        { id:"k0pkg2ql9",  type:"conveyor",    x:264, y:308, width:200, height:40, rotation:0, linkedVar:"A_MOTOR_X", color:"green", useCollision:true, labelPinned:false },
+                        { id:"azlhbqqn8",  type:"part_holder", x:371, y:267, width:80, height:40, rotation:0, linkedVar:"SENSOR_POS", color:"green", useCollision:false, labelPinned:false, hasPart:false, vibAlways:false, vibProb:1, vibDuration:150, centerOnly:true, centerTolerance:6 },
+                        // ---- Werkstück-Quelle und -Senke ----
+                        { id:"yrpded8mc",  type:"spawner_metall", x:240, y:178, width:50, height:50, rotation:0, interval:10, spawnSolid:true, spawnYOffset:80, backpressureStop:true, color:"green", useCollision:false, labelPinned:false },
+                        { id:"bnp5dqt6q",  type:"despawner",   x:468, y:310, width:50, height:50, rotation:0, color:"green", useCollision:false, labelPinned:false }
                     ]
                 }
             },
@@ -5119,7 +5193,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "//       S_ON/S_OFF + S_SEL_<n> → Manueller Schritt-Zugriff\n" +
                     "//       OUT_AUTO_ON/TAP_ON/TOP_ON/MAN_ON → Mode-Rückmeldung\n" +
                     "//       OUT_ERR_FLT  → Sammelfehler\n" +
-                    "//       OUT_S_NO_<n> → Step-Aktiv-LED pro Step\n" +
+                    "//       OUT_S_NO     → Echte Integer-Step-Nummer (1..6) via Arithmetik\n" +
+                    "//                       (lesbar mit 7-Seg-Display)\n" +
                     "//       OUT_CYCLE_COUNT / OUT_FAULT_COUNT → CTU-Integer-Counter\n" +
                     "//                       (lesbar mit 7-Seg Display über CTU_<name>.cv)\n" +
                     "//\n" +
@@ -5138,7 +5213,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "SCHRITTKETTE MISCHANLAGE:\n" +
                     "  CONTROL:\n" +
                     "    INIT_SQ:     RESET_BTN          // alle Q=0 + S1 forcen\n" +
-                    "    OFF_SQ:      NOT_AUS            // NOT-Halt setzt Kette komplett ab\n" +
+                    "    OFF_SQ:      ¬NOT_AUS           // NC-Konvention: NOT_AUS=TRUE im Ruhezustand, FALSE wenn gedrückt → ¬NOT_AUS=TRUE löst OFF aus\n" +
                     "    ACK_EF:      ACK_BTN            // quittiert latched Faults\n" +
                     "    MODE_AUTO:   SW_AUTO            // Mode-Wahlschalter\n" +
                     "    MODE_TAP:    SW_TAP\n" +
@@ -5158,14 +5233,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "    OUT_TOP_ON:  LED_TOP\n" +
                     "    OUT_MAN_ON:  LED_MAN\n" +
                     "    OUT_ERR_FLT: LED_ERR            // Sammelfehler (OR aller _FAULT_)\n" +
-                    "    OUT_S_NO_S1: LED_S1             // Step-Aktiv-LED pro Step\n" +
-                    "    OUT_S_NO_S2: LED_S2             //  (Ersatz für S7-GRAPHs Integer S_NO)\n" +
-                    "    OUT_S_NO_S3: LED_S3\n" +
-                    "    OUT_S_NO_S4: LED_S4\n" +
-                    "    OUT_S_NO_S5: LED_S5\n" +
-                    "    OUT_S_NO_S6: LED_S6\n" +
-                    "    OUT_CYCLE_COUNT: CYCLE_CNT       // Integer-Counter — 7-Seg liest .cv\n" +
-                    "    OUT_FAULT_COUNT: FAULT_CNT       // Integer-Counter\n" +
+                    "    OUT_S_NO:    S_NO               // Echtes Integer-S_NO (1..6) via Arithmetik\n" +
+                    "    OUT_CYCLE_COUNT: CYCLE_CNT      // Integer-Counter — 7-Seg liest .cv\n" +
+                    "    OUT_FAULT_COUNT: FAULT_CNT      // Integer-Counter\n" +
                     "\n" +
                     "  STEP S1 (BEREIT):\n" +
                     "    A_LAMPE_BEREIT := TRUE\n" +
@@ -5173,7 +5243,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "    START && SAFETY_OK -> S2\n" +
                     "\n" +
                     "  STEP S2 (FUELLEN):\n" +
-                    "    INTERLOCK: ¬NOT_AUS && DECKEL_ZU\n" +
+                    "    INTERLOCK: NOT_AUS && DECKEL_ZU\n" +
                     "    SUPERVISION: AFTER 15.0\n" +
                     "    C: A_PUMPE := TRUE\n" +
                     "    P: A_HUPE := TRUE\n" +
@@ -5181,7 +5251,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "    SENSOR_VOLL -> S3\n" +
                     "\n" +
                     "  STEP S3 (MISCHEN):\n" +
-                    "    INTERLOCK: DECKEL_ZU && ¬NOT_AUS\n" +
+                    "    INTERLOCK: DECKEL_ZU && NOT_AUS\n" +
                     "    C: A_MISCHER := TRUE\n" +
                     "    D 1.0: A_LED_MISCH := TRUE\n" +
                     "  TRANS:\n" +
@@ -5243,14 +5313,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "LED_TOP":            "led",
                     "LED_MAN":            "led",
                     "LED_ERR":            "led",
-                    "LED_S1":             "led",
-                    "LED_S2":             "led",
-                    "LED_S3":             "led",
-                    "LED_S4":             "led",
-                    "LED_S5":             "led",
-                    "LED_S6":             "led",
                     "CYCLE_CNT":          "led",
-                    "FAULT_CNT":          "led"
+                    "FAULT_CNT":          "led",
+                    "S_NO":               "display"
                 },
                 keyBindings: {
                     "START":             " ",
@@ -5321,16 +5386,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                         { id:"sw_pick4",   type:"schalter", x:598, y:307, width:30, height:40, rotation:0, linkedVar:"PICK_S4",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
                         { id:"sw_pick5",   type:"schalter", x:648, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S5",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
                         { id:"sw_pick6",   type:"schalter", x:698, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S6",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        // ---- Step-Aktiv-LEDs (Gruppe "stepleds") ----
-                        { id:"ld_s1",      type:"led",      x:448, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S1",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        { id:"ld_s2",      type:"led",      x:498, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S2",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        { id:"ld_s3",      type:"led",      x:548, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S3",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        { id:"ld_s4",      type:"led",      x:598, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S4",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        { id:"ld_s5",      type:"led",      x:648, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S5",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        { id:"ld_s6",      type:"led",      x:698, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S6",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
-                        // ---- 7-Seg-Displays (Cycle- & Fault-Counter, lesen direkt aus CTU.cv) ----
-                        { id:"dsp_cycle",  type:"display",  x:456, y:444, width:90, height:32, rotation:0, linkedVar:"CTU_CYCLE_CNT", color:"red", useCollision:false, labelPinned:true },
-                        { id:"dsp_fault",  type:"display",  x:560, y:444, width:90, height:32, rotation:0, linkedVar:"CTU_FAULT_CNT", color:"red", useCollision:false, labelPinned:true }
+                        // ---- 7-Seg-Displays ----
+                        //   - dsp_cycle/dsp_fault: lesen CTU.cv (Counter)
+                        //   - dsp_sno: liest spsState['S_NO'] direkt (Integer aus Arithmetik 1*Q1+2*Q2+…)
+                        { id:"dsp_cycle",  type:"display",  x:456, y:444, width:60, height:32, rotation:0, linkedVar:"CTU_CYCLE_CNT", color:"red", useCollision:false, labelPinned:true },
+                        { id:"dsp_fault",  type:"display",  x:528, y:444, width:60, height:32, rotation:0, linkedVar:"CTU_FAULT_CNT", color:"red", useCollision:false, labelPinned:true },
+                        { id:"dsp_sno",    type:"display",  x:600, y:444, width:60, height:32, rotation:0, linkedVar:"S_NO",          color:"red", useCollision:false, labelPinned:true }
                     ]
                 }
             }
@@ -6776,16 +6837,97 @@ You must output exactly this JSON format. The logic code goes as a single string
                     jsCompiledCode += `    state['${blockId}'] = timers['${blockId}'].q;\n`;
                     return;
                 }
+                // === Arithmetik-Pfad ===
+                // VALIS' Evaluator ist normalerweise rein boolesch. Mit `+` und `*`
+                // im Ausdruck schalten wir auf einen separaten Arithmetik-Pfad um:
+                // jede bool-Variable wird zu 0/1 koerziert, Zahlen bleiben Zahlen.
+                // Anwendung: echtes Integer S_NO im Schrittketten-CONTROL, generelle
+                // Wert-Berechnungen für 7-Seg-Displays.
+                //
+                // Erkennung: `+` oder `*` auf paren-depth 0 ODER reines Zahl-Literal.
+                // `||`/`&&` und Arithmetik in DERSELBEN Zeile sind unzulässig (würden
+                // semantisch Schmerzen machen — bool und int mischen unkontrolliert).
+                function _hasTopLevelOp(s, op) {
+                    let depth = 0;
+                    for (let i = 0; i < s.length; i++) {
+                        const c = s[i];
+                        if (c === '(') depth++;
+                        else if (c === ')') depth--;
+                        else if (depth === 0 && c === op) return true;
+                    }
+                    return false;
+                }
+                const _hasArith = _hasTopLevelOp(expressionStr, '+') || _hasTopLevelOp(expressionStr, '*')
+                                || /^\s*[\d.]+\s*$/.test(expressionStr);
+                const _hasBoolOps = expressionStr.includes('||') || expressionStr.includes('&&') || expressionStr.includes('¬');
+                if (_hasArith && _hasBoolOps) {
+                    throw new Error('Arithmetik (+, *) und boolesche Operatoren (||, &&, ¬) dürfen nicht in derselben Zeile gemischt werden.');
+                }
+                if (_hasArith) {
+                    // Recursive-Descent: parseSum → parseTerm → parseFactor.
+                    // Wir liefern (a) gerendertes JS für die Compile-Pipeline und
+                    // (b) die Liste verwendeter Variablen für die Graph-Knoten.
+                    const _src = expressionStr.replace(/\s+/g, '');
+                    let _pos = 0;
+                    const _vars = new Set();
+                    function _arithPeek() { return _src[_pos]; }
+                    function _arithSum() {
+                        let left = _arithTerm();
+                        while (_arithPeek() === '+') { _pos++; left = '(' + left + '+' + _arithTerm() + ')'; }
+                        return left;
+                    }
+                    function _arithTerm() {
+                        let left = _arithFactor();
+                        while (_arithPeek() === '*') { _pos++; left = '(' + left + '*' + _arithFactor() + ')'; }
+                        return left;
+                    }
+                    function _arithFactor() {
+                        if (_arithPeek() === '(') {
+                            _pos++;
+                            const inner = _arithSum();
+                            if (_arithPeek() !== ')') throw new Error('Arithmetik: erwartete )');
+                            _pos++;
+                            return inner;
+                        }
+                        const numM = _src.slice(_pos).match(/^[\d]+(?:\.[\d]+)?/);
+                        if (numM) { _pos += numM[0].length; return numM[0]; }
+                        const idM = _src.slice(_pos).match(/^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/);
+                        if (idM) {
+                            _pos += idM[0].length;
+                            const id = idM[0];
+                            if (id === 'TRUE')  return '1';
+                            if (id === 'FALSE') return '0';
+                            _vars.add(id);
+                            // bool → 0/1, int → int, undefined → 0
+                            return "(+state['" + id + "']||0)";
+                        }
+                        throw new Error('Arithmetik: Unerwartetes Zeichen "' + (_src[_pos] || 'EOF') + '" an Position ' + _pos);
+                    }
+                    const _js = _arithSum();
+                    if (_pos < _src.length) throw new Error('Arithmetik: Reste nicht verarbeitet ("' + _src.slice(_pos) + '")');
+                    // Graph-Knoten: ein Knoten vom Typ ARITH mit der Formel als Label.
+                    graph.addNode(outputStr, 'ARITH', outputStr + ' = ' + expressionStr);
+                    if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
+                    definedOutputs.add(outputStr);
+                    _vars.forEach(v => {
+                        graph.addNode(v, 'INPUT', v);
+                        allUsedInputs.add(v);
+                        graph.addEdge(v, outputStr, '', false);
+                    });
+                    jsCompiledCode += `    state['${outputStr}'] = ${_js};\n`;
+                    return;
+                }
+
                 const rsMatch = outputStr.match(/^([SR])(\d+)(_(?:SR|RS))?$/i);
                 let targetId = outputStr;
                 let targetPin = '';
                 if (rsMatch) {
-                    const pin = rsMatch[1].toUpperCase(); 
+                    const pin = rsMatch[1].toUpperCase();
                     const num = rsMatch[2];
                     const suffix = rsMatch[3] ? rsMatch[3].toUpperCase() : '';
                     const isSR = suffix === '_SR';
                     const blockType = isSR ? 'SR' : 'RS';
-                    targetId = `${blockType}_${num}`; 
+                    targetId = `${blockType}_${num}`;
                     targetPin = pin;
                     rsBlocks.set(`${num}${suffix}`, blockType);
                     graph.addNode(targetId, blockType, `${blockType}-Glied ${num}`);
@@ -6899,9 +7041,35 @@ You must output exactly this JSON format. The logic code goes as a single string
                         ? 'PRO-Modus AN. Klick zum Deaktivieren — versteckt Schrittketten-Features wieder.'
                         : 'PRO-Modus AUS. Klick zum Aktivieren — schaltet Schrittketten-DSL, Grafcet/S7-GRAPH-Panel und alle Schrittketten-Beispiele frei.';
                 }
-                // SK-Doku-Button (in der Editor-Leiste) bedingen auf PRO-Mode.
-                const docsBtn = document.getElementById('btn-sk-docs');
-                if (docsBtn) docsBtn.style.display = on ? '' : 'none';
+                // PRO-Doku-Button-Reihe (SK-Doku + Arith-Doku in der Legende)
+                // bedingen auf PRO-Mode.
+                const docsRow = document.getElementById('pro-docs-btn-row');
+                if (docsRow) docsRow.style.display = on ? 'flex' : 'none';
+                // Legenden-Summary erweitern wenn PRO an. Wir verzichten bewusst auf
+                // data-i18n auf der Summary — die Übersetzungsmaschine würde unsere
+                // PRO-Erweiterung sonst beim Sprach-Toggle wegbügeln.
+                const legText = document.getElementById('leg-ext-sum-text');
+                if (legText) {
+                    const isDE = (window.currentLang || 'de') === 'de';
+                    if (on) {
+                        legText.textContent = isDE
+                            ? 'Erweiterte Befehle (Speicher, Zeiten, Zähler, Schrittketten, Arithmetik)'
+                            : 'Extended Commands (Memory, Timers, Counters, Step Chains, Arithmetic)';
+                    } else {
+                        legText.textContent = isDE
+                            ? 'Erweiterte Befehle (Speicher, Zeiten, Zähler)'
+                            : 'Extended Commands (Memory, Timers, Counters)';
+                    }
+                }
+            }
+            function _setupLangChangeWatcher() {
+                // Bei Sprachwechsel den Label-Text neu setzen — switchLanguage feuert
+                // kein Event, daher Polyfill via MutationObserver auf das Flag-Emoji
+                // des Sprach-Buttons (🇩🇪 ↔ 🇬🇧).
+                const langBtn = document.getElementById('btn-lang-toggle');
+                if (langBtn) {
+                    new MutationObserver(applyToggleButtonStyle).observe(langBtn, { childList: true, subtree: true });
+                }
             }
             window._isProMode = read;
             // PIN-Gate beim Aktivieren — sonst kommt jeder über den Button rein.
@@ -6943,11 +7111,84 @@ You must output exactly this JSON format. The logic code goes as a single string
                     try { window._renderSchrittketten(); } catch(_e) {}
                 }
             };
-            // Beim DOM-ready den Button-Stil setzen.
+            // Beim DOM-ready den Button-Stil setzen + Sprach-Watcher aufsetzen.
+            function _initOnReady() { applyToggleButtonStyle(); _setupLangChangeWatcher(); }
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', applyToggleButtonStyle);
+                document.addEventListener('DOMContentLoaded', _initOnReady);
             } else {
-                applyToggleButtonStyle();
+                _initOnReady();
+            }
+        })();
+
+        // ==========================================================
+        // === SK-Panel-Optionen (Optionen-Button, analog Logikplan)
+        // ==========================================================
+        // Aufklapp-Gruppe im SK-Panel-Header mit einer Option:
+        //   - „Tool-Buttons bei Sim ausblenden": versteckt die runden
+        //     Edit-Buttons (×, ↑, ↓, +) während aktiver Simulation,
+        //     damit das Panel im Lauf-Modus sauber aussieht.
+        // User-Preference persistiert in localStorage. Wenn die Option
+        // AN ist + isSimulationActive TRUE, kriegt #sk-wrapper die
+        // Klasse `.sk-hide-tools` (CSS regelt den Rest).
+        (function _initSkPanelOptions() {
+            const KEY = 'valis.sk.hideToolsOnSim';
+            function readHide() {
+                try { return localStorage.getItem(KEY) === '1'; } catch(_e) { return false; }
+            }
+            function writeHide(v) {
+                try { localStorage.setItem(KEY, v ? '1' : '0'); } catch(_e) {}
+            }
+            function applyHideClass() {
+                const wrap = document.getElementById('sk-wrapper');
+                if (!wrap) return;
+                const userOn = readHide();
+                const simOn = !!window.isSimulationActive
+                              || (typeof isSimulationActive !== 'undefined' && isSimulationActive);
+                wrap.classList.toggle('sk-hide-tools', userOn && simOn);
+            }
+            function updateButtonLabel() {
+                const btn = document.getElementById('btn-sk-hide-tools');
+                if (!btn) return;
+                const on = readHide();
+                btn.textContent = '🛠 Tool-Buttons bei Sim: ' + (on ? 'AUS (ausgeblendet)' : 'EIN (sichtbar)');
+                btn.style.backgroundColor = on ? '#7b1fa2' : '#555';
+            }
+            window._toggleSkOptions = function() {
+                const group = document.getElementById('sk-options-group');
+                const btn = document.getElementById('btn-sk-options');
+                if (!group || !btn) return;
+                group.classList.toggle('expanded');
+                btn.classList.toggle('expanded');
+                btn.textContent = btn.classList.contains('expanded') ? '❌ Schließen' : '⚙️ Optionen';
+            };
+            window._toggleSkHideToolsOnSim = function() {
+                writeHide(!readHide());
+                updateButtonLabel();
+                applyHideClass();
+            };
+            // Beim Sim-Toggle die CSS-Klasse aktualisieren — über einen Wrapper
+            // um die bestehende toggleSimulation().
+            function _hookSimToggle() {
+                if (typeof window.toggleSimulation !== 'function') return;
+                const orig = window.toggleSimulation;
+                window.toggleSimulation = function() {
+                    const ret = orig.apply(this, arguments);
+                    try { applyHideClass(); } catch(_e) {}
+                    return ret;
+                };
+            }
+            function _onReady() {
+                updateButtonLabel();
+                applyHideClass();
+                _hookSimToggle();
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', _onReady);
+            } else {
+                // Sim-Wrapper-Hook ggf. später nachschieben, falls toggleSimulation
+                // erst nach dieser IIFE definiert wird.
+                _onReady();
+                setTimeout(_hookSimToggle, 0);
             }
         })();
 
@@ -7067,7 +7308,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         </table>
                         <h5>Beispiel</h5>
 <pre>  <span class="kw">STEP</span> S2 (FUELLEN):
-    <span class="kw">INTERLOCK:</span> ¬NOT_AUS && DECKEL_ZU
+    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU     <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span>
     C: A_PUMPE := <span class="kw">TRUE</span>         <span class="cm">// nur wenn Interlock TRUE</span>
     P: A_HUPE := <span class="kw">TRUE</span>          <span class="cm">// 100 ms Puls beim Eintritt</span>
     D <span class="num">1.0</span>: A_LED_RUN := <span class="kw">TRUE</span>   <span class="cm">// LED erst nach 1 s</span>
@@ -7086,7 +7327,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         <h4>Übergangs-Bedingungen</h4>
                         <p>Jeder ausgehende Übergang hat eine boolesche Bedingung. Standard:</p>
 <pre>  <span class="kw">TRANS:</span>
-    SENSOR_VOLL && ¬NOT_AUS -&gt; S3</pre>
+    SENSOR_VOLL && NOT_AUS -&gt; S3   <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span></pre>
                         <h5>AFTER &lt;t&gt; — Übergangs-Timer</h5>
                         <p>Mit <code>AFTER &lt;sekunden&gt;</code> kannst du einen <b>step-eintritts-relativen Timer</b>
                         in der Bedingung verwenden — wie ein FUP-Timer in der Transition bei S7-GRAPH:</p>
@@ -7128,7 +7369,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         unterdrückt. Der Step bleibt aktiv, die Aktoren werden nur einfach nicht angesteuert.
                         Im Grafcet/S7-GRAPH-Panel als 🔒-Badge unter dem Step angezeigt.</p>
 <pre>  <span class="kw">STEP</span> S2 (FUELLEN):
-    <span class="kw">INTERLOCK:</span> ¬NOT_AUS && DECKEL_ZU
+    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU   <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span>
     C: A_PUMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt nur wenn Interlock TRUE</span>
     N: A_LAMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt immer (N ignoriert Interlock)</span></pre>
                         <h5>SUPERVISION — Überwachung / Watchdog</h5>
@@ -7160,7 +7401,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
 <pre><span class="kw">SCHRITTKETTE</span> MISCHER:
   <span class="kw">CONTROL:</span>
     INIT_SQ:     RESET_BTN
-    OFF_SQ:      NOT_AUS
+    OFF_SQ:      ¬NOT_AUS     <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand → ¬NOT_AUS</span>
     ACK_EF:      ACK_BTN
     MODE_AUTO:   SW_AUTO
     MODE_TAP:    SW_TAP
@@ -7185,7 +7426,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         <table>
                             <tr><th>Key</th><th>Wirkung</th></tr>
                             <tr><td><code>INIT_SQ</code></td><td>Wenn TRUE: alle Q werden zurückgesetzt + Init-Step wird aktiviert. Reset-Taster.</td></tr>
-                            <tr><td><code>OFF_SQ</code></td><td>Wenn TRUE: alle Q=0 und Init-Term blockiert. Komplette Abschaltung (z.B. NOT-Halt).</td></tr>
+                            <tr><td><code>OFF_SQ</code></td><td>Wenn TRUE: alle Q=0 und Init-Term blockiert. Komplette Abschaltung (z.B. NOT-Halt). <b>NC-Konvention:</b> bei nothalt-Typ (NC) ist die Variable im Ruhezustand TRUE, daher als <code>¬NOT_AUS</code> binden — der Generator macht das richtige.</td></tr>
                             <tr><td><code>ACK_EF</code></td><td>Quittier-Taster. Aktiviert SR-Latch für SUPERVISION-Faults — sonst sind sie auto-clearing.</td></tr>
                         </table>
                         <h5>Betriebsarten</h5>
@@ -7213,7 +7454,8 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                             <tr><th>Key</th><th>Wirkung</th></tr>
                             <tr><td><code>OUT_AUTO_ON</code> / <code>OUT_TAP_ON</code> / <code>OUT_TOP_ON</code> / <code>OUT_MAN_ON</code></td><td>Mode-Anzeigelampen — eine pro Modus.</td></tr>
                             <tr><td><code>OUT_ERR_FLT</code></td><td>Sammelfehler: OR aller _FAULT_-Helper der Kette.</td></tr>
-                            <tr><td><code>OUT_S_NO_S&lt;n&gt;</code></td><td>Pro Step ein bool-Output mit Q&lt;n&gt; — Step-Aktiv-LED. Ersatz für S7-GRAPHs Integer S_NO.</td></tr>
+                            <tr><td><code>OUT_S_NO_S&lt;n&gt;</code></td><td>Pro Step ein bool-Output mit Q&lt;n&gt; — Step-Aktiv-LED. Bool-Fallback wenn kein 7-Seg-Display gewollt.</td></tr>
+                            <tr><td><code>OUT_S_NO</code></td><td><b>Echtes Integer-S_NO</b> (S7-konform). Generator emittiert <code>S_NO := 1*Q1 + 2*Q2 + 3*Q3 + …</code> via Arithmetik-Pfad — siehe <a href="#" onclick="event.preventDefault();" style="color:#569cd6;">Arithmetik-Tab</a>. Bei linearer Kette = Step-Nummer (1..N), bei OFF = 0. Lesbar mit 7-Seg-Display, das direkt <code>spsState['S_NO']</code> abgreift.</td></tr>
                             <tr><td><code>OUT_CYCLE_COUNT</code></td><td>Integer-Counter via CTU(Q&lt;init&gt;) — zählt Zyklus-Returns. Lesbar im 7-Seg Display via <code>CTU_&lt;name&gt;.cv</code>.</td></tr>
                             <tr><td><code>OUT_FAULT_COUNT</code></td><td>Integer-Counter via CTU(SammelfehlerSteigflanke) — zählt Fault-Ereignisse seit letztem ACK.</td></tr>
                         </table>
@@ -7373,6 +7615,218 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
         })();
 
         // ==========================================================
+        // === Arithmetik-Doku-Modal (Tabs, eigener Button, PRO-only)
+        // ==========================================================
+        // Eigenständig, weil die Arithmetik-Erweiterung (+, *) konzeptionell
+        // unabhängig von Schrittketten ist — auch wenn der häufigste Use-Case
+        // gerade `OUT_S_NO` ist. Eigener Button + eigenes Modal, damit der
+        // SK-Doku-Modal-Tabbar nicht überfrachtet wird.
+        (function _initArithDocsModal() {
+            const TABS = [
+                {
+                    id: 'overview', icon: '🧭', label: 'Übersicht',
+                    html: `
+                        <h4>Integer-Werte im sonst boolschen Evaluator</h4>
+                        <p>VALIS' Standard-Evaluator ist rein boolesch (<code>||</code>, <code>&&</code>, <code>¬</code>).
+                        Für Integer-Werte gibt es einen separaten <b>Arithmetik-Pfad</b>, der zwei Operatoren
+                        kennt: <code>+</code> (Addition) und <code>*</code> (Multiplikation), plus Klammern,
+                        Zahl-Literale und Variablen.</p>
+                        <h5>Wann brauche ich das?</h5>
+                        <ul>
+                            <li>Echte Integer-Anzeige auf 7-Seg-Displays (Step-Nummer, Stückzahl, Pegel-Indikator …)</li>
+                            <li>Skalare aus mehreren Bool-Eingängen aggregieren (z.B. 4-Bit-DIP-Schalter → Zahl 0..15)</li>
+                            <li>Gewichtete Summen für HMI-Diagnose</li>
+                            <li>Cycle-/Fault-Counter-Vorberechnungen jenseits der reinen CTU-Form</li>
+                        </ul>
+                        <h5>Wann wird arithmetisch ausgewertet?</h5>
+                        <p>Eine Zeile ist arithmetisch, wenn die rechte Seite:</p>
+                        <ul>
+                            <li>ein <code>+</code> oder <code>*</code> auf Klammer-Ebene 0 enthält, ODER</li>
+                            <li>nur aus einer Zahl besteht (z.B. <code>FAKTOR := 42</code>)</li>
+                        </ul>
+                        <p>Sonst läuft der gewohnte boolesche Pfad. Mischen geht <b>nicht</b> — eine Zeile mit
+                        <code>+/*</code> UND <code>||/&&/¬</code> wird als Fehler abgewiesen, weil das Vermischen
+                        von bool- und int-Werten in einem Ausdruck schnell unsauber wird.</p>
+                        <div class="sk-warn">
+                            <b>Scope-Hinweis:</b> Aktuell nur <code>+</code> und <code>*</code>. Keine Subtraktion,
+                            Division, kein Modulo, keine Vergleiche, keine Ternary. Das deckt 95 % der
+                            sinnvollen SPS-Use-Cases — falls du mehr brauchst, lass uns reden.
+                        </div>
+                    `
+                },
+                {
+                    id: 'syntax', icon: '🔢', label: 'Operatoren & Syntax',
+                    html: `
+                        <h4>Operatoren, Präzedenz, Klammern</h4>
+                        <table>
+                            <tr><th>Symbol</th><th>Bedeutung</th><th>Präzedenz</th></tr>
+                            <tr><td><code>*</code></td><td>Multiplikation</td><td>höher (bindet enger)</td></tr>
+                            <tr><td><code>+</code></td><td>Addition</td><td>niedriger</td></tr>
+                            <tr><td><code>(…)</code></td><td>Klammerung</td><td>überschreibt Präzedenz</td></tr>
+                        </table>
+                        <p>Funktioniert wie aus jedem Taschenrechner gewohnt — <code>1 + 2 * 3</code> ergibt 7,
+                        nicht 9. Klammern explizit setzen wenn die Reihenfolge zählt:
+                        <code>(1 + 2) * 3</code> ergibt 9.</p>
+                        <h5>Erlaubte Operanden</h5>
+                        <ul>
+                            <li><b>Zahl-Literale:</b> ganzzahlig (<code>0</code>, <code>5</code>, <code>42</code>) oder Dezimal (<code>1.5</code>, <code>3.14</code>)</li>
+                            <li><b>Variablen:</b> jeder gültige Identifier — wird automatisch koerziert</li>
+                            <li><b>TRUE/FALSE:</b> werden direkt zu <code>1</code>/<code>0</code> aufgelöst</li>
+                        </ul>
+                        <h5>Beispiele</h5>
+<pre><span class="cm">// Pure Konstante</span>
+FAKTOR := <span class="num">42</span>
+
+<span class="cm">// Bool → 0/1, dann gewichten</span>
+S_NO := <span class="num">1</span>*Q1 + <span class="num">2</span>*Q2 + <span class="num">3</span>*Q3 + <span class="num">4</span>*Q4
+
+<span class="cm">// Mehrere Faktoren zusammen</span>
+SUMME := <span class="num">10</span>*BAR1 + <span class="num">5</span>*BAR2 + BIAS
+
+<span class="cm">// Klammern</span>
+GESAMT := (<span class="num">3</span> + STUFE) * MULT
+
+<span class="cm">// 4-Bit-DIP-Schalter zu Integer 0..15</span>
+WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <span class="num">2</span>*DIP1 + DIP0</pre>
+                        <div class="sk-tip">
+                            Innerhalb von TON/TOF/TP/CTU-Aufrufen ist Arithmetik <b>nicht</b> erlaubt — die
+                            Argumente bleiben strikt typisch (Bool-Signal, Zahl-Konstante). Nur als RHS
+                            einer <code>:=</code>-Zuweisung wird der Arithmetik-Pfad aktiv.
+                        </div>
+                    `
+                },
+                {
+                    id: 'coercion', icon: '🔄', label: 'Koerzion & 7-Seg',
+                    html: `
+                        <h4>Wie werden Variablen koerziert?</h4>
+                        <p>Im arithmetischen Kontext wird jede Variable durch
+                        <code>(+state['NAME'] || 0)</code> ausgewertet. Effekt:</p>
+                        <table>
+                            <tr><th>State-Wert</th><th>Ergebnis</th></tr>
+                            <tr><td><code>true</code></td><td>1</td></tr>
+                            <tr><td><code>false</code></td><td>0</td></tr>
+                            <tr><td><code>0</code> (Zahl)</td><td>0</td></tr>
+                            <tr><td><code>5</code> (Zahl)</td><td>5</td></tr>
+                            <tr><td><code>3.14</code> (Zahl)</td><td>3.14</td></tr>
+                            <tr><td><code>undefined</code> / nicht gesetzt</td><td>0</td></tr>
+                            <tr><td><code>NaN</code> / String</td><td>0</td></tr>
+                        </table>
+                        <h4>7-Seg-Display</h4>
+                        <p>Das 7-Seg-Display zeigt jetzt in dieser Priorität:</p>
+                        <ol>
+                            <li><b>Priorität 1:</b> <code>simTimers[name].cv</code> (Counter)
+                                bzw. <code>.et/1000</code> (Timer-Sekunden) — wie bisher.</li>
+                            <li><b>Priorität 2 (NEU):</b> <code>spsState[name]</code> wenn der Wert
+                                <i>eine Zahl</i> ist (Integer-Output einer Arithmetik-Zeile).</li>
+                            <li>Sonst: <code>---</code></li>
+                        </ol>
+                        <p>Booleans werden bewusst nicht angezeigt — sonst würde das Display 0/1
+                        für jede Schalter-Variable zeigen und den Sinn der Bauteilauswahl untergraben.
+                        Wenn du einen Bool als „0 oder 1" sehen willst, leg ihn auf eine LED.</p>
+                        <h5>Variable-Dropdown des Displays</h5>
+                        <p>Im Auswahl-Dialog des 7-Seg-Displays werden jetzt auch
+                        <b>ARITH</b>-Knoten gelistet, nicht nur TON/TOF/TP/CTU.
+                        Jede arithmetische Zeile (RHS hat <code>+</code> oder <code>*</code>) legt automatisch einen
+                        ARITH-Knoten im Logik-Graph an.</p>
+                        <div class="sk-tip">
+                            <b>Live-Wert im FBS-Knoten:</b> der ARITH-Knoten im Logikplan zeigt
+                            unter sich das aktuelle Berechnungsergebnis als blaue Zahl —
+                            genauso wie es CTU/TON tun.
+                        </div>
+                    `
+                },
+                {
+                    id: 'sk-integration', icon: '📊', label: 'SK-Integration (S_NO)',
+                    html: `
+                        <h4>OUT_S_NO im CONTROL-Block</h4>
+                        <p>Der häufigste Use-Case für Arithmetik in VALIS ist die Integer-Step-Nummer
+                        einer Schrittkette — analog zum S7-GRAPH-FB-Output <code>S_NO</code>.
+                        Im <code>CONTROL:</code>-Block deiner Schrittkette:</p>
+<pre><span class="kw">SCHRITTKETTE</span> MISCHANLAGE:
+  <span class="kw">CONTROL:</span>
+    ...
+    <span class="kw">OUT_S_NO:</span> S_NO     <span class="cm">// Integer-Step-Nummer</span>
+  <span class="kw">STEP</span> S1 ...</pre>
+                        <h5>Was generiert wird</h5>
+                        <p>Der Schrittketten-Expander erzeugt automatisch eine Arithmetik-Zeile:</p>
+<pre>S_NO := <span class="num">1</span>*Q1 + <span class="num">2</span>*Q2 + <span class="num">3</span>*Q3 + <span class="num">4</span>*Q4 + <span class="num">5</span>*Q5 + <span class="num">6</span>*Q6</pre>
+                        <p>Bei <b>linearer Kette</b> (genau ein Q-Pin TRUE) liefert die gewichtete Summe
+                        die aktuelle Step-Nummer — exakt wie S7-GRAPHs S_NO:</p>
+                        <ul>
+                            <li>S1 aktiv → <code>S_NO = 1</code></li>
+                            <li>S4 aktiv → <code>S_NO = 4</code></li>
+                            <li>OFF_SQ aktiv, alle Q=0 → <code>S_NO = 0</code></li>
+                        </ul>
+                        <h5>Bei parallelen Zweigen</h5>
+                        <p>Sind mehrere Q-Pins gleichzeitig TRUE (parallele Verzweigung über
+                        <code>cond -&gt; [S2, S5]</code>), wird <code>S_NO</code> die <b>Summe</b> der
+                        aktiven Step-Nummern. Beispiel: S2 und S5 parallel aktiv → <code>S_NO = 7</code>.</p>
+                        <div class="sk-warn">
+                            Das ist konsequent, aber nicht eindeutig — 7 könnte auch „nur S7 aktiv" heißen.
+                            In Anlagen mit parallelen Zweigen empfiehlt sich eine eigene Anzeige-Logik
+                            (z.B. mehrere kleinere Displays pro Zweig). Für klassische lineare Ketten
+                            funktioniert <code>OUT_S_NO</code> tadellos.
+                        </div>
+                        <h5>HMI-Verkabelung</h5>
+                        <p>Das 7-Seg-Display in der 2D-Anlage bekommt einfach <code>linkedVar: "S_NO"</code>.
+                        Die Display-<code>animate</code>-Funktion liest <code>spsState['S_NO']</code> direkt.
+                        Keine CTU-Indirektion nötig — der ARITH-Knoten ist der Wert.</p>
+                        <p>Im Beispiel <b>Schrittkette (Vollausstattung)</b> ist das dritte Display
+                        unten rechts in der HMI genau dafür da.</p>
+                    `
+                }
+            ];
+
+            let _activeTab = 'overview';
+
+            function renderTabs() {
+                const tabsEl = document.getElementById('arith-docs-tabs');
+                if (!tabsEl) return;
+                tabsEl.innerHTML = TABS.map(t =>
+                    '<div class="sk-docs-tab' + (t.id === _activeTab ? ' active' : '') +
+                    '" data-tab-id="' + t.id + '">' +
+                    '<span style="font-size:14px;">' + t.icon + '</span>' +
+                    '<span>' + t.label + '</span></div>'
+                ).join('');
+            }
+            function renderContent() {
+                const contentEl = document.getElementById('arith-docs-content');
+                if (!contentEl) return;
+                const tab = TABS.find(t => t.id === _activeTab) || TABS[0];
+                contentEl.innerHTML = tab.html;
+                contentEl.scrollTop = 0;
+            }
+            window._openArithDocsModal = function() {
+                // Hard-Gate: ohne PRO-Mode den Modal nicht öffnen.
+                if (typeof window._isProMode === 'function' && !window._isProMode()) return;
+                const overlay = document.getElementById('arith-docs-overlay');
+                if (!overlay) return;
+                renderTabs();
+                renderContent();
+                overlay.classList.add('open');
+                document.addEventListener('keydown', _arithDocsEsc);
+            };
+            window._closeArithDocsModal = function() {
+                const overlay = document.getElementById('arith-docs-overlay');
+                if (!overlay) return;
+                overlay.classList.remove('open');
+                document.removeEventListener('keydown', _arithDocsEsc);
+            };
+            function _arithDocsEsc(e) {
+                if (e.key === 'Escape') window._closeArithDocsModal();
+            }
+            document.addEventListener('click', (e) => {
+                const tab = e.target.closest('#arith-docs-tabs .sk-docs-tab');
+                if (!tab) return;
+                const id = tab.getAttribute('data-tab-id');
+                if (!id || id === _activeTab) return;
+                _activeTab = id;
+                renderTabs();
+                renderContent();
+            });
+        })();
+
+        // ==========================================================
         // === Schrittketten DSL → RS-Self-Hold Expansion (Phase 1)
         // ==========================================================
         // DSL-Form:
@@ -7512,6 +7966,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                                 || /^S_SEL_[A-Z][A-Z0-9_]*$/.test(key)
                                 || /^(OUT_AUTO_ON|OUT_TAP_ON|OUT_TOP_ON|OUT_MAN_ON|OUT_ERR_FLT)$/.test(key)
                                 || /^OUT_S_NO_[A-Z][A-Z0-9_]*$/.test(key)
+                                || /^OUT_S_NO$/.test(key)                            // Integer S_NO über Arithmetik
                                 || /^(OUT_CYCLE_COUNT|OUT_FAULT_COUNT)$/.test(key);
                             if (!isKnown) {
                                 errAt(i, 'Unbekannter CONTROL-Key "' + key + '" in "' + cur.name + '".');
@@ -7698,8 +8153,18 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                 // bleibt KEIN Step aktiv.
                 const allQs = c.steps.map(s => Q(s.name));
                 const initStep = c.steps[0].name;
+                // OFF_SQ-Wert kann „¬X" sein (NC-Konvention: Variable TRUE im Ruhezustand,
+                // also „chain off" = ¬X). Wir kippen dann einfach das Flag statt naiv „¬¬X"
+                // zu schreiben — das würde der Evaluator nicht parsen können.
+                function negateExpr(v) {
+                    const t = String(v).trim();
+                    if (t.startsWith('¬')) return t.substring(1).trim();
+                    // Atomarer Identifier: direkt mit ¬ prefixen. Sonst klammern, damit
+                    // z.B. `A || B` als `¬(A || B)` korrekt parst.
+                    return /^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/.test(t) ? '¬' + t : '¬(' + t + ')';
+                }
                 const initTerm = has('OFF_SQ')
-                    ? '(¬(' + allQs.join(' || ') + ') && ¬' + get('OFF_SQ') + ')'
+                    ? '(¬(' + allQs.join(' || ') + ') && ' + negateExpr(get('OFF_SQ')) + ')'
                     : '¬(' + allQs.join(' || ') + ')';
                 sets.get(initStep).push(initTerm);
                 // INIT_SQ erzwingt den Init-Step direkt (egal welcher andere Step aktiv ist).
@@ -7943,7 +8408,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
 
                 // === Status-Outputs (CONTROL.OUT_*) ===
                 const outKeys = ['OUT_AUTO_ON', 'OUT_TAP_ON', 'OUT_TOP_ON', 'OUT_MAN_ON', 'OUT_ERR_FLT',
-                                 'OUT_CYCLE_COUNT', 'OUT_FAULT_COUNT'];
+                                 'OUT_CYCLE_COUNT', 'OUT_FAULT_COUNT', 'OUT_S_NO'];
                 const hasAnyOut = outKeys.some(k => has(k))
                     || c.steps.some(s => has('OUT_S_NO_' + s.name.toUpperCase()));
                 if (hasAnyOut) {
@@ -7958,12 +8423,22 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         : 'FALSE';
                     if (has('OUT_ERR_FLT')) lines.push(get('OUT_ERR_FLT') + ' := ' + errExpr);
                     // OUT_S_NO_<step>: pro konfiguriertem Step ein bool-Output mit Q<n>.
-                    // Ersatz für S7-GRAPHs Integer S_NO, das VALIS rein boolesch nicht
-                    // ausdrücken kann.
+                    // Bool-Variante — solides Fallback wenn Arithmetik nicht gewünscht.
                     c.steps.forEach(s => {
                         const k = 'OUT_S_NO_' + s.name.toUpperCase();
                         if (has(k)) lines.push(get(k) + ' := ' + Q(s.name));
                     });
+                    // OUT_S_NO: Integer-Variante via Arithmetik. Generiert
+                    //   S_NO := 1*Q1 + 2*Q2 + 3*Q3 + ... + n*Qn
+                    // → bei linearer Kette ist genau ein Q TRUE → S_NO = Step-Nummer.
+                    // Bei OFF_SQ (alle Q=0) → S_NO=0. Bei parallelen Zweigen ist die
+                    // Summe der aktiven Step-Nummern (nicht ideal, aber konsequent).
+                    // Lesbar per 7-Seg-Display, das spsState['S_NO'] direkt liest.
+                    if (has('OUT_S_NO')) {
+                        const parts = c.steps.map((s, i) =>
+                            (i + 1) + '*' + Q(s.name));
+                        lines.push(get('OUT_S_NO') + ' := ' + parts.join(' + '));
+                    }
                     // OUT_CYCLE_COUNT: CTU mit CU = Q<init>, R = INIT_SQ oder OFF_SQ
                     //   (Cycle wird gezählt, sobald die Kette zum Init-Step zurückkehrt).
                     // OUT_FAULT_COUNT: CTU mit CU = ¬-Sammelfehler-Steigflanke (vereinfacht: ERR_FLT-Term)
@@ -10832,6 +11307,10 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
             '&&':    { title:'UND-Verknüpfung', syntax:'A && B', desc:'Wahr, wenn ALLE Bedingungen wahr sind. Wie eine Reihenschaltung von Schaltern. Auch: &, ∧, UND, AND.', scenario:'„und", „sowohl … als auch", „gleichzeitig", „zusätzlich", „nur wenn auch", „beide aktiv", „erst wenn alle …", „während …" — überall, wo mehrere Bedingungen ZUSAMMEN erfüllt sein müssen.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
             '||':    { title:'ODER-Verknüpfung', syntax:'A || B', desc:'Wahr, wenn MINDESTENS EINE Bedingung wahr ist. Wie eine Parallelschaltung. Auch: |, ∨, ODER, OR.', scenario:'„oder", „entweder … oder", „mindestens eines", „wahlweise", „auch wenn", „falls irgendein …", „kann durch X ODER Y ausgelöst werden" — sobald EINE von mehreren Bedingungen reicht, um die linke Seite zu aktivieren.', example:'ALARM := RAUCH_SENSOR || WAERME_SENSOR' },
             '¬':  { title:'Negation (NICHT)', syntax:'¬A', desc:'Kehrt den Wahrheitswert um: aus wahr wird falsch und umgekehrt. Auch: !, NICHT, NOT.', example:'TUER_AUF := TASTER && ¬NOTAUS' },
+            '->':    { title:'Übergang (Schrittketten-DSL)', syntax:'<Bedingung> -> S<n>',
+                       desc:'Definiert einen Übergang in einer SCHRITTKETTE: sobald die Bedingung wahr wird, wechselt die Kette vom aktuellen Schritt zum Zielschritt S<n>. Steht im TRANS-Block direkt unter dem STEP. Mehrere Ziele in eckigen Klammern aktivieren parallele Zweige: cond -> [S2, S5]. Auch erlaubt: AFTER <Sek> als Übergangs-Timer.',
+                       scenario:'„wechselt zum nächsten Schritt, sobald …", „wenn Bedingung erfüllt, dann Step X aktivieren", „nach Step-Eintritt erst X Sekunden warten" (→ AFTER <t>), „gleichzeitig in zwei Zweige verzweigen" (→ -> [Sa, Sb]).',
+                       example:'STEP S2 (LAUFEN):\n  A_MOTOR := TRUE\nTRANS:\n  SENSOR_FERTIG -> S3' },
             'TON':   { title:'Timer: Einschaltverzögert', syntax:'OUT := TON(IN, Sekunden)', desc:'OUT wird wahr, wenn IN ununterbrochen für die angegebene Zeit wahr war. Klassischer Anlaufschutz.', example:'WARNLAMPE := TON(MOTOR_AN, 3.0)' },
             'TOF':   { title:'Timer: Ausschaltverzögert', syntax:'OUT := TOF(IN, Sekunden)', desc:'OUT bleibt nach Abfall von IN noch die angegebene Zeit wahr. Klassischer Nachlauf.', example:'LUEFTER := TOF(OFEN_AN, 60.0)' },
             'TP':    { title:'Timer: Impuls', syntax:'OUT := TP(IN, Sekunden)', desc:'Ein kurzer Wechsel von IN auf wahr erzeugt einen festen Impuls der angegebenen Länge.', example:'HUPE := TP(START_TASTER, 0.5)' },
@@ -19157,6 +19636,18 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                 window._schrittkettenChains = expansion.chains || [];
                 window._schrittkettenChainBase = expansion.chainBase || new Map();
                 window._schrittkettenErrors = expansion.dslErrors || [];
+                // Legenden-`->`-Button zeigen, sobald der Code eine SCHRITTKETTE-DSL
+                // verwendet — entweder schon valide geparsed (chains.length > 0) oder
+                // mindestens eine `SCHRITTKETTE …:`-Header-Zeile am Zeilen-Anfang
+                // (also nicht nur in einem Kommentar). So erscheint der Button beim
+                // Tippen sobald die Header-Zeile dasteht, aber NICHT wenn jemand das
+                // Wort nur in einem `// SCHRITTKETTE …`-Kommentar erwähnt.
+                const _legGrid = document.getElementById('legend-grid');
+                if (_legGrid) {
+                    const _hasSk = (window._schrittkettenChains && window._schrittkettenChains.length > 0)
+                                   || /^\s*SCHRITTKETTE\s+/im.test(code);
+                    _legGrid.classList.toggle('has-sk', _hasSk);
+                }
                 // (Früher hier: Reset des `_INIT_<NAME>`-Flags bei Strukturänderung.
                 //  Mit der jetzt selbstheilenden `¬(Q1 || Q2 || ...)`-Init-Semantik
                 //  ist das nicht mehr nötig — die Kette startet zuverlässig sobald
@@ -21299,20 +21790,44 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                 menuHtml: `<div onclick="addFactoryDevice('display')">📟 <span data-i18n="plug_display_name">7-Seg Display</span></div>`,
                 css: `
                     /* ... bestehendes CSS ... */
-                    .f2d-display { position: absolute; width: 60px; height: 30px; background: #000; border: 2px solid #333; border-radius: 4px; color: #ff1744; font-family: monospace; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 20; box-shadow: inset 0 0 8px rgba(255,0,0,0.4); box-sizing: border-box; }
+                    .f2d-display { position: absolute; width: 60px; height: 30px; background: #000; border: 2px solid #333; border-radius: 4px; font-family: monospace; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 20; box-shadow: inset 0 0 8px rgba(255,0,0,0.4); box-sizing: border-box; }
+                    .f2d-display .f2d-display-val { color: #ff1744; pointer-events: none; }
                 `,
                 build: function(obj, el, var1) {
                     obj.linkedVar = var1; obj.width = 60; obj.height = 30; el.className = 'f2d-obj f2d-display';
-                    el.innerHTML = '00.0';
+                    el.innerHTML = '';
+                    // Wert kommt in ein eigenes inneres <div>, damit der animate-Tick nur
+                    // diesen Inhalt überschreibt und Label/Resizer überleben.
+                    let valEl = document.createElement('div');
+                    valEl.className = 'f2d-display-val';
+                    valEl.textContent = '00.0';
+                    el.appendChild(valEl);
+                    // Standard-Label wie bei anderen 2D-Bauteilen — drunter und mittig
+                    // (`f2d-label-below`), zeigt den Variable-Namen. _refreshFactoryLabel
+                    // hält ihn synchron.
+                    let label = document.createElement('div');
+                    label.className = 'f2d-label f2d-label-below';
+                    if (obj.labelPinned) label.classList.add('f2d-label-pinned');
+                    label.textContent = obj.linkedVar || '---';
+                    el.appendChild(label);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                     obj.useCollision = false;
                 },
                 animate: function(obj) {
+                    let valEl = obj.el.querySelector('.f2d-display-val');
+                    if (!valEl) return;
                     if (window.simTimers && window.simTimers[obj.linkedVar]) {
                         let t = window.simTimers[obj.linkedVar];
-                        obj.el.textContent = t.cv !== undefined ? t.cv : (t.et / 1000).toFixed(1);
-                    } else { 
-                        obj.el.textContent = '---';
+                        valEl.textContent = t.cv !== undefined ? t.cv : (t.et / 1000).toFixed(1);
+                    } else if (typeof spsState !== 'undefined' && obj.linkedVar in spsState
+                               && typeof spsState[obj.linkedVar] === 'number') {
+                        // Plain Integer-/Float-Variable im State (z.B. S_NO via Arithmetik).
+                        // Booleans bewusst nicht — sonst zeigt das Display 0/1 für jede
+                        // beliebige Schalter-Variable, was den Sinn der Bauteilauswahl umgeht.
+                        const v = spsState[obj.linkedVar];
+                        valEl.textContent = Number.isInteger(v) ? v : v.toFixed(1);
+                    } else {
+                        valEl.textContent = '---';
                     }
                 },
                 contextMenuVarSection: function(obj, ctxMenu, helpers) {
@@ -22205,6 +22720,94 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                             obj.audioNodes = null;
                         }
                     }
+                }
+            },
+			'bohrspindel': {
+                role: 'output', color: '#546e7a',
+                i18n: {
+                    de: { name: 'Bohrspindel', desc: 'Vertikale Spindel mit Drehanimation. Per Rechtsklick „An Kolben montieren" auf einen Zylinder-Kolben aufsetzbar.' },
+                    en: { name: 'Drill Spindle', desc: 'Vertical spindle with rotation animation. Right-click "Mount on piston" to attach to a cylinder rod.' }
+                },
+                meta: { icon: '🪛' },
+                modalConfig: { t: 'Bohrspindel (Ausgang) zuweisen:', l1: 'SPS Ausgangsvariable', out: true },
+                hasHeight: true,
+                menuTarget: '#menu-anbauteile',
+                menuHtml: `<div onclick="addFactoryDevice('bohrspindel')">🪛 <span data-i18n="plug_bohrspindel_name">Bohrspindel</span></div>`,
+                css: `
+                    /* Bohrspindel: 3 vertikale Sektionen (Motor / Spannfutter / Bohrer-Spitze).
+                       Die Rotation wird via animierte Helix-Streifen auf der Bohrer-Spitze
+                       angedeutet — echtes transform: rotate würde die ganze Form drehen,
+                       was bei vertikaler Drehachse unsinnig aussieht. Stattdessen scrollen
+                       die diagonalen Streifen nach unten, klassische 2D-Bohrer-Konvention. */
+                    .f2d-bohrspindel { position: absolute; z-index: 2; display: flex; flex-direction: column; align-items: center; background: transparent; box-shadow: none; box-sizing: border-box; }
+                    .f2d-bohrspindel-motor {
+                        width: 100%; height: 28%;
+                        background: linear-gradient(180deg, #607d8b, #455a64);
+                        border: 2px solid #263238; border-radius: 3px;
+                        box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 1px 2px 4px rgba(0,0,0,0.4);
+                        box-sizing: border-box;
+                    }
+                    .f2d-bohrspindel-chuck {
+                        width: 60%; height: 12%;
+                        background: linear-gradient(180deg, #78909c, #455a64);
+                        border: 1px solid #263238;
+                        margin-top: -1px;
+                        box-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+                        box-sizing: border-box;
+                    }
+                    .f2d-bohrspindel-bit {
+                        width: 24%; height: 60%;
+                        background-color: #b0bec5;
+                        /* Helix-Streifen: diagonal, sich wiederholend */
+                        background-image: repeating-linear-gradient(
+                            -45deg,
+                            #b0bec5 0px,
+                            #b0bec5 4px,
+                            #455a64 4px,
+                            #455a64 7px
+                        );
+                        background-size: 100% auto;
+                        border-left: 1.5px solid #37474f;
+                        border-right: 1.5px solid #37474f;
+                        clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%);
+                        box-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+                        margin-top: -1px;
+                    }
+                    .f2d-bohrspindel.active .f2d-bohrspindel-bit {
+                        animation: drill-spin 0.45s linear infinite;
+                    }
+                    @keyframes drill-spin {
+                        0%   { background-position: 0 0; }
+                        100% { background-position: 0 14px; }
+                    }
+                    /* Glow im Aktiv-Zustand */
+                    .f2d-bohrspindel.active .f2d-bohrspindel-motor {
+                        box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 0 6px rgba(255,165,0,0.5);
+                    }
+                `,
+                build: function(obj, el, var1) {
+                    obj.linkedVar = var1;
+                    if (!obj.width)  obj.width  = 28;
+                    if (!obj.height) obj.height = 80;
+                    el.className = 'f2d-obj f2d-bohrspindel';
+                    el.style.background = 'transparent';
+                    el.style.boxShadow  = 'none';
+                    el.innerHTML = '';
+                    let motor = document.createElement('div'); motor.className = 'f2d-bohrspindel-motor'; el.appendChild(motor);
+                    let chuck = document.createElement('div'); chuck.className = 'f2d-bohrspindel-chuck'; el.appendChild(chuck);
+                    let bit   = document.createElement('div'); bit.className   = 'f2d-bohrspindel-bit';   el.appendChild(bit);
+                    // Standard-Label wie bei anderen 2D-Bauteilen (drunter, mittig).
+                    let label = document.createElement('div');
+                    label.className = 'f2d-label f2d-label-below';
+                    if (obj.labelPinned) label.classList.add('f2d-label-pinned');
+                    label.textContent = obj.linkedVar || '---';
+                    el.appendChild(label);
+                    let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
+                    obj.useCollision = false;
+                },
+                animate: function(obj, spsState) {
+                    const isActive = !!spsState[obj.linkedVar];
+                    obj.el.classList.toggle('active', isActive);
                 }
             },
 			'heater': {
@@ -28096,7 +28699,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         items = (typeof window._getStickyInputs  === 'function') ? window._getStickyInputs()  : globalInputs;
                     else if (listType === 'out')
                         items = (typeof window._getStickyOutputs === 'function') ? window._getStickyOutputs() : globalOutputs;
-                    else if (listType === 'timers' && currentGraph) items = Array.from(currentGraph.nodes.values()).filter(n => ['TON','TOF','TP','CTU'].includes(n.type)).map(n => n.id);
+                    else if (listType === 'timers' && currentGraph) items = Array.from(currentGraph.nodes.values()).filter(n => ['TON','TOF','TP','CTU','ARITH'].includes(n.type)).map(n => n.id);
                     // Trennung „Passende Komponenten" / „Andere Variablen" — gleiche Logik
                     // wie im Platzierungs-Dialog (fillOptions). Bei `timers` und unbekannten
                     // Bauteil-Typen fällt die Trennung sinnvollerweise weg (alle Optionen

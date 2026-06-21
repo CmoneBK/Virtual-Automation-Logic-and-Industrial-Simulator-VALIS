@@ -1877,6 +1877,7 @@
                 <button class="btn-export" onclick="openHelpModal()" style="background: #17a2b8; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_help">ℹ️ Hilfe / Tipps</button>
                 <button class="btn-export" onclick="openSaveLoadModal()" style="background: #2196f3; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_save_load">💾 Speichern / Laden</button>
                 <button class="btn-export" onclick="startTutorial()" style="background: #5c6bc0; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Interaktive Schritt-für-Schritt-Tour">🎓 Tour</button>
+                <button id="btn-pro-toggle" class="btn-export" onclick="window._toggleProMode()" style="background: #424242; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="PRO-Modus: schaltet die Schrittketten-Features (DSL, Grafcet/S7-GRAPH-Panel, Beispiele, Toggle DSL↔RS) ein/aus.">⚙️ PRO</button>
             </div>
         </div>
         <div class="section-header" onclick="toggleSection('editor-container', this)" style="justify-content:space-between;">
@@ -1899,10 +1900,11 @@
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol(' || ')">||</span> <span data-i18n="leg_or">ODER (auch |, ∨, OR)</span>
                     <span class="legend-code" title="Klicken zum Einfügen" onclick="insertSymbol('¬')">¬</span> <span data-i18n="leg_not">NICHT (auch !, NOT)</span>
                 </div>
-                <details style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #444; font-size: 11px;">
-                    <summary style="cursor: pointer; color: #569CD6; font-weight: bold; outline: none; user-select: none;" data-i18n="leg_ext_sum">
+                <details style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #444; font-size: 11px; position: relative;">
+                    <summary style="cursor: pointer; color: #569CD6; font-weight: bold; outline: none; user-select: none; padding-right: 90px;" data-i18n="leg_ext_sum">
                         Erweiterte Befehle (Speicher, Zeiten, Zähler)
                     </summary>
+                    <button id="btn-sk-docs" onclick="event.stopPropagation(); event.preventDefault(); window._openSkDocsModal();" title="Schrittketten-Dokumentation: DSL-Syntax, Aktions-Qualifier, AFTER-Timer, INTERLOCK/SUPERVISION, CONTROL-Block, Grafcet/S7-GRAPH-Panel." style="display:none;position:absolute;top:5px;right:0;background:#7b1fa2;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.4;z-index:5;">📘 SK-Doku</button>
                     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding-left: 5px; color: #ccc; line-height: 1.4;">
                         <div>
                             <strong style="color: #fff;" data-i18n="leg_ff_title">🧲 Speicherglieder (Flip-Flops)</strong><br>
@@ -2910,6 +2912,121 @@
                     <button onclick="closeExamplesModal()" style="background:none; border:none; color:#aaa; font-size:22px; cursor:pointer; line-height:1; padding:0 4px;" title="Schließen">✕</button>
                 </div>
                 <div class="examples-grid" id="examples-grid"></div>
+            </div>
+        </div>
+        <!-- Schrittketten-Dokumentations-Modal (nur bei PRO-Mode erreichbar) -->
+        <style>
+            #sk-docs-overlay {
+                display: none; position: fixed; inset: 0;
+                background: rgba(0,0,0,0.72); z-index: 3000;
+                align-items: center; justify-content: center;
+                padding: 20px;
+            }
+            #sk-docs-overlay.open { display: flex; }
+            #sk-docs-modal {
+                background: #1e1e1e; color: #d4d4d4;
+                width: min(1100px, 96vw); height: min(720px, 92vh);
+                border: 1px solid #444; border-radius: 6px;
+                box-shadow: 0 8px 40px rgba(0,0,0,0.9);
+                display: flex; flex-direction: column; overflow: hidden;
+            }
+            #sk-docs-modal .sk-docs-head {
+                display: flex; align-items: center; justify-content: space-between;
+                padding: 10px 14px; border-bottom: 1px solid #333;
+                background: #252526;
+            }
+            #sk-docs-modal .sk-docs-head h3 {
+                margin: 0; color: #fff; font-size: 15px; font-weight: 600;
+            }
+            #sk-docs-modal .sk-docs-close {
+                background: none; border: none; color: #aaa;
+                font-size: 22px; cursor: pointer; padding: 0 4px;
+            }
+            #sk-docs-modal .sk-docs-close:hover { color: #fff; }
+            #sk-docs-modal .sk-docs-body {
+                display: flex; flex: 1; min-height: 0;
+            }
+            #sk-docs-modal .sk-docs-tabs {
+                width: 220px; flex-shrink: 0;
+                background: #252526; border-right: 1px solid #333;
+                overflow-y: auto; padding: 8px 0;
+            }
+            #sk-docs-modal .sk-docs-tab {
+                display: flex; align-items: center; gap: 6px;
+                padding: 8px 14px; cursor: pointer;
+                color: #ccc; font-size: 12px;
+                border-left: 3px solid transparent;
+                transition: background 0.12s, border-color 0.12s;
+            }
+            #sk-docs-modal .sk-docs-tab:hover { background: #2a2d2e; }
+            #sk-docs-modal .sk-docs-tab.active {
+                background: #094771; color: #fff;
+                border-left-color: #569cd6; font-weight: 600;
+            }
+            #sk-docs-modal .sk-docs-content {
+                flex: 1; padding: 20px 26px; overflow-y: auto;
+                font-size: 13px; line-height: 1.6;
+            }
+            #sk-docs-modal .sk-docs-content h4 {
+                margin: 0 0 10px; color: #569cd6;
+                font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 6px;
+            }
+            #sk-docs-modal .sk-docs-content h5 {
+                margin: 18px 0 6px; color: #c586c0; font-size: 13px;
+            }
+            #sk-docs-modal .sk-docs-content p { margin: 6px 0; color: #d4d4d4; }
+            #sk-docs-modal .sk-docs-content ul { margin: 6px 0; padding-left: 22px; }
+            #sk-docs-modal .sk-docs-content li { margin: 3px 0; }
+            #sk-docs-modal .sk-docs-content code {
+                background: #2d2d30; color: #ce9178;
+                padding: 1px 5px; border-radius: 3px;
+                font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
+            }
+            #sk-docs-modal .sk-docs-content pre {
+                background: #1a1a1a; border: 1px solid #333; border-radius: 4px;
+                padding: 10px 12px; margin: 10px 0;
+                overflow-x: auto;
+                font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
+                line-height: 1.5; color: #d4d4d4;
+            }
+            #sk-docs-modal .sk-docs-content pre .kw  { color: #569cd6; font-weight: bold; }
+            #sk-docs-modal .sk-docs-content pre .cm  { color: #6a9955; font-style: italic; }
+            #sk-docs-modal .sk-docs-content pre .num { color: #b5cea8; }
+            #sk-docs-modal .sk-docs-content pre .str { color: #ce9178; }
+            #sk-docs-modal .sk-docs-content .sk-tip {
+                background: rgba(86,156,214,0.1); border-left: 3px solid #569cd6;
+                padding: 8px 12px; margin: 10px 0; border-radius: 3px;
+                font-size: 12px; color: #d4d4d4;
+            }
+            #sk-docs-modal .sk-docs-content .sk-warn {
+                background: rgba(255,167,38,0.1); border-left: 3px solid #ffa726;
+                padding: 8px 12px; margin: 10px 0; border-radius: 3px;
+                font-size: 12px; color: #d4d4d4;
+            }
+            #sk-docs-modal .sk-docs-content table {
+                width: 100%; border-collapse: collapse; margin: 10px 0;
+                font-size: 12px;
+            }
+            #sk-docs-modal .sk-docs-content th,
+            #sk-docs-modal .sk-docs-content td {
+                border: 1px solid #333; padding: 6px 10px;
+                text-align: left; vertical-align: top;
+            }
+            #sk-docs-modal .sk-docs-content th {
+                background: #252526; color: #569cd6; font-weight: 600;
+            }
+            #sk-docs-modal .sk-docs-content td code { font-size: 11px; }
+        </style>
+        <div id="sk-docs-overlay" onclick="if(event.target===this)window._closeSkDocsModal()">
+            <div id="sk-docs-modal">
+                <div class="sk-docs-head">
+                    <h3>📘 Schrittketten — Dokumentation</h3>
+                    <button class="sk-docs-close" onclick="window._closeSkDocsModal()" title="Schließen">✕</button>
+                </div>
+                <div class="sk-docs-body">
+                    <div class="sk-docs-tabs" id="sk-docs-tabs"></div>
+                    <div class="sk-docs-content" id="sk-docs-content"></div>
+                </div>
             </div>
         </div>
 		<style>
@@ -4986,20 +5103,30 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "//                   aber nicht angesteuert.\n" +
                     "//   • SUPERVISION — Überwachung. Wenn TRUE während Step aktiv,\n" +
                     "//                   setzt einen Fault-Flag und blockiert den\n" +
-                    "//                   Übergang aus diesem Step. Die Step-Box blinkt\n" +
-                    "//                   im Panel rot. Geht die Bedingung wieder FALSE,\n" +
-                    "//                   verschwindet der Fault automatisch.\n" +
+                    "//                   Übergang. Step-Box blinkt rot. Mit ACK_EF\n" +
+                    "//                   konfiguriert → Fault ist gelatcht (S7-konform).\n" +
                     "//   • Qualifier N — Standard-Aktion (solange Step aktiv).\n" +
-                    "//   • Qualifier C — wie N, aber zusätzlich UND-verknüpft mit dem\n" +
-                    "//                   INTERLOCK des Steps (Conditional / S7-NC).\n" +
+                    "//   • Qualifier C — wie N, aber UND-verknüpft mit INTERLOCK (S7-NC).\n" +
                     "//   • Qualifier P — Puls (~100 ms) beim Eintritt in den Step.\n" +
                     "//   • Qualifier D <t> — Delayed: Aktor schaltet erst nach <t> s.\n" +
                     "//   • Qualifier L <t> — Limited: Aktor schaltet für <t> s als Puls.\n" +
-                    "//   • AFTER <t>   — Übergangs-Timer. Wartet <t> s nach Step-Eintritt.\n" +
-                    "//                   Funktioniert auch innerhalb SUPERVISION (Watchdog!).\n" +
+                    "//   • AFTER <t>   — Übergangs-Timer. Funktioniert auch in SUPERVISION.\n" +
+                    "//   • CONTROL     — S7-GRAPH-FB-Inputs/Outputs:\n" +
+                    "//       INIT_SQ      → Kette zurück zum Init-Step\n" +
+                    "//       OFF_SQ       → Kette komplett aus (alle Q=0)\n" +
+                    "//       ACK_EF       → Fault quittieren (latched SR)\n" +
+                    "//       MODE_AUTO/TAP/TOP/MAN + T_PUSH → Betriebsarten\n" +
+                    "//       S_ON/S_OFF + S_SEL_<n> → Manueller Schritt-Zugriff\n" +
+                    "//       OUT_AUTO_ON/TAP_ON/TOP_ON/MAN_ON → Mode-Rückmeldung\n" +
+                    "//       OUT_ERR_FLT  → Sammelfehler\n" +
+                    "//       OUT_S_NO_<n> → Step-Aktiv-LED pro Step\n" +
+                    "//       OUT_CYCLE_COUNT / OUT_FAULT_COUNT → CTU-Integer-Counter\n" +
+                    "//                       (lesbar mit 7-Seg Display über CTU_<name>.cv)\n" +
                     "//\n" +
-                    "// Tasten: SPACE=START, ESC=NOT-AUS,\n" +
-                    "//         1=DECKEL, 2=SAFETY, 3=VOLL, 4=TEMP_OK, 5=ÜBERHITZT\n" +
+                    "// Tasten:  SPACE=START, ESC=NOT_AUS, R=RESET, A=ACK\n" +
+                    "//          1..6 = SENSOREN togglen (DECKEL, SAFETY, VOLL, TEMP_OK,\n" +
+                    "//                                   ÜBERHITZT, MAN-ON)\n" +
+                    "//          F=AUTO, G=TAP, H=TOP, J=MAN, T=Weiterschalt-Taster\n" +
                     "//\n" +
                     "// Anzeige im Schrittketten-Panel:\n" +
                     "//   - grüner Doppelrand = aktiver Schritt (animiert)\n" +
@@ -5009,10 +5136,41 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "// ===========================================================\n" +
                     "\n" +
                     "SCHRITTKETTE MISCHANLAGE:\n" +
+                    "  CONTROL:\n" +
+                    "    INIT_SQ:     RESET_BTN          // alle Q=0 + S1 forcen\n" +
+                    "    OFF_SQ:      NOT_AUS            // NOT-Halt setzt Kette komplett ab\n" +
+                    "    ACK_EF:      ACK_BTN            // quittiert latched Faults\n" +
+                    "    MODE_AUTO:   SW_AUTO            // Mode-Wahlschalter\n" +
+                    "    MODE_TAP:    SW_TAP\n" +
+                    "    MODE_TOP:    SW_TOP\n" +
+                    "    MODE_MAN:    SW_MAN\n" +
+                    "    T_PUSH:      T_BTN              // Weiterschalt-Taster (TAP/TOP)\n" +
+                    "    S_ON:        MAN_ON             // Manueller Step-Set (MAN)\n" +
+                    "    S_OFF:       MAN_OFF            // Manueller Step-Reset (MAN)\n" +
+                    "    S_SEL_S1:    PICK_S1            // Step-Wahl-Bits (Bool pro Step,\n" +
+                    "    S_SEL_S2:    PICK_S2            //  weil VALIS rein boolesch ist)\n" +
+                    "    S_SEL_S3:    PICK_S3\n" +
+                    "    S_SEL_S4:    PICK_S4\n" +
+                    "    S_SEL_S5:    PICK_S5\n" +
+                    "    S_SEL_S6:    PICK_S6\n" +
+                    "    OUT_AUTO_ON: LED_AUTO           // Mode-Anzeigelampen\n" +
+                    "    OUT_TAP_ON:  LED_TAP\n" +
+                    "    OUT_TOP_ON:  LED_TOP\n" +
+                    "    OUT_MAN_ON:  LED_MAN\n" +
+                    "    OUT_ERR_FLT: LED_ERR            // Sammelfehler (OR aller _FAULT_)\n" +
+                    "    OUT_S_NO_S1: LED_S1             // Step-Aktiv-LED pro Step\n" +
+                    "    OUT_S_NO_S2: LED_S2             //  (Ersatz für S7-GRAPHs Integer S_NO)\n" +
+                    "    OUT_S_NO_S3: LED_S3\n" +
+                    "    OUT_S_NO_S4: LED_S4\n" +
+                    "    OUT_S_NO_S5: LED_S5\n" +
+                    "    OUT_S_NO_S6: LED_S6\n" +
+                    "    OUT_CYCLE_COUNT: CYCLE_CNT       // Integer-Counter — 7-Seg liest .cv\n" +
+                    "    OUT_FAULT_COUNT: FAULT_CNT       // Integer-Counter\n" +
+                    "\n" +
                     "  STEP S1 (BEREIT):\n" +
                     "    A_LAMPE_BEREIT := TRUE\n" +
                     "  TRANS:\n" +
-                    "    START && ¬NOT_AUS && SAFETY_OK -> S2\n" +
+                    "    START && SAFETY_OK -> S2\n" +
                     "\n" +
                     "  STEP S2 (FUELLEN):\n" +
                     "    INTERLOCK: ¬NOT_AUS && DECKEL_ZU\n" +
@@ -5051,6 +5209,21 @@ You must output exactly this JSON format. The logic code goes as a single string
                 types: {
                     "START":              "taster",
                     "NOT_AUS":            "nothalt",
+                    "RESET_BTN":          "taster",
+                    "ACK_BTN":            "taster",
+                    "T_BTN":              "taster",
+                    "SW_AUTO":            "schalter",
+                    "SW_TAP":             "schalter",
+                    "SW_TOP":             "schalter",
+                    "SW_MAN":             "schalter",
+                    "MAN_ON":             "taster",
+                    "MAN_OFF":            "taster",
+                    "PICK_S1":            "schalter",
+                    "PICK_S2":            "schalter",
+                    "PICK_S3":            "schalter",
+                    "PICK_S4":            "schalter",
+                    "PICK_S5":            "schalter",
+                    "PICK_S6":            "schalter",
                     "DECKEL_ZU":          "schalter",
                     "SAFETY_OK":          "schalter",
                     "SENSOR_VOLL":        "schalter",
@@ -5064,11 +5237,31 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "A_HEIZUNG":          "led",
                     "A_AUSLASS":          "valve",
                     "A_SIGNAL_FERTIG":    "led",
-                    "A_SPUELVENTIL":      "valve"
+                    "A_SPUELVENTIL":      "valve",
+                    "LED_AUTO":           "led",
+                    "LED_TAP":            "led",
+                    "LED_TOP":            "led",
+                    "LED_MAN":            "led",
+                    "LED_ERR":            "led",
+                    "LED_S1":             "led",
+                    "LED_S2":             "led",
+                    "LED_S3":             "led",
+                    "LED_S4":             "led",
+                    "LED_S5":             "led",
+                    "LED_S6":             "led",
+                    "CYCLE_CNT":          "led",
+                    "FAULT_CNT":          "led"
                 },
                 keyBindings: {
                     "START":             " ",
                     "NOT_AUS":           "Escape",
+                    "RESET_BTN":         "r",
+                    "ACK_BTN":           "a",
+                    "T_BTN":             "t",
+                    "SW_AUTO":           "f",
+                    "SW_TAP":            "g",
+                    "SW_TOP":            "h",
+                    "SW_MAN":            "j",
                     "DECKEL_ZU":         "1",
                     "SAFETY_OK":         "2",
                     "SENSOR_VOLL":       "3",
@@ -5079,27 +5272,65 @@ You must output exactly this JSON format. The logic code goes as a single string
                     globalViewMode: "side",
                     items: [],
                     objects: [
+                        // ---- HMI-Rahmen (Hintergrund-Panels, localZ:-200) ----
+                        { id:"pnl_plant",  type:"hmi_panel",x: 18, y: 12, width:403, height:343, rotation:0, color:"green", useCollision:false, labelPinned:false, locked:true, localZ:-200 },
+                        { id:"pnl_ctrl",   type:"hmi_panel",x:429, y: 13, width:375, height:490, rotation:0, color:"green", useCollision:false, labelPinned:false, locked:true, localZ:-200 },
                         // ---- Bedienpult (oben links) ----
-                        { id:"bp_start",   type:"taster",   x: 20, y: 20, width:42, rotation:0, linkedVar:"START",          color:"green", useCollision:true, labelPinned:true },
-                        { id:"bp_naus",    type:"nothalt",  x: 80, y: 20, width:52, rotation:0, linkedVar:"NOT_AUS",        color:"red",   useCollision:true, labelPinned:true },
-                        // ---- Status-Lampen (oben rechts) ----
-                        { id:"sl_bereit",  type:"led",      x:160, y: 28, width:30, rotation:0, linkedVar:"A_LAMPE_BEREIT", color:"green",  useCollision:true, labelPinned:true },
-                        { id:"sl_hupe",    type:"led",      x:200, y: 28, width:30, rotation:0, linkedVar:"A_HUPE",         color:"yellow", useCollision:true, labelPinned:true },
-                        { id:"sl_fertig",  type:"led",      x:240, y: 28, width:30, rotation:0, linkedVar:"A_SIGNAL_FERTIG",color:"blue",   useCollision:true, labelPinned:true },
+                        { id:"bp_start",   type:"taster",   x: 44, y: 40, width:42, height:40, rotation:0, linkedVar:"START",          color:"green", useCollision:true, labelPinned:true, locked:true },
+                        { id:"bp_naus",    type:"nothalt",  x:104, y: 36, width:52, height:45, rotation:0, linkedVar:"NOT_AUS",        color:"red",   useCollision:true, labelPinned:true, locked:true },
+                        // ---- Status-Lampen (oben rechts der Plant) ----
+                        { id:"sl_bereit",  type:"led",      x:182, y: 50, width:30, height:30, rotation:0, linkedVar:"A_LAMPE_BEREIT", color:"green",  useCollision:true, labelPinned:true, locked:true },
+                        { id:"sl_hupe",    type:"led",      x:245, y: 50, width:30, height:30, rotation:0, linkedVar:"A_HUPE",         color:"yellow", useCollision:true, labelPinned:true, locked:true },
+                        { id:"sl_fertig",  type:"led",      x:310, y: 50, width:30, height:30, rotation:0, linkedVar:"A_SIGNAL_FERTIG",color:"blue",   useCollision:true, labelPinned:true, locked:true },
                         // ---- Sicherheits-Schalter (zweite Reihe links) ----
-                        { id:"sw_deckel",  type:"schalter", x: 20, y: 95, width:42, rotation:0, linkedVar:"DECKEL_ZU",      color:"blue",   useCollision:true, labelPinned:true },
-                        { id:"sw_safety",  type:"schalter", x: 80, y: 95, width:42, rotation:0, linkedVar:"SAFETY_OK",      color:"blue",   useCollision:true, labelPinned:true },
-                        // ---- Prozess-Sensoren (zweite Reihe rechts) ----
-                        { id:"sw_voll",    type:"schalter", x:160, y: 95, width:42, rotation:0, linkedVar:"SENSOR_VOLL",      color:"yellow", useCollision:true, labelPinned:true },
-                        { id:"sw_tempok",  type:"schalter", x:215, y: 95, width:42, rotation:0, linkedVar:"SENSOR_TEMP_OK",   color:"yellow", useCollision:true, labelPinned:true },
-                        { id:"sw_heiss",   type:"schalter", x:270, y: 95, width:42, rotation:0, linkedVar:"SENSOR_UEBERHITZT",color:"red",    useCollision:true, labelPinned:true },
-                        // ---- Anlagen-Aktoren (untere Reihen) ----
-                        { id:"ak_pumpe",   type:"motor",    x: 20, y:185, width:50, rotation:0, linkedVar:"A_PUMPE",        color:"blue",   useCollision:true, labelPinned:true },
-                        { id:"ak_mischer", type:"motor",    x: 90, y:185, width:50, rotation:0, linkedVar:"A_MISCHER",      color:"orange", useCollision:true, labelPinned:true },
-                        { id:"ak_mischled",type:"led",      x:155, y:195, width:30, rotation:0, linkedVar:"A_LED_MISCH",    color:"orange", useCollision:true, labelPinned:true },
-                        { id:"ak_heiz",    type:"led",      x:200, y:195, width:30, rotation:0, linkedVar:"A_HEIZUNG",      color:"red",    useCollision:true, labelPinned:true },
-                        { id:"ak_auslass", type:"valve",    x:245, y:185, width:50, rotation:0, linkedVar:"A_AUSLASS",      color:"green",  useCollision:true, labelPinned:true },
-                        { id:"ak_spuel",   type:"valve",    x:310, y:185, width:50, rotation:0, linkedVar:"A_SPUELVENTIL",  color:"blue",   useCollision:true, labelPinned:true }
+                        { id:"sw_deckel",  type:"schalter", x: 44, y:117, width:42, height:40, rotation:0, linkedVar:"DECKEL_ZU",      color:"blue",   useCollision:true, labelPinned:true, locked:true },
+                        { id:"sw_safety",  type:"schalter", x:104, y:117, width:42, height:40, rotation:0, linkedVar:"SAFETY_OK",      color:"blue",   useCollision:true, labelPinned:true, locked:true },
+                        // ---- Prozess-Sensoren ----
+                        { id:"sw_voll",    type:"schalter", x:170, y:117, width:42, height:40, rotation:0, linkedVar:"SENSOR_VOLL",      color:"yellow", useCollision:true, labelPinned:true, locked:true },
+                        { id:"sw_tempok",  type:"schalter", x:247, y:117, width:42, height:40, rotation:0, linkedVar:"SENSOR_TEMP_OK",   color:"yellow", useCollision:true, labelPinned:true, locked:true },
+                        { id:"sw_heiss",   type:"schalter", x:340, y:117, width:42, height:40, rotation:0, linkedVar:"SENSOR_UEBERHITZT",color:"red",    useCollision:true, labelPinned:true, locked:true },
+                        // ---- Anlagen-Aktoren ----
+                        { id:"ak_mischled",type:"led",      x:179, y:217, width:30, height:30, rotation:0, linkedVar:"A_LED_MISCH",    color:"orange", useCollision:true, labelPinned:true, locked:true },
+                        { id:"ak_heiz",    type:"led",      x:243, y:217, width:30, height:30, rotation:0, linkedVar:"A_HEIZUNG",      color:"red",    useCollision:true, labelPinned:true, locked:true },
+                        { id:"ak_pumpe",   type:"motor",    x:323, y:273, width:50, height:40, rotation:0, linkedVar:"A_PUMPE",        color:"blue",   useCollision:true, labelPinned:true },
+                        { id:"ak_mischer", type:"motor",    x:373, y:263, width:50, height:40, rotation:0, linkedVar:"A_MISCHER",      color:"orange", useCollision:true, labelPinned:true },
+                        { id:"ak_auslass", type:"valve",    x:528, y:263, width:50, height:40, rotation:0, linkedVar:"A_AUSLASS",      color:"green",  useCollision:true, labelPinned:true },
+                        { id:"ak_spuel",   type:"valve",    x:593, y:263, width:50, height:40, rotation:0, linkedVar:"A_SPUELVENTIL",  color:"blue",   useCollision:true, labelPinned:true },
+                        // ---- CONTROL-HMI: Mode-Wahlschalter (Gruppe "modes") ----
+                        { id:"sw_auto",    type:"schalter", x:452, y: 41, width:40, height:40, rotation:0, linkedVar:"SW_AUTO",        color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"modes" },
+                        { id:"sw_tap",     type:"schalter", x:497, y: 41, width:40, height:40, rotation:0, linkedVar:"SW_TAP",         color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"modes" },
+                        { id:"sw_top",     type:"schalter", x:542, y: 41, width:40, height:40, rotation:0, linkedVar:"SW_TOP",         color:"orange", useCollision:true, labelPinned:true, locked:true, groupId:"modes" },
+                        { id:"sw_man",     type:"schalter", x:587, y: 41, width:40, height:40, rotation:0, linkedVar:"SW_MAN",         color:"blue",   useCollision:true, labelPinned:true, locked:true, groupId:"modes" },
+                        // ---- Mode-Rückmelde-LEDs (Gruppe "modeleds") ----
+                        { id:"ld_auto",    type:"led",      x:456, y:109, width:24, height:30, rotation:0, linkedVar:"LED_AUTO",       color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"modeleds" },
+                        { id:"ld_tap",     type:"led",      x:501, y:109, width:24, height:30, rotation:0, linkedVar:"LED_TAP",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"modeleds" },
+                        { id:"ld_top",     type:"led",      x:546, y:109, width:24, height:30, rotation:0, linkedVar:"LED_TOP",        color:"orange", useCollision:true, labelPinned:true, locked:true, groupId:"modeleds" },
+                        { id:"ld_man",     type:"led",      x:591, y:109, width:24, height:30, rotation:0, linkedVar:"LED_MAN",        color:"blue",   useCollision:true, labelPinned:true, locked:true, groupId:"modeleds" },
+                        // ---- Steuer-Taster + Sammelfehler (Gruppe "ctrl") ----
+                        { id:"bp_reset",   type:"taster",   x:452, y:167, width:40, height:40, rotation:0, linkedVar:"RESET_BTN",      color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"ctrl" },
+                        { id:"bp_ack",     type:"taster",   x:497, y:167, width:40, height:40, rotation:0, linkedVar:"ACK_BTN",        color:"blue",   useCollision:true, labelPinned:true, locked:true, groupId:"ctrl" },
+                        { id:"bp_tpush",   type:"taster",   x:542, y:167, width:40, height:40, rotation:0, linkedVar:"T_BTN",          color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"ctrl" },
+                        { id:"ld_err",     type:"led",      x:592, y:175, width:30, height:30, rotation:0, linkedVar:"LED_ERR",        color:"red",    useCollision:true, labelPinned:true, locked:true, groupId:"ctrl" },
+                        // ---- Manuelle Schritt-Steuerung (MAN-Mode) ----
+                        { id:"bp_manon",   type:"taster",   x:450, y:236, width:40, height:40, rotation:0, linkedVar:"MAN_ON",         color:"green",  useCollision:true, labelPinned:true, locked:true },
+                        { id:"bp_manoff",  type:"taster",   x:495, y:236, width:40, height:40, rotation:0, linkedVar:"MAN_OFF",        color:"red",    useCollision:true, labelPinned:true, locked:true },
+                        // ---- Step-Picker (S1..S6) (Gruppe "picks") ----
+                        { id:"sw_pick1",   type:"schalter", x:448, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S1",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        { id:"sw_pick2",   type:"schalter", x:498, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S2",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        { id:"sw_pick3",   type:"schalter", x:547, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S3",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        { id:"sw_pick4",   type:"schalter", x:598, y:307, width:30, height:40, rotation:0, linkedVar:"PICK_S4",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        { id:"sw_pick5",   type:"schalter", x:648, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S5",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        { id:"sw_pick6",   type:"schalter", x:698, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S6",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        // ---- Step-Aktiv-LEDs (Gruppe "stepleds") ----
+                        { id:"ld_s1",      type:"led",      x:448, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S1",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        { id:"ld_s2",      type:"led",      x:498, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S2",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        { id:"ld_s3",      type:"led",      x:548, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S3",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        { id:"ld_s4",      type:"led",      x:598, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S4",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        { id:"ld_s5",      type:"led",      x:648, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S5",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        { id:"ld_s6",      type:"led",      x:698, y:376, width:24, height:30, rotation:0, linkedVar:"LED_S6",         color:"green",  useCollision:true, labelPinned:true, locked:true, groupId:"stepleds" },
+                        // ---- 7-Seg-Displays (Cycle- & Fault-Counter, lesen direkt aus CTU.cv) ----
+                        { id:"dsp_cycle",  type:"display",  x:456, y:444, width:90, height:32, rotation:0, linkedVar:"CTU_CYCLE_CNT", color:"red", useCollision:false, labelPinned:true },
+                        { id:"dsp_fault",  type:"display",  x:560, y:444, width:90, height:32, rotation:0, linkedVar:"CTU_FAULT_CNT", color:"red", useCollision:false, labelPinned:true }
                     ]
                 }
             }
@@ -6642,6 +6873,506 @@ You must output exactly this JSON format. The logic code goes as a single string
         }
 
         // ==========================================================
+        // === PRO-Modus (gated Schrittketten-Features)
+        // ==========================================================
+        // PRO-Modus ist ein per-User-Flag (localStorage). Aus = klassischer
+        // VALIS-Workflow (RS-Glieder, Timer, klassische Logik). An =
+        // Schrittketten-DSL, Grafcet-/S7-GRAPH-Panel, Rechtsklick-Toggle
+        // DSL↔RS, Schrittketten-Beispiele im Examples-Modal.
+        // _isProMode() darf von OVERALL ÜBERALL aufgerufen werden — sehr früh
+        // im Script registriert, damit gating-Aufrufe nicht fehlschlagen.
+        (function _initProMode() {
+            const KEY = 'valis.proMode';
+            function read() {
+                try { return localStorage.getItem(KEY) === '1'; } catch(_e) { return false; }
+            }
+            function write(v) {
+                try { localStorage.setItem(KEY, v ? '1' : '0'); } catch(_e) {}
+            }
+            function applyToggleButtonStyle() {
+                const btn = document.getElementById('btn-pro-toggle');
+                const on = read();
+                if (btn) {
+                    btn.style.background = on ? '#7b1fa2' : '#424242';
+                    btn.textContent = on ? '⚙️ PRO ✓' : '⚙️ PRO';
+                    btn.title = on
+                        ? 'PRO-Modus AN. Klick zum Deaktivieren — versteckt Schrittketten-Features wieder.'
+                        : 'PRO-Modus AUS. Klick zum Aktivieren — schaltet Schrittketten-DSL, Grafcet/S7-GRAPH-Panel und alle Schrittketten-Beispiele frei.';
+                }
+                // SK-Doku-Button (in der Editor-Leiste) bedingen auf PRO-Mode.
+                const docsBtn = document.getElementById('btn-sk-docs');
+                if (docsBtn) docsBtn.style.display = on ? '' : 'none';
+            }
+            window._isProMode = read;
+            // PIN-Gate beim Aktivieren — sonst kommt jeder über den Button rein.
+            // Deaktivieren bleibt frei. PIN ist absichtlich nicht prominent
+            // dokumentiert (versteckte Profi-Funktion).
+            const PRO_PIN = 'tfo';
+            window._toggleProMode = function() {
+                const cur = read();
+                if (!cur) {
+                    // Aktivieren — PIN abfragen.
+                    const entered = prompt('PRO-Modus aktivieren\n\nPIN:', '');
+                    if (entered == null) return; // Cancel
+                    if (entered.trim().toLowerCase() !== PRO_PIN) {
+                        alert('Falsche PIN.');
+                        return;
+                    }
+                }
+                const next = !cur;
+                write(next);
+                applyToggleButtonStyle();
+                // Schrittketten-Panel beim Ausschalten zumachen + Top-Bar-Button
+                // ausblenden. Bei Anschalten wird der Renderer ihn ggf. wieder
+                // einblenden (er bedingt sowieso auf erkannte Ketten).
+                if (!next) {
+                    const wrap = document.getElementById('sk-wrapper');
+                    if (wrap) wrap.style.display = 'none';
+                    const skBtn = document.getElementById('btn-view-sk');
+                    if (skBtn) skBtn.style.display = 'none';
+                    // Im Grid-Layout muss zusätzlich die `.has-sk`-Klasse weg, sonst
+                    // bleibt die Grid-Spalte reserviert (sk-wrapper ist zwar display:none,
+                    // aber das Grid lässt den Slot leer). updateWorkspace() macht das.
+                    if (typeof updateWorkspace === 'function') {
+                        try { updateWorkspace(); } catch(_e) {}
+                    }
+                }
+                // Renderer (falls vorhanden) neu triggern — der berücksichtigt
+                // den Pro-Flag und blendet alles korrekt aus/ein.
+                if (typeof window._renderSchrittketten === 'function') {
+                    try { window._renderSchrittketten(); } catch(_e) {}
+                }
+            };
+            // Beim DOM-ready den Button-Stil setzen.
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', applyToggleButtonStyle);
+            } else {
+                applyToggleButtonStyle();
+            }
+        })();
+
+        // ==========================================================
+        // === Schrittketten-Doku-Modal (Tabs, nur bei PRO erreichbar)
+        // ==========================================================
+        (function _initSkDocsModal() {
+            // Tab-Inhalte als HTML-Strings. Reihenfolge = Anzeige-Reihenfolge in
+            // der linken Tab-Spalte. Jeder Tab hat id, label, icon, html.
+            const TABS = [
+                {
+                    id: 'overview', icon: '🧭', label: 'Übersicht',
+                    html: `
+                        <h4>Was ist eine Schrittkette?</h4>
+                        <p>Eine <b>Schrittkette</b> (engl. <i>Sequential Function Chart</i> / SFC, in TIA-Welt <b>S7-GRAPH</b>) ist
+                        eine Folge von <b>Schritten</b>, die mit <b>Übergängen</b> verbunden sind. Pro Tick ist
+                        genau ein Schritt der Kette aktiv (bei parallelen Zweigen auch mehrere).
+                        Jeder Schritt hat <b>Aktionen</b>, die ausgeführt werden solange er aktiv ist;
+                        sobald eine <b>Bedingung</b> am ausgehenden Übergang erfüllt ist, wechselt die
+                        Kette auf den Folgeschritt.</p>
+                        <h5>Wann brauche ich das?</h5>
+                        <ul>
+                            <li>Sequentielle Abläufe (Greifen → Heben → Fahren → Absetzen)</li>
+                            <li>Zustands-Maschinen mit klaren Phasen (Bereit, Laden, Mischen, Spülen, …)</li>
+                            <li>Wartezeiten zwischen Aktionen (AFTER-Timer)</li>
+                            <li>Sicherheits-Sperren pro Phase (INTERLOCK)</li>
+                            <li>Watchdogs (SUPERVISION)</li>
+                            <li>Manuelle Bedienung (Hand-Auto-Tipp-Betrieb)</li>
+                        </ul>
+                        <h5>Was bietet VALIS hier?</h5>
+                        <ul>
+                            <li>Eine kompakte <b>DSL</b> (Domain Specific Language) zum Schreiben der Kette</li>
+                            <li>Automatische Expansion in <b>RS-Glied-Form</b> für den Simulator</li>
+                            <li>Live-<b>Grafcet-/S7-GRAPH-Visualisierung</b> der aktiven Schritte und feuernden Übergänge</li>
+                            <li>S7-GRAPH-kompatible <b>FB-Inputs/Outputs</b> (INIT_SQ, OFF_SQ, ACK_EF, Betriebsarten, S_NO…)</li>
+                            <li><b>Rechtsklick-Toggle</b> zwischen DSL- und RS-Form</li>
+                        </ul>
+                        <div class="sk-tip">
+                            <b>Pro-Modus:</b> Diese Features sind hinter dem PRO-Modus versteckt. Solange der
+                            an ist, siehst du die Schrittketten-Beispiele, dieses Doku-Modal, das
+                            Grafcet/S7-GRAPH-Panel und die Rechtsklick-Optionen.
+                        </div>
+                    `
+                },
+                {
+                    id: 'dsl', icon: '📝', label: 'DSL-Syntax',
+                    html: `
+                        <h4>SCHRITTKETTE / STEP / TRANS / END</h4>
+                        <p>Grundgerüst einer Kette:</p>
+<pre><span class="kw">SCHRITTKETTE</span> NAME:
+  <span class="kw">STEP</span> S1 (BEREIT):
+    A_LAMPE := <span class="kw">TRUE</span>
+  <span class="kw">TRANS:</span>
+    START && SAFETY_OK -&gt; S2
+
+  <span class="kw">STEP</span> S2 (LAUFEN):
+    A_MOTOR := <span class="kw">TRUE</span>
+  <span class="kw">TRANS:</span>
+    STOP -&gt; S1
+<span class="kw">END</span></pre>
+                        <h5>Spielregeln</h5>
+                        <ul>
+                            <li><code>SCHRITTKETTE NAME:</code> öffnet einen Block. Name muss aus Großbuchstaben/Ziffern/Unterstrich bestehen.</li>
+                            <li><code>STEP S&lt;n&gt; (LABEL):</code> definiert einen Schritt. Das Label in Klammern ist nur ein Kommentar/Anzeigename — die <b>S&lt;n&gt;</b>-Form ist Pflicht (S1, S2, …).</li>
+                            <li><code>TRANS:</code> leitet die ausgehenden Übergänge ein. Syntax: <code>&lt;Bedingung&gt; -&gt; S&lt;ziel&gt;</code>.</li>
+                            <li>Der <b>erste</b> Schritt ist automatisch der <b>Init-Schritt</b> (Doppelrand im Grafcet). Beim Start ist er aktiv.</li>
+                            <li><code>END</code> schließt die Kette.</li>
+                        </ul>
+                        <h5>Boolesche Operatoren in Bedingungen</h5>
+                        <p><code>&&</code> = UND, <code>||</code> = ODER, <code>¬</code> oder <code>!</code> = NICHT.
+                        Klammern wie üblich. Variablen sind beliebige Inputs/Outputs aus dem Anlagen-Code.</p>
+                        <h5>Parallele Verzweigung</h5>
+                        <p>Ein Übergang kann mehrere Ziele in eckigen Klammern haben — dann werden alle
+                        Ziele gleichzeitig aktiviert:</p>
+<pre>  <span class="kw">TRANS:</span>
+    START -&gt; [S2, S3]</pre>
+                        <div class="sk-warn">
+                            <b>Vorsicht:</b> Der Recognizer (DSL ↔ RS-Toggle) kann parallele Verzweigungen
+                            beim Rück-Wandeln aktuell nur eingeschränkt rekonstruieren. Die DSL-Richtung
+                            funktioniert immer.
+                        </div>
+                    `
+                },
+                {
+                    id: 'qualifiers', icon: '🎚️', label: 'Aktions-Qualifier',
+                    html: `
+                        <h4>N · C · P · D · L</h4>
+                        <p>Pro Aktion lässt sich ein <b>Qualifier</b> davorstellen, der ihr Zeitverhalten ändert.
+                        Ohne Prefix gilt <code>N:</code>.</p>
+                        <table>
+                            <tr><th>Qualifier</th><th>Bedeutung</th><th>Erzeugter Code</th></tr>
+                            <tr>
+                                <td><code>N:</code><br>(Default)</td>
+                                <td>Normal — Aktor folgt dem Step. An wenn Step aktiv, aus wenn Step inaktiv.</td>
+                                <td><code>A := Q&lt;n&gt; && (rhs)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>C:</code></td>
+                                <td>Conditional — wie N, aber zusätzlich UND-verknüpft mit dem INTERLOCK des Steps. Aktor schaltet nur wenn Step <b>aktiv</b> und INTERLOCK <b>TRUE</b>.</td>
+                                <td><code>A := Q&lt;n&gt; && _IL_X_Q&lt;n&gt; && (rhs)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>P:</code></td>
+                                <td>Pulse — kurzer Impuls (~100 ms) beim Eintritt in den Step. Danach FALSE, auch wenn der Step weiter aktiv ist.</td>
+                                <td><code>A := TP(Q&lt;n&gt;, 0.1)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>D &lt;t&gt;:</code></td>
+                                <td>Delayed — Aktor schaltet erst <code>t</code> Sekunden <b>nach</b> Step-Eintritt ein. Bleibt dann an, solange der Step aktiv ist.</td>
+                                <td><code>A := TON(Q&lt;n&gt;, t)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>L &lt;t&gt;:</code></td>
+                                <td>Limited — Aktor ist <code>t</code> Sekunden lang an, danach FALSE. Mit dem Step abgeschnitten wenn er kürzer ist.</td>
+                                <td><code>A := TP(Q&lt;n&gt;, t)</code></td>
+                            </tr>
+                        </table>
+                        <h5>Beispiel</h5>
+<pre>  <span class="kw">STEP</span> S2 (FUELLEN):
+    <span class="kw">INTERLOCK:</span> ¬NOT_AUS && DECKEL_ZU
+    C: A_PUMPE := <span class="kw">TRUE</span>         <span class="cm">// nur wenn Interlock TRUE</span>
+    P: A_HUPE := <span class="kw">TRUE</span>          <span class="cm">// 100 ms Puls beim Eintritt</span>
+    D <span class="num">1.0</span>: A_LED_RUN := <span class="kw">TRUE</span>   <span class="cm">// LED erst nach 1 s</span>
+    L <span class="num">3.0</span>: A_SIGNAL := <span class="kw">TRUE</span>    <span class="cm">// Signal genau 3 s lang</span>
+  <span class="kw">TRANS:</span>
+    SENSOR_VOLL -&gt; S3</pre>
+                        <div class="sk-tip">
+                            Mehrere Aktionen auf dieselbe Variable in verschiedenen Steps werden via OR aggregiert
+                            (für N und C), Timer-Qualifier (P/D/L) bekommen jede Zeile als eigenständigen Timer.
+                        </div>
+                    `
+                },
+                {
+                    id: 'transitions', icon: '⏱️', label: 'Übergänge & AFTER',
+                    html: `
+                        <h4>Übergangs-Bedingungen</h4>
+                        <p>Jeder ausgehende Übergang hat eine boolesche Bedingung. Standard:</p>
+<pre>  <span class="kw">TRANS:</span>
+    SENSOR_VOLL && ¬NOT_AUS -&gt; S3</pre>
+                        <h5>AFTER &lt;t&gt; — Übergangs-Timer</h5>
+                        <p>Mit <code>AFTER &lt;sekunden&gt;</code> kannst du einen <b>step-eintritts-relativen Timer</b>
+                        in der Bedingung verwenden — wie ein FUP-Timer in der Transition bei S7-GRAPH:</p>
+<pre>  <span class="kw">STEP</span> S2 (LAUFEN):
+    A_MOTOR := <span class="kw">TRUE</span>
+  <span class="kw">TRANS:</span>
+    <span class="kw">AFTER</span> <span class="num">5.0</span> -&gt; S3                  <span class="cm">// reiner Timeout</span>
+
+  <span class="kw">STEP</span> S3 (WARTEN):
+  <span class="kw">TRANS:</span>
+    SENSOR_FERTIG || <span class="kw">AFTER</span> <span class="num">10.0</span> -&gt; S4    <span class="cm">// Sensor ODER Timeout</span>
+
+  <span class="kw">STEP</span> S4 (PRESS):
+  <span class="kw">TRANS:</span>
+    SENSOR_UNTEN && <span class="kw">AFTER</span> <span class="num">1.5</span> -&gt; S5   <span class="cm">// Sensor UND mind. 1.5 s</span></pre>
+                        <h5>Wie funktioniert das?</h5>
+                        <p>Der Generator ersetzt jeden <code>AFTER &lt;t&gt;</code> in der Bedingung durch eine
+                        interne Helper-Variable <code>_TMR_&lt;chain&gt;_S&lt;from&gt;_&lt;t&gt;</code>, die einen TON
+                        auf <code>Q&lt;from&gt;</code> hält. Beispiel:</p>
+<pre>_TMR_X_S2_5 := <span class="kw">TON</span>(Q2, <span class="num">5</span>)
+S3 := (Q2 && (_TMR_X_S2_5))</pre>
+                        <p>Mehrere AFTERs aus demselben Step mit gleicher Zeit nutzen den gleichen Timer
+                        (kein Duplikat). Verschiedene Zeiten → eigene Timer-Instanzen.</p>
+                        <h5>AFTER auch in SUPERVISION</h5>
+                        <p>Praktisch für Cycle-Time-Watchdogs:</p>
+<pre>  <span class="kw">STEP</span> S2 (FUELLEN):
+    <span class="kw">SUPERVISION:</span> <span class="kw">AFTER</span> <span class="num">15.0</span>     <span class="cm">// Step muss in 15 s fertig sein</span>
+    C: A_PUMPE := <span class="kw">TRUE</span>
+  <span class="kw">TRANS:</span>
+    SENSOR_VOLL -&gt; S3</pre>
+                    `
+                },
+                {
+                    id: 'interlock', icon: '🔒', label: 'INTERLOCK & SUPERVISION',
+                    html: `
+                        <h4>S7-GRAPH-Style Verriegelung & Überwachung</h4>
+                        <h5>INTERLOCK — Verriegelungs-Bedingung</h5>
+                        <p>Ein optionaler Ausdruck, der bei <b>FALSE</b> alle <code>C:</code>-Aktionen des Steps
+                        unterdrückt. Der Step bleibt aktiv, die Aktoren werden nur einfach nicht angesteuert.
+                        Im Grafcet/S7-GRAPH-Panel als 🔒-Badge unter dem Step angezeigt.</p>
+<pre>  <span class="kw">STEP</span> S2 (FUELLEN):
+    <span class="kw">INTERLOCK:</span> ¬NOT_AUS && DECKEL_ZU
+    C: A_PUMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt nur wenn Interlock TRUE</span>
+    N: A_LAMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt immer (N ignoriert Interlock)</span></pre>
+                        <h5>SUPERVISION — Überwachung / Watchdog</h5>
+                        <p>Ein optionaler Ausdruck. Wird er <b>TRUE</b> während der Step aktiv ist, wird ein
+                        <b>Fault-Flag</b> gesetzt, der die <b>ausgehenden Übergänge blockiert</b>. Die Kette
+                        bleibt im Fehlerschritt stehen. Der Step blinkt im Panel rot, mit ⚠-Badge.</p>
+<pre>  <span class="kw">STEP</span> S4 (HEIZEN):
+    <span class="kw">SUPERVISION:</span> SENSOR_UEBERHITZT   <span class="cm">// Überhitzung → Step bleibt stehen</span>
+    C: A_HEIZUNG := <span class="kw">TRUE</span>
+  <span class="kw">TRANS:</span>
+    SENSOR_TEMP_OK -&gt; S5</pre>
+                        <h5>Latched vs. Auto-Clearing</h5>
+                        <ul>
+                            <li><b>Ohne ACK_EF</b> (Default): Fault verschwindet automatisch, sobald die SUPERVISION-Bedingung wieder FALSE wird. Auto-Clearing.</li>
+                            <li><b>Mit ACK_EF</b> (im CONTROL-Block konfiguriert): Fault wird gelatcht (SR-Flip), bleibt bis der Quittier-Taster gedrückt wird. S7-konform.</li>
+                        </ul>
+                        <h5>C-Qualifier-Aktionen ohne INTERLOCK</h5>
+                        <p>Wenn ein Step ein <code>C:</code> hat aber kein INTERLOCK, fällt C automatisch auf
+                        N-Verhalten zurück. Kein Fehler, aber auch kein Effekt zum N-Default.</p>
+                    `
+                },
+                {
+                    id: 'control', icon: '🎛️', label: 'CONTROL-Block (FB-Inputs/Outputs)',
+                    html: `
+                        <h4>S7-GRAPH-FB-Pins via CONTROL:</h4>
+                        <p>Der optionale <code>CONTROL:</code>-Block vor den STEP-Definitionen bindet
+                        bestimmte Variablen an Schrittketten-Service-Funktionen — analog zu den Inputs/Outputs
+                        eines S7-GRAPH-FB. Jeder Key ist optional.</p>
+<pre><span class="kw">SCHRITTKETTE</span> MISCHER:
+  <span class="kw">CONTROL:</span>
+    INIT_SQ:     RESET_BTN
+    OFF_SQ:      NOT_AUS
+    ACK_EF:      ACK_BTN
+    MODE_AUTO:   SW_AUTO
+    MODE_TAP:    SW_TAP
+    MODE_TOP:    SW_TOP
+    MODE_MAN:    SW_MAN
+    T_PUSH:      T_BTN
+    S_ON:        MAN_ON
+    S_OFF:       MAN_OFF
+    S_SEL_S1:    PICK_S1
+    S_SEL_S2:    PICK_S2
+    OUT_AUTO_ON: LED_AUTO
+    OUT_TAP_ON:  LED_TAP
+    OUT_TOP_ON:  LED_TOP
+    OUT_MAN_ON:  LED_MAN
+    OUT_ERR_FLT: LED_ERR
+    OUT_S_NO_S1: LED_S1
+    OUT_S_NO_S2: LED_S2
+    OUT_CYCLE_COUNT: CYCLE_CNT
+    OUT_FAULT_COUNT: FAULT_CNT
+  <span class="kw">STEP</span> S1 (BEREIT): ...</pre>
+                        <h5>Grundsteuerung</h5>
+                        <table>
+                            <tr><th>Key</th><th>Wirkung</th></tr>
+                            <tr><td><code>INIT_SQ</code></td><td>Wenn TRUE: alle Q werden zurückgesetzt + Init-Step wird aktiviert. Reset-Taster.</td></tr>
+                            <tr><td><code>OFF_SQ</code></td><td>Wenn TRUE: alle Q=0 und Init-Term blockiert. Komplette Abschaltung (z.B. NOT-Halt).</td></tr>
+                            <tr><td><code>ACK_EF</code></td><td>Quittier-Taster. Aktiviert SR-Latch für SUPERVISION-Faults — sonst sind sie auto-clearing.</td></tr>
+                        </table>
+                        <h5>Betriebsarten</h5>
+                        <table>
+                            <tr><th>Modus</th><th>Wahl-Input</th><th>Verhalten</th></tr>
+                            <tr><td>AUTO</td><td><code>MODE_AUTO</code></td><td>Übergänge schalten automatisch, sobald Bedingung erfüllt.</td></tr>
+                            <tr><td>TAP</td><td><code>MODE_TAP</code></td><td>Übergang braucht <b>zusätzlich</b> eine T_PUSH-Steigflanke (Einzelschritt mit Cond).</td></tr>
+                            <tr><td>TOP</td><td><code>MODE_TOP</code></td><td>Übergang ignoriert Cond, schaltet nur auf T_PUSH-Steigflanke (Fehlersuche).</td></tr>
+                            <tr><td>MAN</td><td><code>MODE_MAN</code></td><td>Keine automatischen Übergänge. Nur S_ON/S_OFF wirken.</td></tr>
+                        </table>
+                        <div class="sk-tip">
+                            Prio bei mehreren aktiven Mode-Inputs: <b>AUTO &gt; TAP &gt; TOP &gt; MAN</b>.
+                            Wenn keiner gesetzt ist → effektiv AUTO.
+                        </div>
+                        <h5>Manuelle Schrittanwahl</h5>
+                        <p>Im MAN-Modus aktivieren <code>S_ON</code>/<code>S_OFF</code> in Kombination mit
+                        <code>S_SEL_S&lt;n&gt;</code> einen bestimmten Step gezielt:</p>
+                        <ul>
+                            <li><code>S_SEL_S&lt;n&gt;: &lt;input&gt;</code> — pro Step ein bool (statt eines Integer S_SEL, weil VALIS' Evaluator rein boolesch ist)</li>
+                            <li><code>S_ON: BTN_MAN_ON</code> — bei MAN-Modus + S_SEL_S&lt;n&gt; TRUE: Step n wird aktiviert</li>
+                            <li><code>S_OFF: BTN_MAN_OFF</code> — analog für Deaktivierung</li>
+                        </ul>
+                        <h5>Status-Outputs</h5>
+                        <table>
+                            <tr><th>Key</th><th>Wirkung</th></tr>
+                            <tr><td><code>OUT_AUTO_ON</code> / <code>OUT_TAP_ON</code> / <code>OUT_TOP_ON</code> / <code>OUT_MAN_ON</code></td><td>Mode-Anzeigelampen — eine pro Modus.</td></tr>
+                            <tr><td><code>OUT_ERR_FLT</code></td><td>Sammelfehler: OR aller _FAULT_-Helper der Kette.</td></tr>
+                            <tr><td><code>OUT_S_NO_S&lt;n&gt;</code></td><td>Pro Step ein bool-Output mit Q&lt;n&gt; — Step-Aktiv-LED. Ersatz für S7-GRAPHs Integer S_NO.</td></tr>
+                            <tr><td><code>OUT_CYCLE_COUNT</code></td><td>Integer-Counter via CTU(Q&lt;init&gt;) — zählt Zyklus-Returns. Lesbar im 7-Seg Display via <code>CTU_&lt;name&gt;.cv</code>.</td></tr>
+                            <tr><td><code>OUT_FAULT_COUNT</code></td><td>Integer-Counter via CTU(SammelfehlerSteigflanke) — zählt Fault-Ereignisse seit letztem ACK.</td></tr>
+                        </table>
+                    `
+                },
+                {
+                    id: 'panel', icon: '📊', label: 'Grafcet- / S7-GRAPH-Panel',
+                    html: `
+                        <h4>Live-Visualisierung der Kette</h4>
+                        <p>Sobald die Kette geparsed ist, erscheint oben in der Toolbar der Button
+                        <b>Schrittkette</b>. Klick blendet ein Panel ein, das die Kette in zwei Modi rendert
+                        (Umschalt-Buttons im Panel-Header):</p>
+                        <ul>
+                            <li><b>Grafcet:</b> klassische SFC-Norm-Darstellung — Step-Boxen mit Aktionen rechts, Übergänge als Balken dazwischen.</li>
+                            <li><b>S7-GRAPH:</b> TIA-Look — Schritt-Nummer links in der Box, Aktionen mit Qualifier-Prefix, T&lt;n&gt;-Nummerierung der Übergänge.</li>
+                        </ul>
+                        <h5>Visuelle Signale</h5>
+                        <ul>
+                            <li><b>Doppelrand</b> auf S1: das ist der Init-Step</li>
+                            <li><b>Grüne Pulse-Animation</b>: gerade aktiver Step</li>
+                            <li><b>Roter Blink</b>: Step im Fault (SUPERVISION ausgelöst)</li>
+                            <li><b>Orange-Aufblitzen</b> des Übergangs-Balkens: Transition feuert gerade (Q&lt;next&gt; ist 0→1 gewechselt)</li>
+                            <li>🔒 <b>IL:</b>-Badge: Verriegelungs-Bedingung des Steps</li>
+                            <li>⚠ <b>SV:</b>-Badge: Supervision-Bedingung — wird bei Fault rot</li>
+                        </ul>
+                        <h5>Inline-Edit (nur DSL-Ketten)</h5>
+                        <p>Bei aus DSL parsenden Ketten sind Step-Labels, Aktionen und Übergangs-Bedingungen
+                        <b>klickbar</b>. Klick öffnet einen Inline-Edit-Input — Enter übernimmt,
+                        Esc verwirft. Änderungen werden automatisch in den DSL-Quelltext zurückgeschrieben.
+                        Tool-Buttons rechts an jedem Step:</p>
+                        <ul>
+                            <li><code>↑ ↓</code> — Step verschieben</li>
+                            <li><code>×</code> — Step löschen</li>
+                            <li><code>+ Aktion</code> — neue Aktion am Step-Boden</li>
+                            <li><code>+ Schritt am Ende</code> — neuen Step anhängen</li>
+                        </ul>
+                        <div class="sk-warn">
+                            Recognized RS-Ketten (handgeschriebene S/R-Ketten ohne DSL-Quelle) werden
+                            angezeigt, sind aber <b>nicht editierbar</b> — keine startLine/endLine.
+                        </div>
+                    `
+                },
+                {
+                    id: 'toggle', icon: '🔁', label: 'DSL ↔ RS-Form-Toggle',
+                    html: `
+                        <h4>Hin- und her-Konvertieren</h4>
+                        <p>Per <b>Rechtsklick im Code-Editor</b> kannst du jede Kette zwischen DSL- und
+                        RS-Form umschalten. VALIS erkennt dabei drei Cursor-Kontexte:</p>
+                        <table>
+                            <tr><th>Cursor steht in…</th><th>Menüeintrag</th><th>Effekt</th></tr>
+                            <tr>
+                                <td>DSL-<code>SCHRITTKETTE</code>-Block</td>
+                                <td><i>„… → RS-Glied-Code anzeigen"</i></td>
+                                <td>Ersetzt den DSL-Block durch den generierten S/R/Q-Code. Die ursprüngliche DSL wird als <code>// @dsl</code>-Kommentare eingebettet, damit der Rück-Toggle 1:1 wiederherstellt.</td>
+                            </tr>
+                            <tr>
+                                <td>RS-Block mit <code>// @schrittkette … form=rs</code>-Marker</td>
+                                <td><i>„RS-Form ← zurück zur SCHRITTKETTE-Form"</i></td>
+                                <td>Liest die eingebetteten <code>// @dsl</code>-Kommentare und stellt die DSL-Form wieder her.</td>
+                            </tr>
+                            <tr>
+                                <td>Hand-geschriebene RS-Kette ohne Marker</td>
+                                <td><i>„RS-Kette → in SCHRITTKETTE-Form umwandeln"</i></td>
+                                <td>Recognizer rekonstruiert die DSL aus dem Pattern (S/R/Q-Glieder, <code>¬(Q1||…)</code>-Init-Term, Übergangs-Conds aus S&lt;n&gt;-RHS).</td>
+                            </tr>
+                        </table>
+                        <h5>Was der Recognizer kann / nicht kann</h5>
+                        <ul>
+                            <li><b>Voll roundtrip:</b> Schritt-Labels, Aktionen, Übergangs-Bedingungen, AFTER-Timer, INTERLOCK, SUPERVISION (auto + latched), C-Qualifier</li>
+                            <li><b>Teilweise:</b> Aktionen mit Timer-Qualifier (P/D/L) werden auf der RS-Seite als TON/TP-Zeilen sichtbar, aber beim Rück-Wandeln evtl. nicht als Qualifier erkannt</li>
+                            <li><b>Nicht:</b> Parallele Verzweigungen (RS-Form geht, aber Rück-DSL ist linear); CONTROL-Block (Mode-Gating wird im Cond-String belassen, nicht zurück-extrahiert)</li>
+                        </ul>
+                        <div class="sk-tip">
+                            <b>Praxis-Tipp:</b> Schreib in der DSL — sie ist viel kompakter. Den RS-Code
+                            nur ansehen, wenn du wissen willst was VALIS intern daraus generiert.
+                        </div>
+                    `
+                },
+                {
+                    id: 'examples', icon: '📋', label: 'Mitgelieferte Beispiele',
+                    html: `
+                        <h4>Im Beispiele-Modal (📋) verfügbar:</h4>
+                        <h5>Schrittkette (Bohrmaschine)</h5>
+                        <p>4-Schritt-Sequenz Grundstellung → Positionieren → Bohren → Zurück. Minimales
+                        Demo ohne Qualifier, ohne INTERLOCK/SUPERVISION. Gut zum Einstieg in die DSL.
+                        Tasten: <code>SPACE</code>=START, <code>ESC</code>=NOT-AUS, <code>1/2/3</code>=Sensoren.</p>
+                        <h5>Schrittkette (Vollausstattung)</h5>
+                        <p>6-Schritt-Mischanlage mit <b>jedem</b> Feature drin:</p>
+                        <ul>
+                            <li>INTERLOCK in mehreren Steps</li>
+                            <li>SUPERVISION inkl. AFTER-Watchdog</li>
+                            <li>Aktions-Qualifier N, C, P, D, L</li>
+                            <li>AFTER-Übergangs-Timer</li>
+                            <li>Kompletter CONTROL-Block mit Mode-Switching, manuellem Step-Zugriff, Status-Outputs</li>
+                            <li>Integer-Counter (Cycle, Fault) per CTU + 7-Seg-Display</li>
+                        </ul>
+                        <p>Inkl. großem 2D-HMI rechts in der Anlage: Mode-Wahlschalter, RESET/ACK/T-PUSH-Taster,
+                        Step-Picker, Step-Aktiv-LEDs, Sammelfehler-LED, 7-Seg-Counter.
+                        Tasten: <code>SPACE/ESC</code>, <code>R/A/T</code>, <code>F/G/H/J</code>, <code>1..5</code> für Sensoren.</p>
+                        <div class="sk-tip">
+                            <b>Empfehlung:</b> Erst Bohrmaschine durchspielen, dann Vollausstattung. Schau dir
+                            in der Vollausstattung mal an, was passiert wenn man im MISCHEN-Step den DECKEL
+                            öffnet (INTERLOCK fällt) oder im HEIZEN-Step ÜBERHITZT togglt (SUPERVISION feuert).
+                        </div>
+                    `
+                }
+            ];
+
+            let _activeTab = 'overview';
+
+            function renderTabs() {
+                const tabsEl = document.getElementById('sk-docs-tabs');
+                if (!tabsEl) return;
+                tabsEl.innerHTML = TABS.map(t =>
+                    '<div class="sk-docs-tab' + (t.id === _activeTab ? ' active' : '') +
+                    '" data-tab-id="' + t.id + '">' +
+                    '<span style="font-size:14px;">' + t.icon + '</span>' +
+                    '<span>' + t.label + '</span></div>'
+                ).join('');
+            }
+            function renderContent() {
+                const contentEl = document.getElementById('sk-docs-content');
+                if (!contentEl) return;
+                const tab = TABS.find(t => t.id === _activeTab) || TABS[0];
+                contentEl.innerHTML = tab.html;
+                contentEl.scrollTop = 0;
+            }
+            window._openSkDocsModal = function() {
+                // Hard-Gate: ohne PRO-Mode den Modal nicht öffnen.
+                if (typeof window._isProMode === 'function' && !window._isProMode()) return;
+                const overlay = document.getElementById('sk-docs-overlay');
+                if (!overlay) return;
+                renderTabs();
+                renderContent();
+                overlay.classList.add('open');
+                document.addEventListener('keydown', _skDocsEsc);
+            };
+            window._closeSkDocsModal = function() {
+                const overlay = document.getElementById('sk-docs-overlay');
+                if (!overlay) return;
+                overlay.classList.remove('open');
+                document.removeEventListener('keydown', _skDocsEsc);
+            };
+            function _skDocsEsc(e) {
+                if (e.key === 'Escape') window._closeSkDocsModal();
+            }
+            // Tab-Klick-Delegation am stabilen Container.
+            document.addEventListener('click', (e) => {
+                const tab = e.target.closest('#sk-docs-tabs .sk-docs-tab');
+                if (!tab) return;
+                const id = tab.getAttribute('data-tab-id');
+                if (!id || id === _activeTab) return;
+                _activeTab = id;
+                renderTabs();
+                renderContent();
+            });
+        })();
+
+        // ==========================================================
         // === Schrittketten DSL → RS-Self-Hold Expansion (Phase 1)
         // ==========================================================
         // DSL-Form:
@@ -6674,6 +7405,27 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Fault-Flag, der die ausgehenden Übergänge blockiert.
             const RE_INTERLOCK      = /^INTERLOCK\s*:\s*(.+)$/i;
             const RE_SUPERVISION    = /^SUPERVISION\s*:\s*(.+)$/i;
+            // CONTROL-Block (S7-GRAPH FB-Inputs/Outputs):
+            //   CONTROL:
+            //     INIT_SQ:    <input>      // Force Init (alle Q=0, S<init>:=TRUE)
+            //     OFF_SQ:     <input>      // Force Off (alle Q=0, keine Aktivierung)
+            //     ACK_EF:     <input>      // Quittier-Taster (latched Fault → SR)
+            //     MODE_AUTO:  <input>      // Mode-Wahl: AUTO/TAP/TOP/MAN
+            //     MODE_TAP:   <input>
+            //     MODE_TOP:   <input>
+            //     MODE_MAN:   <input>
+            //     T_PUSH:     <input>      // Weiterschalt-Taster (TAP/TOP)
+            //     S_ON:       <input>      // Manuelle Schritt-Aktivierung (MAN)
+            //     S_OFF:      <input>      // Manuelle Schritt-Deaktivierung (MAN)
+            //     S_SEL_<n>:  <input>      // Step-Wahl: ein Bool pro Step
+            //     OUT_AUTO_ON: <output>    // Rückmeldung aktiver Modus
+            //     OUT_TAP_ON:  <output>
+            //     OUT_TOP_ON:  <output>
+            //     OUT_MAN_ON:  <output>
+            //     OUT_ERR_FLT: <output>    // Sammelfehler aller Steps
+            //     OUT_S_NO_<n>:<output>    // Step-Aktiv-LED pro Step
+            const RE_CONTROL_HDR    = /^CONTROL\s*:\s*$/i;
+            const RE_CONTROL_LINE   = /^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/;
 
             // Parser: liest den Code Zeile für Zeile als State-Machine.
             // Liefert { chains: [{name, steps, transitions, startLine, endLine}], errors }.
@@ -6695,7 +7447,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     if (state === 'TOP') {
                         const m = line.match(RE_SK_HEADER);
                         if (m) {
-                            cur = { name: m[1].toUpperCase(), steps: [], transitions: [], startLine: i, endLine: -1 };
+                            cur = {
+                                name: m[1].toUpperCase(),
+                                steps: [], transitions: [],
+                                control: null,    // null oder { keys: Map<key, val> }
+                                startLine: i, endLine: -1
+                            };
                             state = 'IN_BLOCK';
                             continue;
                         }
@@ -6706,6 +7463,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
 
                     if (state === 'IN_BLOCK') {
+                        if (RE_CONTROL_HDR.test(line)) {
+                            if (cur.control) errAt(i, 'CONTROL-Block in "' + cur.name + '" mehrfach definiert.');
+                            cur.control = { keys: new Map(), startLine: i };
+                            state = 'IN_CONTROL';
+                            continue;
+                        }
                         const sm = line.match(RE_STEP);
                         if (sm) {
                             step = {
@@ -6726,7 +7489,39 @@ You must output exactly this JSON format. The logic code goes as a single string
                             state = 'TOP';
                             continue;
                         }
-                        errAt(i, 'Erwartet "STEP <Name>:" oder "END" — gefunden: ' + line);
+                        errAt(i, 'Erwartet "CONTROL:", "STEP <Name>:" oder "END" — gefunden: ' + line);
+                        continue;
+                    }
+
+                    if (state === 'IN_CONTROL') {
+                        // CONTROL-Block endet sobald STEP, END oder eine andere
+                        // Block-Direktive auftaucht.
+                        if (RE_STEP.test(line) || RE_END.test(line)) {
+                            state = 'IN_BLOCK';
+                            // Re-process diese Zeile im IN_BLOCK-State
+                            i--;
+                            continue;
+                        }
+                        const cm = line.match(RE_CONTROL_LINE);
+                        if (cm) {
+                            const key = cm[1].toUpperCase();
+                            const val = cm[2].trim();
+                            // Erlaubte Keys (Whitelist) — Tippfehler sollen früh auffallen.
+                            const isKnown =
+                                /^(INIT_SQ|OFF_SQ|ACK_EF|MODE_AUTO|MODE_TAP|MODE_TOP|MODE_MAN|T_PUSH|S_ON|S_OFF)$/.test(key)
+                                || /^S_SEL_[A-Z][A-Z0-9_]*$/.test(key)
+                                || /^(OUT_AUTO_ON|OUT_TAP_ON|OUT_TOP_ON|OUT_MAN_ON|OUT_ERR_FLT)$/.test(key)
+                                || /^OUT_S_NO_[A-Z][A-Z0-9_]*$/.test(key)
+                                || /^(OUT_CYCLE_COUNT|OUT_FAULT_COUNT)$/.test(key);
+                            if (!isKnown) {
+                                errAt(i, 'Unbekannter CONTROL-Key "' + key + '" in "' + cur.name + '".');
+                                continue;
+                            }
+                            if (cur.control.keys.has(key)) errAt(i, 'CONTROL-Key "' + key + '" mehrfach definiert.');
+                            cur.control.keys.set(key, val);
+                            continue;
+                        }
+                        errAt(i, 'Erwartet "<KEY>: <Variable>" oder STEP/END — gefunden: ' + line);
                         continue;
                     }
 
@@ -6864,6 +7659,20 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // `_INIT_<NAME> := TRUE`-Zuweisung mehr im spsState.
                 lines.push('// === SCHRITTKETTE ' + c.name + '  (RS-Glieder ' + baseNum + '..' + lastNum + ') ===');
 
+                // CONTROL-Block-Konfiguration. Wenn kein Block angegeben, sind
+                // alle Keys leer und die Steuerlogik fällt auf das Default-
+                // Verhalten zurück (reiner AUTO-Modus ohne Init/Off/Ack/Manual).
+                const cfg = (c.control && c.control.keys) || new Map();
+                const has = (k) => cfg.has(k);
+                const get = (k) => cfg.get(k);
+                const hasModeInputs = has('MODE_AUTO') || has('MODE_TAP') || has('MODE_TOP') || has('MODE_MAN');
+                const modeAutoVar = '_MODE_' + c.name + '_AUTO';
+                const modeTapVar  = '_MODE_' + c.name + '_TAP';
+                const modeTopVar  = '_MODE_' + c.name + '_TOP';
+                const modeManVar  = '_MODE_' + c.name + '_MAN';
+                const tpushNewVar  = '_TPUSH_' + c.name + '_NEW';
+                const tpushLastVar = '_TPUSH_' + c.name + '_LAST';
+
                 const sets   = new Map();
                 const resets = new Map();
                 c.steps.forEach(s => { sets.set(s.name, []); resets.set(s.name, []); });
@@ -6885,12 +7694,18 @@ You must output exactly this JSON format. The logic code goes as a single string
 
                 // Init-Schritt: selbstheilende Semantik über `¬(Q1 || Q2 || ... || Qn)`.
                 // Wenn KEIN Q der Kette aktiv ist, fängt der Init-Schritt an.
-                // Vorteil gegenüber dem alten `_INIT_<NAME>`-Flag: der State muss
-                // nicht zurückgesetzt werden, die Kette startet zuverlässig bei
-                // frischem spsState oder nach beliebigen Recompiles.
+                // OFF_SQ blockiert die Selbstheilung — solange OFF_SQ TRUE ist,
+                // bleibt KEIN Step aktiv.
                 const allQs = c.steps.map(s => Q(s.name));
                 const initStep = c.steps[0].name;
-                sets.get(initStep).push('¬(' + allQs.join(' || ') + ')');
+                const initTerm = has('OFF_SQ')
+                    ? '(¬(' + allQs.join(' || ') + ') && ¬' + get('OFF_SQ') + ')'
+                    : '¬(' + allQs.join(' || ') + ')';
+                sets.get(initStep).push(initTerm);
+                // INIT_SQ erzwingt den Init-Step direkt (egal welcher andere Step aktiv ist).
+                if (has('INIT_SQ')) {
+                    sets.get(initStep).push(get('INIT_SQ'));
+                }
 
                 // Interlock-/Supervision-Helper-Namen pro Step. Wir nutzen den
                 // Q-Pin-Suffix statt des DSL-Step-Namens — so überleben
@@ -6898,10 +7713,28 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const ilName  = (stepName) => '_IL_'    + c.name + '_' + Q(stepName);
                 const fltName = (stepName) => '_FAULT_' + c.name + '_' + Q(stepName);
 
+                // Übergangs-Bedingung in Mode-Logik einkleiden:
+                //   AUTO    → cond wie gehabt
+                //   TAP     → cond UND T_PUSH-Flanke
+                //   TOP     → nur T_PUSH-Flanke (cond ignoriert)
+                //   MAN     → keine automatische Schaltung (nur manuell)
+                // Wenn KEIN Mode-Input gesetzt ist, fällt das auf reines AUTO zurück.
+                function gateTransitionCond(cond) {
+                    if (!hasModeInputs) return cond;
+                    const parts = [];
+                    parts.push('(' + modeAutoVar + ' && (' + cond + '))');
+                    if (has('T_PUSH')) {
+                        parts.push('(' + modeTapVar + ' && ' + tpushNewVar + ' && (' + cond + '))');
+                        parts.push('(' + modeTopVar + ' && ' + tpushNewVar + ')');
+                    } else {
+                        parts.push('(' + modeTapVar + ' && (' + cond + '))');
+                    }
+                    return parts.join(' || ');
+                }
+
                 // Erst Transitionen + IL/SV AFTER-Substitutionen sammeln (mutiert
                 // `timerHelpers`), DANN die Timer-Helper en bloc emittieren — sonst
                 // würden SUPERVISION-AFTER-Timer nie in den Code geschrieben.
-                const guardedTransConds = [];
                 c.transitions.forEach(t => {
                     if (!sets.has(t.to))   return;
                     if (!resets.has(t.from)) return;
@@ -6909,14 +7742,49 @@ You must output exactly this JSON format. The logic code goes as a single string
                     cond = processAfter(cond, t.from);
                     // Wenn Quelle-Step eine SUPERVISION hat, blockiert ein gesetzter
                     // Fault die Transition — die Kette bleibt stehen, bis der Fehler
-                    // verschwindet (Supervision-Expr wieder FALSE).
+                    // verschwindet (Supervision-Expr wieder FALSE bzw. ACK_EF gedrückt).
                     const fromStep = c.steps.find(s => s.name === t.from);
+                    let effectiveCond = gateTransitionCond(cond);
                     const guardedCond = (fromStep && fromStep.supervision)
-                        ? '¬' + fltName(t.from) + ' && (' + cond + ')'
-                        : cond;
+                        ? '¬' + fltName(t.from) + ' && (' + effectiveCond + ')'
+                        : effectiveCond;
                     sets.get(t.to).push('(' + Q(t.from) + ' && (' + guardedCond + '))');
                     resets.get(t.from).push(Q(t.to));
                 });
+
+                // Manuelle Schritt-Steuerung (MAN-Modus): pro Step ein optionaler
+                // S_SEL_<step>-Input plus globaler S_ON/S_OFF. Wirkt nur, wenn der
+                // MAN-Modus aktiv ist.
+                if (has('S_ON') || has('S_OFF')) {
+                    c.steps.forEach(s => {
+                        const selKey = 'S_SEL_' + s.name.toUpperCase();
+                        if (!cfg.has(selKey)) return;
+                        const selVar = get(selKey);
+                        const manGate = hasModeInputs ? modeManVar + ' && ' : '';
+                        if (has('S_ON')) {
+                            sets.get(s.name).push('(' + manGate + get('S_ON') + ' && ' + selVar + ')');
+                        }
+                        if (has('S_OFF')) {
+                            resets.get(s.name).push('(' + manGate + get('S_OFF') + ' && ' + selVar + ')');
+                        }
+                    });
+                }
+
+                // Globale Reset-Quellen: INIT_SQ und OFF_SQ setzen ALLE Steps zurück.
+                if (has('INIT_SQ') || has('OFF_SQ')) {
+                    const globalResets = [];
+                    if (has('INIT_SQ')) globalResets.push(get('INIT_SQ'));
+                    if (has('OFF_SQ'))  globalResets.push(get('OFF_SQ'));
+                    c.steps.forEach(s => {
+                        // Beim Init-Step KEIN INIT_SQ als Reset — sonst würde er sich
+                        // selbst löschen. OFF_SQ aber schon (soll wirklich AUS heißen).
+                        if (s.name === initStep) {
+                            if (has('OFF_SQ')) resets.get(s.name).push(get('OFF_SQ'));
+                        } else {
+                            globalResets.forEach(r => resets.get(s.name).push(r));
+                        }
+                    });
+                }
 
                 // IL/SV-AFTER vorab substituieren, damit auch Watchdog-Timer in der
                 // SUPERVISION-Bedingung in `timerHelpers` landen.
@@ -6926,6 +7794,44 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const svProcessed  = new Map();
                 ilSteps.forEach(s => ilProcessed.set(s.name, processAfter(s.interlock.expr, s.name)));
                 svSteps.forEach(s => svProcessed.set(s.name, processAfter(s.supervision.expr, s.name)));
+
+                // Mode-Auflösung + T_PUSH-Flanke VOR den S/R-Zeilen emittieren —
+                // damit die mode-gegateten Übergangs-Conds bereits den aktuellen
+                // Modus und die Flanke sehen.
+                if (hasModeInputs) {
+                    lines.push('// --- Modus-Auflösung (AUTO/TAP/TOP/MAN, Prio: AUTO > TAP > TOP > MAN) ---');
+                    const auto = get('MODE_AUTO');
+                    const tap  = get('MODE_TAP');
+                    const top  = get('MODE_TOP');
+                    const man  = get('MODE_MAN');
+                    // Mode-AUTO ist der Default, wenn KEINER der anderen Modi gewählt ist.
+                    const otherFalseTerms = [];
+                    if (tap) otherFalseTerms.push('¬' + tap);
+                    if (top) otherFalseTerms.push('¬' + top);
+                    if (man) otherFalseTerms.push('¬' + man);
+                    const otherFalseExpr = otherFalseTerms.join(' && ');
+                    if (auto) {
+                        lines.push(modeAutoVar + ' := ' + auto + (otherFalseExpr ? ' || (' + otherFalseExpr + ')' : ''));
+                    } else if (otherFalseExpr) {
+                        lines.push(modeAutoVar + ' := ' + otherFalseExpr);
+                    } else {
+                        lines.push(modeAutoVar + ' := TRUE');
+                    }
+                    // TAP/TOP/MAN sind nur aktiv, wenn AUTO NICHT aktiv ist (Prio).
+                    if (tap) lines.push(modeTapVar + ' := ' + tap + ' && ¬' + modeAutoVar);
+                    else     lines.push(modeTapVar + ' := FALSE');
+                    if (top) lines.push(modeTopVar + ' := ' + top + ' && ¬' + modeAutoVar + ' && ¬' + modeTapVar);
+                    else     lines.push(modeTopVar + ' := FALSE');
+                    if (man) lines.push(modeManVar + ' := ' + man + ' && ¬' + modeAutoVar + ' && ¬' + modeTapVar + ' && ¬' + modeTopVar);
+                    else     lines.push(modeManVar + ' := FALSE');
+                }
+                // T_PUSH-Flanke: Klassischer R-Trig.  Reihenfolge wichtig — erst
+                // NEW lesen (vorheriger LAST!), dann LAST überschreiben.
+                if (has('T_PUSH')) {
+                    lines.push('// --- T_PUSH-Flanken-Erkennung ---');
+                    lines.push(tpushNewVar  + ' := ' + get('T_PUSH') + ' && ¬' + tpushLastVar);
+                    lines.push(tpushLastVar + ' := ' + get('T_PUSH'));
+                }
 
                 // Übergangs-Timer VOR den S/R-Zeilen emittieren — die S<n>-
                 // Set-Zeilen referenzieren diese Variablen.
@@ -6938,17 +7844,24 @@ You must output exactly this JSON format. The logic code goes as a single string
 
                 // INTERLOCK/SUPERVISION-Helper VOR den S/R-Zeilen emittieren.
                 // _IL_<chain>_Q<n> ist die reine Verriegelungs-Bedingung;
-                // _FAULT_<chain>_Q<n> ist `Q<n> && SUPERVISION_EXPR` — nur
-                // aktiv, wenn der überwachte Step gerade läuft. Damit
-                // bleibt der Fault nicht hängen, sondern verschwindet beim
-                // Step-Wechsel oder wenn die Bedingung wieder FALSE wird.
+                // _FAULT_<chain>_Q<n> ist `Q<n> && SUPERVISION_EXPR`.
+                // Wenn ACK_EF konfiguriert ist, wird der Fault stattdessen
+                // SR-gelatcht: `(Q<n> && SV) || (_FAULT && ¬ACK_EF)`. Der Latch
+                // bleibt auch nach Step-Wechsel sichtbar, bis der Bediener
+                // quittiert — S7-konform.
                 if (ilSteps.length || svSteps.length) {
                     lines.push('// --- Interlock / Supervision ---');
                     ilSteps.forEach(s => {
                         lines.push(ilName(s.name) + ' := ' + ilProcessed.get(s.name));
                     });
                     svSteps.forEach(s => {
-                        lines.push(fltName(s.name) + ' := ' + Q(s.name) + ' && (' + svProcessed.get(s.name) + ')');
+                        const fault = fltName(s.name);
+                        const setTerm = Q(s.name) + ' && (' + svProcessed.get(s.name) + ')';
+                        if (has('ACK_EF')) {
+                            lines.push(fault + ' := (' + setTerm + ') || (' + fault + ' && ¬' + get('ACK_EF') + ')');
+                        } else {
+                            lines.push(fault + ' := ' + setTerm);
+                        }
                     });
                 }
 
@@ -7027,6 +7940,50 @@ You must output exactly this JSON format. The logic code goes as a single string
                         lines.push('// TODO ' + x.q.kind + '-Qualifier nicht implementiert: ' + lhs + ' ' + x.q.kind + ': ' + x.rhs);
                     });
                 });
+
+                // === Status-Outputs (CONTROL.OUT_*) ===
+                const outKeys = ['OUT_AUTO_ON', 'OUT_TAP_ON', 'OUT_TOP_ON', 'OUT_MAN_ON', 'OUT_ERR_FLT',
+                                 'OUT_CYCLE_COUNT', 'OUT_FAULT_COUNT'];
+                const hasAnyOut = outKeys.some(k => has(k))
+                    || c.steps.some(s => has('OUT_S_NO_' + s.name.toUpperCase()));
+                if (hasAnyOut) {
+                    lines.push('// --- Status-Outputs ---');
+                    if (has('OUT_AUTO_ON')) lines.push(get('OUT_AUTO_ON') + ' := ' + modeAutoVar);
+                    if (has('OUT_TAP_ON'))  lines.push(get('OUT_TAP_ON')  + ' := ' + modeTapVar);
+                    if (has('OUT_TOP_ON'))  lines.push(get('OUT_TOP_ON')  + ' := ' + modeTopVar);
+                    if (has('OUT_MAN_ON'))  lines.push(get('OUT_MAN_ON')  + ' := ' + modeManVar);
+                    // Sammelfehler-Ausdruck — wird mehrfach gebraucht (Output + Fault-Counter).
+                    const errExpr = svSteps.length
+                        ? svSteps.map(s => fltName(s.name)).join(' || ')
+                        : 'FALSE';
+                    if (has('OUT_ERR_FLT')) lines.push(get('OUT_ERR_FLT') + ' := ' + errExpr);
+                    // OUT_S_NO_<step>: pro konfiguriertem Step ein bool-Output mit Q<n>.
+                    // Ersatz für S7-GRAPHs Integer S_NO, das VALIS rein boolesch nicht
+                    // ausdrücken kann.
+                    c.steps.forEach(s => {
+                        const k = 'OUT_S_NO_' + s.name.toUpperCase();
+                        if (has(k)) lines.push(get(k) + ' := ' + Q(s.name));
+                    });
+                    // OUT_CYCLE_COUNT: CTU mit CU = Q<init>, R = INIT_SQ oder OFF_SQ
+                    //   (Cycle wird gezählt, sobald die Kette zum Init-Step zurückkehrt).
+                    // OUT_FAULT_COUNT: CTU mit CU = ¬-Sammelfehler-Steigflanke (vereinfacht: ERR_FLT-Term)
+                    //   und R = ACK_EF.
+                    // PV = 9999 → praktisch kein Triggern des Q-Pins; nur das `cv`-Feld
+                    //   interessiert uns, das 7-Seg Display liest es direkt aus.
+                    if (has('OUT_CYCLE_COUNT')) {
+                        const resetTerms = [];
+                        if (has('INIT_SQ')) resetTerms.push(get('INIT_SQ'));
+                        if (has('OFF_SQ'))  resetTerms.push(get('OFF_SQ'));
+                        const resetExpr = resetTerms.length ? resetTerms.join(' || ') : 'FALSE';
+                        lines.push(get('OUT_CYCLE_COUNT') + ' := CTU(' + Q(initStep) + ', ' + resetExpr + ', 9999)');
+                    }
+                    if (has('OUT_FAULT_COUNT')) {
+                        const ack = has('ACK_EF') ? get('ACK_EF') : 'FALSE';
+                        // ERR-Term in Klammern, damit OR-Verkettung sauber parsed.
+                        lines.push(get('OUT_FAULT_COUNT') + ' := CTU((' + errExpr + '), ' + ack + ', 9999)');
+                    }
+                }
+
                 lines.push('// === END ' + c.name + ' ===');
                 return lines;
             }
@@ -7147,6 +8104,14 @@ You must output exactly this JSON format. The logic code goes as a single string
                     lines.push('// @schrittkette ' + chain.name + ' form=dsl');
                 }
                 lines.push('SCHRITTKETTE ' + chain.name + ':');
+                // CONTROL-Block ausgeben, falls vorhanden — vor den Steps.
+                if (chain.control && chain.control.keys && chain.control.keys.size) {
+                    lines.push('  CONTROL:');
+                    chain.control.keys.forEach((val, key) => {
+                        lines.push('    ' + key + ': ' + val);
+                    });
+                    lines.push('');
+                }
                 chain.steps.forEach((s, idx) => {
                     if (idx > 0) lines.push('');
                     const lbl = s.label ? ' (' + s.label + ')' : '';
@@ -7471,7 +8436,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     }
 
                     // Aktionen: Zuweisungen, deren RHS Terme `(Q<n> && (rhs))` enthält
-                    // und deren LHS keiner S/R/Q/_INIT_/_TMR_/_IL_/_FAULT_-Pin ist.
+                    // und deren LHS keiner S/R/Q/_INIT_/_TMR_/_IL_/_FAULT_/_MODE_/_TPUSH_-Pin ist.
                     stmts.forEach(s => {
                         if (RE_SR_PIN.test(s.lhs)) return;
                         if (/^Q\d+/.test(s.lhs)) return;
@@ -7479,6 +8444,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         if (/^_TMR_/.test(s.lhs)) return;
                         if (/^_IL_/.test(s.lhs)) return;
                         if (/^_FAULT_/.test(s.lhs)) return;
+                        if (/^_MODE_/.test(s.lhs)) return;
+                        if (/^_TPUSH_/.test(s.lhs)) return;
                         // Pro Step vier Patterns versuchen — alle mit balancierter
                         // Klammer-Erkennung statt lazy regex:
                         //   1a) (Q<n> && _IL_<chain>_Q<n> && (rhs)) → C-Aktion mit RHS
@@ -7529,6 +8496,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         });
                     });
 
+                    // Auch CONTROL-bezogene Helper-Zeilen (Mode/TPush) einbeziehen,
+                    // damit sie beim Toggle DSL ↔ RS sauber durch die DSL ersetzt
+                    // werden.
+                    const controlLineIdx = stmts
+                        .filter(s => /^_MODE_|^_TPUSH_/.test(s.lhs))
+                        .map(s => s.idx);
+
                     // Block-Linenrange: alle relevanten Zeilen (Anker, S/R der
                     // Kette, Aktionen, AFTER-Timer-Helper, IL/FAULT-Helper)
                     // plus optional ein `// === END NAME ===`-Marker am Ende.
@@ -7536,7 +8510,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                         .concat(stmts.filter(s => RE_SR_PIN.test(s.lhs) && stepNums.includes(parseInt(s.lhs.slice(1), 10))).map(s => s.idx))
                         .concat(steps.flatMap(st => st.actions.map(a => a.line)))
                         .concat(tmrLineIdx)
-                        .concat(ilFltLineIdx);
+                        .concat(ilFltLineIdx)
+                        .concat(controlLineIdx);
                     lines.forEach((line, idx) => {
                         if (new RegExp('^\\s*\\/\\/\\s*=+\\s*END\\s+' + chainName + '\\b', 'i').test(line)) {
                             allLines.push(idx);
@@ -7900,6 +8875,15 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const svg = $svg();
                 const btn = $btn();
                 if (!panel || !svg) return;
+                // PRO-Modus aus → alles weg. Renderer komplett ruhig, Top-Bar-
+                // Button verstecken, Panel zumachen.
+                if (typeof window._isProMode === 'function' && !window._isProMode()) {
+                    if (btn) btn.style.display = 'none';
+                    while (svg.firstChild) svg.removeChild(svg.firstChild);
+                    if (panel.style.display !== 'none') panel.style.display = 'none';
+                    if ($info()) $info().textContent = '';
+                    return;
+                }
                 const dslChains = (window._schrittkettenChains || []).filter(
                     c => (window._schrittkettenChainBase || new Map()).has(c.name));
                 const dslBaseMap = window._schrittkettenChainBase || new Map();
@@ -9111,7 +10095,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             const grid = document.getElementById('examples-grid');
             const isDE = (window.currentLang || 'de') === 'de';
             grid.innerHTML = '';
-            EXAMPLE_META.forEach(meta => {
+            // PRO-Modus-Gating: alle `schrittkette_*`-Beispiele ausblenden, wenn
+            // der User nicht im PRO-Modus ist.
+            const proOn = typeof window._isProMode === 'function' ? window._isProMode() : false;
+            EXAMPLE_META.filter(m => proOn || !/^schrittkette_/.test(m.key)).forEach(meta => {
                 const exData = EXAMPLES[meta.key];
                 const factory = (typeof exData === 'object' && exData.factory) ? exData.factory : EXAMPLES.factory;
                 const card = document.createElement('div');
@@ -10978,9 +11965,28 @@ You must output exactly this JSON format. The logic code goes as a single string
             gutter.style.width = (rightOffset + iconSize + 4) + 'px';
             const offsetY = (lineHeight - iconSize) / 2;
             const infoLines = window._infoLines || new Set();
+            // Visuelle Zeilen-Position aus dem Highlighting-Overlay nehmen statt
+            // `idx * lineHeight` zu rechnen — sonst verrutschen die Icons sobald
+            // Zeilen umbrechen (lange Schrittketten-Generator-Zeilen werden im
+            // Standard-Wrap-Modus z.B. auf 2 visuelle Zeilen verteilt) oder die
+            // Schrift­größe nicht 13 px ist. Jede Quellzeile ist im Highlighter ein
+            // <span style="display:block"> — `offsetTop` liefert die echte Pixel-
+            // Position relativ zum Highlighting-Container (inkl. dessen padding).
+            const hc = document.getElementById('highlighting-content');
+            const lineSpans = hc ? hc.children : null;
             let html = '';
             errLines.forEach(idx => {
-                const top = padTop + idx * lineHeight + offsetY - scrollTop;
+                let top;
+                const span = (lineSpans && idx < lineSpans.length) ? lineSpans[idx] : null;
+                if (span && span.offsetTop != null) {
+                    // span.offsetTop ist relativ zum Highlighting-<pre>, dessen
+                    // padding bereits enthalten — wir brauchen padTop NICHT zusätzlich.
+                    // Zentriere das Icon vertikal innerhalb der ERSTEN visuellen Zeile
+                    // des umgebrochenen Spans (offsetHeight wäre höher bei wrap).
+                    top = span.offsetTop - scrollTop + offsetY;
+                } else {
+                    top = padTop + idx * lineHeight + offsetY - scrollTop;
+                }
                 const activeAttr = (idx === prevActive) ? ' active' : '';
                 const isInfo = infoLines.has(idx);
                 const cls   = isInfo ? 'info-icon'  : 'error-icon';
@@ -11774,23 +12780,29 @@ You must output exactly this JSON format. The logic code goes as a single string
                 recognizedHand = recs.find(r =>
                     cursorLine >= r.chain.startLine && cursorLine <= r.chain.endLine);
             }
-            if (skChain) {
+            // PRO-Modus-Gating: Schrittketten-Toggles nur sichtbar, wenn aktiv.
+            const proOn = typeof window._isProMode === 'function' ? window._isProMode() : false;
+            if (proOn && skChain) {
                 html += `<div class="ctx-sep"></div>`;
                 html += `<div class="ctx-item" data-act="sk-to-rs" data-name="${skChain.name}">
                             <span>Schrittkette „${skChain.name}" → RS-Glied-Code anzeigen</span></div>`;
-            } else if (rsBlock) {
+            } else if (proOn && rsBlock) {
                 html += `<div class="ctx-sep"></div>`;
                 html += `<div class="ctx-item" data-act="rs-to-sk" data-name="${rsBlock.name}">
                             <span>RS-Form „${rsBlock.name}" ← zurück zur SCHRITTKETTE-Form</span></div>`;
-            } else if (recognizedHand) {
+            } else if (proOn && recognizedHand) {
                 html += `<div class="ctx-sep"></div>`;
                 html += `<div class="ctx-item" data-act="hand-rs-to-sk" data-name="${recognizedHand.chain.name}">
                             <span>RS-Kette „${recognizedHand.chain.name}" → in SCHRITTKETTE-Form umwandeln</span></div>`;
             }
             html += `<div class="ctx-sep"></div>`;
             html += `<div class="ctx-section">Snippet einfügen</div>`;
-            window._CODE_SNIPPETS.forEach((s, i) => {
-                html += `<div class="ctx-item" data-act="snippet" data-idx="${i}">
+            // PRO-Gating: Schrittketten-Vorlage rausfiltern, wenn Pro-Modus aus.
+            const filteredSnippets = (window._CODE_SNIPPETS || []).filter(s =>
+                proOn || !/Schrittkette/i.test(s.label));
+            filteredSnippets.forEach((s) => {
+                const origIdx = window._CODE_SNIPPETS.indexOf(s);
+                html += `<div class="ctx-item" data-act="snippet" data-idx="${origIdx}">
                             <span>${s.label}</span></div>`;
             });
             menu.innerHTML = html;
@@ -31524,17 +32536,31 @@ You must output exactly this JSON format. The logic code goes as a single string
             try {
                 const boundFromFactory = window._collectBoundVarsFromFactory();
                 const _seedNow = Date.now();
+                // Variablen, die JETZT im Code stehen (Inputs/Outputs plus Timer-/
+                // Zähler-Node-IDs wie `CTU_<name>`), sollen NICHT als verwaist
+                // geseeded werden — sonst landen z.B. Display-gebundene CTU_*-IDs
+                // dauerhaft in der Orphan-Liste, obwohl der Zähler im Logikplan
+                // existiert.
+                const _allInCodeSeed = new Set([
+                    ...(Array.isArray(globalInputs)  ? globalInputs  : []),
+                    ...(Array.isArray(globalOutputs) ? globalOutputs : []),
+                    ...(typeof window._getTimerCounterIds === 'function'
+                        ? window._getTimerCounterIds() : [])
+                ]);
                 boundFromFactory.forEach((role, name) => {
                     if (!window._stickyVars.has(name)) {
                         // addedAt: setzen, damit spätere Lifetime-Checks definiert sind.
-                        // firstMissingAt: setzen, damit nachträgliches Re-Auftauchen im
-                        // Code als „Reappearance" korrekt erkannt wird (firstMissingAt
-                        // wird dann gelöscht).
+                        // firstMissingAt nur setzen, wenn die Variable wirklich nicht
+                        // im Code ist — sonst täuscht sie eine Reappearance vor.
+                        const isInCode = _allInCodeSeed.has(name);
                         window._stickyVars.set(name, {
                             role, compType: null,
-                            addedAt: _seedNow, firstMissingAt: _seedNow
+                            addedAt: _seedNow,
+                            firstMissingAt: isInCode ? undefined : _seedNow
                         });
-                        window._committedOrphans.add(name); // zunächst als verwaist einstufen
+                        if (!isInCode) {
+                            window._committedOrphans.add(name); // verwaist nur, wenn echt missing
+                        }
                         _stickySeeded = true;
                     }
                 });

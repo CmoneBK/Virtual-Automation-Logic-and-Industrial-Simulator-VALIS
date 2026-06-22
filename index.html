@@ -6639,7 +6639,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     allUsedInputs.add(varName);
                     return; 
                 }
-                cleanLine = cleanLine.replace(/(:=|=|<-|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
+                // `=(?!=)` statt nur `=` — sonst würde `X == 5` zu `X := = 5` zerlegt
+                // und der Vergleich nie als Arithmetik-Pfad erkannt.
+                cleanLine = cleanLine.replace(/(:=|<-|=(?!=)|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
                 if (!cleanLine || !cleanLine.includes(':=')) return;
                 let parts = cleanLine.split(':=');
                 let outputStr = parts[0].trim();
@@ -6738,13 +6740,17 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const _savedJs = jsCompiledCode;
                 try {
                 let cleanLine = line.split('//')[0].trim();
-                cleanLine = cleanLine.replace(/(:=|=|<-|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
+                // `=(?!=)` statt nur `=` — sonst würde `X == 5` zu `X := = 5` zerlegt
+                // und der Vergleich nie als Arithmetik-Pfad erkannt.
+                cleanLine = cleanLine.replace(/(:=|<-|=(?!=)|\bIST\b|\bIS\b|\bGLEICH\b)/i, ':=');
                 if (!cleanLine || !cleanLine.includes(':=')) return;
                 const parts = cleanLine.split(':=');
                 const outputStr = parts[0].trim();
                 let expressionStr = parts[1].trim();
                 expressionStr = expressionStr
-                    .replace(/!/g, '¬').replace(/\bNOT\b/gi, '¬').replace(/\bNICHT\b/gi, '¬')
+                    // `!(?!=)` statt nur `!` — sonst würde `!=` (Ungleich-Vergleich)
+                    // in `¬=` zerlegt und der Arithmetik-Pfad nie erkannt.
+                    .replace(/!(?!=)/g, '¬').replace(/\bNOT\b/gi, '¬').replace(/\bNICHT\b/gi, '¬')
                     .replace(/\bAND\b/gi, '&&').replace(/\bUND\b/gi, '&&').replace(/\^/g, '&&').replace(/∧/g, '&&')
                     .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/g, '||').replace(/∨/g, '||');
                 expressionStr = expressionStr.replace(/&&/g, '##AND##').replace(/&/g, '&&').replace(/##AND##/g, '&&');
@@ -6838,53 +6844,106 @@ You must output exactly this JSON format. The logic code goes as a single string
                     return;
                 }
                 // === Arithmetik-Pfad ===
-                // VALIS' Evaluator ist normalerweise rein boolesch. Mit `+` und `*`
-                // im Ausdruck schalten wir auf einen separaten Arithmetik-Pfad um:
-                // jede bool-Variable wird zu 0/1 koerziert, Zahlen bleiben Zahlen.
-                // Anwendung: echtes Integer S_NO im Schrittketten-CONTROL, generelle
-                // Wert-Berechnungen für 7-Seg-Displays.
+                // VALIS' Evaluator ist normalerweise rein boolesch. Sobald die Zeile
+                // arithmetische Operatoren enthält, schalten wir auf einen separaten
+                // Recursive-Descent-Parser um.
                 //
-                // Erkennung: `+` oder `*` auf paren-depth 0 ODER reines Zahl-Literal.
-                // `||`/`&&` und Arithmetik in DERSELBEN Zeile sind unzulässig (würden
-                // semantisch Schmerzen machen — bool und int mischen unkontrolliert).
-                function _hasTopLevelOp(s, op) {
+                // Unterstützte Grammatik (Präzedenz: niedrig → hoch):
+                //   ternary    := comparison ('?' ternary ':' ternary)?
+                //   comparison := additive (('=='|'!='|'<='|'>='|'<'|'>') additive)?
+                //   additive   := multiplicative (('+'|'-') multiplicative)*
+                //   multiplicative := unary (('*'|'/'|'%') unary)*
+                //   unary      := '-' unary | factor
+                //   factor     := number | identifier | '(' ternary ')'
+                //
+                // Bool→Int-Koerzion: `(+state['X']||0)` (true→1, false→0, num→num, sonst 0).
+                // Vergleichs-Ergebnis wird via `+(…)` zu 0/1 zurückgekippt, damit der
+                // Wert weiterhin als Zahl im State landet und z.B. in &&/||-Boolean-
+                // Kontexten konsumiert werden kann (1 truthy, 0 falsy).
+                function _hasArithFeatures(s) {
                     let depth = 0;
                     for (let i = 0; i < s.length; i++) {
-                        const c = s[i];
+                        const c = s[i], c2 = s[i+1];
                         if (c === '(') depth++;
                         else if (c === ')') depth--;
-                        else if (depth === 0 && c === op) return true;
+                        else if (depth === 0) {
+                            if ('+-*/%'.indexOf(c) >= 0) return true;
+                            if (c === '<' || c === '>') return true;
+                            if (c === '=' && c2 === '=') return true;
+                            if (c === '!' && c2 === '=') return true;
+                            if (c === '?') return true;
+                        }
                     }
-                    return false;
+                    return /^\s*[\d.]+\s*$/.test(s);
                 }
-                const _hasArith = _hasTopLevelOp(expressionStr, '+') || _hasTopLevelOp(expressionStr, '*')
-                                || /^\s*[\d.]+\s*$/.test(expressionStr);
+                const _hasArith = _hasArithFeatures(expressionStr);
                 const _hasBoolOps = expressionStr.includes('||') || expressionStr.includes('&&') || expressionStr.includes('¬');
                 if (_hasArith && _hasBoolOps) {
-                    throw new Error('Arithmetik (+, *) und boolesche Operatoren (||, &&, ¬) dürfen nicht in derselben Zeile gemischt werden.');
+                    throw new Error('Arithmetik (+, -, *, /, %, ==, …) und boolesche Operatoren (||, &&, ¬) dürfen nicht in derselben Zeile gemischt werden.');
                 }
                 if (_hasArith) {
-                    // Recursive-Descent: parseSum → parseTerm → parseFactor.
-                    // Wir liefern (a) gerendertes JS für die Compile-Pipeline und
-                    // (b) die Liste verwendeter Variablen für die Graph-Knoten.
+                    // Quelltext ohne Whitespace — Position-Index zeigt aufs nächste Zeichen.
                     const _src = expressionStr.replace(/\s+/g, '');
                     let _pos = 0;
                     const _vars = new Set();
-                    function _arithPeek() { return _src[_pos]; }
-                    function _arithSum() {
-                        let left = _arithTerm();
-                        while (_arithPeek() === '+') { _pos++; left = '(' + left + '+' + _arithTerm() + ')'; }
+                    function _arithPeek(off) { return _src[_pos + (off || 0)]; }
+                    function _arithMatch(s) {
+                        if (_src.substr(_pos, s.length) === s) { _pos += s.length; return true; }
+                        return false;
+                    }
+                    function _arithTernary() {
+                        const cond = _arithComparison();
+                        if (_arithMatch('?')) {
+                            const ifT = _arithTernary();
+                            if (!_arithMatch(':')) throw new Error('Arithmetik: erwartetes „:" im Ternär');
+                            const ifF = _arithTernary();
+                            return '((' + cond + ')?(' + ifT + '):(' + ifF + '))';
+                        }
+                        return cond;
+                    }
+                    function _arithComparison() {
+                        const left = _arithAdditive();
+                        // Längere Operatoren zuerst probieren (==, !=, <=, >=) vor (<, >).
+                        const ops2 = [['==','==='], ['!=','!=='], ['<=','<='], ['>=','>=']];
+                        for (const [src, dst] of ops2) {
+                            if (_arithMatch(src)) {
+                                const right = _arithAdditive();
+                                return '(+(' + left + dst + right + '))';
+                            }
+                        }
+                        if (_arithPeek() === '<' || _arithPeek() === '>') {
+                            const op = _src[_pos]; _pos++;
+                            const right = _arithAdditive();
+                            return '(+(' + left + op + right + '))';
+                        }
                         return left;
                     }
-                    function _arithTerm() {
-                        let left = _arithFactor();
-                        while (_arithPeek() === '*') { _pos++; left = '(' + left + '*' + _arithFactor() + ')'; }
+                    function _arithAdditive() {
+                        let left = _arithMultiplicative();
+                        while (_arithPeek() === '+' || _arithPeek() === '-') {
+                            const op = _src[_pos]; _pos++;
+                            const right = _arithMultiplicative();
+                            left = '(' + left + op + right + ')';
+                        }
                         return left;
+                    }
+                    function _arithMultiplicative() {
+                        let left = _arithUnary();
+                        while (_arithPeek() === '*' || _arithPeek() === '/' || _arithPeek() === '%') {
+                            const op = _src[_pos]; _pos++;
+                            const right = _arithUnary();
+                            left = '(' + left + op + right + ')';
+                        }
+                        return left;
+                    }
+                    function _arithUnary() {
+                        if (_arithPeek() === '-') { _pos++; return '(-' + _arithUnary() + ')'; }
+                        return _arithFactor();
                     }
                     function _arithFactor() {
                         if (_arithPeek() === '(') {
                             _pos++;
-                            const inner = _arithSum();
+                            const inner = _arithTernary();
                             if (_arithPeek() !== ')') throw new Error('Arithmetik: erwartete )');
                             _pos++;
                             return inner;
@@ -6898,14 +6957,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                             if (id === 'TRUE')  return '1';
                             if (id === 'FALSE') return '0';
                             _vars.add(id);
-                            // bool → 0/1, int → int, undefined → 0
                             return "(+state['" + id + "']||0)";
                         }
                         throw new Error('Arithmetik: Unerwartetes Zeichen "' + (_src[_pos] || 'EOF') + '" an Position ' + _pos);
                     }
-                    const _js = _arithSum();
+                    const _js = _arithTernary();
                     if (_pos < _src.length) throw new Error('Arithmetik: Reste nicht verarbeitet ("' + _src.slice(_pos) + '")');
-                    // Graph-Knoten: ein Knoten vom Typ ARITH mit der Formel als Label.
                     graph.addNode(outputStr, 'ARITH', outputStr + ' = ' + expressionStr);
                     if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
                     definedOutputs.add(outputStr);
@@ -7265,10 +7322,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                         Ziele gleichzeitig aktiviert:</p>
 <pre>  <span class="kw">TRANS:</span>
     START -&gt; [S2, S3]</pre>
-                        <div class="sk-warn">
-                            <b>Vorsicht:</b> Der Recognizer (DSL ↔ RS-Toggle) kann parallele Verzweigungen
-                            beim Rück-Wandeln aktuell nur eingeschränkt rekonstruieren. Die DSL-Richtung
-                            funktioniert immer.
+                        <div class="sk-tip">
+                            <b>Parallel-Roundtrip:</b> Der Recognizer erkennt parallele Verzweigungen
+                            am gleichen <code>(from, cond)</code>-Paar in mehreren <code>S&lt;n&gt;</code>-Set-Zeilen
+                            und rekonstruiert die Bracket-Syntax. DSL→RS→DSL funktioniert vollständig.
                         </div>
                     `
                 },
@@ -7304,6 +7361,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                                 <td><code>L &lt;t&gt;:</code></td>
                                 <td>Limited — Aktor ist <code>t</code> Sekunden lang an, danach FALSE. Mit dem Step abgeschnitten wenn er kürzer ist.</td>
                                 <td><code>A := TP(Q&lt;n&gt;, t)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>S:</code></td>
+                                <td>Set — Aktor wird gelatcht eingeschaltet, sobald der Step aktiv und die RHS TRUE ist. Bleibt EIN bis ein R-Qualifier ihn explizit zurücksetzt. Klassisches Memory-Bit.</td>
+                                <td><code>A := (A || (Q&lt;n&gt; && (rhs))) && ¬(resets)</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>R:</code></td>
+                                <td>Reset — Aktor wird gelatcht zurückgesetzt. Gewinnt gegen S bei gleichzeitiger Aktivität (RS-dominant, S7-konform).</td>
+                                <td>(siehe S-Zeile — kombiniert pro Variable)</td>
                             </tr>
                         </table>
                         <h5>Beispiel</h5>
@@ -7442,11 +7509,17 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                             Wenn keiner gesetzt ist → effektiv AUTO.
                         </div>
                         <h5>Manuelle Schrittanwahl</h5>
-                        <p>Im MAN-Modus aktivieren <code>S_ON</code>/<code>S_OFF</code> in Kombination mit
-                        <code>S_SEL_S&lt;n&gt;</code> einen bestimmten Step gezielt:</p>
+                        <p>Im MAN-Modus aktivieren <code>S_ON</code>/<code>S_OFF</code> in Kombination
+                        mit einer Step-Auswahl einen bestimmten Step gezielt. Zwei Varianten — pick one:</p>
                         <ul>
-                            <li><code>S_SEL_S&lt;n&gt;: &lt;input&gt;</code> — pro Step ein bool (statt eines Integer S_SEL, weil VALIS' Evaluator rein boolesch ist)</li>
-                            <li><code>S_ON: BTN_MAN_ON</code> — bei MAN-Modus + S_SEL_S&lt;n&gt; TRUE: Step n wird aktiviert</li>
+                            <li><b>Bool pro Step</b> (z.B. 6 Drucktaster, einer pro Step):
+                                <code>S_SEL_S&lt;n&gt;: &lt;bool-var&gt;</code> — bei MAN + S_ON + S_SEL_S&lt;n&gt; TRUE wird Step n aktiviert.</li>
+                            <li><b>Integer-Variable</b> (S7-konform, einzelner Wert):
+                                <code>S_SEL: &lt;int-var&gt;</code> — der Generator emittiert intern pro Step einen
+                                Compare-Helper <code>_SK_&lt;chain&gt;_SEL_EQ_&lt;i&gt; := &lt;int-var&gt; == &lt;i&gt;</code>
+                                und nutzt diese als Step-Auswahl. Funktioniert dank Arithmetik-Evaluator
+                                mit Vergleichsoperatoren.</li>
+                            <li><code>S_ON: BTN_MAN_ON</code> — Step-Set-Auslöser</li>
                             <li><code>S_OFF: BTN_MAN_OFF</code> — analog für Deaktivierung</li>
                         </ul>
                         <h5>Status-Outputs</h5>
@@ -7524,9 +7597,8 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         </table>
                         <h5>Was der Recognizer kann / nicht kann</h5>
                         <ul>
-                            <li><b>Voll roundtrip:</b> Schritt-Labels, Aktionen, Übergangs-Bedingungen, AFTER-Timer, INTERLOCK, SUPERVISION (auto + latched), C-Qualifier</li>
-                            <li><b>Teilweise:</b> Aktionen mit Timer-Qualifier (P/D/L) werden auf der RS-Seite als TON/TP-Zeilen sichtbar, aber beim Rück-Wandeln evtl. nicht als Qualifier erkannt</li>
-                            <li><b>Nicht:</b> Parallele Verzweigungen (RS-Form geht, aber Rück-DSL ist linear); CONTROL-Block (Mode-Gating wird im Cond-String belassen, nicht zurück-extrahiert)</li>
+                            <li><b>Voll roundtrip:</b> Schritt-Labels, Aktionen (N/C/P/D/L/S/R), Übergangs-Bedingungen, AFTER-Timer, INTERLOCK, SUPERVISION (auto + latched), <b>parallele Verzweigungen</b>, <b>CONTROL-Block</b> (MODE_*/T_PUSH/OUT_*/ACK_EF/CTU-Counter)</li>
+                            <li><b>Lücken:</b> INIT_SQ, OFF_SQ, S_ON/S_OFF/S_SEL — in komplex verschachtelten S/R-Reset-Strings eingebettet und nicht eindeutig rückführbar. Pretty-Printer ist tolerant, fehlende Keys verschwinden einfach.</li>
                         </ul>
                         <div class="sk-tip">
                             <b>Praxis-Tipp:</b> Schreib in der DSL — sie ist viel kompakter. Den RS-Code
@@ -7647,10 +7719,12 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         <p>Sonst läuft der gewohnte boolesche Pfad. Mischen geht <b>nicht</b> — eine Zeile mit
                         <code>+/*</code> UND <code>||/&&/¬</code> wird als Fehler abgewiesen, weil das Vermischen
                         von bool- und int-Werten in einem Ausdruck schnell unsauber wird.</p>
-                        <div class="sk-warn">
-                            <b>Scope-Hinweis:</b> Aktuell nur <code>+</code> und <code>*</code>. Keine Subtraktion,
-                            Division, kein Modulo, keine Vergleiche, keine Ternary. Das deckt 95 % der
-                            sinnvollen SPS-Use-Cases — falls du mehr brauchst, lass uns reden.
+                        <div class="sk-tip">
+                            <b>Mixing-Verbot:</b> eine Zeile darf <i>entweder</i> arithmetische Operatoren
+                            (<code>+ - * / %</code>, Vergleiche, Ternär) <i>oder</i> boolesche Operatoren
+                            (<code>&& || ¬</code>) verwenden — nicht beide. Wer's mischt, kriegt eine
+                            klare Fehlermeldung. Für gemischte Logik einfach zwei Zeilen schreiben:
+                            erst arithmetisch in eine Hilfsvariable, dann boolesche Aggregation.
                         </div>
                     `
                 },
@@ -7660,10 +7734,16 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         <h4>Operatoren, Präzedenz, Klammern</h4>
                         <table>
                             <tr><th>Symbol</th><th>Bedeutung</th><th>Präzedenz</th></tr>
-                            <tr><td><code>*</code></td><td>Multiplikation</td><td>höher (bindet enger)</td></tr>
-                            <tr><td><code>+</code></td><td>Addition</td><td>niedriger</td></tr>
+                            <tr><td><code>?:</code></td><td>Ternär (Bedingung)</td><td>niedrigste</td></tr>
+                            <tr><td><code>==</code> <code>!=</code></td><td>Gleich / Ungleich</td><td>Vergleich</td></tr>
+                            <tr><td><code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td><td>Kleiner/Größer (Gleich)</td><td>Vergleich</td></tr>
+                            <tr><td><code>+</code> <code>-</code></td><td>Addition / Subtraktion</td><td>Additiv</td></tr>
+                            <tr><td><code>*</code> <code>/</code> <code>%</code></td><td>Multiplikation / Division / Modulo</td><td>Multiplikativ (bindet enger)</td></tr>
+                            <tr><td><code>-X</code></td><td>Unäre Negation (Vorzeichen)</td><td>höchste</td></tr>
                             <tr><td><code>(…)</code></td><td>Klammerung</td><td>überschreibt Präzedenz</td></tr>
                         </table>
+                        <p>Vergleiche liefern <code>1</code> bei wahr, <code>0</code> bei falsch — kann als
+                        Bool in <code>&&</code>/<code>||</code>-Kontext weiterverwendet werden (1=truthy, 0=falsy).</p>
                         <p>Funktioniert wie aus jedem Taschenrechner gewohnt — <code>1 + 2 * 3</code> ergibt 7,
                         nicht 9. Klammern explizit setzen wenn die Reihenfolge zählt:
                         <code>(1 + 2) * 3</code> ergibt 9.</p>
@@ -7964,6 +8044,7 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                             const isKnown =
                                 /^(INIT_SQ|OFF_SQ|ACK_EF|MODE_AUTO|MODE_TAP|MODE_TOP|MODE_MAN|T_PUSH|S_ON|S_OFF)$/.test(key)
                                 || /^S_SEL_[A-Z][A-Z0-9_]*$/.test(key)
+                                || /^S_SEL$/.test(key)                               // Integer-Variante: 1 Variable mit Step-Nr
                                 || /^(OUT_AUTO_ON|OUT_TAP_ON|OUT_TOP_ON|OUT_MAN_ON|OUT_ERR_FLT)$/.test(key)
                                 || /^OUT_S_NO_[A-Z][A-Z0-9_]*$/.test(key)
                                 || /^OUT_S_NO$/.test(key)                            // Integer S_NO über Arithmetik
@@ -8217,14 +8298,22 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                     resets.get(t.from).push(Q(t.to));
                 });
 
-                // Manuelle Schritt-Steuerung (MAN-Modus): pro Step ein optionaler
-                // S_SEL_<step>-Input plus globaler S_ON/S_OFF. Wirkt nur, wenn der
-                // MAN-Modus aktiv ist.
+                // Manuelle Schritt-Steuerung (MAN-Modus): zwei Varianten je nach CONTROL:
+                //   - S_SEL_<step>: per-Step-Bool (z.B. 6 Drucktaster, einer pro Step)
+                //   - S_SEL:        Integer-Variable mit Step-Nummer (S7-konform).
+                //                   Generator emittiert pro Step einen Compare-Helper
+                //                   `_SK_<chain>_SEL_EQ_<i> := <S_SEL> == <i>` weiter
+                //                   unten (im Helfer-Emit-Block).
+                // Beide Varianten sind gleichzeitig erlaubt — per-Step gewinnt, wenn
+                // beide existieren.
+                const _selEqHelperName = (idx) => '_SK_' + c.name + '_SEL_EQ_' + idx;
                 if (has('S_ON') || has('S_OFF')) {
-                    c.steps.forEach(s => {
+                    c.steps.forEach((s, i) => {
                         const selKey = 'S_SEL_' + s.name.toUpperCase();
-                        if (!cfg.has(selKey)) return;
-                        const selVar = get(selKey);
+                        let selVar = null;
+                        if (cfg.has(selKey)) selVar = get(selKey);
+                        else if (has('S_SEL')) selVar = _selEqHelperName(i + 1);
+                        if (!selVar) return;
                         const manGate = hasModeInputs ? modeManVar + ' && ' : '';
                         if (has('S_ON')) {
                             sets.get(s.name).push('(' + manGate + get('S_ON') + ' && ' + selVar + ')');
@@ -8297,6 +8386,15 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                     lines.push(tpushNewVar  + ' := ' + get('T_PUSH') + ' && ¬' + tpushLastVar);
                     lines.push(tpushLastVar + ' := ' + get('T_PUSH'));
                 }
+                // S_SEL-Integer-Compare-Helper: ein `_SK_<chain>_SEL_EQ_<i>`-Bool pro Step.
+                // Wird vom Arithmetik-Pfad des Evaluators kompiliert (`==` erkennbar)
+                // und liefert 0/1, was als Bool im Manual-Set/Reset-Gate funktioniert.
+                if (has('S_SEL')) {
+                    lines.push('// --- S_SEL-Integer-Vergleich pro Step ---');
+                    c.steps.forEach((s, i) => {
+                        lines.push(_selEqHelperName(i + 1) + ' := ' + get('S_SEL') + ' == ' + (i + 1));
+                    });
+                }
 
                 // Übergangs-Timer VOR den S/R-Zeilen emittieren — die S<n>-
                 // Set-Zeilen referenzieren diese Variablen.
@@ -8347,7 +8445,8 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                 //   - P (Pulse):   `A := TP(Q<n>, 0.1)` — ~100 ms Puls
                 //   - D <t>:       `A := TON(Q<n>, t)`  — verzögerter Ein
                 //   - L <t>:       `A := TP(Q<n>, t)`   — zeitbegrenzter Puls
-                //   - S/R:         derzeit nicht unterstützt — Warn-Kommentar
+                //   - S/R:         latched per Variable. `S:` setzt, `R:` resettet
+                //                  dominant. Form: `X := (X || sets) && ¬(resets)`.
                 // Mehrere Beiträge derselben Aktor-Variable mit Timer-Qualifier
                 // schreiben jeweils eine eigene Zeile; VALIS warnt dann ggf. vor
                 // doppelter Ausgangs-Definition. Das ist semantisch korrekt — pro
@@ -8400,10 +8499,43 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                             lines.push(lhs + ' := TP(' + x.qVar + ', ' + (x.q.time || 1.0) + ')   // Limited');
                         }
                     });
-                    // 3) S/R-Aktionen (noch nicht implementiert — Hinweiskommentar)
-                    srContribs.forEach(x => {
-                        lines.push('// TODO ' + x.q.kind + '-Qualifier nicht implementiert: ' + lhs + ' ' + x.q.kind + ': ' + x.rhs);
-                    });
+                    // 3) S/R-Aktionen — latched RS-Aggregation pro Variable.
+                    //
+                    //   S<i>:  setTerm[i] = (Q<step_i> && (rhs_i))   → addiert sich per OR ins „on"
+                    //   R<j>:  rstTerm[j] = (Q<step_j> && (rhs_j))   → blockiert per ¬(…) das Ergebnis
+                    //
+                    // RS-Dominante Form (S7-GRAPH-Standard): bei gleichzeitigem S und R
+                    // gewinnt R. JS-Form:
+                    //   state['X'] = (state['X'] || s1 || s2 || …) && !(r1 || r2 || …)
+                    //
+                    // Self-Referenz auf state['X'] auf der RHS funktioniert dank VALIS'
+                    // Read-then-Write-Semantik im single-pass — der OLD-Wert wird gelesen,
+                    // dann der neue geschrieben. Klassischer Latch-Trick.
+                    //
+                    // Mischung von N/C-Aktionen mit S/R für DIESELBE Variable wird
+                    // erlaubt aber unkonventionell: das N/C-Ergebnis überschreibt die
+                    // S/R-Zeile, weil das spätere `:=` im single-pass zuletzt feuert.
+                    // → wir warnen darum nicht; wer das macht, weiß was er tut.
+                    if (srContribs.length) {
+                        const setParts = [], rstParts = [];
+                        srContribs.forEach(x => {
+                            const rhsT = x.rhs.trim().toUpperCase();
+                            if (rhsT === 'FALSE') return;
+                            const term = (rhsT === 'TRUE')
+                                ? x.qVar
+                                : '(' + x.qVar + ' && (' + x.rhs + '))';
+                            if (x.q.kind === 'S') setParts.push(term);
+                            else                  rstParts.push(term);
+                        });
+                        const onExpr  = setParts.length ? lhs + ' || ' + setParts.join(' || ') : lhs;
+                        let result    = '(' + onExpr + ')';
+                        if (rstParts.length) result += ' && ¬(' + rstParts.join(' || ') + ')';
+                        // Bei N/C-Aktionen wurde lhs ggf. schon emittiert. Wir hängen
+                        // die S/R-Latch-Zeile dann weiter unten an — VALIS' single-pass
+                        // führt sie nach der N/C-Aggregation aus, was den Latch
+                        // korrekt überlagert.
+                        lines.push(lhs + ' := ' + result);
+                    }
                 });
 
                 // === Status-Outputs (CONTROL.OUT_*) ===
@@ -8755,26 +8887,27 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                     if (!initStepStmt) return;
                     const initNum = parseInt(initStepStmt.lhs.slice(1), 10);
 
-                    // Kette aufbauen: vom Init-Schritt aus über R<i> := Q<j>-Verweise
-                    // die Reihenfolge bestimmen. Wir bleiben bei linearen Ketten —
-                    // alternative Verzweigung über mehrere Q-Ziele in einem R<i>
-                    // erkennen wir bei Bedarf später.
+                    // Kette aufbauen: BFS vom Init-Schritt aus über R<i> := Q<j>-Verweise.
+                    // R<i>.rhs kann mehrere Q<j>-Referenzen enthalten — das sind dann
+                    // parallele Folgesteps. Wir folgen ALLEN Verzweigungen und sammeln
+                    // alle erreichbaren Step-Nummern. Reihenfolge: Init zuerst,
+                    // dann BFS-Reihenfolge der Entdeckung.
                     const stepNums = [];
                     const visited  = new Set();
-                    let cur = initNum;
                     const MAX_STEPS = 64;
-                    while (cur != null && !visited.has(cur) && stepNums.length < MAX_STEPS) {
+                    const queue = [initNum];
+                    while (queue.length && stepNums.length < MAX_STEPS) {
+                        const cur = queue.shift();
+                        if (visited.has(cur)) continue;
                         visited.add(cur);
                         stepNums.push(cur);
-                        // R<cur> := Q<next>
                         const rStmt = stmts.find(s => s.lhs === 'R' + cur);
-                        if (!rStmt) break;
-                        // Erstes Q<n> in RHS suchen (lineare Kette)
-                        const qm = rStmt.rhs.match(/\bQ(\d+)\b/);
-                        if (!qm) break;
-                        const nxt = parseInt(qm[1], 10);
-                        if (nxt === cur) break;
-                        cur = nxt;
+                        if (!rStmt) continue;
+                        const qMatches = Array.from(rStmt.rhs.matchAll(/\bQ(\d+)\b/g));
+                        qMatches.forEach(qm => {
+                            const nxt = parseInt(qm[1], 10);
+                            if (nxt !== cur && !visited.has(nxt)) queue.push(nxt);
+                        });
                     }
                     if (stepNums.length < 1) return;
                     // Konsekutivität sicherstellen für stabile Anzeige (z.B. 1..N
@@ -8878,40 +9011,62 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                         return inner;
                     }
 
-                    // Übergänge: für jedes (i → j) den passenden Term `(Q<i> && (cond))`
-                    // in S<j>.rhs finden.
+                    // Übergänge: für jeden Step die ECHTEN Folgeschritte aus R<n>.rhs
+                    // ableiten (nicht mehr linear via Modulo). Mehrere Q<x> in R<n>
+                    // bedeuten parallele Verzweigung — alle Ziele kriegen je einen
+                    // Übergang mit aus S<x>.rhs extrahierter Cond.
                     const transitions = [];
-                    for (let k = 0; k < stepNums.length; k++) {
-                        const from = stepNums[k];
-                        const to   = stepNums[(k + 1) % stepNums.length];
-                        const sToStmt = stmts.find(s => s.lhs === 'S' + to);
-                        if (!sToStmt) continue;
-                        // Suche Term der Form `(Q<from> && (<cond>))` mit balancierten
-                        // Klammern. Fallback: `Q<from> && <token>` (Bare-Token, ohne Klammer).
-                        let cond = null;
-                        const reFullStart = new RegExp('\\(\\s*Q' + from + '\\s*&&\\s*\\(');
-                        const mStart = sToStmt.rhs.match(reFullStart);
-                        if (mStart) {
-                            const innerOpen = mStart.index + mStart[0].length - 1;
-                            const innerClose = balancedClose(sToStmt.rhs, innerOpen);
-                            if (innerClose !== -1) cond = sToStmt.rhs.slice(innerOpen + 1, innerClose).trim();
-                        }
-                        if (cond == null) {
-                            const reLoose = new RegExp('Q' + from + '\\s*&&\\s*(.+?)(?:\\)\\s*\\||\\)$|$)');
-                            const mLoose = sToStmt.rhs.match(reLoose);
-                            if (mLoose) cond = mLoose[1].trim().replace(/\)+$/, '').trim();
-                        }
-                        // Erst `¬_FAULT_<chain>_Q<from>`-Guard rauspulen (falls
-                        // SUPERVISION aktiv), dann AFTER-Substitution.
-                        const stripped = stripFaultGuard(cond || 'TRUE', from);
-                        transitions.push({
-                            from: 'S' + from, to: 'S' + to, cond: restoreAfter(stripped),
-                            line: sToStmt.idx
+                    stepNums.forEach(from => {
+                        const rStmt = stmts.find(s => s.lhs === 'R' + from);
+                        if (!rStmt) return;
+                        const qChildren = Array.from(rStmt.rhs.matchAll(/\bQ(\d+)\b/g), m => parseInt(m[1], 10));
+                        const uniqChildren = [...new Set(qChildren)];
+                        uniqChildren.forEach(to => {
+                            const sToStmt = stmts.find(s => s.lhs === 'S' + to);
+                            if (!sToStmt) return;
+                            // Suche Term `(Q<from> && (<cond>))` mit balancierter Klammer,
+                            // Fallback: `Q<from> && <token>` (Bare-Token, ohne Klammer).
+                            let cond = null;
+                            const reFullStart = new RegExp('\\(\\s*Q' + from + '\\s*&&\\s*\\(');
+                            const mStart = sToStmt.rhs.match(reFullStart);
+                            if (mStart) {
+                                const innerOpen = mStart.index + mStart[0].length - 1;
+                                const innerClose = balancedClose(sToStmt.rhs, innerOpen);
+                                if (innerClose !== -1) cond = sToStmt.rhs.slice(innerOpen + 1, innerClose).trim();
+                            }
+                            if (cond == null) {
+                                const reLoose = new RegExp('Q' + from + '\\s*&&\\s*(.+?)(?:\\)\\s*\\||\\)$|$)');
+                                const mLoose = sToStmt.rhs.match(reLoose);
+                                if (mLoose) cond = mLoose[1].trim().replace(/\)+$/, '').trim();
+                            }
+                            const stripped = stripFaultGuard(cond || 'TRUE', from);
+                            transitions.push({
+                                from: 'S' + from, to: 'S' + to, cond: restoreAfter(stripped),
+                                line: sToStmt.idx
+                            });
                         });
-                    }
+                    });
+                    // Parallel-Erkennung: identische (from, cond)-Paare → parallel.
+                    // Pretty-Printer schreibt dann die Bracket-Syntax `cond -> [S2,S5]`.
+                    const _byFromCond = new Map();
+                    transitions.forEach(t => {
+                        const key = t.from + '|' + t.cond;
+                        if (!_byFromCond.has(key)) _byFromCond.set(key, []);
+                        _byFromCond.get(key).push(t);
+                    });
+                    _byFromCond.forEach(group => {
+                        if (group.length > 1) {
+                            const targets = group.map(t => t.to);
+                            group.forEach(t => {
+                                t.parallel = true;
+                                t.parallelGroup = targets.slice();
+                            });
+                        }
+                    });
 
                     // Aktionen: Zuweisungen, deren RHS Terme `(Q<n> && (rhs))` enthält
-                    // und deren LHS keiner S/R/Q/_INIT_/_TMR_/_IL_/_FAULT_/_MODE_/_TPUSH_-Pin ist.
+                    // ODER ein TP/TON-Aufruf auf einem Step-Q-Pin (P/D/L-Qualifier).
+                    // LHS darf kein S/R/Q/Init/Helper-Pin sein.
                     stmts.forEach(s => {
                         if (RE_SR_PIN.test(s.lhs)) return;
                         if (/^Q\d+/.test(s.lhs)) return;
@@ -8921,6 +9076,36 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                         if (/^_FAULT_/.test(s.lhs)) return;
                         if (/^_MODE_/.test(s.lhs)) return;
                         if (/^_TPUSH_/.test(s.lhs)) return;
+                        if (/^_SK_/.test(s.lhs)) return;
+                        // P/D/L-Qualifier — Timer-Action auf einem Step-Q. Generator-
+                        // Konvention:
+                        //   P:    TP(Q<n>, 0.1)        — 100 ms Puls
+                        //   D t:  TON(Q<n>, <t>)        — Einschaltverzögerung
+                        //   L t:  TP(Q<n>, <t>)         — zeitbegrenzter Puls
+                        const _rhsT = s.rhs.trim();
+                        const _tpM  = _rhsT.match(/^TP\s*\(\s*Q(\d+)\s*,\s*([\d.]+)\s*\)$/i);
+                        const _tonM = !_tpM && _rhsT.match(/^TON\s*\(\s*Q(\d+)\s*,\s*([\d.]+)\s*\)$/i);
+                        if (_tpM) {
+                            const _qn = parseInt(_tpM[1], 10);
+                            const _t  = parseFloat(_tpM[2]);
+                            const _si = stepNums.indexOf(_qn);
+                            if (_si >= 0) {
+                                const _q = Math.abs(_t - 0.1) < 1e-9 ? { kind: 'P' } : { kind: 'L', time: _t };
+                                steps[_si].actions.push({ lhs: s.lhs, rhs: 'TRUE', qualifier: _q, line: s.idx });
+                                return;
+                            }
+                        }
+                        if (_tonM) {
+                            const _qn = parseInt(_tonM[1], 10);
+                            const _t  = parseFloat(_tonM[2]);
+                            const _si = stepNums.indexOf(_qn);
+                            if (_si >= 0) {
+                                steps[_si].actions.push({
+                                    lhs: s.lhs, rhs: 'TRUE', qualifier: { kind: 'D', time: _t }, line: s.idx
+                                });
+                                return;
+                            }
+                        }
                         // Pro Step vier Patterns versuchen — alle mit balancierter
                         // Klammer-Erkennung statt lazy regex:
                         //   1a) (Q<n> && _IL_<chain>_Q<n> && (rhs)) → C-Aktion mit RHS
@@ -8995,11 +9180,80 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                     const startLine = Math.min.apply(null, allLines);
                     const endLine   = Math.max.apply(null, allLines);
 
+                    // CONTROL-Block-Recognizer: Helper-Patterns rückwärts in
+                    // CONTROL-Keys übersetzen. Wir decken die häufigsten Fälle ab:
+                    //   - Mode-Auflösung (MODE_AUTO/TAP/TOP/MAN-Inputs)
+                    //   - T_PUSH-Flanke (T_PUSH-Input)
+                    //   - OUT_AUTO_ON / TAP_ON / TOP_ON / MAN_ON / ERR_FLT
+                    //   - ACK_EF (aus latched _FAULT_-Pattern)
+                    //   - OUT_CYCLE_COUNT / OUT_FAULT_COUNT (CTU-Pattern)
+                    // INIT_SQ / OFF_SQ / S_ON / S_OFF / S_SEL_<n> bleiben Lücken —
+                    // sie sind in komplexen S/R-Reset-Strings vermischt und nicht
+                    // eindeutig rückführbar. Pretty-Printer ist tolerant gegen
+                    // fehlende Keys.
+                    const controlKeys = new Map();
+                    // MODE_AUTO: `<auto> || (¬<x> && ¬<y> && ¬<z>)` ODER nur `¬<x> && …` ODER `TRUE`
+                    const _autoStmt = stmts.find(s => s.lhs === '_MODE_' + chainName + '_AUTO');
+                    if (_autoStmt) {
+                        const m = _autoStmt.rhs.match(/^([A-Za-z_]\w*)\s*\|\|\s*\(/);
+                        if (m) controlKeys.set('MODE_AUTO', m[1]);
+                    }
+                    // MODE_TAP/TOP/MAN: `<x> && ¬_MODE_<chain>_…`
+                    ['TAP','TOP','MAN'].forEach(suffix => {
+                        const stmt = stmts.find(s => s.lhs === '_MODE_' + chainName + '_' + suffix);
+                        if (!stmt) return;
+                        const m = stmt.rhs.match(/^([A-Za-z_]\w*)\s*&&\s*¬_MODE_/);
+                        if (m && m[1] !== 'FALSE') controlKeys.set('MODE_' + suffix, m[1]);
+                    });
+                    // T_PUSH: `<input> && ¬_TPUSH_<chain>_LAST`
+                    const _tpushStmt = stmts.find(s => s.lhs === '_TPUSH_' + chainName + '_NEW');
+                    if (_tpushStmt) {
+                        const m = _tpushStmt.rhs.match(/^([A-Za-z_]\w*)\s*&&\s*¬_TPUSH_/);
+                        if (m) controlKeys.set('T_PUSH', m[1]);
+                    }
+                    // OUT_AUTO_ON/TAP_ON/TOP_ON/MAN_ON: `<var> := _MODE_<chain>_<suffix>`
+                    stmts.forEach(s => {
+                        const m = s.rhs.match(/^_MODE_([A-Za-z_]\w*)_(AUTO|TAP|TOP|MAN)\s*$/);
+                        if (m && m[1] === chainName) {
+                            controlKeys.set('OUT_' + m[2] + '_ON', s.lhs);
+                        }
+                    });
+                    // ACK_EF: aus dem latched _FAULT_-Pattern
+                    //   `(Q<n> && (sv)) || (_FAULT_X_Q<n> && ¬<ack>)`
+                    stmts.forEach(s => {
+                        if (!s.lhs.startsWith('_FAULT_' + chainName + '_Q')) return;
+                        const m = s.rhs.match(/_FAULT_[\w]+_Q\d+\s*&&\s*¬([A-Za-z_]\w*)\s*\)/);
+                        if (m) controlKeys.set('ACK_EF', m[1]);
+                    });
+                    // OUT_ERR_FLT: `<var> := _FAULT_X_Q<a> || _FAULT_X_Q<b> || …`
+                    stmts.forEach(s => {
+                        const parts = s.rhs.split(/\s*\|\|\s*/);
+                        if (parts.length < 1) return;
+                        const allFault = parts.every(p => p.match(new RegExp('^_FAULT_' + chainName + '_Q\\d+$')));
+                        if (allFault && parts.length >= 1 && /_FAULT_/.test(s.rhs)) {
+                            controlKeys.set('OUT_ERR_FLT', s.lhs);
+                        }
+                    });
+                    // OUT_CYCLE_COUNT: `<var> := CTU(Q<init>, <reset>, 9999)`
+                    // OUT_FAULT_COUNT: `<var> := CTU((<faults>), <ack>, 9999)`
+                    stmts.forEach(s => {
+                        const m = s.rhs.match(/^CTU\s*\(\s*(\(.*?\)|Q\d+|[A-Za-z_]\w*)\s*,/);
+                        if (!m) return;
+                        const arg0 = m[1];
+                        const qm = arg0.match(/^Q(\d+)$/);
+                        if (qm && parseInt(qm[1], 10) === stepNums[0]) {
+                            controlKeys.set('OUT_CYCLE_COUNT', s.lhs);
+                        } else if (arg0.includes('_FAULT_' + chainName + '_')) {
+                            controlKeys.set('OUT_FAULT_COUNT', s.lhs);
+                        }
+                    });
+
                     chains.push({
                         chain: {
                             name: chainName,
                             steps, transitions,
-                            startLine, endLine
+                            startLine, endLine,
+                            control: controlKeys.size ? { keys: controlKeys } : null
                         },
                         base: baseNum
                     });

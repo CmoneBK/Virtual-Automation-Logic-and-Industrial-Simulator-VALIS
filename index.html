@@ -330,18 +330,18 @@
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
-        /* Bei `.has-sk` mit Spalten-Layout (sim-bottom/sim-top) NICHT die
-           gespeicherten Custom-Width-Vars verwenden — die hätten die Zeile
-           schon voll belegt, SK-Spalte bekäme 0 px. Wir teilen die obere
-           Zeile gleichmäßig auf alle Code-View-Panels auf. */
+        /* Mit `.has-sk` Spalten-Layout (sim-bottom/sim-top): Var-basiert, damit
+           der horizontale Resizer auch bei sichtbarem SK-Panel funktioniert.
+           Die Vars werden bei Klassen-Wechsel zurückgesetzt (siehe updateWorkspace),
+           sonst hätten alte Pixel-Werte aus 2-Spalten-Layouts die neue Zeile gesprengt. */
         .grid-sim-bottom.has-sk {
             grid-template-areas: "fbs r1 iec rS sk" "r2 r2 r2 r2 r2" "sim sim sim sim sim";
-            grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-bottom.has-editor.has-sk {
             grid-template-areas: "fbs r1 iec re ced rS sk" "r2 r2 r2 r2 r2 r2 r2" "sim sim sim sim sim sim sim";
-            grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr)) 6px minmax(0, 1fr);
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-top {
@@ -356,12 +356,12 @@
         }
         .grid-sim-top.has-sk {
             grid-template-areas: "sim sim sim sim sim" "r2 r2 r2 r2 r2" "fbs r1 iec rS sk";
-            grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr));
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-top.has-editor.has-sk {
             grid-template-areas: "sim sim sim sim sim sim sim" "r2 r2 r2 r2 r2 r2 r2" "fbs r1 iec re ced rS sk";
-            grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr) 6px minmax(0, 1fr);
+            grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr)) 6px var(--grid-col-3, minmax(0, 1fr)) 6px minmax(0, 1fr);
             grid-template-rows: var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr));
         }
         .grid-sim-right {
@@ -5190,7 +5190,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "//       OFF_SQ       → Kette komplett aus (alle Q=0)\n" +
                     "//       ACK_EF       → Fault quittieren (latched SR)\n" +
                     "//       MODE_AUTO/TAP/TOP/MAN + T_PUSH → Betriebsarten\n" +
-                    "//       S_ON/S_OFF + S_SEL_<n> → Manueller Schritt-Zugriff\n" +
+                    "//       S_ON/S_OFF + S_SEL (Integer 1..6) → Manueller Schritt-Zugriff\n" +
+                    "//                       (Integer-Variante: STEP_NEXT-Taster zyklt SEL_STEP\n" +
+                    "//                        per CTU + Arithmetik 1→2→…→6→1, STEP_RST springt auf 1)\n" +
                     "//       OUT_AUTO_ON/TAP_ON/TOP_ON/MAN_ON → Mode-Rückmeldung\n" +
                     "//       OUT_ERR_FLT  → Sammelfehler\n" +
                     "//       OUT_S_NO     → Echte Integer-Step-Nummer (1..6) via Arithmetik\n" +
@@ -5199,9 +5201,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "//                       (lesbar mit 7-Seg Display über CTU_<name>.cv)\n" +
                     "//\n" +
                     "// Tasten:  SPACE=START, ESC=NOT_AUS, R=RESET, A=ACK\n" +
-                    "//          1..6 = SENSOREN togglen (DECKEL, SAFETY, VOLL, TEMP_OK,\n" +
-                    "//                                   ÜBERHITZT, MAN-ON)\n" +
+                    "//          1..5 = SENSOREN togglen (DECKEL, SAFETY, VOLL, TEMP_OK, ÜBERHITZT)\n" +
                     "//          F=AUTO, G=TAP, H=TOP, J=MAN, T=Weiterschalt-Taster\n" +
+                    "//          N=STEP_NEXT (Step weiterzählen), B=STEP_RST (Auswahl auf 1)\n" +
                     "//\n" +
                     "// Anzeige im Schrittketten-Panel:\n" +
                     "//   - grüner Doppelrand = aktiver Schritt (animiert)\n" +
@@ -5209,6 +5211,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "//   - ⚠ SV: …          = Supervision; rot blinkend wenn Fault aktiv\n" +
                     "//   - Rechtsklick in den Block → Form-Wechsel DSL ↔ RS-Glieder\n" +
                     "// ===========================================================\n" +
+                    "\n" +
+                    "// Integer-Step-Select über einen CTU-Zähler:\n" +
+                    "//   STEP_NEXT (Taster) → eine Flanke = +1 in SEL_RAW.cv\n" +
+                    "//   STEP_RST  (Taster) → setzt SEL_RAW.cv = 0 (= Step 1 nach Wrap)\n" +
+                    "// Arithmetik liest .cv und wrappt auf 1..6 (`(.cv % 6) + 1`).\n" +
+                    "// Daraus baut der Generator pro Step einen Compare-Helper\n" +
+                    "// `_SK_MISCHANLAGE_SEL_EQ_<i> := SEL_STEP == <i>`, den S_SEL nutzt —\n" +
+                    "// S7-konforme Integer-Variante mit ehrlichem Integer-Datenpfad.\n" +
+                    "SEL_RAW := CTU(STEP_NEXT, STEP_RST, 9999)\n" +
+                    "SEL_STEP := (SEL_RAW.cv % 6) + 1\n" +
                     "\n" +
                     "SCHRITTKETTE MISCHANLAGE:\n" +
                     "  CONTROL:\n" +
@@ -5222,12 +5234,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "    T_PUSH:      T_BTN              // Weiterschalt-Taster (TAP/TOP)\n" +
                     "    S_ON:        MAN_ON             // Manueller Step-Set (MAN)\n" +
                     "    S_OFF:       MAN_OFF            // Manueller Step-Reset (MAN)\n" +
-                    "    S_SEL_S1:    PICK_S1            // Step-Wahl-Bits (Bool pro Step,\n" +
-                    "    S_SEL_S2:    PICK_S2            //  weil VALIS rein boolesch ist)\n" +
-                    "    S_SEL_S3:    PICK_S3\n" +
-                    "    S_SEL_S4:    PICK_S4\n" +
-                    "    S_SEL_S5:    PICK_S5\n" +
-                    "    S_SEL_S6:    PICK_S6\n" +
+                    "    S_SEL:       SEL_STEP           // Integer-Variante (S7-konform):\n" +
+                    "                                    //   eine Integer-Variable wählt den Step,\n" +
+                    "                                    //   Compare-Helper werden auto-generiert.\n" +
+                    "                                    //   SEL_STEP-Berechnung steht oberhalb.\n" +
                     "    OUT_AUTO_ON: LED_AUTO           // Mode-Anzeigelampen\n" +
                     "    OUT_TAP_ON:  LED_TAP\n" +
                     "    OUT_TOP_ON:  LED_TOP\n" +
@@ -5288,12 +5298,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "SW_MAN":             "schalter",
                     "MAN_ON":             "taster",
                     "MAN_OFF":            "taster",
-                    "PICK_S1":            "schalter",
-                    "PICK_S2":            "schalter",
-                    "PICK_S3":            "schalter",
-                    "PICK_S4":            "schalter",
-                    "PICK_S5":            "schalter",
-                    "PICK_S6":            "schalter",
+                    "STEP_NEXT":          "taster",
+                    "STEP_RST":           "taster",
+                    "SEL_STEP":           "display",
                     "DECKEL_ZU":          "schalter",
                     "SAFETY_OK":          "schalter",
                     "SENSOR_VOLL":        "schalter",
@@ -5331,7 +5338,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     "SAFETY_OK":         "2",
                     "SENSOR_VOLL":       "3",
                     "SENSOR_TEMP_OK":    "4",
-                    "SENSOR_UEBERHITZT": "5"
+                    "SENSOR_UEBERHITZT": "5",
+                    "STEP_NEXT":         "n",
+                    "STEP_RST":          "b"
                 },
                 factory: {
                     globalViewMode: "side",
@@ -5379,13 +5388,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         // ---- Manuelle Schritt-Steuerung (MAN-Mode) ----
                         { id:"bp_manon",   type:"taster",   x:450, y:236, width:40, height:40, rotation:0, linkedVar:"MAN_ON",         color:"green",  useCollision:true, labelPinned:true, locked:true },
                         { id:"bp_manoff",  type:"taster",   x:495, y:236, width:40, height:40, rotation:0, linkedVar:"MAN_OFF",        color:"red",    useCollision:true, labelPinned:true, locked:true },
-                        // ---- Step-Picker (S1..S6) (Gruppe "picks") ----
-                        { id:"sw_pick1",   type:"schalter", x:448, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S1",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        { id:"sw_pick2",   type:"schalter", x:498, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S2",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        { id:"sw_pick3",   type:"schalter", x:547, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S3",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        { id:"sw_pick4",   type:"schalter", x:598, y:307, width:30, height:40, rotation:0, linkedVar:"PICK_S4",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        { id:"sw_pick5",   type:"schalter", x:648, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S5",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
-                        { id:"sw_pick6",   type:"schalter", x:698, y:306, width:30, height:40, rotation:0, linkedVar:"PICK_S6",        color:"yellow", useCollision:true, labelPinned:true, locked:true, groupId:"picks" },
+                        // ---- Step-Wahl (Integer-S_SEL via CTU + Arithmetik) ----
+                        // STEP_NEXT zählt SEL_RAW.cv hoch, Arithmetik wrappt auf 1..6.
+                        // STEP_RST setzt zurück → Auswahl springt auf Step 1.
+                        // dsp_sel zeigt SEL_STEP (1..6) als 7-Seg im HMI.
+                        { id:"bp_stepnext",type:"taster",   x:450, y:306, width:40, height:40, rotation:0, linkedVar:"STEP_NEXT",      color:"green",  useCollision:true, labelPinned:true, locked:true },
+                        { id:"bp_steprst", type:"taster",   x:498, y:306, width:40, height:40, rotation:0, linkedVar:"STEP_RST",       color:"red",    useCollision:true, labelPinned:true, locked:true },
+                        { id:"dsp_sel",    type:"display",  x:556, y:311, width:60, height:32, rotation:0, linkedVar:"SEL_STEP",       color:"red",    useCollision:false, labelPinned:true },
                         // ---- 7-Seg-Displays ----
                         //   - dsp_cycle/dsp_fault: lesen CTU.cv (Counter)
                         //   - dsp_sno: liest spsState['S_NO'] direkt (Integer aus Arithmetik 1*Q1+2*Q2+…)
@@ -6950,14 +6959,41 @@ You must output exactly this JSON format. The logic code goes as a single string
                         }
                         const numM = _src.slice(_pos).match(/^[\d]+(?:\.[\d]+)?/);
                         if (numM) { _pos += numM[0].length; return numM[0]; }
-                        const idM = _src.slice(_pos).match(/^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/);
+                        // Identifier mit optionalem Property-Suffix (.cv | .et | .q).
+                        // Damit kann Arithmetik direkt CTU-Counter-Werte und
+                        // TON/TOF/TP-Timer-Restzeiten einlesen — sonst hätte z.B.
+                        // ein integer-basiertes S_SEL: <cnt>.cv im SCHRITTKETTE-CONTROL
+                        // keinen Weg, an die Zählwerte zu kommen.
+                        const idM = _src.slice(_pos).match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)(\.(?:cv|et|q))?/);
                         if (idM) {
                             _pos += idM[0].length;
-                            const id = idM[0];
-                            if (id === 'TRUE')  return '1';
-                            if (id === 'FALSE') return '0';
+                            const id   = idM[1];
+                            const prop = idM[2] ? idM[2].slice(1) : null;
+                            if (!prop) {
+                                if (id === 'TRUE')  return '1';
+                                if (id === 'FALSE') return '0';
+                                _vars.add(id);
+                                return "(+state['" + id + "']||0)";
+                            }
+                            // Property-Zugriff probiert die VALIS-Block-Prefixe
+                            // (CTU_/TON_/TOF_/TP_) durch — der Generator legt für
+                            // `X := CTU(...)` immer `timers['CTU_X']` an. Wir tragen
+                            // `id` trotzdem in _vars ein, damit der FBS-Graph eine
+                            // sichtbare Abhängigkeit zwischen dem Counter/Timer-
+                            // Output und unserer ARITH-Zeile bekommt. addNode
+                            // re-typed bestehende OUTPUT-Knoten nicht — es bleibt
+                            // beim CTU-Block-Output.
                             _vars.add(id);
-                            return "(+state['" + id + "']||0)";
+                            if (prop === 'cv') {
+                                return "((timers['CTU_" + id + "']||timers['TON_" + id + "']||timers['TOF_" + id + "']||timers['TP_" + id + "']||{}).cv||0)";
+                            }
+                            if (prop === 'et') {
+                                // et ist intern in Millisekunden — Sekunden ausliefern.
+                                return "(((timers['TON_" + id + "']||timers['TOF_" + id + "']||timers['TP_" + id + "']||timers['CTU_" + id + "']||{}).et||0)/1000)";
+                            }
+                            if (prop === 'q') {
+                                return "(((timers['CTU_" + id + "']||timers['TON_" + id + "']||timers['TOF_" + id + "']||timers['TP_" + id + "']||{}).q)?1:0)";
+                            }
                         }
                         throw new Error('Arithmetik: Unerwartetes Zeichen "' + (_src[_pos] || 'EOF') + '" an Position ' + _pos);
                     }
@@ -7752,6 +7788,15 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                             <li><b>Zahl-Literale:</b> ganzzahlig (<code>0</code>, <code>5</code>, <code>42</code>) oder Dezimal (<code>1.5</code>, <code>3.14</code>)</li>
                             <li><b>Variablen:</b> jeder gültige Identifier — wird automatisch koerziert</li>
                             <li><b>TRUE/FALSE:</b> werden direkt zu <code>1</code>/<code>0</code> aufgelöst</li>
+                            <li><b>Property-Zugriff <code>X.cv</code> / <code>X.et</code> / <code>X.q</code>:</b>
+                                liest direkt aus der Timer-/Counter-Instanz von <code>X</code>.
+                                <code>.cv</code> = aktueller Zählwert (CTU),
+                                <code>.et</code> = abgelaufene Zeit in Sekunden (TON/TOF/TP),
+                                <code>.q</code> = Bool-Ausgang (1/0). Suchreihenfolge der
+                                Block-Prefixe: CTU_/TON_/TOF_/TP_; existiert keiner, ist der
+                                Wert <code>0</code>. Damit lässt sich z.B. eine Integer-Variable
+                                aus einem CTU bauen, die <code>S_SEL</code> als Step-Auswahl
+                                bekommt.</li>
                         </ul>
                         <h5>Beispiele</h5>
 <pre><span class="cm">// Pure Konstante</span>
@@ -7767,7 +7812,11 @@ SUMME := <span class="num">10</span>*BAR1 + <span class="num">5</span>*BAR2 + BI
 GESAMT := (<span class="num">3</span> + STUFE) * MULT
 
 <span class="cm">// 4-Bit-DIP-Schalter zu Integer 0..15</span>
-WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <span class="num">2</span>*DIP1 + DIP0</pre>
+WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <span class="num">2</span>*DIP1 + DIP0
+
+<span class="cm">// CTU-Counter als Integer-Quelle (1..6 Wrap, z.B. für S_SEL)</span>
+SEL_RAW := CTU(STEP_NEXT, STEP_RST, <span class="num">9999</span>)
+SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</span></pre>
                         <div class="sk-tip">
                             Innerhalb von TON/TOF/TP/CTU-Aufrufen ist Arithmetik <b>nicht</b> erlaubt — die
                             Argumente bleiben strikt typisch (Bool-Signal, Zahl-Konstante). Nur als RHS
@@ -10760,8 +10809,8 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
             {
                 key: 'schrittkette_mischer',
                 title: 'Schrittkette (Vollausstattung)', title_en: 'Step Chain (Full-Featured)',
-                desc:  '6-Schritt-Mischanlage mit INTERLOCK, SUPERVISION, allen Action-Qualifiern (N/C/P/D/L) und AFTER-Timern. Großes Demo-Beispiel.',
-                desc_en: '6-step mixing plant with INTERLOCK, SUPERVISION, all action qualifiers (N/C/P/D/L) and AFTER timers. Large showcase example.',
+                desc:  '6-Schritt-Mischanlage mit INTERLOCK, SUPERVISION, allen Action-Qualifiern (N/C/P/D/L), AFTER-Timern, CONTROL-Block (MODE_*/T_PUSH/Counter) und S7-konformer Integer-S_SEL-Variante. Großes Demo-Beispiel.',
+                desc_en: '6-step mixing plant with INTERLOCK, SUPERVISION, all action qualifiers (N/C/P/D/L), AFTER timers, CONTROL block (MODE_*/T_PUSH/counters) and S7-style integer S_SEL variant. Large showcase example.',
             },
         ];
         function renderFactoryPreview(canvas, objects) {
@@ -14261,6 +14310,108 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
             if (currentGraph) { drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true); runSimulationTick(); }
         };
 		// --- NEU: WORKSPACE PANEL MANAGEMENT ---
+        // Baut bei Bedarf ein dynamisches Grid-Template, wenn fbs ODER iec im
+        // Grid-Modus geschlossen sind. Im Default-Fall (beide sichtbar) bleibt
+        // alles bei den statischen .grid-sim-*-Regeln. Wichtig:
+        //  - Die Panel-Wrapper (fbs/circuit/factory) haben INLINE `grid-area:
+        //    fbs|iec|sim` im HTML. Hidden-Panels (display:none) belegen
+        //    keinen Slot, also dürfen wir ihre Area-Namen ohne Risiko aus dem
+        //    Template entfernen.
+        //  - Die Resizer (r1/re/rS) werden vom Aufrufer (updateWorkspace) per
+        //    inline `display:none !important` versteckt, da CSS .workspace-resizer
+        //    sie sonst sichtbar lässt und sie ohne passende Area in den
+        //    impliziten Grid wandern würden.
+        //  - --grid-col-* Vars werden NICHT verwendet (1fr), da sie sich auf
+        //    das alte 2/3-Spalten-Layout beziehen und im degraded-Zustand
+        //    Spalten kollabieren würden. Horizontaler Resize ist dort nicht
+        //    verfügbar — vertikaler (r2) bleibt aktiv über var(--grid-row-*).
+        function _applyDynamicGridTemplate(wcEl, currentLayout, vis) {
+            if (!wcEl) return;
+            const LAYOUT_CLASSES = ['grid-sim-bottom', 'grid-sim-top', 'grid-sim-right', 'grid-sim-left'];
+            const removeAll = () => {
+                wcEl.style.removeProperty('grid-template-areas');
+                wcEl.style.removeProperty('grid-template-columns');
+                wcEl.style.removeProperty('grid-template-rows');
+            };
+            if (!currentLayout || !currentLayout.startsWith('grid-')) {
+                removeAll();
+                return;
+            }
+            // Default-Pfad: beide Code-Hauptpanels sichtbar → statische
+            // .grid-sim-*-Klassen erledigen den Rest (inkl. has-editor/has-sk).
+            // Sicherstellen, dass die Layout-Klasse präsent ist (sie kann
+            // im Degraded-Zustand entfernt worden sein).
+            if (vis.fbs && vis.iec) {
+                removeAll();
+                LAYOUT_CLASSES.forEach(c => { if (c !== currentLayout) wcEl.classList.remove(c); });
+                if (!wcEl.classList.contains(currentLayout)) wcEl.classList.add(currentLayout);
+                return;
+            }
+            // Degraded-Zustand: Die statische .grid-sim-*-CSS-Klasse wird
+            // ENTFERNT, damit unser Inline-Template ohne Konkurrenz greift.
+            // (Ohne diesen Schritt würde die CSS-Klasse z.B. 3 Spalten setzen,
+            // unsere Inline-Anweisung 1 — und je nach Spezifität/Var-Ladereihenfolge
+            // bliebe ein leerer Streifen rechts stehen.)
+            LAYOUT_CLASSES.forEach(c => wcEl.classList.remove(c));
+            const layoutBase = currentLayout.replace('grid-sim-', '');
+            // Sichtbare Code-Cells in derselben Reihenfolge wie die statischen
+            // CSS-Templates (fbs → iec → ced → sk).
+            const cells = [];
+            if (vis.fbs) cells.push('fbs');
+            if (vis.iec) cells.push('iec');
+            if (vis.ced) cells.push('ced');
+            if (vis.sk)  cells.push('sk');
+            if (cells.length === 0) {
+                // Edge-Case: alle Code-Panels weg, sim noch da. (factory-close
+                // löst eigentlich flex-row aus — hier nur defensiv.)
+                if (vis.sim) {
+                    wcEl.style.gridTemplateAreas = '"sim"';
+                    wcEl.style.gridTemplateColumns = 'minmax(0, 1fr)';
+                    wcEl.style.gridTemplateRows = 'minmax(0, 1fr)';
+                } else {
+                    removeAll();
+                }
+                return;
+            }
+            const codeColTrack = cells.map(() => 'minmax(0, 1fr)').join(' ');
+            if (layoutBase === 'bottom' || layoutBase === 'top') {
+                const codeRow = cells.join(' ');
+                if (vis.sim) {
+                    const r2Row  = cells.map(() => 'r2').join(' ');
+                    const simRow = cells.map(() => 'sim').join(' ');
+                    wcEl.style.gridTemplateAreas = layoutBase === 'bottom'
+                        ? `"${codeRow}" "${r2Row}" "${simRow}"`
+                        : `"${simRow}" "${r2Row}" "${codeRow}"`;
+                    wcEl.style.gridTemplateColumns = codeColTrack;
+                    wcEl.style.gridTemplateRows = 'var(--grid-row-1, minmax(0, 1fr)) 6px var(--grid-row-2, minmax(0, 1fr))';
+                } else {
+                    wcEl.style.gridTemplateAreas = `"${codeRow}"`;
+                    wcEl.style.gridTemplateColumns = codeColTrack;
+                    wcEl.style.gridTemplateRows = 'minmax(0, 1fr)';
+                }
+            } else if (layoutBase === 'right' || layoutBase === 'left') {
+                // Code-Cells als eigene Reihen stapeln, sim spannt rechts/links
+                // über alle Reihen.
+                if (vis.sim) {
+                    const rows = cells.map(c => layoutBase === 'right'
+                        ? `"${c} r2 sim"`
+                        : `"sim r2 ${c}"`
+                    ).join(' ');
+                    wcEl.style.gridTemplateAreas = rows;
+                    wcEl.style.gridTemplateColumns = layoutBase === 'right'
+                        ? 'minmax(0, 1fr) 6px minmax(0, 1fr)'
+                        : 'minmax(0, 1fr) 6px minmax(0, 1fr)';
+                    wcEl.style.gridTemplateRows = cells.map(() => 'minmax(0, 1fr)').join(' ');
+                } else {
+                    const rows = cells.map(c => `"${c}"`).join(' ');
+                    wcEl.style.gridTemplateAreas = rows;
+                    wcEl.style.gridTemplateColumns = 'minmax(0, 1fr)';
+                    wcEl.style.gridTemplateRows = cells.map(() => 'minmax(0, 1fr)').join(' ');
+                }
+            } else {
+                removeAll();
+            }
+        }
         function updateWorkspace() {
             if (!window.popOutWindows) window.popOutWindows = {};
             // Prüft ob ein Panel ausgelagert (Monitor 2) oder lokal sichtbar ist
@@ -14280,25 +14431,65 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
             const resizerEdit = document.getElementById('ws-resizer-iec-edit');
             const resizerSk   = document.getElementById('ws-resizer-sk');
             const isGrid = currentLayout.startsWith('grid-');
-            let p0 = fbs.isMainVisible || isGrid;
-            let p1 = circ.isMainVisible || isGrid;
-            let pE = cedit.isMainVisible; // Editor optional auch im Grid (siehe .has-editor)
-            let p2 = fac.isMainVisible || isGrid;
-            let pS = sk.isMainVisible;    // Schrittkette analog zum Editor — nur mit Grid-Klasse .has-sk im Grid
+            // p0/p1/p2/pE/pS = echte Sichtbarkeit. Wird für Button-Active-State
+            // und für die dynamische Grid-Template-Berechnung verwendet. Frühere
+            // Version hatte `|| isGrid` an p0/p1/p2 — das hielt die Buttons im
+            // Grid-Modus konstant orange, auch wenn die Panels geschlossen waren.
+            let p0 = fbs.isMainVisible;
+            let p1 = circ.isMainVisible;
+            let pE = cedit.isMainVisible;
+            let p2 = fac.isMainVisible;
+            let pS = sk.isMainVisible;
             // Editor + SK-Panel als optionale Grid-Slots eintragen (per Klasse).
             // Beide werden NIE neben factory-wrapper platziert (.has-sk-Layouts
             // sortieren sk in die Code-Spalte ein, sim bleibt unverändert).
+            //
+            // Bug-Fix: bei Klassen-Wechsel werden die Pixel-fixierten
+            // `--grid-col-*`-Vars zurückgesetzt — sie sind layout-spezifisch
+            // (in einem 2-Spalten-Layout gespeichert, taugen sie im 3- oder
+            // 5-Spalten-Layout nicht und produzieren leere Spalten). Auch
+            // umgekehrt: vom Mehr-Spalten- ins 2-Spalten-Layout kollabieren
+            // die alten Pixel-Werte die sichtbaren Panels auf 0 px.
             const _wcEl = document.getElementById('workspace-container');
             if (_wcEl) {
-                _wcEl.classList.toggle('has-editor', isGrid && pE);
-                _wcEl.classList.toggle('has-sk', isGrid && pS);
+                const _wantEditor = isGrid && pE;
+                const _wantSk     = isGrid && pS;
+                const _hadEditor  = _wcEl.classList.contains('has-editor');
+                const _hadSk      = _wcEl.classList.contains('has-sk');
+                if (_hadEditor !== _wantEditor || _hadSk !== _wantSk) {
+                    _wcEl.style.removeProperty('--grid-col-1');
+                    _wcEl.style.removeProperty('--grid-col-2');
+                    _wcEl.style.removeProperty('--grid-col-3');
+                }
+                _wcEl.classList.toggle('has-editor', _wantEditor);
+                _wcEl.classList.toggle('has-sk',     _wantSk);
             }
+            // Grid-Resizer im "degraded"-Zustand verstecken: ist fbs ODER iec
+            // ausgeblendet, baut _applyDynamicGridTemplate ein Template ohne
+            // r1/re/rS-Areas. Die CSS-Regel `.workspace-resizer { display:block
+            // !important }` würde die Resizer sonst in den impliziten Grid
+            // zwingen — also via `!important` inline zurücknehmen.
+            const _degraded = isGrid && (!p0 || !p1);
             if (isGrid) {
-                if (resizer1) resizer1.style.display = 'none';
-                if (resizer2) resizer2.style.display = 'none';
-                if (resizerEdit) resizerEdit.style.display = pE ? 'block' : 'none';
-                if (resizerSk)   resizerSk.style.display   = pS ? 'block' : 'none';
+                if (resizer1) {
+                    if (_degraded) resizer1.style.setProperty('display', 'none', 'important');
+                    else resizer1.style.removeProperty('display');
+                }
+                if (resizer2) resizer2.style.removeProperty('display');
+                if (resizerEdit) {
+                    if (_degraded || !pE) resizerEdit.style.setProperty('display', 'none', 'important');
+                    else resizerEdit.style.removeProperty('display');
+                }
+                if (resizerSk) {
+                    if (_degraded || !pS) resizerSk.style.setProperty('display', 'none', 'important');
+                    else resizerSk.style.removeProperty('display');
+                }
             } else {
+                // In Flex-Modi keine !important-Overrides aktiv lassen.
+                if (resizer1) resizer1.style.removeProperty('display');
+                if (resizer2) resizer2.style.removeProperty('display');
+                if (resizerEdit) resizerEdit.style.removeProperty('display');
+                if (resizerSk) resizerSk.style.removeProperty('display');
                 if (resizer1) resizer1.style.display = (p0 && (p1 || pE || p2 || pS)) ? 'block' : 'none';
                 // Editor-Resizer sichtbar wenn Editor aktiv UND ein Nachbar-Panel ebenfalls aktiv
                 if (resizerEdit) resizerEdit.style.display = (pE && (p1 || p0 || p2 || pS)) ? 'block' : 'none';
@@ -14307,6 +14498,11 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                 // das letzte Panel, also reicht „SK an UND irgendein anderes Panel an".
                 if (resizerSk) resizerSk.style.display = (pS && (p0 || p1 || pE || p2)) ? 'block' : 'none';
             }
+            // Dynamisches Grid-Template einsetzen, wenn fbs/iec ausgeblendet sind —
+            // sonst übernehmen die statischen .grid-sim-*-CSS-Klassen.
+            _applyDynamicGridTemplate(_wcEl, currentLayout, {
+                fbs: p0, iec: p1, ced: pE, sk: pS, sim: p2,
+            });
             // Button-Zustände: detached = blau, active = orange
             const updateBtn = (btnId, state, pVisible) => {
                 let b = document.getElementById(btnId);
@@ -14364,12 +14560,13 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
             });
             // Letztes aktives Fenster auf dem Hauptmonitor darf nicht geschlossen werden!
             if (mainVisibleCount <= 1 && panel.style.display !== 'none') return;
-            // 4. Grid-Layout auflösen, wenn man manuell Fenster schließt
-            //    Ausnahme: Editor und Schrittketten-Panel — beide werden im Grid
-            //    optional zugeschaltet (.has-editor / .has-sk), ihr Toggle darf
-            //    das Grid nicht aufbrechen.
+            // 4. Grid-Layout NUR auflösen, wenn die 2D-Anlage (sim) geschlossen
+            //    wird — ohne sim macht ein Sim-Bottom/Top/Right/Left-Layout keinen
+            //    Sinn mehr, flex-row ist dort die natürliche Fallback-Anordnung.
+            //    Bei fbs/iec/ced/sk-Closes bleibt das Grid bestehen und reflowt
+            //    sich über die dynamische Template-Logik in updateWorkspace.
             if (currentLayout.startsWith('grid-') && panel.style.display !== 'none'
-                && panelId !== 'circuit-editor-wrapper' && panelId !== 'sk-wrapper') {
+                && panelId === 'factory-wrapper') {
                 document.getElementById('btn-layout-text').textContent = 'Layout: ◫';
                 currentLayout = 'flex-row';
                 localStorage.setItem('valisLayout', 'flex-row');
@@ -14377,9 +14574,15 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                 wc.classList.remove('layout-grid', 'grid-sim-bottom', 'grid-sim-top', 'grid-sim-right', 'grid-sim-left');
                 wc.style.flexDirection = 'row';
             }
-            // 5. Ein/Ausblenden
-            if (panel.style.display === 'none') {
-                panel.style.display = 'flex';
+            // 5. Ein/Ausblenden — mit !important, weil die CSS-Regel
+            //    `.layout-grid .workspace-panel { display: flex !important }`
+            //    sonst ein nacktes `display: none` überschreibt und das Panel
+            //    sichtbar bleibt (fbs/iec/factory haben keine zugehörige
+            //    `:not(.has-X)`-Override-Regel, die ced/sk hier rettet).
+            const _isCurrentlyHidden = panel.style.display === 'none' ||
+                panel.style.getPropertyValue('display') === 'none';
+            if (_isCurrentlyHidden) {
+                panel.style.setProperty('display', 'flex', 'important');
                 requestAnimationFrame(() => {
                     if (panelId === 'fbs-wrapper' && currentGraph) drawGraph(currentGraph);
                     if (panelId === 'circuit-wrapper' && currentGraph) drawCircuitPlan(currentGraph, globalInputs, globalOutputs);
@@ -14389,7 +14592,7 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                     updateWorkspace();
                 });
             } else {
-                panel.style.display = 'none';
+                panel.style.setProperty('display', 'none', 'important');
                 if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = null; }
                 if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = null; }
             }
@@ -35948,9 +36151,13 @@ WAHL := <span class="num">8</span>*DIP3 + <span class="num">4</span>*DIP2 + <spa
                         let isGrid = wc && wc.classList.contains('layout-grid');
                         ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
-                            // Grid mode forces all panels visible via CSS !important — skip hiding
-                            if (el && vis[id] !== undefined && !(isGrid && !vis[id])) {
-                                el.style.display = vis[id] ? 'flex' : 'none';
+                            // Im Grid-Modus überschreibt .layout-grid .workspace-panel
+                            // ein nacktes `display: none` per !important. Daher
+                            // hier ebenfalls mit !important setzen, sonst bleiben
+                            // gespeicherte „geschlossen"-Zustände beim Reload
+                            // sichtbar.
+                            if (el && vis[id] !== undefined) {
+                                el.style.setProperty('display', vis[id] ? 'flex' : 'none', 'important');
                                 if (id === 'circuit-editor-wrapper' && vis[id] && window.cedInit) window.cedInit();
                             }
                         });

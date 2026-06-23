@@ -476,6 +476,16 @@
         #code { color: transparent; background: transparent; caret-color: #d4d4d4; z-index: 2; resize: none; outline: none; overflow: auto; }
         #highlighting { z-index: 1; pointer-events: none; overflow: hidden; }
         #highlighting-content { display: block; font-family: inherit; font-size: inherit; line-height: inherit; padding: 0; margin: 0; border: none; color: #d4d4d4; }
+        /* Toggle-Flash: kurzfristig die per DSL↔RS-Toggle gerade umgeschriebenen
+           Zeilen mit pulsierender blauer Fläche markieren, damit der User den
+           geänderten Bereich findet. Wird vom Toggle-Handler an die jeweiligen
+           Zeilen-Spans als CSS-Klasse gehängt und nach ~1.6 s wieder entfernt. */
+        @keyframes skToggleFlash {
+            0%   { background-color: rgba(86, 156, 214, 0.45); box-shadow: inset 3px 0 0 0 #569cd6; }
+            70%  { background-color: rgba(86, 156, 214, 0.15); box-shadow: inset 3px 0 0 0 #569cd6; }
+            100% { background-color: transparent;                box-shadow: inset 3px 0 0 0 transparent; }
+        }
+        #highlighting-content .sk-toggle-flash { animation: skToggleFlash 1.6s ease-out 1; }
         .token.assign { color: #C586C0; font-weight: bold; }
         .token.operator { color: #569CD6; font-weight: bold; }
         .token.paren { color: #FFD700; font-weight: bold; }
@@ -5566,14 +5576,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (newPrev <= 50) newNext = totalSize - 50;
                 if (newNext <= 50) newPrev = totalSize - 50;
                 if (isGridMode) {
-                    if (isHorizontalMove) {
-                        // FIX: 'px' statt 'fr'! Verhindert, dass das Grid beim Ziehen explodiert.
-                        wc.style.setProperty('--grid-col-1', newPrev + 'px'); 
-                        wc.style.setProperty('--grid-col-2', newNext + 'px'); 
-                    } else {
-                        wc.style.setProperty('--grid-row-1', newPrev + 'px'); 
-                        wc.style.setProperty('--grid-row-2', newNext + 'px'); 
-                    }
+                    // Patcht die im mousedown gespeicherten Track-Indizes direkt
+                    // in grid-template-columns/rows. Vorher per --grid-col-1/2
+                    // — das traf re/rS auf falsche Tracks.
+                    _wsApplyGridResize(wc, newPrev, newNext, isHorizontalMove);
                 } else {
                     wsPrevPanel.style.flex = `0 0 ${newPrev}px`;
                     wsNextPanel.style.flex = `0 0 ${newNext}px`;
@@ -7554,7 +7560,13 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                                 <code>S_SEL: &lt;int-var&gt;</code> — der Generator emittiert intern pro Step einen
                                 Compare-Helper <code>_SK_&lt;chain&gt;_SEL_EQ_&lt;i&gt; := &lt;int-var&gt; == &lt;i&gt;</code>
                                 und nutzt diese als Step-Auswahl. Funktioniert dank Arithmetik-Evaluator
-                                mit Vergleichsoperatoren.</li>
+                                mit Vergleichsoperatoren.<br>
+                                <b>Tipp:</b> Eine CTU als Integer-Quelle lässt sich direkt einlesen:
+                                <code>SEL_RAW := CTU(NEXT, RST, 9999)</code> →
+                                <code>SEL := (SEL_RAW.cv % N) + 1</code> →
+                                <code>S_SEL: SEL</code>. Details zum Property-Zugriff
+                                <code>.cv</code>/<code>.et</code>/<code>.q</code> stehen im
+                                <a href="#" onclick="event.preventDefault(); if(window._openArithDocsModal) window._openArithDocsModal();" style="color:#569cd6;">Arithmetik-Tab → Operatoren &amp; Syntax → Erlaubte Operanden</a>.</li>
                             <li><code>S_ON: BTN_MAN_ON</code> — Step-Set-Auslöser</li>
                             <li><code>S_OFF: BTN_MAN_OFF</code> — analog für Deaktivierung</li>
                         </ul>
@@ -9441,7 +9453,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-step-name': step.name,
                                     'data-action-idx': ai
                                 }, aBox);
-                                t.textContent = formatActionInline(a);
+                                const _q = a.qualifier || { kind: 'N' };
+                                const _baseTxt = formatActionInline(a);
+                                t.textContent = _baseTxt;
+                                // D-/L-Qualifier-Texte werden im Live-Modus von
+                                // highlightActive() um eine Rest-Sekunden-Anzeige
+                                // erweitert. data-qual-base hält den statischen
+                                // Inhalt, damit wir den Suffix bei jedem Tick
+                                // konsistent neu setzen können (auch wenn der
+                                // Timer wieder ruht).
+                                if (_q.kind === 'D' || _q.kind === 'L') {
+                                    t.setAttribute('data-qual-kind', _q.kind);
+                                    t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
+                                    t.setAttribute('data-qual-time', String(_q.time != null ? _q.time : 1.0));
+                                    t.setAttribute('data-qual-base', _baseTxt);
+                                }
                                 if (isEditable) {
                                     renderToolBtn(svg, ax + 220 - 10, y + 12 + ai * 14, '×', 'action-del', chain.name, step.name, ai);
                                 }
@@ -9465,9 +9491,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         // damit sie zur Step-Visualisierung gehören (Init-Doppelrand etc.
                         // bleibt sauber).
                         const badgeLines = [];
-                        if (step.interlock)   badgeLines.push({ cls: 'sk-step-il-badge', text: '🔒 IL: ' + step.interlock.expr });
-                        if (step.supervision) badgeLines.push({ cls: 'sk-step-sv-badge', text: '⚠ SV: '  + step.supervision.expr,
-                                                                faultVar: '_FAULT_' + chain.name + '_Q' + num });
+                        // Helper-Name eines AFTER-TON konstruieren — passend zum
+                        // Generator (`_TMR_<chain>_<step>_<time-mit-_>`). Wird vom
+                        // Live-Countdown in highlightActive nachgeschlagen.
+                        const _mkAfter = (expr) => {
+                            if (!expr) return null;
+                            const m = String(expr).match(/\bAFTER\s+([\d.]+)\b/i);
+                            if (!m) return null;
+                            const time = parseFloat(m[1]);
+                            const safeTime = String(time).replace('.', '_');
+                            return { time, helper: 'TON__TMR_' + chain.name + '_' + step.name + '_' + safeTime };
+                        };
+                        if (step.interlock)   badgeLines.push({
+                            cls: 'sk-step-il-badge', text: '🔒 IL: ' + step.interlock.expr,
+                            after: _mkAfter(step.interlock.expr)
+                        });
+                        if (step.supervision) badgeLines.push({
+                            cls: 'sk-step-sv-badge', text: '⚠ SV: '  + step.supervision.expr,
+                            faultVar: '_FAULT_' + chain.name + '_Q' + num,
+                            after: _mkAfter(step.supervision.expr)
+                        });
                         badgeLines.forEach((b, bi) => {
                             const t = el('text', {
                                 x: colX - W/2, y: y + 10 + bi * 12,
@@ -9475,6 +9518,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             }, svg);
                             if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
                             t.textContent = b.text;
+                            // AFTER-Countdown markieren (Live-Update fügt ` ⏱Rs` an).
+                            if (b.after) {
+                                t.setAttribute('data-after-helper', b.after.helper);
+                                t.setAttribute('data-after-time',   String(b.after.time));
+                                t.setAttribute('data-after-base',   b.text);
+                            }
                             maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
                         });
                         if (badgeLines.length) y += 12 * badgeLines.length + 2;
@@ -9504,7 +9553,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-from-step':  t.from,
                                     'data-to-step':    t.to
                                 }, tg);
-                                cond.textContent = (t.cond || 'TRUE') + ' → ' + t.to;
+                                const baseTxt = (t.cond || 'TRUE') + ' → ' + t.to;
+                                cond.textContent = baseTxt;
+                                // AFTER-Countdown auch für Transition-Conds —
+                                // gleiches `_TMR_<chain>_<from>_<time>`-Schema.
+                                const _am = String(t.cond || '').match(/\bAFTER\s+([\d.]+)\b/i);
+                                if (_am) {
+                                    const _tt = parseFloat(_am[1]);
+                                    const _safe = String(_tt).replace('.', '_');
+                                    cond.setAttribute('data-after-helper', 'TON__TMR_' + chain.name + '_' + t.from + '_' + _safe);
+                                    cond.setAttribute('data-after-time',   String(_tt));
+                                    cond.setAttribute('data-after-base',   baseTxt);
+                                }
                             });
                             el('line', { class: 'sk-trans-line', x1: colX, y1: barY, x2: colX, y2: barY + VSP/2 }, tg);
                             y += VSP;
@@ -9585,17 +9645,39 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 } else {
                                     qPrefix = q.kind;
                                 }
-                                t.textContent = qPrefix.padEnd(4, ' ') + a.lhs + ' := ' + a.rhs;
+                                const _baseTxt = qPrefix.padEnd(4, ' ') + a.lhs + ' := ' + a.rhs;
+                                t.textContent = _baseTxt;
+                                // Live-Countdown analog Grafcet (siehe dort).
+                                if (q.kind === 'D' || q.kind === 'L') {
+                                    t.setAttribute('data-qual-kind', q.kind);
+                                    t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
+                                    t.setAttribute('data-qual-time', String(q.time != null ? q.time : 1.0));
+                                    t.setAttribute('data-qual-base', _baseTxt);
+                                }
                             });
                             maxX = Math.max(maxX, ax + 230);
                         }
                         y += H;
 
                         // INTERLOCK-/SUPERVISION-Badges unter dem Step.
+                        const _mkAfter = (expr) => {
+                            if (!expr) return null;
+                            const m = String(expr).match(/\bAFTER\s+([\d.]+)\b/i);
+                            if (!m) return null;
+                            const time = parseFloat(m[1]);
+                            const safeTime = String(time).replace('.', '_');
+                            return { time, helper: 'TON__TMR_' + chain.name + '_' + step.name + '_' + safeTime };
+                        };
                         const badgeLines = [];
-                        if (step.interlock)   badgeLines.push({ cls: 'sk-step-il-badge', text: '🔒 V: ' + step.interlock.expr });
-                        if (step.supervision) badgeLines.push({ cls: 'sk-step-sv-badge', text: '⚠ S: '  + step.supervision.expr,
-                                                                faultVar: '_FAULT_' + chain.name + '_Q' + num });
+                        if (step.interlock)   badgeLines.push({
+                            cls: 'sk-step-il-badge', text: '🔒 V: ' + step.interlock.expr,
+                            after: _mkAfter(step.interlock.expr)
+                        });
+                        if (step.supervision) badgeLines.push({
+                            cls: 'sk-step-sv-badge', text: '⚠ S: '  + step.supervision.expr,
+                            faultVar: '_FAULT_' + chain.name + '_Q' + num,
+                            after: _mkAfter(step.supervision.expr)
+                        });
                         badgeLines.forEach((b, bi) => {
                             const t = el('text', {
                                 x: colX - W/2, y: y + 10 + bi * 12,
@@ -9603,6 +9685,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             }, svg);
                             if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
                             t.textContent = b.text;
+                            if (b.after) {
+                                t.setAttribute('data-after-helper', b.after.helper);
+                                t.setAttribute('data-after-time',   String(b.after.time));
+                                t.setAttribute('data-after-base',   b.text);
+                            }
                             maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
                         });
                         if (badgeLines.length) y += 12 * badgeLines.length + 2;
@@ -9633,7 +9720,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-from-step':  t.from,
                                     'data-to-step':    t.to
                                 }, tg);
-                                cond.textContent = (t.cond || 'TRUE') + ' → ' + t.to;
+                                const baseTxt = (t.cond || 'TRUE') + ' → ' + t.to;
+                                cond.textContent = baseTxt;
+                                const _am = String(t.cond || '').match(/\bAFTER\s+([\d.]+)\b/i);
+                                if (_am) {
+                                    const _tt = parseFloat(_am[1]);
+                                    const _safe = String(_tt).replace('.', '_');
+                                    cond.setAttribute('data-after-helper', 'TON__TMR_' + chain.name + '_' + t.from + '_' + _safe);
+                                    cond.setAttribute('data-after-time',   String(_tt));
+                                    cond.setAttribute('data-after-base',   baseTxt);
+                                }
                             });
                             el('line', { class: 'sk-trans-line', x1: colX, y1: barY, x2: colX, y2: barY + VSP/2 }, tg);
                             y += VSP;
@@ -9676,16 +9772,71 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 recognized.forEach(r => baseMap.set(r.chain.name, r.base));
 
                 const visible = allChains.length > 0;
-                // Top-Bar-Button nur anzeigen, wenn mindestens eine Kette existiert.
-                if (btn) btn.style.display = visible ? '' : 'none';
+                // Im PRO-Modus ist der Top-Bar-Button IMMER da — das Panel dient
+                // dann auch als Einstiegspunkt zum Anlegen neuer Ketten (Empty-State
+                // unten). Ohne PRO-Modus sind wir oben bereits ausgestiegen.
+                if (btn) btn.style.display = '';
                 if (!visible) {
-                    // Panel zu — der Button verschwindet, das Panel wird nicht
-                    // explizit geschlossen (toggleWorkspaceView verhindert das
-                    // Schließen des letzten sichtbaren Panels). Wenn der User es
-                    // offen hatte, leeren wir nur die SVG.
+                    // Empty-State: kein Code mit Schrittkette → zeige Aufforderung
+                    // im Panel, damit man Erstellung von hier aus initiieren kann.
                     while (svg.firstChild) svg.removeChild(svg.firstChild);
-                    if (panel.style.display !== 'none') panel.style.display = 'none';
-                    if ($info()) $info().textContent = '';
+                    const g = document.createElementNS(SVG_NS, 'g');
+                    g.setAttribute('class', 'sk-empty');
+                    const W = 420, H = 220;
+                    const rect = document.createElementNS(SVG_NS, 'rect');
+                    rect.setAttribute('x', 20); rect.setAttribute('y', 20);
+                    rect.setAttribute('width', W - 40); rect.setAttribute('height', H - 40);
+                    rect.setAttribute('rx', 8); rect.setAttribute('fill', '#1e2229');
+                    rect.setAttribute('stroke', '#37474f'); rect.setAttribute('stroke-dasharray', '6 4');
+                    g.appendChild(rect);
+                    const mkText = (y, str, opts) => {
+                        const t = document.createElementNS(SVG_NS, 'text');
+                        t.setAttribute('x', W / 2); t.setAttribute('y', y);
+                        t.setAttribute('text-anchor', 'middle');
+                        t.setAttribute('fill', (opts && opts.color) || '#cfd8dc');
+                        t.setAttribute('font-size', (opts && opts.size) || 14);
+                        if (opts && opts.weight) t.setAttribute('font-weight', opts.weight);
+                        t.textContent = str;
+                        g.appendChild(t);
+                    };
+                    mkText(64,  'Noch keine Schrittkette im Code', { size: 16, weight: 'bold' });
+                    mkText(92,  'Eine SCHRITTKETTE-Block im Editor parsen', { size: 12, color: '#90a4ae' });
+                    mkText(110, 'oder per Klick unten eine Vorlage einfügen.', { size: 12, color: '#90a4ae' });
+                    // Insert-Button: schreibt ein Minimal-Template am Cursor des Editors ein
+                    const btnG = document.createElementNS(SVG_NS, 'g');
+                    btnG.setAttribute('class', 'sk-empty-insert');
+                    btnG.setAttribute('cursor', 'pointer');
+                    const bw = 260, bh = 38, bx = (W - bw) / 2, by = 140;
+                    const brc = document.createElementNS(SVG_NS, 'rect');
+                    brc.setAttribute('x', bx); brc.setAttribute('y', by);
+                    brc.setAttribute('width', bw); brc.setAttribute('height', bh);
+                    brc.setAttribute('rx', 6); brc.setAttribute('fill', '#1976d2');
+                    brc.setAttribute('stroke', '#0d47a1');
+                    btnG.appendChild(brc);
+                    const btx = document.createElementNS(SVG_NS, 'text');
+                    btx.setAttribute('x', W / 2); btx.setAttribute('y', by + 24);
+                    btx.setAttribute('text-anchor', 'middle');
+                    btx.setAttribute('fill', '#fff');
+                    btx.setAttribute('font-size', 14); btx.setAttribute('font-weight', 'bold');
+                    btx.textContent = '＋ Neue SCHRITTKETTE einfügen';
+                    btnG.appendChild(btx);
+                    btnG.addEventListener('click', () => {
+                        const ta = document.getElementById('code');
+                        if (!ta) return;
+                        const tmpl = '\nSCHRITTKETTE NEU:\n  STEP S1 (INIT):\n  TRANS:\n    START -> S2\n\n  STEP S2 (LAUFEN):\n  TRANS:\n    AFTER 2.0 -> S1\nEND\n';
+                        const pos = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+                        ta.value = ta.value.slice(0, pos) + tmpl + ta.value.slice(pos);
+                        ta.dispatchEvent(new Event('input', { bubbles: true }));
+                        // Cursor auf den Step-Block setzen, damit der User direkt editieren kann
+                        const newPos = pos + tmpl.indexOf('S1') + 2;
+                        ta.focus(); ta.setSelectionRange(newPos, newPos);
+                    });
+                    g.appendChild(btnG);
+                    svg.appendChild(g);
+                    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+                    svg.style.minWidth = W + 'px';
+                    svg.style.minHeight = H + 'px';
+                    if ($info()) $info().textContent = 'leer — neue Kette anlegen';
                     return;
                 }
                 while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -9769,6 +9920,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             setTimeout(() => tEl.classList.remove('firing'), 1300);
                         });
                     }
+                });
+                // D/L-Action-Qualifier — Rest-Sekunden-Countdown im Live-Modus.
+                // Der Renderer markiert betreffende <text>-Elemente mit
+                // data-qual-kind/var/time/base. Die zugehörigen TON-/TP-Timer
+                // schreiben ihre .et (ms) in window.simTimers; wir hängen die
+                // verbleibenden Sekunden hinter den statischen Text-Base.
+                const _timers = (typeof window !== 'undefined' && window.simTimers) ? window.simTimers : {};
+                svg.querySelectorAll('text[data-qual-kind]').forEach(tEl => {
+                    const kind   = tEl.getAttribute('data-qual-kind');
+                    const v      = tEl.getAttribute('data-qual-var');
+                    const preset = parseFloat(tEl.getAttribute('data-qual-time')) || 0;
+                    const base   = tEl.getAttribute('data-qual-base') || tEl.textContent;
+                    const inst   = _timers[(kind === 'D' ? 'TON_' : 'TP_') + v];
+                    let suffix = '';
+                    if (inst) {
+                        const elapsedSec = (inst.et || 0) / 1000;
+                        const remaining  = Math.max(0, preset - elapsedSec);
+                        if (kind === 'D') {
+                            // Delayed: et zählt, bis q schaltet (Action aktiv).
+                            if (inst.q) suffix = ' ▶';
+                            else if (elapsedSec > 0) suffix = ' ⏱' + remaining.toFixed(1) + 's';
+                        } else { // L
+                            // Pulse: q ist während der Zeit aktiv, et zählt mit.
+                            if (inst.q) suffix = ' ⏱' + remaining.toFixed(1) + 's';
+                        }
+                    }
+                    if (tEl.textContent !== base + suffix) tEl.textContent = base + suffix;
+                });
+                // AFTER-Countdown für SV/IL-Badges und Transition-Conds. Der
+                // Renderer setzt data-after-helper auf den Block-ID des TON
+                // (z.B. `TON__TMR_<chain>_<step>_<safeTime>`), data-after-time
+                // auf den Preset und data-after-base auf den Originaltext.
+                // Live: ` ⏱<rest>s` solange et > 0 und q noch nicht TRUE,
+                // sonst ` ▶` (Trans kann feuern bzw. SV-Watchdog hat ausgelöst).
+                svg.querySelectorAll('[data-after-helper]').forEach(aEl => {
+                    const helper = aEl.getAttribute('data-after-helper');
+                    const preset = parseFloat(aEl.getAttribute('data-after-time')) || 0;
+                    const base   = aEl.getAttribute('data-after-base') || aEl.textContent;
+                    const inst   = _timers[helper];
+                    let suffix = '';
+                    if (inst) {
+                        const elapsedSec = (inst.et || 0) / 1000;
+                        const remaining  = Math.max(0, preset - elapsedSec);
+                        if (inst.q) suffix = ' ▶';
+                        else if (elapsedSec > 0) suffix = ' ⏱' + remaining.toFixed(1) + 's';
+                    }
+                    if (aEl.textContent !== base + suffix) aEl.textContent = base + suffix;
                 });
                 // Snapshot für den nächsten Tick aktualisieren.
                 lastQState.clear();
@@ -10000,6 +10198,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
 
             $svg() && $svg().addEventListener('click', (e) => {
+                // Bei aktivem Inline-Edit: SVG-Klicks NICHT direkt in einen
+                // weiteren Edit umschlagen. Parallel-Verzweigungen rendern die
+                // Transition-Conds dicht beieinander (14 px Zeilenabstand);
+                // ein knapp daneben gesetzter Klick öffnete sonst sofort den
+                // nächsten Edit-Input und „raubte" dem laufenden Edit den
+                // Fokus. Wir lassen blur() den aktuellen Edit sauber schließen
+                // und erfordern einen zweiten Klick für den neuen Edit.
+                if (_activeEditInput) return;
                 // Erst Tool-Buttons (×, ↑, ↓, +) prüfen — die brauchen kein Inline-Edit.
                 const tool = e.target.closest('.sk-tool-btn');
                 if (tool) {
@@ -12701,7 +12907,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (cycle.length === 1) {
                         title = 'Selbsthaltung über vorherigen Tick';
                         why = '"' + node + '" steht auf beiden Seiten der Zuweisung. VALIS wertet das als Selbsthaltung über den vorherigen Tick-Wert aus — funktioniert technisch, ist aber im Logikplan eine Rückkopplungs-Schleife. Für klarere Visualisierung und deterministisches Verhalten empfiehlt sich ein RS-/SR-Glied.';
-                        hint = 'Klicke unten auf einen der Buttons, um die Zeile automatisch in ein RS- oder SR-Glied umzuschreiben.';
+                        hint = 'Klicke unten auf einen der Buttons, um die Zeile automatisch in ein RS- oder SR-Glied umzuschreiben. ' +
+                               'Wenn das Ziel ein Zähler ist (z.B. Step-Auswahl 1..N, Stückzahl) ist meistens CTU + Property-Zugriff schöner: ' +
+                               '`CNT := CTU(INC, RST, 9999)` und dann z.B. `IDX := (CNT.cv % N) + 1` — ohne Selbst-Referenz.';
                         canConvertSelfHold = true;
                     } else if (cycle.length === 2) {
                         title = 'Direkte zirkuläre Abhängigkeit';
@@ -13772,6 +13980,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         };
 
+        // Highlight-Helper für die DSL↔RS-Toggles: nach dem Re-Render der
+        // highlighting-content-Spans bekommen die geänderten Zeilen kurzfristig
+        // die .sk-toggle-flash-Klasse (siehe CSS-Animation). startLine/lineCount
+        // sind 0-basiert. Wenn requestAnimationFrame nicht verfügbar ist,
+        // fallback auf setTimeout(0).
+        window._flashEditorLines = function(startLine, lineCount) {
+            const rAF = window.requestAnimationFrame || ((cb) => setTimeout(cb, 16));
+            rAF(() => rAF(() => {
+                const hc = document.getElementById('highlighting-content');
+                if (!hc) return;
+                const spans = hc.children;
+                for (let i = startLine; i < startLine + lineCount && i < spans.length; i++) {
+                    if (!spans[i]) continue;
+                    spans[i].classList.remove('sk-toggle-flash');
+                    // Reflow erzwingen, damit die Animation auch beim wiederholten
+                    // Toggle frisch anläuft (Browser caches die animation sonst).
+                    void spans[i].offsetWidth;
+                    spans[i].classList.add('sk-toggle-flash');
+                }
+                setTimeout(() => {
+                    for (let i = startLine; i < startLine + lineCount && i < spans.length; i++) {
+                        if (spans[i]) spans[i].classList.remove('sk-toggle-flash');
+                    }
+                }, 1700);
+            }));
+        };
         // === Schrittketten-Toggle: DSL ↔ RS-Glied-Form im Editor ===
         // DSL → RS: erzeugt die expandierte RS-Form mit eingebettetem DSL-Original
         // als `// @dsl …`-Kommentare. Der Roundtrip zurück kann den DSL-Quelltext
@@ -13788,7 +14022,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (typeof window._printSchrittketteAsRS !== 'function') return;
             const baseNum = (window._schrittkettenChainBase && window._schrittkettenChainBase.get(chainName)) || 1;
             const rsText = window._printSchrittketteAsRS(chain, { baseNum, embedDSL: dslText });
-            lines.splice(chain.startLine, chain.endLine - chain.startLine + 1, ...rsText.split('\n'));
+            const rsLines = rsText.split('\n');
+            const _newStart = chain.startLine;
+            const _newCount = rsLines.length;
+            lines.splice(chain.startLine, chain.endLine - chain.startLine + 1, ...rsLines);
             ta.value = lines.join('\n');
             // Cursor an den Anfang der ersetzten Region setzen.
             let off = 0;
@@ -13796,6 +14033,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { ta.selectionStart = ta.selectionEnd = off; } catch(_e) {}
             ta.focus();
             ta.dispatchEvent(new Event('input'));
+            // Hervorhebung der umgeschriebenen Zeilen (Animation läuft 1.6 s).
+            if (typeof window._flashEditorLines === 'function') {
+                window._flashEditorLines(_newStart, _newCount);
+            }
         };
 
         // Hand-RS → DSL: erkennt eine hand-geschriebene RS-Kette über den
@@ -13814,14 +14055,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!rec) { alert('Hand-RS-Kette „' + chainName + '" nicht (mehr) erkannt.'); return; }
             if (!confirm('„' + chainName + '" als SCHRITTKETTE-Block neu schreiben?\n\nDer erkannte RS-Block (Zeilen ' + (rec.chain.startLine + 1) + '–' + (rec.chain.endLine + 1) + ') wird durch die DSL-Form ersetzt. Eingebettete Kommentare oder eigene Layouts gehen dabei verloren.')) return;
             const lines = ta.value.split('\n');
-            const dslText = window._printSchrittketteAsDSL(rec.chain);
-            lines.splice(rec.chain.startLine, rec.chain.endLine - rec.chain.startLine + 1, ...dslText.split('\n'));
+            const dslLines = window._printSchrittketteAsDSL(rec.chain).split('\n');
+            const _newStart = rec.chain.startLine;
+            const _newCount = dslLines.length;
+            lines.splice(rec.chain.startLine, rec.chain.endLine - rec.chain.startLine + 1, ...dslLines);
             ta.value = lines.join('\n');
             let off = 0;
             for (let i = 0; i < rec.chain.startLine; i++) off += lines[i].length + 1;
             try { ta.selectionStart = ta.selectionEnd = off; } catch(_e) {}
             ta.focus();
             ta.dispatchEvent(new Event('input'));
+            if (typeof window._flashEditorLines === 'function') {
+                window._flashEditorLines(_newStart, _newCount);
+            }
         };
 
         // RS → DSL: liest die `// @dsl …`-Kommentare des markierten RS-Blocks und
@@ -13839,14 +14085,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (!confirm('„' + chainName + '" zurück in die SCHRITTKETTE-Form wandeln?\n\nManuelle Änderungen an der RS-Form werden dabei verworfen.')) return;
             const lines = ta.value.split('\n');
-            const dslText = block.dslLines.join('\n');
-            lines.splice(block.startLine, block.endLine - block.startLine + 1, ...dslText.split('\n'));
+            const dslLines = block.dslLines.slice();
+            const _newStart = block.startLine;
+            const _newCount = dslLines.length;
+            lines.splice(block.startLine, block.endLine - block.startLine + 1, ...dslLines);
             ta.value = lines.join('\n');
             let off = 0;
             for (let i = 0; i < block.startLine; i++) off += lines[i].length + 1;
             try { ta.selectionStart = ta.selectionEnd = off; } catch(_e) {}
             ta.focus();
             ta.dispatchEvent(new Event('input'));
+            if (typeof window._flashEditorLines === 'function') {
+                window._flashEditorLines(_newStart, _newCount);
+            }
         };
         window._openCodeEditorSettings = function(ev) {
             if (ev) ev.stopPropagation();
@@ -14373,12 +14624,48 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 return;
             }
-            const codeColTrack = cells.map(() => 'minmax(0, 1fr)').join(' ');
+            // Separatoren zwischen den sichtbaren Code-Cells einbauen (sodass der
+            // User auch im degraded-Modus iec/ced bzw. fbs/sk gegeneinander
+            // ziehen kann). Wir nehmen die Resizer-Elemente in fester Reihenfolge:
+            //   1. Separator = ws-resizer-1   (area 'r1')
+            //   2. Separator = ws-resizer-iec-edit (area 're')
+            //   3. Separator = ws-resizer-sk  (area 'rS')
+            // Jedem benutzten Resizer wird inline grid-area + display:block
+            // gesetzt (überschreibt die has-editor/has-sk-CSS-Hide-Regeln);
+            // nicht benutzte Resizer werden mit display:none !important versteckt.
+            const sepAll = [
+                { name: 'r1', el: document.getElementById('ws-resizer-1') },
+                { name: 're', el: document.getElementById('ws-resizer-iec-edit') },
+                { name: 'rS', el: document.getElementById('ws-resizer-sk') },
+            ];
+            const sepCount = Math.max(0, cells.length - 1);
+            const sepUsed = sepAll.slice(0, sepCount);
+            sepAll.forEach((s, i) => {
+                if (!s.el) return;
+                if (i < sepCount) {
+                    s.el.style.gridArea = s.name;
+                    s.el.style.setProperty('display', 'block', 'important');
+                } else {
+                    s.el.style.setProperty('display', 'none', 'important');
+                }
+            });
+            // Code-Reihe mit interleavten Separatoren: ['fbs', 'r1', 'iec', 're', 'ced']
+            const codeRowParts = [];
+            const colTrackParts = [];
+            for (let i = 0; i < cells.length; i++) {
+                codeRowParts.push(cells[i]);
+                colTrackParts.push('minmax(0, 1fr)');
+                if (i < cells.length - 1) {
+                    codeRowParts.push(sepUsed[i].name);
+                    colTrackParts.push('6px');
+                }
+            }
+            const codeRow = codeRowParts.join(' ');
+            const codeColTrack = colTrackParts.join(' ');
             if (layoutBase === 'bottom' || layoutBase === 'top') {
-                const codeRow = cells.join(' ');
                 if (vis.sim) {
-                    const r2Row  = cells.map(() => 'r2').join(' ');
-                    const simRow = cells.map(() => 'sim').join(' ');
+                    const r2Row  = codeRowParts.map(() => 'r2').join(' ');
+                    const simRow = codeRowParts.map(() => 'sim').join(' ');
                     wcEl.style.gridTemplateAreas = layoutBase === 'bottom'
                         ? `"${codeRow}" "${r2Row}" "${simRow}"`
                         : `"${simRow}" "${r2Row}" "${codeRow}"`;
@@ -14390,23 +14677,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     wcEl.style.gridTemplateRows = 'minmax(0, 1fr)';
                 }
             } else if (layoutBase === 'right' || layoutBase === 'left') {
-                // Code-Cells als eigene Reihen stapeln, sim spannt rechts/links
-                // über alle Reihen.
+                // Code-Cells als eigene Reihen stapeln (mit Separator-Reihen
+                // dazwischen). sim und r2 spannen über alle Reihen.
+                const rowAreas = [];
+                const rowTracks = [];
+                for (let i = 0; i < cells.length; i++) {
+                    const c = cells[i];
+                    rowAreas.push(layoutBase === 'right' ? `"${c} r2 sim"` : `"sim r2 ${c}"`);
+                    rowTracks.push('minmax(0, 1fr)');
+                    if (i < cells.length - 1) {
+                        const sep = sepUsed[i].name;
+                        rowAreas.push(layoutBase === 'right' ? `"${sep} r2 sim"` : `"sim r2 ${sep}"`);
+                        rowTracks.push('6px');
+                    }
+                }
                 if (vis.sim) {
-                    const rows = cells.map(c => layoutBase === 'right'
-                        ? `"${c} r2 sim"`
-                        : `"sim r2 ${c}"`
-                    ).join(' ');
-                    wcEl.style.gridTemplateAreas = rows;
-                    wcEl.style.gridTemplateColumns = layoutBase === 'right'
-                        ? 'minmax(0, 1fr) 6px minmax(0, 1fr)'
-                        : 'minmax(0, 1fr) 6px minmax(0, 1fr)';
-                    wcEl.style.gridTemplateRows = cells.map(() => 'minmax(0, 1fr)').join(' ');
+                    wcEl.style.gridTemplateAreas = rowAreas.join(' ');
+                    wcEl.style.gridTemplateColumns = 'minmax(0, 1fr) 6px minmax(0, 1fr)';
+                    wcEl.style.gridTemplateRows = rowTracks.join(' ');
                 } else {
-                    const rows = cells.map(c => `"${c}"`).join(' ');
-                    wcEl.style.gridTemplateAreas = rows;
+                    // ohne sim — nur eine Spalte mit Code-Cells und Separatoren als Reihen
+                    const rowAreasNoSim = [];
+                    for (let i = 0; i < cells.length; i++) {
+                        rowAreasNoSim.push(`"${cells[i]}"`);
+                        if (i < cells.length - 1) rowAreasNoSim.push(`"${sepUsed[i].name}"`);
+                    }
+                    wcEl.style.gridTemplateAreas = rowAreasNoSim.join(' ');
                     wcEl.style.gridTemplateColumns = 'minmax(0, 1fr)';
-                    wcEl.style.gridTemplateRows = cells.map(() => 'minmax(0, 1fr)').join(' ');
+                    wcEl.style.gridTemplateRows = rowTracks.join(' ');
                 }
             } else {
                 removeAll();
@@ -14633,11 +14931,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     drawCircuitPlan(currentGraph, globalInputs, globalOutputs);
                 }
 				// NEU: Setzt die Schiebe-Pfeile im Grid-Modus korrekt (vertikal vs. horizontal)
+                //  isVerticalSplit = Code-Reihe waagrecht (sim-bottom/top) →
+                //    r1/re/rS sitzen zwischen Code-Spalten → col-resize
+                //    r2 sitzt zwischen Code- und sim-Reihe → row-resize
+                //  Sonst (sim-right/left) ist die Code-Spalte vertikal → genau umgekehrt.
                 const isVerticalSplit = val === 'grid-sim-bottom' || val === 'grid-sim-top';
-                document.getElementById('ws-resizer-1').style.cursor = isVerticalSplit ? 'col-resize' : 'row-resize';
-                document.getElementById('ws-resizer-2').style.cursor = isVerticalSplit ? 'row-resize' : 'col-resize';
+                const codeCursor = isVerticalSplit ? 'col-resize' : 'row-resize';
+                const simCursor  = isVerticalSplit ? 'row-resize' : 'col-resize';
+                document.getElementById('ws-resizer-1').style.cursor = codeCursor;
+                document.getElementById('ws-resizer-2').style.cursor = simCursor;
                 const rE = document.getElementById('ws-resizer-iec-edit');
-                if (rE) rE.style.cursor = 'col-resize';
+                if (rE) rE.style.cursor = codeCursor;
+                const rS = document.getElementById('ws-resizer-sk');
+                if (rS) rS.style.cursor = codeCursor;
             } else {
                 // Zurück in den flexiblen Modus (Nebeneinander/Untereinander)
                 let isCol = val === 'flex-col';
@@ -14663,6 +14969,95 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         let wsStartSizePrev = 0;
         let wsStartSizeNext = 0;
         let wsMouseStart = 0;
+        // Indizes in grid-template-columns/rows (für Grid-Modus): welche Tracks der
+        // aktuelle Resizer beim Ziehen modifiziert. Wird beim mousedown/touchstart
+        // gesetzt, beim mousemove/touchmove gelesen. Beispiel sim-bottom.has-editor:
+        //   tracks = [fbs, 6, iec, 6, ced] → wenn re geklickt wird, prev=2 next=4.
+        let wsGridPrevIdx = -1;
+        let wsGridNextIdx = -1;
+        // Findet die Code-Cells, zwischen denen der Resizer im Grid sitzt — nicht
+        // per Hardcoded-tracks[0]/[2], sondern über grid-template-areas. Damit
+        // arbeiten r1/re/rS/r2 unabhängig vom konkreten Layout und auch im
+        // Degraded-Modus mit nur 2 Code-Panels.
+        //
+        // Liefert null, wenn keine eindeutigen Nachbarn gefunden — dann wird das
+        // Resize-Event abgebrochen.
+        function _wsFindGridNeighbors(wc, resizer, isHorizontal) {
+            const csR = window.getComputedStyle(resizer);
+            const myArea = ((resizer.style.gridArea || csR.gridArea || '').trim().split(/\s*\/\s*/)[0] || '').trim();
+            if (!myArea || myArea === 'auto' || myArea === 'none') return null;
+            const csC = window.getComputedStyle(wc);
+            const areasStr = csC.gridTemplateAreas;
+            if (!areasStr || areasStr === 'none') return null;
+            const rowMatches = areasStr.match(/"[^"]*"/g);
+            if (!rowMatches) return null;
+            const rows = rowMatches.map(s => s.slice(1, -1).split(/\s+/).filter(Boolean));
+            // Erste Zelle finden, in der myArea steht
+            let myRow = -1, myCol = -1;
+            for (let r = 0; r < rows.length; r++) {
+                const c = rows[r].indexOf(myArea);
+                if (c >= 0) { myRow = r; myCol = c; break; }
+            }
+            if (myRow < 0) return null;
+            // prev/next ermitteln (skippt benachbarte Zellen die zur selben Area gehören)
+            let prevName = null, nextName = null;
+            if (isHorizontal) {
+                const row = rows[myRow];
+                let i = myCol - 1;
+                while (i >= 0 && row[i] === myArea) i--;
+                if (i >= 0) prevName = row[i];
+                let j = myCol + 1;
+                while (j < row.length && row[j] === myArea) j++;
+                if (j < row.length) nextName = row[j];
+            } else {
+                let i = myRow - 1;
+                while (i >= 0 && rows[i][myCol] === myArea) i--;
+                if (i >= 0) prevName = rows[i][myCol];
+                let j = myRow + 1;
+                while (j < rows.length && rows[j][myCol] === myArea) j++;
+                if (j < rows.length) nextName = rows[j][myCol];
+            }
+            if (!prevName || !nextName) return null;
+            // Track-Indizes finden: Position der prev/next-Area im ersten Row-Array
+            // (für horizontale Resizer reicht eine Reihe, für vertikale die Spalte
+            // — beides via Lineardurchsuche).
+            let prevIdx = -1, nextIdx = -1;
+            if (isHorizontal) {
+                const row = rows[myRow];
+                prevIdx = row.indexOf(prevName);
+                nextIdx = row.indexOf(nextName);
+            } else {
+                for (let r = 0; r < rows.length; r++) {
+                    if (rows[r][myCol] === prevName && prevIdx < 0) prevIdx = r;
+                    if (rows[r][myCol] === nextName && nextIdx < 0) nextIdx = r;
+                }
+            }
+            // DOM-Elemente mit passender grid-area finden
+            const findEl = (name) => {
+                for (const el of wc.children) {
+                    const ga = ((el.style.gridArea || window.getComputedStyle(el).gridArea || '').trim().split(/\s*\/\s*/)[0] || '').trim();
+                    if (ga === name) return el;
+                }
+                return null;
+            };
+            const prevEl = findEl(prevName);
+            const nextEl = findEl(nextName);
+            if (!prevEl || !nextEl) return null;
+            return { prevEl, nextEl, prevIdx, nextIdx };
+        }
+        // Schreibt newPrev/newNext in die aktuellen grid-template-columns/rows an
+        // den vom mousedown gespeicherten Indizes. Erhält alle anderen Tracks.
+        function _wsApplyGridResize(wc, newPrev, newNext, isHorizontal) {
+            if (wsGridPrevIdx < 0 || wsGridNextIdx < 0) return;
+            const cs = window.getComputedStyle(wc);
+            const tracksStr = isHorizontal ? cs.gridTemplateColumns : cs.gridTemplateRows;
+            const tracks = tracksStr.split(' ').filter(Boolean);
+            if (wsGridPrevIdx >= tracks.length || wsGridNextIdx >= tracks.length) return;
+            tracks[wsGridPrevIdx] = newPrev + 'px';
+            tracks[wsGridNextIdx] = newNext + 'px';
+            if (isHorizontal) wc.style.gridTemplateColumns = tracks.join(' ');
+            else              wc.style.gridTemplateRows    = tracks.join(' ');
+        }
         document.querySelectorAll('.workspace-resizer').forEach(resizer => {
             resizer.addEventListener('mousedown', (e) => {
                 wsResizing = true;
@@ -14679,10 +15074,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     isHorizontalMove = wc.style.flexDirection !== 'column'; 
                 }
                 if (isGridMode) {
-                    let style = window.getComputedStyle(wc);
-                    let tracks = isHorizontalMove ? style.gridTemplateColumns.split(' ') : style.gridTemplateRows.split(' ');
-                    wsStartSizePrev = parseFloat(tracks[0]);
-                    wsStartSizeNext = parseFloat(tracks[2]);
+                    // Grid-Modus: Nachbarn dynamisch ermitteln (statt tracks[0]/[2]
+                    // hart anzunehmen) — sonst zieht z.B. re an fbs/iec statt iec/ced.
+                    const n = _wsFindGridNeighbors(wc, resizer, isHorizontalMove);
+                    if (!n) { wsResizing = false; return; }
+                    wsGridPrevIdx = n.prevIdx; wsGridNextIdx = n.nextIdx;
+                    const rectPrev = n.prevEl.getBoundingClientRect();
+                    const rectNext = n.nextEl.getBoundingClientRect();
+                    wsStartSizePrev = isHorizontalMove ? rectPrev.width : rectPrev.height;
+                    wsStartSizeNext = isHorizontalMove ? rectNext.width : rectNext.height;
                 } else {
                     // ROBUSTE NACHBAR-SUCHE: Ignoriert Platzhalter von abgekoppelten Fenstern!
                     let p = resizer.previousElementSibling;
@@ -14697,7 +15097,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     wsNextPanel = n;
                     if (!wsPrevPanel || !wsNextPanel) {
                         wsResizing = false; // Sicherheitsabbruch, falls alles drüben ist
-                        return; 
+                        return;
                     }
                     let rectPrev = wsPrevPanel.getBoundingClientRect();
                     let rectNext = wsNextPanel.getBoundingClientRect();
@@ -14725,10 +15125,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     isHorizontalMove = wc.style.flexDirection !== 'column'; 
                 }
                 if (isGridMode) {
-                    let style = window.getComputedStyle(wc);
-                    let tracks = isHorizontalMove ? style.gridTemplateColumns.split(' ') : style.gridTemplateRows.split(' ');
-                    wsStartSizePrev = parseFloat(tracks[0]);
-                    wsStartSizeNext = parseFloat(tracks[2]);
+                    const ng = _wsFindGridNeighbors(wc, resizer, isHorizontalMove);
+                    if (!ng) { wsResizing = false; return; }
+                    wsGridPrevIdx = ng.prevIdx; wsGridNextIdx = ng.nextIdx;
+                    const rPrev = ng.prevEl.getBoundingClientRect();
+                    const rNext = ng.nextEl.getBoundingClientRect();
+                    wsStartSizePrev = isHorizontalMove ? rPrev.width : rPrev.height;
+                    wsStartSizeNext = isHorizontalMove ? rNext.width : rNext.height;
                 } else {
                     let p = resizer.previousElementSibling;
                     while(p && (!p.classList.contains('workspace-panel') || p.style.display === 'none')) { p = p.previousElementSibling; }
@@ -14782,13 +15185,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (newPrev <= 50) newNext = totalSize - 50;
                 if (newNext <= 50) newPrev = totalSize - 50;
                 if (isGridMode) {
-                    if (isHorizontalMove) {
-                        wc.style.setProperty('--grid-col-1', newPrev + 'px'); 
-                        wc.style.setProperty('--grid-col-2', newNext + 'px'); 
-                    } else {
-                        wc.style.setProperty('--grid-row-1', newPrev + 'px'); 
-                        wc.style.setProperty('--grid-row-2', newNext + 'px'); 
-                    }
+                    _wsApplyGridResize(wc, newPrev, newNext, isHorizontalMove);
                 } else {
                     wsPrevPanel.style.flex = `0 0 ${newPrev}px`;
                     wsNextPanel.style.flex = `0 0 ${newNext}px`;

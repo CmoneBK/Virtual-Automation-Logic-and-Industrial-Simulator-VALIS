@@ -465,13 +465,19 @@
         #panel-resizer:hover, #panel-resizer.active { background: #007acc; border-color: #007acc; }
         #editor-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 50px; gap: 10px; }
         #simulator-container { display: flex; flex-direction: column; height: 40%; min-height: 50px; }
-        #code, #highlighting { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            margin: 0; padding: 15px; border: none; box-sizing: border-box; 
-            font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5; 
-            letter-spacing: normal; word-spacing: normal; tab-size: 4; 
+        #code, #highlighting {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            margin: 0; padding: 15px; border: none; box-sizing: border-box;
+            font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.5;
+            letter-spacing: normal; word-spacing: normal; tab-size: 4;
             white-space: pre-wrap; word-break: break-all; overflow-wrap: break-word;
             -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+            /* Beide Layer reservieren den Scrollbar-Platz unverändert. Ohne
+               diese Zeile entstehen Wrap-Divergenzen, sobald die Textarea eine
+               Scrollbar zeigt (Content-Width ~17px schmaler als #highlighting)
+               — das macht lange Zeilen im Editor umbrechen, im Highlighter
+               nicht → Selektion sitzt eine Zeile neben dem markierten Text. */
+            scrollbar-gutter: stable;
         }
         #code { color: transparent; background: transparent; caret-color: #d4d4d4; z-index: 2; resize: none; outline: none; overflow: auto; }
         #highlighting { z-index: 1; pointer-events: none; overflow: hidden; }
@@ -486,6 +492,37 @@
             100% { background-color: transparent;                box-shadow: inset 3px 0 0 0 transparent; }
         }
         #highlighting-content .sk-toggle-flash { animation: skToggleFlash 1.6s ease-out 1; }
+        /* Fold-Gutter: separate Schicht GANZ LINKS im Editor (ähnlich
+           #error-gutter rechts). Chevrons werden JS-positioniert auf die
+           Y-Koordinate der jeweiligen SCHRITTKETTE-Headerzeile. Liegt ÜBER
+           dem Textarea (z-index:3), damit Klicks ankommen. */
+        #fold-gutter {
+            position: absolute; top: 0; left: 0;
+            width: 18px; height: 100%;
+            pointer-events: none; z-index: 3; overflow: hidden;
+        }
+        #fold-gutter .sk-fold-chevron {
+            position: absolute; left: 2px;
+            width: 14px; height: 14px;
+            background: rgba(86, 156, 214, 0.18); color: #569cd6;
+            border: 1px solid rgba(86, 156, 214, 0.5);
+            border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: bold;
+            cursor: pointer; pointer-events: auto;
+            user-select: none;
+            transition: background 0.12s, color 0.12s, transform 0.12s;
+        }
+        #fold-gutter .sk-fold-chevron:hover {
+            background: rgba(86, 156, 214, 0.45);
+            color: #9cdcfe; transform: scale(1.1);
+        }
+        /* Wenn das Fold-Gutter aktiv ist, Editor-Inhalt etwas nach rechts
+           verschieben, damit die Chevrons nicht überlappen. Mit
+           with-line-numbers existiert schon padding-left:46px → die 18px
+           sind dort sowieso enthalten. */
+        .editor-wrapper.with-fold-gutter #code,
+        .editor-wrapper.with-fold-gutter #highlighting { padding-left: 22px; }
         .token.assign { color: #C586C0; font-weight: bold; }
         .token.operator { color: #569CD6; font-weight: bold; }
         .token.paren { color: #FFD700; font-weight: bold; }
@@ -510,6 +547,24 @@
         #code-glossary-popup .gp-side b { color: #569cd6; }
         #code-glossary-popup .gp-scenario { margin-top: 6px; padding: 5px 8px; border-radius: 3px; background: rgba(255,213,79,0.06); border-left: 2px solid #ffd54f; color: #d4d4d4; font-size: 11px; line-height: 1.55; white-space: pre-line; }
         #code-glossary-popup .gp-scenario b { color: #ffd54f; }
+        /* Hover-Tooltip im Code-Editor: zeigt Typ / Live-Wert / HMI-Bindung
+           für die unter dem Cursor stehende Variable. Optisch an die
+           Glossary-Popups angelehnt, aber eigenes Layout-Element. */
+        #code-var-tooltip {
+            position: fixed; z-index: 99998; max-width: 380px; min-width: 200px;
+            background: #2d2d30; border: 1px solid #3e3e42; border-left: 3px solid #dcdcaa;
+            border-radius: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+            padding: 8px 11px; color: #d4d4d4; font-size: 12px; line-height: 1.5;
+            pointer-events: none; display: none;
+        }
+        #code-var-tooltip .vt-name { font-weight: bold; color: #569cd6; font-size: 13px; font-family: 'Consolas','Courier New',monospace; }
+        #code-var-tooltip .vt-row { margin-top: 5px; display: flex; gap: 6px; align-items: flex-start; }
+        #code-var-tooltip .vt-label { color: #999; font-size: 11px; min-width: 64px; }
+        #code-var-tooltip .vt-value { color: #d4d4d4; font-family: 'Consolas','Courier New',monospace; }
+        #code-var-tooltip .vt-true  { color: #4caf50; font-weight: bold; }
+        #code-var-tooltip .vt-false { color: #f44336; }
+        #code-var-tooltip .vt-none  { color: #777; font-style: italic; font-size: 11px; }
+        #code-var-tooltip .vt-int   { color: #b5cea8; }
         [data-glossary], .legend-code { cursor: help; }
         #code-inspector {
             background: #252526; border-top: 1px solid #3e3e42;
@@ -1981,6 +2036,7 @@
                 <pre id="highlighting" aria-hidden="true"><code id="highlighting-content"></code></pre>
                 <textarea id="code" spellcheck="false"></textarea>
                 <div id="error-gutter" aria-hidden="true"></div>
+                <div id="fold-gutter" aria-hidden="true"></div>
                 <div id="editor-missing-badge" title="Hinweis: hier fehlt etwas Allgemeines."></div>
             </div>
             <div id="code-autocomplete"></div>
@@ -2045,6 +2101,7 @@
                             <div onclick="detachPanel('circuit-wrapper', 'Schaltplan')" data-i18n="extra_detach_iec" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Schaltplan</div>
                             <div onclick="detachPanel('circuit-editor-wrapper', 'Editor')" data-i18n="extra_detach_iec_edit" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Editor</div>
                             <div onclick="detachPanel('factory-wrapper', '2D-Anlage')" data-i18n="extra_detach_fac" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ 2D-Anlage</div>
+                            <div onclick="detachPanel('sk-wrapper', 'Schrittkette')" data-i18n="extra_detach_sk" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Schrittkette</div>
                             <div onclick="detachPanel('analyzer-modal', 'Oszilloskop')" data-i18n="extra_detach_osc" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Oszilloskop</div>
                         </div>
                       </div><!-- /flex-row wrapper -->
@@ -2296,7 +2353,8 @@
                     <div id="sk-options-group">
                         <button id="btn-sk-hide-tools" class="btn-export" style="background-color:#555;border:1px solid #333;" onclick="window._toggleSkHideToolsOnSim()" title="Bei aktiver Simulation die runden Edit-Buttons (×, ↑, ↓, +) im Grafcet ausblenden, damit das Panel aufgeräumt bleibt.">🛠 Tool-Buttons bei Sim: EIN</button>
                     </div>
-                    <span id="sk-panel-info" style="color:#90caf9;font-size:10px;margin-left:auto;"></span>
+                    <span id="sk-panel-stats" style="color:#cfd8dc;font-size:10px;margin-left:auto;font-family:'Consolas','Courier New',monospace;letter-spacing:0.3px;"></span>
+                    <span id="sk-panel-info" style="color:#90caf9;font-size:10px;margin-left:8px;"></span>
                 </div>
                 <div class="sk-panel-body">
                     <svg id="sk-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>
@@ -3223,6 +3281,45 @@
             /* Editierbare Step-Labels / Transition-Bedingungen — Klick öffnet
                einen Inline-Text-Input über der SVG-Position. */
             .sk-editable { cursor: text; }
+            /* Sichtbare Qualifier-Badge in der Aktions-Box — IMMER da (auch „N"),
+               damit der User weiß wo geklickt werden muss, und ohne Überlappung
+               mit der Variable. Beim Hover wird sie etwas heller; der Klick
+               öffnet das Mini-Menü zum Qualifier-Wechsel. */
+            .sk-qual-badge {
+                fill: #569cd6;
+                font-weight: bold;
+                font-size: 11px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                cursor: pointer;
+                user-select: none;
+                transition: fill 0.12s;
+            }
+            .sk-qual-badge:hover {
+                fill: #9cdcfe;
+                text-decoration: underline;
+            }
+            .sk-qual-readonly {
+                fill: #78909c;
+                cursor: default;
+            }
+            .sk-qual-readonly:hover { fill: #78909c; text-decoration: none; }
+            /* Mini-Menü für Qualifier-Wechsel — HTML-Popup über dem SVG. */
+            #sk-qual-menu {
+                position: fixed; z-index: 7000;
+                background: #2d2d30; border: 1px solid #569cd6;
+                border-radius: 4px; padding: 4px;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+                font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 12px;
+                min-width: 220px;
+            }
+            #sk-qual-menu .sk-qual-opt {
+                padding: 5px 8px; cursor: pointer; color: #cfd8dc;
+                border-radius: 3px; display: flex; gap: 8px; align-items: baseline;
+            }
+            #sk-qual-menu .sk-qual-opt:hover { background: #3e3e42; }
+            #sk-qual-menu .sk-qual-opt.active { background: rgba(86, 156, 214, 0.2); }
+            #sk-qual-menu .sk-qual-opt b { color: #ffd54f; min-width: 20px; }
+            #sk-qual-menu .sk-qual-opt span { color: #90a4ae; }
             .sk-editable:hover {
                 fill: #1976d2 !important;
                 font-weight: bold;
@@ -6889,6 +6986,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                             if (c === '?') return true;
                         }
                     }
+                    // Math-Built-In ohne weitere Operatoren (z.B. `X := min(A, B)`)
+                    // soll trotzdem den Arithmetik-Pfad nehmen.
+                    if (/\b(min|max|abs|floor|ceil|round)\s*\(/i.test(s)) return true;
                     return /^\s*[\d.]+\s*$/.test(s);
                 }
                 const _hasArith = _hasArithFeatures(expressionStr);
@@ -6975,6 +7075,33 @@ You must output exactly this JSON format. The logic code goes as a single string
                             _pos += idM[0].length;
                             const id   = idM[1];
                             const prop = idM[2] ? idM[2].slice(1) : null;
+                            // Funktionsaufruf-Erkennung: Identifier direkt gefolgt
+                            // von `(` ist eine Built-In-Funktion. Supported:
+                            //   min(a,b), max(a,b)               — 2-stellig
+                            //   abs(x), floor(x), ceil(x), round(x) — 1-stellig
+                            // Property-Zugriff (z.B. CTU.cv) hat hier keinen Funktions-
+                            // Aufruf-Sinn, also nur ohne prop probieren.
+                            if (!prop && _arithPeek() === '(') {
+                                _pos++; // konsumiere (
+                                const args = [];
+                                if (_arithPeek() !== ')') {
+                                    args.push(_arithTernary());
+                                    while (_arithPeek() === ',') {
+                                        _pos++;
+                                        args.push(_arithTernary());
+                                    }
+                                }
+                                if (_arithPeek() !== ')') throw new Error('Arithmetik: erwartete ) nach Funktionsargumenten');
+                                _pos++;
+                                const fnU = id.toUpperCase();
+                                if (fnU === 'MIN'   && args.length === 2) return '(Math.min(' + args[0] + ',' + args[1] + '))';
+                                if (fnU === 'MAX'   && args.length === 2) return '(Math.max(' + args[0] + ',' + args[1] + '))';
+                                if (fnU === 'ABS'   && args.length === 1) return '(Math.abs('   + args[0] + '))';
+                                if (fnU === 'FLOOR' && args.length === 1) return '(Math.floor(' + args[0] + '))';
+                                if (fnU === 'CEIL'  && args.length === 1) return '(Math.ceil('  + args[0] + '))';
+                                if (fnU === 'ROUND' && args.length === 1) return '(Math.round(' + args[0] + '))';
+                                throw new Error('Arithmetik: Unbekannte Funktion „' + id + '" oder falsche Argumentanzahl (' + args.length + ').');
+                            }
                             if (!prop) {
                                 if (id === 'TRUE')  return '1';
                                 if (id === 'FALSE') return '0';
@@ -7193,7 +7320,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // ausblenden. Bei Anschalten wird der Renderer ihn ggf. wieder
                 // einblenden (er bedingt sowieso auf erkannte Ketten).
                 if (!next) {
-                    const wrap = document.getElementById('sk-wrapper');
+                    // sk-wrapper kann in einem detached Pop-out leben — beide
+                    // Documents prüfen, damit das Schließen auch dort wirkt.
+                    const wrap = (window._skResolveDoc && window._skResolveDoc().getElementById('sk-wrapper'))
+                                || document.getElementById('sk-wrapper');
                     if (wrap) wrap.style.display = 'none';
                     const skBtn = document.getElementById('btn-view-sk');
                     if (skBtn) skBtn.style.display = 'none';
@@ -7229,6 +7359,13 @@ You must output exactly this JSON format. The logic code goes as a single string
         // User-Preference persistiert in localStorage. Wenn die Option
         // AN ist + isSimulationActive TRUE, kriegt #sk-wrapper die
         // Klasse `.sk-hide-tools` (CSS regelt den Rest).
+        // Pop-out-aware DOM-Lookup für SK-Panel-IDs. Wird von mehreren
+        // SK-Helpern verwendet, die sonst nur das Hauptfenster-document
+        // sehen würden — was ein abgekoppeltes Panel „tot" wirken lässt.
+        window._skResolveDoc = function() {
+            const w = window.popOutWindows && window.popOutWindows['sk-wrapper'];
+            return (w && !w.closed && w.document) ? w.document : document;
+        };
         (function _initSkPanelOptions() {
             const KEY = 'valis.sk.hideToolsOnSim';
             function readHide() {
@@ -7238,7 +7375,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 try { localStorage.setItem(KEY, v ? '1' : '0'); } catch(_e) {}
             }
             function applyHideClass() {
-                const wrap = document.getElementById('sk-wrapper');
+                const wrap = window._skResolveDoc().getElementById('sk-wrapper');
                 if (!wrap) return;
                 const userOn = readHide();
                 const simOn = !!window.isSimulationActive
@@ -7246,15 +7383,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 wrap.classList.toggle('sk-hide-tools', userOn && simOn);
             }
             function updateButtonLabel() {
-                const btn = document.getElementById('btn-sk-hide-tools');
+                const btn = window._skResolveDoc().getElementById('btn-sk-hide-tools');
                 if (!btn) return;
                 const on = readHide();
                 btn.textContent = '🛠 Tool-Buttons bei Sim: ' + (on ? 'AUS (ausgeblendet)' : 'EIN (sichtbar)');
                 btn.style.backgroundColor = on ? '#7b1fa2' : '#555';
             }
             window._toggleSkOptions = function() {
-                const group = document.getElementById('sk-options-group');
-                const btn = document.getElementById('btn-sk-options');
+                const d = window._skResolveDoc();
+                const group = d.getElementById('sk-options-group');
+                const btn = d.getElementById('btn-sk-options');
                 if (!group || !btn) return;
                 group.classList.toggle('expanded');
                 btn.classList.toggle('expanded');
@@ -7800,6 +7938,12 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                             <li><b>Zahl-Literale:</b> ganzzahlig (<code>0</code>, <code>5</code>, <code>42</code>) oder Dezimal (<code>1.5</code>, <code>3.14</code>)</li>
                             <li><b>Variablen:</b> jeder gültige Identifier — wird automatisch koerziert</li>
                             <li><b>TRUE/FALSE:</b> werden direkt zu <code>1</code>/<code>0</code> aufgelöst</li>
+                            <li><b>Built-In-Funktionen:</b>
+                                <code>min(a, b)</code>, <code>max(a, b)</code> (2-stellig),
+                                <code>abs(x)</code>, <code>floor(x)</code>, <code>ceil(x)</code>, <code>round(x)</code> (1-stellig).
+                                Verschachtelung erlaubt: z.B. <code>SEL := min(6, max(1, RAW.cv))</code>
+                                clampt einen CTU-Counter auf 1..6 — praktisch für
+                                <code>S_SEL</code>-Step-Auswahl.</li>
                             <li><b>Property-Zugriff <code>X.cv</code> / <code>X.et</code> / <code>X.q</code>:</b>
                                 liest direkt aus der Timer-/Counter-Instanz von <code>X</code>.
                                 <code>.cv</code> = aktueller Zählwert (CTU),
@@ -8243,6 +8387,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // aktiv wird). `baseNum` gibt die niedrigste RS-Glied-Nummer dieser
             // Kette an — der i-te Schritt belegt RS-Glied `baseNum + i`.
             function generateLines(c, baseNum) {
+                // Leere Kette (z.B. eingeklappt via _toggleCodeFold) — keine
+                // Schritte, keine S/R-Glieder zu generieren. Sonst würde
+                // `c.steps[0].name` werfen. Liefert einen Platzhalter-Kommentar.
+                if (!c.steps || c.steps.length === 0) {
+                    return ['// === SCHRITTKETTE ' + c.name + ' (Block leer — z.B. eingeklappt) ==='];
+                }
                 const stepIdx = new Map();
                 c.steps.forEach((s, i) => stepIdx.set(s.name, i));
                 const pin = (prefix, stepName) => prefix + (baseNum + stepIdx.get(stepName));
@@ -9346,10 +9496,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const SVG_NS = 'http://www.w3.org/2000/svg';
             let renderMode = 'grafcet';   // 'grafcet' | 's7graph'
 
-            const $svg = () => document.getElementById('sk-svg');
-            const $panel = () => document.getElementById('sk-wrapper');
+            // Pop-out-aware DOM-Lookup: wenn das SK-Panel in einem detached
+            // Fenster lebt (window.popOutWindows['sk-wrapper']), gehören alle
+            // SK-DOM-Elemente in dessen document. Sonst Hauptfenster.
+            const _skDoc = () => {
+                const w = window.popOutWindows && window.popOutWindows['sk-wrapper'];
+                return (w && !w.closed && w.document) ? w.document : document;
+            };
+            const $svg   = () => _skDoc().getElementById('sk-svg');
+            const $panel = () => _skDoc().getElementById('sk-wrapper');
             const $btn   = () => document.getElementById('btn-view-sk');
-            const $info  = () => document.getElementById('sk-panel-info');
+            const $info  = () => _skDoc().getElementById('sk-panel-info');
 
             // SVG-Element-Factory mit Attribute-Map.
             function el(tag, attrs, parent) {
@@ -9444,29 +9601,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (hasActions || isEditable) {
                             const aBox = el('g', { class: 'sk-action-box' }, svg);
                             el('rect', { x: ax, y: y, width: 220, height: aH, rx: 2 }, aBox);
+                            // Layout pro Action: links eine VISIBLE Qualifier-Badge,
+                            // rechts der Body (lhs := rhs). Vorher war die Badge nur
+                            // eine transparente Hitzone — der User sah nichts und
+                            // die Hitbox-Breite überschätzte den Prefix, sodass
+                            // Klicks auf die ersten Variablen-Zeichen das Menü
+                            // statt den Inline-Edit auslösten.
+                            const QUAL_W = 50;  // fixe Badge-Spalte (passt für „D 1.5")
                             step.actions.forEach((a, ai) => {
-                                const t = el('text', {
+                                const _q = a.qualifier || { kind: 'N' };
+                                let _qLabel;
+                                if (_q.kind === 'D' || _q.kind === 'L') _qLabel = _q.kind + ' ' + (_q.time != null ? _q.time : 1.0);
+                                else _qLabel = _q.kind; // N/C/P/S/R
+                                // Sichtbare Badge = zugleich Hitzone für den Quick-
+                                // Wechsel. Auch bei N steht das „N" da, damit der
+                                // User eine Stelle zum Klicken sieht.
+                                const badge = el('text', {
                                     x: ax + 6, y: y + 14 + ai * 14,
+                                    class: 'sk-qual-badge' + (isEditable ? '' : ' sk-qual-readonly'),
+                                    'data-chain-name': chain.name,
+                                    'data-step-name': step.name,
+                                    'data-action-idx': ai
+                                }, aBox);
+                                badge.textContent = _qLabel;
+                                if (isEditable) {
+                                    badge.appendChild(document.createElementNS(SVG_NS, 'title')).textContent =
+                                        'Qualifier-Wechsel (N/C/P/D/L/S/R)';
+                                }
+                                // Body — separat klickbar für Inline-Edit. data-qual-base
+                                // hält jetzt nur den Body-Text (lhs := rhs), nicht
+                                // mehr den ganzen Action-String, sodass der Live-
+                                // Countdown sauber daran hängen kann ohne den Prefix
+                                // zu duplizieren (der steht ja in der Badge).
+                                const _bodyTxt = a.lhs + ' := ' + a.rhs;
+                                const t = el('text', {
+                                    x: ax + 6 + QUAL_W, y: y + 14 + ai * 14,
                                     class: isEditable ? 'sk-editable' : '',
                                     'data-edit-kind': isEditable ? 'action' : '',
                                     'data-chain-name': chain.name,
                                     'data-step-name': step.name,
                                     'data-action-idx': ai
                                 }, aBox);
-                                const _q = a.qualifier || { kind: 'N' };
-                                const _baseTxt = formatActionInline(a);
-                                t.textContent = _baseTxt;
-                                // D-/L-Qualifier-Texte werden im Live-Modus von
-                                // highlightActive() um eine Rest-Sekunden-Anzeige
-                                // erweitert. data-qual-base hält den statischen
-                                // Inhalt, damit wir den Suffix bei jedem Tick
-                                // konsistent neu setzen können (auch wenn der
-                                // Timer wieder ruht).
+                                t.textContent = _bodyTxt;
                                 if (_q.kind === 'D' || _q.kind === 'L') {
                                     t.setAttribute('data-qual-kind', _q.kind);
                                     t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
                                     t.setAttribute('data-qual-time', String(_q.time != null ? _q.time : 1.0));
-                                    t.setAttribute('data-qual-base', _baseTxt);
+                                    t.setAttribute('data-qual-base', _bodyTxt);
                                 }
                                 if (isEditable) {
                                     renderToolBtn(svg, ax + 220 - 10, y + 12 + ai * 14, '×', 'action-del', chain.name, step.name, ai);
@@ -9636,23 +9817,35 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             const aH = Math.max(H, step.actions.length * 14 + 6);
                             const aBox = el('g', { class: 'sk-action-box' }, svg);
                             el('rect', { x: ax, y: y, width: 230, height: aH }, aBox);
+                            // S7-GRAPH-Layout: kompaktere Badge (~38 px) — Q-Label
+                            // ist meist nur 1–4 Zeichen ("D1.5" ohne Leerzeichen).
+                            const QUAL_W_S7 = 38;
+                            const isEdit_S7 = editableSet && editableSet.has(chain);
                             step.actions.forEach((a, ai) => {
-                                const t = el('text', { x: ax + 6, y: y + 14 + ai * 14 }, aBox);
                                 const q = a.qualifier || { kind: 'N' };
-                                let qPrefix;
-                                if (q.kind === 'D' || q.kind === 'L') {
-                                    qPrefix = q.kind + (q.time != null ? q.time : 1.0);
-                                } else {
-                                    qPrefix = q.kind;
+                                let qLabel;
+                                if (q.kind === 'D' || q.kind === 'L') qLabel = q.kind + (q.time != null ? q.time : 1.0);
+                                else qLabel = q.kind;
+                                const badge = el('text', {
+                                    x: ax + 6, y: y + 14 + ai * 14,
+                                    class: 'sk-qual-badge' + (isEdit_S7 ? '' : ' sk-qual-readonly'),
+                                    'data-chain-name': chain.name,
+                                    'data-step-name': step.name,
+                                    'data-action-idx': ai
+                                }, aBox);
+                                badge.textContent = qLabel;
+                                if (isEdit_S7) {
+                                    badge.appendChild(document.createElementNS(SVG_NS, 'title')).textContent =
+                                        'Qualifier-Wechsel (N/C/P/D/L/S/R)';
                                 }
-                                const _baseTxt = qPrefix.padEnd(4, ' ') + a.lhs + ' := ' + a.rhs;
-                                t.textContent = _baseTxt;
-                                // Live-Countdown analog Grafcet (siehe dort).
+                                const _bodyTxt = a.lhs + ' := ' + a.rhs;
+                                const t = el('text', { x: ax + 6 + QUAL_W_S7, y: y + 14 + ai * 14 }, aBox);
+                                t.textContent = _bodyTxt;
                                 if (q.kind === 'D' || q.kind === 'L') {
                                     t.setAttribute('data-qual-kind', q.kind);
                                     t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
                                     t.setAttribute('data-qual-time', String(q.time != null ? q.time : 1.0));
-                                    t.setAttribute('data-qual-base', _baseTxt);
+                                    t.setAttribute('data-qual-base', _bodyTxt);
                                 }
                             });
                             maxX = Math.max(maxX, ax + 230);
@@ -9968,23 +10161,70 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (aEl.textContent !== base + suffix) aEl.textContent = base + suffix;
                 });
+                // SK-Panel-Header Live-Stats: pro Kette mit CONTROL-Block einen
+                // kompakten Status (Mode/Zyk/Fault) in der Header-Leiste ausgeben.
+                // Greift auf chain.control.keys zu und liest die gebundenen
+                // Variablen aus spsState bzw. die zugehörigen CTU.cv aus simTimers.
+                const statsEl = _skDoc().getElementById('sk-panel-stats');
+                if (statsEl) {
+                    const chains = (window._schrittkettenChains || []);
+                    const parts = [];
+                    chains.forEach(c => {
+                        if (!c.control || !c.control.keys) return;
+                        const k = c.control.keys;
+                        // Mode aus den OUT_*_ON-Outputs ableiten (das sind die nach
+                        // außen geführten Mode-LEDs; wir lesen sie direkt aus state).
+                        const modeVar = (sfx) => k.get('OUT_' + sfx + '_ON');
+                        const isOn = (v) => v && !!state[v];
+                        let mode = '—';
+                        if      (isOn(modeVar('AUTO'))) mode = 'AUTO';
+                        else if (isOn(modeVar('TAP')))  mode = 'TAP';
+                        else if (isOn(modeVar('TOP')))  mode = 'TOP';
+                        else if (isOn(modeVar('MAN')))  mode = 'MAN';
+                        const seg = [c.name + ': ' + mode];
+                        const cycVar = k.get('OUT_CYCLE_COUNT');
+                        if (cycVar) {
+                            const inst = _timers['CTU_' + cycVar];
+                            seg.push('Zyk: ' + (inst ? (inst.cv || 0) : 0));
+                        }
+                        const fltVar = k.get('OUT_FAULT_COUNT');
+                        if (fltVar) {
+                            const inst = _timers['CTU_' + fltVar];
+                            seg.push('Flt: ' + (inst ? (inst.cv || 0) : 0));
+                        }
+                        parts.push(seg.join(' • '));
+                    });
+                    const txt = parts.join('   │   ');
+                    if (statsEl.textContent !== txt) statsEl.textContent = txt;
+                }
                 // Snapshot für den nächsten Tick aktualisieren.
                 lastQState.clear();
                 currentQ.forEach((v, k) => lastQState.set(k, v));
             }
 
             // Modus-Toggle (Grafcet ↔ S7-GRAPH) im Panel-Header.
-            document.addEventListener('click', e => {
-                const m = e.target.closest('#sk-wrapper .sk-mode-btn');
-                if (!m) return;
-                const mode = m.getAttribute('data-mode');
-                if (mode === renderMode) return;
-                renderMode = mode;
-                document.querySelectorAll('#sk-wrapper .sk-mode-btn').forEach(b => {
-                    b.classList.toggle('active', b.getAttribute('data-mode') === renderMode);
+            // Auf das sk-wrapper-Element selbst binden, damit der Listener mit
+            // dem Panel ins detached Pop-out-Fenster „mitwandert".
+            const _bindSkModeToggle = (root) => {
+                if (!root || root._skModeBound) return;
+                root._skModeBound = true;
+                root.addEventListener('click', e => {
+                    const m = e.target.closest('.sk-mode-btn');
+                    if (!m) return;
+                    const mode = m.getAttribute('data-mode');
+                    if (mode === renderMode) return;
+                    renderMode = mode;
+                    root.querySelectorAll('.sk-mode-btn').forEach(b => {
+                        b.classList.toggle('active', b.getAttribute('data-mode') === renderMode);
+                    });
+                    render();
                 });
-                render();
-            });
+            };
+            _bindSkModeToggle($panel());
+            // Bei Detach/Re-Attach wird $panel() in einem anderen Document
+            // sitzen — wir binden bei jedem render() vorsichtshalber neu, das
+            // _skModeBound-Flag verhindert Doppel-Listener.
+            window._reBindSkPanelHandlers = () => _bindSkModeToggle($panel());
 
             // === Phase 5: Grafcet-Interaktivität ===
             // Inline-Edit für editierbare Step-Labels und Transition-Bedingungen.
@@ -9996,7 +10236,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function openInlineEdit(svgTextEl, initial, applyCb) {
                 if (_activeEditInput) _activeEditInput.remove();
                 const bbox = svgTextEl.getBoundingClientRect();
-                const input = document.createElement('input');
+                // Bei abgekoppeltem Panel landet der Inline-Edit-Input im
+                // popout-Document (sonst wäre er im Hauptfenster unsichtbar
+                // und das Pop-out wirkte „tot").
+                const ownDoc = (svgTextEl.ownerDocument) || document;
+                const input = ownDoc.createElement('input');
                 input.type = 'text';
                 input.value = initial;
                 input.style.cssText = [
@@ -10016,7 +10260,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     'outline:none',
                     'box-shadow:0 4px 14px rgba(0,0,0,0.5)'
                 ].join(';');
-                document.body.appendChild(input);
+                ownDoc.body.appendChild(input);
                 _activeEditInput = input;
                 const ta = document.getElementById('code');
                 const prevReadOnly = ta ? ta.readOnly : false;
@@ -10152,7 +10396,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             function parseActionText(text) {
                 // Akzeptiert „[QUAL: ]LHS := RHS" — Qualifier-Prefixe wie in der DSL.
-                const m1 = text.match(/^(?:([NSRP])\s*:\s*|([DL])\s+([\d.]+)\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/i);
+                // C war früher nicht in der Regex — wurde aber von formatActionInline
+                // emittiert (Quick-Switch-Badge); ohne C-Match wäre der Roundtrip
+                // beim Inline-Edit auf einer C-Aktion stillschweigend gescheitert.
+                const m1 = text.match(/^(?:([NSRPC])\s*:\s*|([DL])\s+([\d.]+)\s*:\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$/i);
                 if (!m1) return null;
                 const q = m1[1] ? { kind: m1[1].toUpperCase() }
                     : (m1[2] ? { kind: m1[2].toUpperCase(), time: parseFloat(m1[3]) }
@@ -10197,7 +10444,80 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return prefix + a.lhs + ' := ' + a.rhs;
             }
 
+            // Quick-Qualifier-Wechsel-Menü: HTML-Popup mit allen 7 Qualifier-
+            // Varianten. Bei D/L wird zusätzlich nach der Zeit gefragt; die
+            // restlichen sind einklick-Wechsel. Mutation läuft über
+            // syncChainToEditor → DSL-Pretty-Print → Re-Render.
+            function openQualifierMenu(x, y, chain, stepName, actionIdx) {
+                const _menuDoc = _skDoc();
+                const existing = _menuDoc.getElementById('sk-qual-menu');
+                if (existing) existing.remove();
+                const step = chain.steps.find(s => s.name === stepName);
+                if (!step || !step.actions[actionIdx]) return;
+                const cur = step.actions[actionIdx].qualifier || { kind: 'N' };
+                const menu = _menuDoc.createElement('div');
+                menu.id = 'sk-qual-menu';
+                const OPTS = [
+                    { kind: 'N', desc: 'Normal — solange Step aktiv' },
+                    { kind: 'C', desc: 'Conditional — UND mit INTERLOCK' },
+                    { kind: 'P', desc: 'Pulse (~100 ms) bei Eintritt' },
+                    { kind: 'D', desc: 'Delayed — schaltet nach <t> s' },
+                    { kind: 'L', desc: 'Limited — Puls über <t> s' },
+                    { kind: 'S', desc: 'Set — gelatcht TRUE' },
+                    { kind: 'R', desc: 'Reset — gelatcht FALSE' },
+                ];
+                OPTS.forEach(opt => {
+                    const item = _menuDoc.createElement('div');
+                    item.className = 'sk-qual-opt' + (opt.kind === cur.kind ? ' active' : '');
+                    item.innerHTML = '<b>' + opt.kind + '</b><span>' + opt.desc + '</span>';
+                    item.addEventListener('click', () => {
+                        let newQual;
+                        if (opt.kind === 'D' || opt.kind === 'L') {
+                            const _def = (cur.kind === opt.kind && cur.time != null) ? cur.time : 1.0;
+                            const ans = prompt('Zeit in Sekunden für ' + opt.kind + ' <t>:', String(_def));
+                            if (ans === null) { menu.remove(); return; }
+                            const _t = parseFloat(ans);
+                            if (!isFinite(_t) || _t <= 0) { alert('Ungültige Zeit.'); return; }
+                            newQual = { kind: opt.kind, time: _t };
+                        } else {
+                            newQual = { kind: opt.kind };
+                        }
+                        step.actions[actionIdx].qualifier = newQual;
+                        syncChainToEditor(chain);
+                        menu.remove();
+                    });
+                    menu.appendChild(item);
+                });
+                // Position klemmen, damit das Menü nicht aus dem Viewport fällt
+                menu.style.left = x + 'px';
+                menu.style.top  = y + 'px';
+                _menuDoc.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth)  menu.style.left = (window.innerWidth  - r.width  - 8) + 'px';
+                if (r.bottom > window.innerHeight) menu.style.top  = (window.innerHeight - r.height - 8) + 'px';
+                // Außenklick schließt das Menü
+                const onDoc = (ev) => {
+                    if (!menu.contains(ev.target)) {
+                        menu.remove();
+                        document.removeEventListener('mousedown', onDoc, true);
+                    }
+                };
+                setTimeout(() => document.addEventListener('mousedown', onDoc, true), 50);
+            }
             $svg() && $svg().addEventListener('click', (e) => {
+                // Qualifier-Badge hat Vorrang vor allem anderen — sie ist eine
+                // sichtbare, klickbare „Pille" links neben jedem Action-Body.
+                // Read-only-Badges (Recognized Hand-RS-Ketten) öffnen kein Menü.
+                const qBadge = e.target.closest('.sk-qual-badge');
+                if (qBadge && !qBadge.classList.contains('sk-qual-readonly')) {
+                    e.stopPropagation();
+                    const chainName = qBadge.getAttribute('data-chain-name');
+                    const stepName  = qBadge.getAttribute('data-step-name');
+                    const actionIdx = parseInt(qBadge.getAttribute('data-action-idx'), 10);
+                    const chain = findChainByName(chainName);
+                    if (chain) openQualifierMenu(e.clientX, e.clientY, chain, stepName, actionIdx);
+                    return;
+                }
                 // Bei aktivem Inline-Edit: SVG-Klicks NICHT direkt in einen
                 // weiteren Edit umschlagen. Parallel-Verzweigungen rendern die
                 // Transition-Conds dicht beieinander (14 px Zeilenabstand);
@@ -11699,19 +12019,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Übergangspfeil als eigener visueller Token (analog zu Zuweisung).
                     t = t.replace(/-&gt;/g, '<span class="token assign">-&gt;</span>');
                 }
+                // Variablen-Wrap: bare Identifier ZWISCHEN bestehenden Spans
+                // (oder am Zeilenanfang/-ende). Matcht nur Text-Inseln außerhalb
+                // bereits getaggter Tokens, damit FALSE/TRUE im fallback-Span
+                // nicht doppelt eingepackt werden. Früher nur bei aktiven FBS-
+                // Farben — jetzt immer, damit das Hover-Tooltip (Typ/Live-Wert/
+                // HMI-Bindung) jeden Variablennamen erreichen kann.
+                t = t.replace(/(<\/span>|^)([^<]+?)(?=<span|$)/g, (m, prefix, txt) => {
+                    const wrapped = txt.replace(
+                        /([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)/g,
+                        (mm, name) => '<span class="token var" data-var="' + name.toUpperCase() + '">' + mm + '</span>'
+                    );
+                    return prefix + wrapped;
+                });
                 if (fbsOn) {
-                    // Variablen-Wrap: bare Identifier ZWISCHEN bestehenden Spans
-                    // (oder am Zeilenanfang/-ende). Matcht nur Text-Inseln außerhalb
-                    // bereits getaggter Tokens, damit FALSE/TRUE im fallback-Span
-                    // nicht doppelt eingepackt werden. Var-Wrap nur bei aktiven
-                    // FBS-Farben — sonst unnötige DOM-Knoten ohne sichtbaren Effekt.
-                    t = t.replace(/(<\/span>|^)([^<]+?)(?=<span|$)/g, (m, prefix, txt) => {
-                        const wrapped = txt.replace(
-                            /([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)/g,
-                            (mm, name) => '<span class="token var" data-var="' + name.toUpperCase() + '">' + mm + '</span>'
-                        );
-                        return prefix + wrapped;
-                    });
                     // FBS-Farben injizieren — Variablen-Spans bekommen die Knoten-
                     // Farbe, Operatoren/Parens/Assign die Farbe der LHS dieser Zeile
                     // (= die Farbe der Ausgangsgröße, die diese Zeile produziert).
@@ -11895,6 +12216,223 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             pop.style.display = 'none';
             pop.setAttribute('aria-hidden', 'true');
         };
+
+        // ===== Variablen-Hover-Tooltip im Code-Editor =====
+        // Hover auf ein <span class="token var" data-var="…"> im Highlighter
+        // zeigt: Rolle (Eingang/Ausgang/Timer/Schritt), aktueller Live-Wert
+        // aus spsState/simTimers, und Factory-Bindungen (Komponenten).
+        // Tooltip ist Glossary-äquivalent stilisiert, eigenes Element
+        // damit beide Popups parallel existieren können.
+        window._showVarTooltip = function(targetEl, varName) {
+            const pop = document.getElementById('code-var-tooltip');
+            if (!pop || !varName) return;
+            const upper = String(varName).toUpperCase();
+            const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // Rolle ableiten
+            let role = '—';
+            let roleColor = '#999';
+            if (Array.isArray(globalInputs)  && globalInputs.includes(upper))  { role = 'Eingang';  roleColor = '#4fc1ff'; }
+            else if (Array.isArray(globalOutputs) && globalOutputs.includes(upper)) { role = 'Ausgang';  roleColor = '#dcdcaa'; }
+            else if (/^Q\d+(_(?:SR|RS))?$/i.test(upper))   { role = 'RS-Q-Pin'; roleColor = '#ce9178'; }
+            else if (/^[SR]\d+(_(?:SR|RS))?$/i.test(upper)){ role = 'RS-Pin';   roleColor = '#ce9178'; }
+            else if (/^S\d+$/i.test(upper))                { role = 'Schritt';  roleColor = '#9cdcfe'; }
+            else if (typeof window._getTimerCounterIds === 'function'
+                     && window._getTimerCounterIds().has(upper)) {
+                role = upper.startsWith('CTU_') ? 'Counter (CTU)' : 'Timer'; roleColor = '#c586c0';
+            }
+            // Live-Wert
+            let liveHtml = '<span class="vt-none">– (Sim aus)</span>';
+            const _isSimOn = (typeof isSimulationActive !== 'undefined' && isSimulationActive)
+                             || !!window.isSimulationActive;
+            if (_isSimOn && typeof spsState !== 'undefined') {
+                if (spsState[upper] !== undefined) {
+                    const v = spsState[upper];
+                    if (typeof v === 'boolean') {
+                        liveHtml = v ? '<span class="vt-true">TRUE</span>' : '<span class="vt-false">FALSE</span>';
+                    } else if (typeof v === 'number') {
+                        liveHtml = '<span class="vt-int">' + esc(String(v)) + '</span>';
+                    } else {
+                        liveHtml = esc(String(v));
+                    }
+                } else if (typeof simTimers !== 'undefined' && simTimers && simTimers.get) {
+                    const t = simTimers.get(upper);
+                    if (t && typeof t.cv === 'number') {
+                        liveHtml = '<span class="vt-int">cv=' + t.cv + '</span>'
+                                 + (t.q ? ' <span class="vt-true">Q=TRUE</span>' : ' <span class="vt-false">Q=FALSE</span>');
+                    }
+                }
+            }
+            // HMI/Factory-Bindungen — Bauteil-Typ + Rolle des Feldes pro Bindung.
+            // _findFactoryBindingsForVar gibt { obj, prop } zurück; obj.type
+            // ist der Bauteil-Typ (taster, sensor_optical, zylinder_double, …)
+            // und prop sagt welche Funktion (Sensor-Auf/Zu, Ext/Ret, X+/Y- usw.).
+            const TYPE_LBL = {
+                taster:'Taster', taster_nc:'Taster (Öffner)',
+                schalter:'Schalter', schalter_nc:'Schalter (Öffner)', key_switch:'Schlüsselschalter',
+                nothalt:'Not-Aus', light_curtain:'Lichtgitter', mech_sensor:'Endschalter',
+                sensor_optical:'Sensor (optisch)', sensor_inductive:'Sensor (induktiv)',
+                sensor_capacitive:'Sensor (kapazitiv)', sensor_magnetic:'Sensor (magnetisch)',
+                bottle_sensor:'Flaschen-Sensor',
+                led:'LED', siren:'Sirene', heater:'Heizung',
+                motor:'Motor', contactor:'Schütz', conveyor:'Förderband',
+                valve:'Ventil', relais:'Hilfsrelais',
+                zylinder:'Zylinder', zylinder_double:'Doppeltwirkender Zylinder',
+                gripper:'Greifer', rotation:'Drehantrieb', pendelarm:'Pendelarm',
+                rolltor:'Rolltor', dichtung:'Dichtung', vibration:'Vibrationsmotor',
+                spawner_part:'Spawner (Werkstück)', spawner_fluid:'Spawner (Fluid)',
+                despawner:'Despawner', 'screen':'Display', 'segment':'7-Segment',
+                'meter':'Anzeige'
+            };
+            const PROP_LBL = {
+                linkedVar:'', linkedVarExt:'ausgefahren', linkedVarRet:'eingefahren',
+                linkedVar3:'3. Pos', linkedVarX_Plus:'X+', linkedVarX_Minus:'X−',
+                linkedVarY_Plus:'Y+', linkedVarY_Minus:'Y−', linkedVarGrab:'Greifer',
+                linkedVarSensorAuf:'Sensor auf', linkedVarSensorZu:'Sensor zu',
+                linkedVarWindSensor:'Wind-Sensor', linkedVarHubOben:'Hub oben',
+                linkedVarPendel:'Pendel'
+            };
+            const _describeBinding = (b) => {
+                if (!b || !b.obj) return 'Bauteil';
+                const o = b.obj;
+                const tlbl = TYPE_LBL[o.type] || (o.type ? String(o.type).replace(/_/g,' ') : 'Bauteil');
+                const plbl = PROP_LBL[b.prop];
+                // Identitäts-Hinweis: bevorzugt explizit gesetzter Name/Label,
+                // sonst die Bauteil-ID (kürzer formatiert).
+                const ident = o.label || o.name || (o.id ? '#' + String(o.id).slice(-4) : '');
+                let s = tlbl;
+                if (plbl) s += ' (' + plbl + ')';
+                if (ident) s += ' ' + ident;
+                return s;
+            };
+            let bindHtml = '<span class="vt-none">keine</span>';
+            try {
+                if (typeof window._findFactoryBindingsForVar === 'function') {
+                    const binds = window._findFactoryBindingsForVar(upper) || [];
+                    if (binds.length) {
+                        // Dedup-Schlüssel: gleiche Bauteil-Instanz + gleiche Rolle.
+                        const seen = new Set();
+                        const items = [];
+                        for (const b of binds) {
+                            const key = ((b.obj && b.obj.id) || '?') + '|' + b.prop;
+                            if (seen.has(key)) continue;
+                            seen.add(key);
+                            items.push('<span class="vt-value">' + esc(_describeBinding(b)) + '</span>');
+                            if (items.length >= 4) break;
+                        }
+                        bindHtml = items.join('<br>')
+                                 + (binds.length > items.length ? '<br><span class="vt-none">+' + (binds.length - items.length) + ' weitere</span>' : '');
+                    }
+                }
+            } catch(_e) {}
+            // Komponententyp (Taster/Sensor/LED/Motor …) — eigene Zeile, sortiert nach
+            // Häufigkeit der Frage „was hängt eigentlich an diesem Namen?".
+            let compHtml = '';
+            if (typeof componentTypes !== 'undefined' && componentTypes && componentTypes[upper]) {
+                compHtml = '<div class="vt-row"><span class="vt-label">Typ</span>'
+                         + '<span class="vt-value">' + esc(componentTypes[upper]) + '</span></div>';
+            }
+            const html =
+                '<div class="vt-name">' + esc(upper) + '</div>' +
+                '<div class="vt-row"><span class="vt-label">Rolle</span>'
+                + '<span class="vt-value" style="color:' + roleColor + '">' + esc(role) + '</span></div>' +
+                compHtml +
+                '<div class="vt-row"><span class="vt-label">Live-Wert</span><span class="vt-value">' + liveHtml + '</span></div>' +
+                '<div class="vt-row"><span class="vt-label">HMI/Anlage</span><span class="vt-value">' + bindHtml + '</span></div>';
+            pop.innerHTML = html;
+            pop.style.display = 'block';
+            pop.setAttribute('aria-hidden', 'false');
+            const rect = targetEl.getBoundingClientRect();
+            const popRect = pop.getBoundingClientRect();
+            let left = rect.left;
+            let top = rect.bottom + 4;
+            if (left + popRect.width > window.innerWidth - 10) left = window.innerWidth - popRect.width - 10;
+            if (top + popRect.height > window.innerHeight - 10) top = rect.top - popRect.height - 4;
+            if (left < 10) left = 10;
+            if (top < 10) top = 10;
+            pop.style.left = left + 'px';
+            pop.style.top = top + 'px';
+        };
+        window._hideVarTooltip = function() {
+            const pop = document.getElementById('code-var-tooltip');
+            if (!pop) return;
+            pop.style.display = 'none';
+            pop.setAttribute('aria-hidden', 'true');
+        };
+        // Hover-Bind auf der TEXTAREA (das Highlighting hat pointer-events:none
+        // und empfängt selbst keine Mouse-Events). Wir suchen den darunter
+        // liegenden Token-Span per elementsFromPoint im hit-test-Stack.
+        // Im Sim-Modus tickt der Live-Wert auch im offenen Tooltip mit
+        // (refresh alle 250 ms, solange das Tooltip eine aktive Variable hält).
+        (function _initVarHover() {
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            let _activeVar = null;
+            let _activeEl  = null;
+            let _delayTimer = null;
+            let _tickTimer  = null;
+            let _lastX = 0, _lastY = 0;
+            function _findTokenAt(x, y) {
+                // elementsFromPoint respektiert pointer-events:none und überspringt
+                // damit die Token-Spans im Highlighting-Layer. Wir testen direkt
+                // per getBoundingClientRect über die im Viewport sichtbaren
+                // Line-Spans und gehen erst INNERHALB des matchenden Line-Spans
+                // in die Token-Spans rein — das hält den Hit-Test auch bei 1000+
+                // Zeilen billig.
+                const hc = document.getElementById('highlighting-content');
+                if (!hc) return null;
+                const lineSpans = hc.children;
+                for (let i = 0; i < lineSpans.length; i++) {
+                    const ls = lineSpans[i];
+                    const r = ls.getBoundingClientRect();
+                    // Außerhalb des Viewports liegende Zeilen überspringen.
+                    if (r.bottom < y) continue;
+                    if (r.top > y) break; // Sortiert nach Y → frühzeitig raus.
+                    // Y matcht — Tokens dieser Zeile prüfen.
+                    const toks = ls.querySelectorAll('.token.var[data-var], .token.rs[data-var]');
+                    for (const t of toks) {
+                        const tr = t.getBoundingClientRect();
+                        if (x >= tr.left && x <= tr.right && y >= tr.top && y <= tr.bottom) {
+                            return t;
+                        }
+                    }
+                    // Y matcht aber kein Token → kein Tooltip nötig.
+                    return null;
+                }
+                return null;
+            }
+            function _kill() {
+                _activeVar = null; _activeEl = null;
+                if (_delayTimer) { clearTimeout(_delayTimer); _delayTimer = null; }
+                if (_tickTimer)  { clearInterval(_tickTimer); _tickTimer = null; }
+                window._hideVarTooltip();
+            }
+            ta.addEventListener('mousemove', (e) => {
+                _lastX = e.clientX; _lastY = e.clientY;
+                const el = _findTokenAt(e.clientX, e.clientY);
+                if (!el) { if (_activeVar) _kill(); return; }
+                const v = el.getAttribute('data-var');
+                if (!v) return;
+                if (_activeVar === v && _activeEl === el) return;
+                _activeVar = v; _activeEl = el;
+                if (_delayTimer) clearTimeout(_delayTimer);
+                _delayTimer = setTimeout(() => {
+                    if (_activeVar !== v) return;
+                    window._showVarTooltip(el, v);
+                    if (_tickTimer) clearInterval(_tickTimer);
+                    _tickTimer = setInterval(() => {
+                        if (_activeVar !== v) { clearInterval(_tickTimer); _tickTimer = null; return; }
+                        // Element kann durch Re-Highlighting weg sein — neu suchen.
+                        const fresh = _findTokenAt(_lastX, _lastY);
+                        if (!fresh || fresh.getAttribute('data-var') !== v) { _kill(); return; }
+                        window._showVarTooltip(fresh, v);
+                    }, 250);
+                }, 350);
+            });
+            ta.addEventListener('mouseleave', _kill);
+            // Beim Scrollen wandert der Code unter dem Cursor — Tooltip schließen,
+            // beim nächsten mousemove öffnet er neu am richtigen Token.
+            ta.addEventListener('scroll', _kill);
+        })();
 
         // Delegierter Hover über alle erklärbaren Elemente (Legende + Inspector-Chips)
         document.addEventListener('mouseover', function(e) {
@@ -12999,6 +13537,60 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         };
 
+        // === Fold-Gutter Renderer ===
+        // Scannt den Editor-Text nach `SCHRITTKETTE`-Headerzeilen und platziert
+        // einen Fold-Chevron in der linken Gutter-Spalte auf der zugehörigen
+        // Y-Koordinate. Liest die Y-Position aus dem highlighting-content-Span
+        // (gleicher Trick wie _updateErrorGutter — robust gegen Zeilenumbrüche
+        // und unterschiedliche Font-Sizes).
+        window._updateFoldGutter = function() {
+            const ta = document.getElementById('code');
+            const gutter = document.getElementById('fold-gutter');
+            const wrap = ta && ta.closest('.editor-wrapper');
+            if (!ta || !gutter) return;
+            const lines = ta.value.split('\n');
+            // SCHRITTKETTE-Zeilen finden (eine pro Kette).
+            const chainStarts = []; // [{ line, name }]
+            for (let i = 0; i < lines.length; i++) {
+                const m = lines[i].match(/^\s*SCHRITTKETTE\s+([A-Za-z_][A-Za-z0-9_]*)/i);
+                if (m) chainStarts.push({ line: i, name: m[1].toUpperCase() });
+            }
+            if (wrap) wrap.classList.toggle('with-fold-gutter', chainStarts.length > 0);
+            if (chainStarts.length === 0) { gutter.innerHTML = ''; return; }
+            const cs = getComputedStyle(ta);
+            const lineHeight = parseFloat(cs.lineHeight) || 19.5;
+            const padTop = parseFloat(cs.paddingTop) || 15;
+            const scrollTop = ta.scrollTop || 0;
+            const offsetY = (lineHeight - 14) / 2;
+            const hc = document.getElementById('highlighting-content');
+            const lineSpans = hc ? hc.children : null;
+            let html = '';
+            chainStarts.forEach(({ line: idx, name }) => {
+                let top;
+                const span = (lineSpans && idx < lineSpans.length) ? lineSpans[idx] : null;
+                if (span && span.offsetTop != null) {
+                    top = span.offsetTop - scrollTop + offsetY;
+                } else {
+                    top = padTop + idx * lineHeight + offsetY - scrollTop;
+                }
+                const isFolded = !!(window._codeFolds && window._codeFolds.has(name));
+                const glyph = isFolded ? '▸' : '▾';
+                const title = isFolded ? 'Ausklappen' : 'Einklappen';
+                html += '<div class="sk-fold-chevron" data-chain-name="' + name +
+                        '" title="' + title + ' (' + name + ')" style="top:' + top + 'px;">' + glyph + '</div>';
+            });
+            gutter.innerHTML = html;
+        };
+        // Click-Delegation auf das Fold-Gutter.
+        document.addEventListener('click', (e) => {
+            const ch = e.target.closest('#fold-gutter .sk-fold-chevron');
+            if (!ch) return;
+            const name = ch.getAttribute('data-chain-name');
+            if (name && typeof window._toggleCodeFold === 'function') {
+                window._toggleCodeFold(name);
+            }
+        });
+
         // === Self-Hold → RS/SR-Glied Konverter ===
         // Erkennt das Muster `LHS := f(LHS)` (Selbsthaltung über vorigen Tick-Wert)
         // und zerlegt es in SET/RESET-Bedingungen, damit der Popup-Button die
@@ -13365,6 +13957,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         ['input','keyup'].forEach(ev => textarea.addEventListener(ev, window._updateErrorGutter));
         textarea.addEventListener('scroll', window._updateErrorGutter);
         window.addEventListener('resize', window._updateErrorGutter);
+        // Fold-Gutter: gleiche Trigger wie Error-Gutter, damit Chevrons mit
+        // scrollen und nach Code-Edits an der richtigen Zeile sitzen.
+        ['input','keyup'].forEach(ev => textarea.addEventListener(ev, window._updateFoldGutter));
+        textarea.addEventListener('scroll', window._updateFoldGutter);
+        window.addEventListener('resize', window._updateFoldGutter);
+        // Initialer Tick nach DOM-ready
+        requestAnimationFrame(() => { try { window._updateFoldGutter(); } catch(_e) {} });
         // Initialer Gutter-Refresh
         setTimeout(() => { try { window._updateErrorGutter(); } catch(e){} }, 250);
 
@@ -13978,6 +14577,95 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     window._toggleHandRStoSchrittkette(name);
                 }
             }
+        };
+
+        // ===== Code-Folding für SCHRITTKETTE-Blöcke =====
+        // Speichert pro Kettennamen die eingeklappten Original-Zeilen im RAM.
+        // Beim Falten wird der Block-Inhalt durch einen Marker-Kommentar
+        // ersetzt; beim Ausklappen kommt der gespeicherte Inhalt zurück.
+        // Bewusst NICHT in localStorage persistiert: nach Reload sind alle
+        // Ketten wieder voll sichtbar (Code-Export reflektiert immer den
+        // tatsächlichen Inhalt, nicht den Fold-Zustand).
+        window._codeFolds = window._codeFolds || new Map();
+        // Wir merken uns die Anzahl Marker-Zeilen pro Fold, damit der Wiederherstellungs-
+        // Splice die richtige Anzahl ersetzt.
+        window._codeFoldMarkerLines = 1;
+        window._toggleCodeFold = function(chainName) {
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            const upper = chainName.toUpperCase();
+            const lines = ta.value.split('\n');
+            let startLine = -1, endLine = -1;
+            const reStart = new RegExp('^\\s*SCHRITTKETTE\\s+' + upper + '\\s*:?', 'i');
+            for (let i = 0; i < lines.length; i++) {
+                if (startLine < 0) {
+                    if (reStart.test(lines[i])) startLine = i;
+                } else if (/^\s*END\b/i.test(lines[i])) {
+                    endLine = i; break;
+                }
+            }
+            if (startLine < 0 || endLine < 0) return;
+            if (window._codeFolds.has(upper)) {
+                // Ausklappen: Marker-Zeile durch Original-Inhalt ersetzen.
+                const body = window._codeFolds.get(upper);
+                const newLines = lines.slice(0, startLine + 1)
+                    .concat(body)
+                    .concat(lines.slice(endLine));
+                ta.value = newLines.join('\n');
+                window._codeFolds.delete(upper);
+            } else {
+                // Einklappen: Inhalt sichern, Marker setzen.
+                const body = lines.slice(startLine + 1, endLine);
+                if (body.length === 0) return;
+                window._codeFolds.set(upper, body);
+                const marker = '    // 🪗 EINGEKLAPPT — ' + body.length + ' Zeilen — auf ▸ klicken zum Ausklappen';
+                const newLines = lines.slice(0, startLine + 1)
+                    .concat([marker])
+                    .concat(lines.slice(endLine));
+                ta.value = newLines.join('\n');
+            }
+            ta.dispatchEvent(new Event('input'));
+            // Nach dem Re-Highlight (im input-Listener) noch einen Tick warten und
+            // den Fold-Gutter NEU positionieren, sonst sitzen die Chevrons auf
+            // den alten Y-Koords (lineSpans waren beim ersten Update noch stale).
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (typeof window._updateFoldGutter === 'function') {
+                        try { window._updateFoldGutter(); } catch(_e) {}
+                    }
+                });
+            });
+        };
+
+        // Sammelt alle Variablennamen, die in eingeklappten SCHRITTKETTE-Blöcken
+        // verwendet werden. Wird vom Sticky-Detector aufgerufen, damit Variablen
+        // aus gefolderten Ketten NICHT als „verwaist" markiert werden.
+        // Trennt nicht zwischen LHS/RHS — die Sticky-Logik braucht nur „existiert
+        // im Code" für die Orphan-Suppression.
+        window._getFoldedVars = function() {
+            const out = new Set();
+            if (!window._codeFolds || window._codeFolds.size === 0) return out;
+            const re = /\b([A-Za-z_][A-Za-z0-9_]*)\b/g;
+            const RESERVED = new Set([
+                'STEP','TRANS','ACTION','ACTIONS','END','AFTER','GOTO',
+                'TON','TOF','TP','CTU','CTD','RS','SR','TRUE','FALSE',
+                'AND','OR','NOT','XOR','UND','ODER','NICHT','IST','GLEICH','IS',
+                'SCHRITTKETTE','VAR','CONTROL','BEGIN','IF','THEN','ELSE',
+                'N','C','P','D','L','S','R'
+            ]);
+            window._codeFolds.forEach(body => {
+                body.forEach(line => {
+                    const codeOnly = line.split('//')[0];
+                    let m;
+                    while ((m = re.exec(codeOnly)) !== null) {
+                        const w = m[1].toUpperCase();
+                        if (RESERVED.has(w)) continue;
+                        if (/^\d/.test(w)) continue;
+                        out.add(w);
+                    }
+                });
+            });
+            return out;
         };
 
         // Highlight-Helper für die DSL↔RS-Toggles: nach dem Re-Render der
@@ -14823,6 +15511,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             });
         }
+        // Pro Layout-Variante eigene Grid-Sizes — wechselt der User zwischen
+        // sim-bottom und sim-right zurück, sind die zuvor eingestellten
+        // Spalten-/Reihen-Breiten wieder da statt verloren.
+        const _GRID_VAR_KEYS = ['--grid-col-1','--grid-col-2','--grid-col-3','--grid-row-1','--grid-row-2'];
+        window._loadGridSizesMap = function() {
+            try {
+                const raw = localStorage.getItem('valisGridSizes');
+                if (!raw) return {};
+                const m = JSON.parse(raw);
+                return (m && typeof m === 'object') ? m : {};
+            } catch(_e) { return {}; }
+        };
+        window._saveGridSizesMap = function(m) {
+            try { localStorage.setItem('valisGridSizes', JSON.stringify(m)); } catch(_e) {}
+        };
+        // Auf das aktuelle Grid-Layout die zugehörigen gespeicherten Sizes
+        // anwenden. Wird sowohl beim Layout-Wechsel als auch beim Reload
+        // aufgerufen. Wenn für das Layout nichts gespeichert ist, werden die
+        // bisherigen CSS-Vars gelöscht — damit das frische Layout sich auf die
+        // 1fr-Defaults aus dem CSS verlässt.
+        window._applyGridSizesForLayout = function(layoutName) {
+            const wc = document.getElementById('workspace-container');
+            if (!wc) return;
+            const m = window._loadGridSizesMap();
+            const saved = m[layoutName] || {};
+            _GRID_VAR_KEYS.forEach(v => {
+                if (saved[v]) wc.style.setProperty(v, saved[v]);
+                else wc.style.removeProperty(v);
+            });
+        };
         function _saveViewState() {
             let vis = {}, sizes = {};
             let wc = document.getElementById('workspace-container');
@@ -14831,14 +15549,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 vis[id] = el ? el.style.display !== 'none' : true;
                 if (el && el.style.flex && el.style.flex !== '1 1 0%' && el.style.flex !== '1 1 0') sizes[id] = el.style.flex;
             });
-            if (wc) {
-                ['--grid-col-1','--grid-col-2','--grid-row-1','--grid-row-2'].forEach(v => {
-                    let val = wc.style.getPropertyValue(v);
-                    if (val) sizes[v] = val;
-                });
-            }
             localStorage.setItem('valisPanelVisibility', JSON.stringify(vis));
             localStorage.setItem('valisPanelSizes', JSON.stringify(sizes));
+            // Grid-Vars getrennt pro Layout speichern (siehe _applyGridSizesForLayout).
+            if (wc && typeof currentLayout === 'string' && currentLayout.startsWith('grid-')) {
+                const map = window._loadGridSizesMap();
+                const entry = map[currentLayout] || {};
+                let dirty = false;
+                _GRID_VAR_KEYS.forEach(v => {
+                    const val = wc.style.getPropertyValue(v);
+                    if (val) { if (entry[v] !== val) { entry[v] = val; dirty = true; } }
+                    else if (entry[v]) { delete entry[v]; dirty = true; }
+                });
+                if (dirty) {
+                    map[currentLayout] = entry;
+                    window._saveGridSizesMap(map);
+                }
+            }
         }
         window.toggleWorkspaceView = function(panelId) {
             if (!window.popOutWindows) window.popOutWindows = {};
@@ -14910,14 +15637,33 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             changeWorkspaceLayout(val, skipSave);
         };
         window.changeWorkspaceLayout = function(val, skipSave) {
+            const _prevLayout = currentLayout;
             currentLayout = val;
             localStorage.setItem('valisLayout', val); // 🌟 NEU: Layout für F5 speichern!
             const wc = document.getElementById('workspace-container');
+            // Bevor wir das aktuelle Layout verlassen: dessen Grid-Vars
+            // unter dem alten Key sichern (sonst gehen die letzten
+            // Resize-Stände bei direkten Wechseln verloren).
+            if (_prevLayout && _prevLayout !== val && _prevLayout.startsWith('grid-') && wc) {
+                const map = window._loadGridSizesMap();
+                const entry = map[_prevLayout] || {};
+                let dirty = false;
+                _GRID_VAR_KEYS.forEach(v => {
+                    const cur = wc.style.getPropertyValue(v);
+                    if (cur) { if (entry[v] !== cur) { entry[v] = cur; dirty = true; } }
+                });
+                if (dirty) { map[_prevLayout] = entry; window._saveGridSizesMap(map); }
+            }
             // Vorherige Raster-Klassen immer erst aufräumen
             wc.classList.remove('layout-grid', 'grid-sim-bottom', 'grid-sim-top', 'grid-sim-right', 'grid-sim-left');
+            // CSS-Vars beim Layout-Wechsel zurücksetzen — die alten Werte
+            // gehörten dem alten Layout. _applyGridSizesForLayout setzt sie
+            // gleich darunter neu, falls es für val gespeicherte Werte gibt.
+            if (wc) _GRID_VAR_KEYS.forEach(v => wc.style.removeProperty(v));
             if (val.startsWith('grid-')) {
                 // Ein 3er-Raster anwenden
                 wc.classList.add('layout-grid', val);
+                window._applyGridSizesForLayout(val);
                 // Wir erzwingen, dass alle 3 Panels sichtbar sind, da sonst das 3er-Raster Löcher hat
                 const pFbs = document.getElementById('fbs-wrapper');
                 const pIec = document.getElementById('circuit-wrapper');
@@ -33305,13 +34051,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             inputs.forEach(name  => _registerInCode(name, 'in'));
             outputs.forEach(name => _registerInCode(name, 'out'));
+            // Folded-Block-Variablen: vor dem Orphan-Check „virtuell vorhanden".
+            // Ohne diese Re-Registrierung würden ALLE Variablen aus einer
+            // eingeklappten SCHRITTKETTE als verwaist gemeldet.
+            const foldedVars = (typeof window._getFoldedVars === 'function')
+                ? window._getFoldedVars() : new Set();
+            foldedVars.forEach(name => _registerInCode(name, 'out'));
             // 2) Variablen, die jetzt wieder im Code sind, SOFORT aus den Committed-Orphans
             //    entfernen (kein Debounce). Timer-/Zähler-Node-IDs (z.B. CTU_BOX_FULL)
             //    sind ebenfalls aktive Variablen — Display-Bauteile binden direkt auf
             //    sie. Ohne diese Zeile würden sie als verwaist auftauchen, obwohl sie
             //    im Code aktiv sind.
             const timerIds = window._getTimerCounterIds();
-            const allInCode = new Set([...inputs, ...outputs, ...timerIds]);
+            const allInCode = new Set([...inputs, ...outputs, ...timerIds, ...foldedVars]);
             let visualChanged = false;
             window._committedOrphans.forEach(name => {
                 if (allInCode.has(name)) { window._committedOrphans.delete(name); visualChanged = true; }
@@ -33334,7 +34086,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const _allInCodeNow = new Set([
                         ...(Array.isArray(globalInputs)  ? globalInputs  : []),
                         ...(Array.isArray(globalOutputs) ? globalOutputs : []),
-                        ...window._getTimerCounterIds()
+                        ...window._getTimerCounterIds(),
+                        ...((typeof window._getFoldedVars === 'function') ? window._getFoldedVars() : [])
                     ]);
                     // Sammeln vor dem Iterieren, damit wir gefahrlos delete() während
                     // forEach machen können.
@@ -35797,6 +36550,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
                 if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
                 if (panelId === 'analyzer-modal') drawAnalyzer(); // Oszilloskop an neue Größe anpassen
+                if (panelId === 'sk-wrapper') {
+                    if (typeof window._reBindSkPanelHandlers === 'function') window._reBindSkPanelHandlers();
+                    if (typeof window._renderSchrittketten === 'function') window._renderSchrittketten();
+                }
             }, 100);
             // 🌟 MOUSE-EVENT-ROUTING: Klicks im 2. Fenster werden zurück an die Engine im 1. Fenster gesendet!
             // WICHTIG: instanceof-Checks über Fenster-Grenzen schlagen fehl (jedes Fenster hat eigene Konstruktoren)!
@@ -36564,18 +37321,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (_savedSizes) {
                     try {
                         let sizes = JSON.parse(_savedSizes);
-                        let wc = document.getElementById('workspace-container');
                         ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
                             if (el && sizes[id]) el.style.flex = sizes[id];
                         });
-                        if (wc) {
-                            ['--grid-col-1','--grid-col-2','--grid-row-1','--grid-row-2'].forEach(v => {
-                                if (sizes[v]) wc.style.setProperty(v, sizes[v]);
-                            });
-                        }
                     } catch(e) {}
                 }
+                // Grid-Vars je Layout aus separatem Key laden
+                // (selectLayout oben hat das Layout zwar gesetzt, aber ohne
+                // Sizes — hier nachschieben, sobald wc verfügbar ist).
+                try {
+                    if (typeof currentLayout === 'string' && currentLayout.startsWith('grid-')
+                        && typeof window._applyGridSizesForLayout === 'function') {
+                        window._applyGridSizesForLayout(currentLayout);
+                    }
+                } catch(_e) {}
+                // Einmaliger Backwards-Compat-Pfad: alte Format-Werte aus
+                // valisPanelSizes übernehmen, falls valisGridSizes leer ist.
+                try {
+                    const map = window._loadGridSizesMap();
+                    if (Object.keys(map).length === 0 && _savedSizes && typeof currentLayout === 'string'
+                        && currentLayout.startsWith('grid-')) {
+                        const old = JSON.parse(_savedSizes);
+                        const entry = {};
+                        _GRID_VAR_KEYS.forEach(v => { if (old[v]) entry[v] = old[v]; });
+                        if (Object.keys(entry).length) {
+                            map[currentLayout] = entry;
+                            window._saveGridSizesMap(map);
+                            window._applyGridSizesForLayout(currentLayout);
+                        }
+                    }
+                } catch(_e) {}
             }, 0);
         }
 		// ==========================================
@@ -40773,8 +41549,35 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return m ? { word: m[0], start: pos - m[0].length } : { word: '', start: pos };
             }
 
+            // Schaut die aktuelle Cursor-Zeile an: liegt sie in einer
+            // SCHRITTKETTE und enthält sie ein „-> S…"-Pattern unmittelbar
+            // vor der Cursor-Position, geben wir die Step-Namen der jeweiligen
+            // Kette zurück. Verhindert Tippfehler bei langen Ketten und macht
+            // das `-> S`-Trigger-Pattern selbst-erklärend.
+            function _stepCandidatesAtCursor(word) {
+                const pos = textarea.selectionStart;
+                const before = textarea.value.substring(0, pos);
+                // Trigger nur, wenn das Wort direkt nach `-> ` (oder `[S`,
+                // `,S`) steht — sonst gewinnen die normalen Var/KW-Treffer.
+                const trans = before.match(/(?:->|\[|,)\s*([A-Za-z_][A-Za-z0-9_]*)?$/);
+                if (!trans) return null;
+                // In welcher SCHRITTKETTE sitzt der Cursor?
+                const lineIdx = before.split('\n').length - 1;
+                const chains = window._schrittkettenChains || [];
+                const chain = chains.find(c => lineIdx >= c.startLine && lineIdx <= c.endLine);
+                if (!chain) return null;
+                const lw = word.toLowerCase();
+                const out = (chain.steps || [])
+                    .map(s => s.name)
+                    .filter(n => n.toLowerCase().startsWith(lw) && n.length > word.length)
+                    .map(n => ({ l: n, t: 'Step (' + chain.name + ')', i: n }));
+                return out;
+            }
             function _buildList(word) {
                 const lw = word.toLowerCase();
+                // Step-Namen haben Vorrang in SCHRITTKETTE-TRANS-Kontext.
+                const stepHits = _stepCandidatesAtCursor(word);
+                if (stepHits && stepHits.length) return stepHits.slice(0, 12);
                 const vars = [...(globalInputs || []), ...(globalOutputs || [])]
                     .map(v => ({ l: v, t: 'Variable', i: v }));
                 return [...vars, ...AC_KW]
@@ -45509,6 +46312,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         </div>
     </div>
     <div id="code-glossary-popup" role="tooltip" aria-hidden="true"></div>
+    <div id="code-var-tooltip" role="tooltip" aria-hidden="true"></div>
     <div id="code-error-popup" role="dialog" aria-hidden="true"></div>
 </body>
 </html>

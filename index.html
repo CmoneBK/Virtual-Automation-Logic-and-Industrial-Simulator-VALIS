@@ -249,10 +249,13 @@
         /* Tool-Buttons während aktiver Sim ausblenden — Klasse `sk-hide-tools` setzt
            der JS-Toggle aufs Wrapper, sobald die Option AN ist UND `isSimulationActive`.
            Greift auf alle Edit-Tool-Buttons (×, ↑, ↓, +) und ihre Label gleichzeitig. */
-        #sk-wrapper.sk-hide-tools .sk-tool-btn,
+        #sk-wrapper.sk-hide-tools .sk-tool-btn:not(.sk-force-btn),
         #sk-wrapper.sk-hide-tools .sk-tool-label {
             display: none !important;
         }
+        /* Force-Active (Feature 11) ist KEIN Edit-Button — er gehört zur
+           Sim-Bedienung. Daher bleibt er auch sichtbar, wenn die Option
+           „Tool-Buttons bei Sim ausblenden" AN ist. */
         /* 2D Toolbar: Feste Höhe aufheben, damit sie umbrechen kann */
         #factory-toolbar {
             flex: 0 0 auto; min-height: 50px; height: auto;
@@ -836,8 +839,22 @@
         .fbs-block { fill: #ffffff; stroke-width: 2.5px; }
         .fbs-text { font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; fill: #000000; font-weight: bold; }
         .fbs-pin-text { font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 10px; fill: #555555; }
-        .fbs-line-halo { fill: none; stroke: #ffffff; stroke-width: 7px; stroke-linejoin: round; stroke-linecap: round; }
-        .fbs-line { fill: none; stroke-width: 2.5px; stroke-linejoin: round; stroke-linecap: round; }
+        .fbs-line-halo { fill: none; stroke: #ffffff; stroke-width: calc(var(--fbs-stroke-w, 2px) + 4.5px); stroke-linejoin: round; stroke-linecap: round; }
+        .fbs-line { fill: none; stroke-width: var(--fbs-stroke-w, 2px); stroke-linejoin: round; stroke-linecap: round; }
+        /* Fokus-Modus-Aktiv-Cursor: zeigt dem User, dass Klicks Knoten fokussieren. */
+        #custom-svg.fbs-focus-armed g[data-node-id] { cursor: pointer; }
+        #custom-svg.fbs-focus-armed g[data-node-id]:hover .fbs-block,
+        #custom-svg.fbs-focus-armed g[data-node-id]:hover .fbs-io-box {
+            stroke: #f57c00 !important; stroke-width: 3 !important;
+        }
+        /* Fokus-Modus: im Code-Editor werden die Zeilen unterstrichen, die
+           Definitionen der im Logikplan-Fokus enthaltenen Variablen sind. */
+        #highlighting-content > span.fbs-focus-line {
+            text-decoration: underline;
+            text-decoration-color: #f57c00;
+            text-decoration-thickness: 2px;
+            text-underline-offset: 2px;
+        }
         .fbs-io-box { fill: #f0f0f0; stroke-width: 2px; rx: 4px; ry: 4px; }
       	/* --- Live-Simulation Styles (MIT AFTERGLOW) --- */
         /* 1. Ausklingen (Fade-Out): Langsamer Übergang (1s), wenn das Signal wegfällt */
@@ -2051,6 +2068,7 @@
                 <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="E-Pneumatik-Modus: blendet Schließer/Öffner-Wahl bei Tastern/Schaltern aus (Notaus & Lichtgitter bleiben Öffner). Verändert NICHT den Code." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
                 <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
                 <button onclick="openAnalyzerModal()" title="Oszilloskop öffnen" style="background:#607d8b;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📊</button>
+                <button id="btn-hmi-recycle" onclick="window._openHmiRecycleBin(event)" title="Papierkorb für gelöschte HMI/Anlage-Bauteile — letzte 20, mit One-Click-Restore." style="background:#5d4037;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">🗑️ <span id="hmi-recycle-count" style="font-size:10px;opacity:0.8;"></span></button>
                 <button id="btn-editor-settings" onclick="window._openEditorSettings(event)" title="Einstellungen für die Variablen-Verwaltung (Auto-Aufräumen, Karenzzeit)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚙️</button>
             </span>
         </div>
@@ -2135,6 +2153,11 @@
                     <div id="fbs-options-group">
                         <button id="btn-fbs-colors" class="btn-export" style="background-color: #911eb4; border: 1px solid #333;" onclick="toggleFbsColors()">🌈 Bunte Linien: AN</button>
                         <button id="btn-fbs-layout" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="cycleFbsLayout()">📐 Dichte: Normal</button>
+                        <button id="btn-fbs-stroke" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="cycleFbsStroke()" title="Linienstärke der Verbindungen — bei dichten Plänen dünner, bei Beamer-Demos fetter.">✏️ Linie: Normal</button>
+                        <button id="btn-fbs-helpers" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsHelpers()" title="Auto-Helper aus Schrittketten (_FAULT_/_IL_/_MODE_/_TMR_/_SK_) im Plan ausblenden. Halbiert oft den Plan bei SK-lastigem Code.">🛠 Helper: AN</button>
+                        <button id="btn-fbs-consts" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsConsts()" title="TRUE/FALSE-Konstanten als eigene Knoten ausblenden, stattdessen am Edge labeln.">🔢 Konstanten: AN</button>
+                        <button id="btn-fbs-rscol" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsRSColumn()" title="RS/SR-Glieder und Timer/Counter in eine eigene Spalte zwischen Logik und Ausgängen sortieren.">⚏ RS-Spalte: AUS</button>
+                        <button id="btn-fbs-focus" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsFocusMode()" title="Fokus-Modus: aktivieren, dann auf einen Knoten klicken → nur Vorgänger und Nachfolger dieses Knotens werden gezeigt. Erneut klicken oder ESC = zurück.">🎯 Fokus: AUS</button>
                         <button id="btn-fbs-errorglow" class="btn-export" style="background-color: #d50000; border: 1px solid #333;" onclick="toggleFbsErrorHighlight()" title="Code-Fehler im Logikplan durch rotes Leuchten an den betroffenen Variablen und Linien sichtbar machen.">🚨 Fehler-Glow: AN</button>
                     </div>
                 </div>
@@ -2350,12 +2373,14 @@
                         <button class="sk-mode-btn" data-mode="s7graph" type="button">S7-GRAPH</button>
                     </div>
                     <button id="btn-sk-options" class="btn-export" style="background-color:#607d8b;border:1px solid #455a64;" onclick="window._toggleSkOptions()">⚙️ Optionen</button>
+                    <button id="btn-sk-control" class="btn-export" style="background-color:#455a64;border:1px solid #263238;display:none;" onclick="window._toggleSkControlEditor()" title="CONTROL-Block der ausgewählten Schrittkette als Editor öffnen (HMI-Bindungen für MODE_AUTO/TAP/MAN, S_ON/S_OFF/S_SEL, OUT_*).">🎛 CONTROL</button>
                     <div id="sk-options-group">
                         <button id="btn-sk-hide-tools" class="btn-export" style="background-color:#555;border:1px solid #333;" onclick="window._toggleSkHideToolsOnSim()" title="Bei aktiver Simulation die runden Edit-Buttons (×, ↑, ↓, +) im Grafcet ausblenden, damit das Panel aufgeräumt bleibt.">🛠 Tool-Buttons bei Sim: EIN</button>
                     </div>
                     <span id="sk-panel-stats" style="color:#cfd8dc;font-size:10px;margin-left:auto;font-family:'Consolas','Courier New',monospace;letter-spacing:0.3px;"></span>
                     <span id="sk-panel-info" style="color:#90caf9;font-size:10px;margin-left:8px;"></span>
                 </div>
+                <div id="sk-control-editor" style="display:none;"></div>
                 <div class="sk-panel-body">
                     <svg id="sk-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>
                 </div>
@@ -3194,6 +3219,115 @@
                 flex: 1; overflow: auto; padding: 12px;
                 position: relative;
             }
+            /* CONTROL-Block-Editor (Feature 9): klappbar unter dem Header. */
+            #sk-control-editor {
+                background: #263238; color: #cfd8dc;
+                border-bottom: 1px solid #455a64;
+                padding: 8px 12px; max-height: 240px; overflow: auto;
+                font-size: 11px; flex-shrink: 0;
+            }
+            #sk-control-editor .skc-chain {
+                margin-bottom: 8px; padding-bottom: 6px;
+                border-bottom: 1px dashed #455a64;
+            }
+            #sk-control-editor .skc-chain:last-child {
+                margin-bottom: 0; padding-bottom: 0; border-bottom: none;
+            }
+            #sk-control-editor .skc-title {
+                font-weight: bold; color: #90caf9;
+                font-family: 'Consolas','Courier New',monospace;
+                margin-bottom: 4px;
+            }
+            #sk-control-editor .skc-grid {
+                display: grid; grid-template-columns: 130px 1fr auto;
+                gap: 4px 8px; align-items: center;
+            }
+            #sk-control-editor .skc-key {
+                color: #dcdcaa; font-family: 'Consolas','Courier New',monospace;
+                font-size: 11px; padding: 2px 0;
+            }
+            #sk-control-editor .skc-input {
+                background: #1e2229; border: 1px solid #455a64;
+                color: #d4d4d4; border-radius: 3px;
+                padding: 2px 5px; font-family: 'Consolas','Courier New',monospace;
+                font-size: 11px; min-width: 0;
+            }
+            #sk-control-editor .skc-input:focus {
+                outline: none; border-color: #569cd6;
+            }
+            #sk-control-editor .skc-del {
+                background: #b71c1c; color: #fff; border: none;
+                border-radius: 3px; cursor: pointer;
+                width: 18px; height: 18px; padding: 0; font-size: 11px;
+                line-height: 1;
+            }
+            #sk-control-editor .skc-del:hover { background: #d32f2f; }
+            #sk-control-editor .skc-add {
+                display: flex; gap: 4px; margin-top: 4px;
+            }
+            #sk-control-editor .skc-add select,
+            #sk-control-editor .skc-add input {
+                background: #1e2229; border: 1px solid #455a64;
+                color: #d4d4d4; border-radius: 3px; padding: 2px 5px;
+                font-size: 11px;
+            }
+            #sk-control-editor .skc-add button {
+                background: #1976d2; color: #fff; border: none;
+                border-radius: 3px; cursor: pointer;
+                padding: 2px 10px; font-size: 11px;
+            }
+            #sk-control-editor .skc-add button:hover { background: #2196f3; }
+            /* Test-Step "Force Active" Button (Feature 11) — runder Button mit
+               Blitz-Icon, sitzt zwischen den Tool-Buttons in der Action-Box. */
+            .sk-force-btn circle {
+                fill: #ffa000; stroke: #f57c00;
+            }
+            .sk-force-btn:hover circle { fill: #ffb300; }
+            .sk-force-btn text { fill: #1a1a1a; font-weight: bold; }
+            /* Drag-Drop für Actions (Feature 12): visuelle States. */
+            .sk-action-box.dragging { opacity: 0.4; }
+            .sk-step.drop-target rect {
+                stroke: #ffd54f !important;
+                stroke-width: 3 !important;
+                stroke-dasharray: 4 2;
+            }
+            .sk-action-box.drop-target > rect:first-child {
+                stroke: #ffd54f !important;
+                stroke-width: 3 !important;
+                stroke-dasharray: 4 2;
+            }
+            /* Während eines aktiven Drags Text-Selektion in SK + Editor sperren,
+               damit Mausbewegung keine native Selection erzeugt. */
+            body[style*="grabbing"] svg, body[style*="grabbing"] textarea {
+                user-select: none !important; -webkit-user-select: none !important;
+            }
+            /* HMI-Papierkorb-Popup (Feature 10) */
+            #hmi-recycle-popup .hrb-item {
+                display: flex; align-items: center; gap: 6px;
+                padding: 6px 8px; margin-bottom: 4px;
+                background: #1e2229; border: 1px solid #455a64;
+                border-radius: 4px;
+            }
+            #hmi-recycle-popup .hrb-info { flex: 1; min-width: 0; }
+            #hmi-recycle-popup .hrb-title {
+                font-weight: bold; color: #90caf9; font-size: 12px;
+            }
+            #hmi-recycle-popup .hrb-meta {
+                color: #90a4ae; font-size: 10px; margin-top: 2px;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            }
+            #hmi-recycle-popup .hrb-restore {
+                background: #2e7d32; color: #fff; border: none;
+                border-radius: 3px; padding: 4px 8px; font-size: 11px;
+                cursor: pointer; flex-shrink: 0;
+            }
+            #hmi-recycle-popup .hrb-restore:hover { background: #388e3c; }
+            #hmi-recycle-popup .hrb-drop {
+                background: #455a64; color: #fff; border: none;
+                border-radius: 3px; padding: 4px 7px; font-size: 11px;
+                cursor: pointer; flex-shrink: 0;
+            }
+            #hmi-recycle-popup .hrb-drop:hover { background: #607d8b; }
             /* SK-Panel-Grid-Behandlung: siehe Block oben bei #workspace-container.layout-grid. */
             /* Step-Box Stile — Grafcet & S7-GRAPH gemeinsam */
             .sk-step rect {
@@ -3270,6 +3404,15 @@
             .sk-step-sv-badge.faulted {
                 fill: #fff; font-size: 11px;
             }
+            /* Add-Badges für fehlende INTERLOCK/SUPERVISION (Feature: IL/SV
+               editierbar machen). Dezent grau, mit ⊕-Symbol — Hover macht sie
+               in der jeweiligen Themenfarbe sichtbar. */
+            .sk-il-add, .sk-sv-add {
+                fill: #78909c !important; font-weight: normal; opacity: 0.7;
+                cursor: pointer;
+            }
+            .sk-il-add:hover { fill: #0d47a1 !important; opacity: 1; }
+            .sk-sv-add:hover { fill: #b71c1c !important; opacity: 1; }
             .sk-step.faulted rect {
                 fill: #ffcdd2 !important; stroke: #b71c1c !important;
                 animation: sk-step-fault-blink 0.6s ease-in-out infinite;
@@ -3320,6 +3463,33 @@
             #sk-qual-menu .sk-qual-opt.active { background: rgba(86, 156, 214, 0.2); }
             #sk-qual-menu .sk-qual-opt b { color: #ffd54f; min-width: 20px; }
             #sk-qual-menu .sk-qual-opt span { color: #90a4ae; }
+            /* Action-Quick-Insert-Menü (Feature 16): nutzt das gleiche
+               .sk-qual-opt-Layout, eigener Wrapper für Variablen-Liste. */
+            #sk-action-insert-menu {
+                position: fixed; z-index: 7000;
+                background: #2d2d30; border: 1px solid #569cd6;
+                border-radius: 4px; padding: 4px;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+                font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 12px;
+                min-width: 240px; max-width: 320px;
+                max-height: 360px; overflow-y: auto;
+            }
+            #sk-action-insert-menu .sk-qual-opt {
+                padding: 5px 8px; cursor: pointer; color: #cfd8dc;
+                border-radius: 3px; display: flex; gap: 8px; align-items: baseline;
+            }
+            #sk-action-insert-menu .sk-qual-opt:hover { background: #3e3e42; }
+            #sk-action-insert-menu .sk-qual-opt b {
+                color: #dcdcaa; font-family: 'Consolas','Courier New',monospace;
+                min-width: 0;
+            }
+            #sk-action-insert-menu .sk-qual-opt span {
+                color: #90a4ae; font-size: 10px; margin-left: auto;
+            }
+            #sk-action-insert-menu .sk-qual-opt code {
+                background: #1e1e1e; padding: 1px 4px; border-radius: 2px;
+                color: #dcdcaa;
+            }
             .sk-editable:hover {
                 fill: #1976d2 !important;
                 font-weight: bold;
@@ -3331,6 +3501,45 @@
             #sk-svg:hover .sk-tool-btn { opacity: 0.85; }
             .sk-tool-btn:hover { opacity: 1 !important; transform-box: fill-box; }
             .sk-tool-btn:hover circle { fill: #1976d2; }
+            /* Recognizer-Banner-Button (Feature 13): RS→DSL-Wandler oben auf
+               aus RS-Form erkannten Ketten. Hover-Feedback in dunklerem
+               Orange, damit die Klickbarkeit klar ist. */
+            .sk-rs-convert-btn { transition: opacity 0.15s; }
+            .sk-rs-convert-btn:hover rect { fill: #e65100; }
+            .sk-rs-convert-btn:hover { opacity: 0.92; }
+            /* IL/SV-Hover-Row: unsichtbare Hit-Rect, die NUR Pointer-Events
+               einfängt. Liegt direkt am SVG (nicht im .sk-step), damit sie
+               weder vom .sk-step rect-Stil betroffen ist noch von der gelben
+               Action-Box visuell überdeckt wird. */
+            .sk-cond-hit {
+                fill: transparent !important;
+                stroke: none !important;
+                pointer-events: all;
+            }
+            /* ×-Lösch-Buttons (action-del, step-del, il-del, sv-del): per
+               Default komplett unsichtbar — erst beim Hover des umgebenden
+               Containers sichtbar. So bleibt das Panel aufgeräumt; die ×-
+               Klicks sind weiterhin direkt verfügbar.
+               Hover-Container je nach Button-Typ:
+                 - action-del  → Hover über .sk-action-box (gelbes Feld)
+                 - step-del    → Hover über .sk-step (Step-Rechteck)
+                 - il-del/sv-del → Hover über .sk-cond-row (jeweilige Zeile)
+               Andere Tool-Buttons (↑↓+) bleiben sichtbar wie bisher. */
+            .sk-tool-btn[data-tool$="-del"] {
+                opacity: 0 !important;
+                pointer-events: none;
+            }
+            .sk-step:hover > .sk-tool-btn[data-tool$="-del"],
+            .sk-action-box:hover > .sk-tool-btn[data-tool$="-del"],
+            .sk-cond-row:hover .sk-tool-btn[data-tool$="-del"] {
+                opacity: 0.85 !important;
+                pointer-events: auto;
+            }
+            .sk-step:hover > .sk-tool-btn[data-tool$="-del"]:hover,
+            .sk-action-box:hover > .sk-tool-btn[data-tool$="-del"]:hover,
+            .sk-cond-row:hover .sk-tool-btn[data-tool$="-del"]:hover {
+                opacity: 1 !important;
+            }
         </style>
         <div id="saveload-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 6px; box-shadow: 0 4px 25px rgba(0,0,0,0.9); z-index: 2000; width: 860px; max-width: 97vw; max-height: 92vh; overflow: hidden; display: none; flex-direction: column;">
             <h3 style="margin:0 0 14px; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px; flex-shrink:0;" data-i18n="sl_title">💾 Speichern / Laden / Exportieren</h3>
@@ -4206,6 +4415,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "extra_detach_iec": "⏏️ Schaltplan abkoppeln (Multi-Screen)",
                 "extra_detach_iec_edit": "⏏️ Editor abkoppeln (Multi-Screen)",
                 "extra_detach_fac": "⏏️ 2D-Anlage abkoppeln (Multi-Screen)",
+                "extra_detach_sk": "⏏️ Schrittkette abkoppeln (Multi-Screen)",
                 "extra_detach_osc": "⏏️ Oszilloskop abkoppeln (Multi-Screen)",
                 "extra_scl": "📤 Als Siemens SCL exportieren (TIA Portal)",
                 "extra_embed": "🖼️ Embed-Code (Moodle / ILIAS)",
@@ -4559,6 +4769,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "extra_detach_iec": "⏏️ Detach Circuit Diagram (Multi-Screen)",
                 "extra_detach_iec_edit": "⏏️ Detach Editor (Multi-Screen)",
                 "extra_detach_fac": "⏏️ Detach 2D Factory (Multi-Screen)",
+                "extra_detach_sk": "⏏️ Detach Sequence Chart (Multi-Screen)",
                 "extra_detach_osc": "⏏️ Detach Oscilloscope (Multi-Screen)",
                 "extra_scl": "📤 Export as Siemens SCL (TIA Portal)",
                 "extra_embed": "🖼️ Embed Code (Moodle / ILIAS)",
@@ -4967,6 +5178,32 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.fbsLayoutScale = 1.0;  // 1.0 = Normal
         window.fbsLayoutIndex = 0;    // 0=Normal, 1=Kompakt, 2=Weit
         window.fbsErrorHighlight = true; // true = Code-Fehler im Logikplan rot hervorheben
+        // Neue Render-Optionen (alle persistiert in localStorage). Defaults
+        // entsprechen dem bisherigen Verhalten: nichts wird gefiltert/gegliedert.
+        window.fbsHideHelpers   = false;  // _FAULT_/_IL_/_MODE_/_TMR_/_SK_-Knoten ausblenden
+        window.fbsHideConsts    = false;  // TRUE/FALSE-Eingangsknoten ausblenden, Edge-Label stattdessen
+        window.fbsRSColumn      = false;  // RS/SR-Glieder + Timer/Counter in eigener Spalte
+        window.fbsStrokeIndex   = 1;      // 0=Dünn, 1=Normal, 2=Fett
+        window.fbsFocusNodeId   = null;   // wenn gesetzt → nur Vorgänger/Nachfolger sichtbar
+        (function _initFbsSettings() {
+            try {
+                const _ls = (k) => localStorage.getItem(k);
+                if (_ls('valisFbsColors') === '0') window.fbsColorMode = false;
+                else if (_ls('valisFbsColors') === '1') window.fbsColorMode = true;
+                if (_ls('valisFbsErrorHi') === '0') window.fbsErrorHighlight = false;
+                else if (_ls('valisFbsErrorHi') === '1') window.fbsErrorHighlight = true;
+                const li = parseInt(_ls('valisFbsLayoutIdx'), 10);
+                if (Number.isFinite(li) && li >= 0 && li < 3) {
+                    window.fbsLayoutIndex = li;
+                    window.fbsLayoutScale = [1.0, 0.65, 1.5][li];
+                }
+                if (_ls('valisFbsHideHelpers') === '1') window.fbsHideHelpers = true;
+                if (_ls('valisFbsHideConsts')  === '1') window.fbsHideConsts  = true;
+                if (_ls('valisFbsRSColumn')    === '1') window.fbsRSColumn    = true;
+                const si = parseInt(_ls('valisFbsStrokeIdx'), 10);
+                if (Number.isFinite(si) && si >= 0 && si < 3) window.fbsStrokeIndex = si;
+            } catch(_e) {}
+        })();
 		// ==========================================
         // NEU: WEB AUDIO API SYNTHESIZER (0 Bytes Audio-Dateien!)
         // ==========================================
@@ -9567,6 +9804,47 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }, svg);
                     title.textContent = 'SCHRITTKETTE ' + chain.name;
                     y += 22;
+                    // Recognizer-Banner (Feature 13): wenn die Kette nicht aus
+                    // dem DSL stammt (also editableSet sie NICHT enthält), wurde
+                    // sie aus Hand-RS-Code erkannt. Banner zeigt das + Button
+                    // „In DSL umwandeln" → window._toggleHandRStoSchrittkette.
+                    if (!isEditable) {
+                        const bg = el('rect', {
+                            x: PAD, y: y,
+                            width: 380, height: 24,
+                            rx: 3,
+                            fill: '#fff3e0', stroke: '#f57c00', 'stroke-width': 1
+                        }, svg);
+                        const bt = el('text', {
+                            x: PAD + 8, y: y + 16,
+                            fill: '#e65100', 'font-size': 11,
+                            'font-family': "'Segoe UI', Tahoma, sans-serif"
+                        }, svg);
+                        bt.textContent = '🔎 aus RS-Form erkannt — nicht editierbar';
+                        // Convert-Button rechts im Banner. Klick → DSL-Form.
+                        const btn = el('g', {
+                            class: 'sk-rs-convert-btn',
+                            transform: 'translate(' + (PAD + 290) + ',' + (y + 4) + ')',
+                            'data-tool': 'rs-to-dsl',
+                            'data-chain-name': chain.name,
+                            style: 'cursor:pointer;'
+                        }, svg);
+                        el('rect', {
+                            x: 0, y: 0, width: 84, height: 16, rx: 3,
+                            fill: '#f57c00', stroke: '#e65100'
+                        }, btn);
+                        const btnText = el('text', {
+                            x: 42, y: 12, 'text-anchor': 'middle',
+                            fill: '#fff', 'font-size': 10, 'font-weight': 'bold',
+                            'font-family': "'Segoe UI', Tahoma, sans-serif"
+                        }, btn);
+                        btnText.textContent = '→ In DSL umwandeln';
+                        const tooltip = document.createElementNS(SVG_NS, 'title');
+                        tooltip.textContent = 'Aus dem erkannten RS-Glied-Muster die SCHRITTKETTE-DSL erzeugen und im Editor ersetzen.';
+                        btn.appendChild(tooltip);
+                        maxX = Math.max(maxX, PAD + 380);
+                        y += 30;
+                    }
 
                     chain.steps.forEach((step, si) => {
                         const num = base + si;
@@ -9599,7 +9877,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const addBtnSpace = isEditable ? 16 : 0;
                         const aH = Math.max(H, aRows * 14 + 6 + addBtnSpace);
                         if (hasActions || isEditable) {
-                            const aBox = el('g', { class: 'sk-action-box' }, svg);
+                            // Action-Box-Wrapper trägt selbst data-chain-name +
+                            // data-step-name — sonst findet der Drag-Drop-Hit-Test
+                            // den Step nicht, wenn die Box leer ist (keine
+                            // Text-Spans mit data-step-name als Kinder).
+                            const aBox = el('g', {
+                                class: 'sk-action-box',
+                                'data-chain-name': chain.name,
+                                'data-step-name': step.name
+                            }, svg);
                             el('rect', { x: ax, y: y, width: 220, height: aH, rx: 2 }, aBox);
                             // Layout pro Action: links eine VISIBLE Qualifier-Badge,
                             // rechts der Body (lhs := rhs). Vorher war die Badge nur
@@ -9650,7 +9936,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     t.setAttribute('data-qual-base', _bodyTxt);
                                 }
                                 if (isEditable) {
-                                    renderToolBtn(svg, ax + 220 - 10, y + 12 + ai * 14, '×', 'action-del', chain.name, step.name, ai);
+                                    // ×-Action-Del als Kind der aBox, damit CSS-
+                                    // Hover die Sichtbarkeit auf die jeweilige
+                                    // Action-Reihe begrenzen kann (Hover-only).
+                                    renderToolBtn(aBox, ax + 220 - 10, y + 12 + ai * 14, '×', 'action-del', chain.name, step.name, ai);
                                 }
                             });
                             if (isEditable) {
@@ -9659,12 +9948,41 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             }
                             maxX = Math.max(maxX, ax + 220);
                         }
-                        // Step-Tool-Buttons rechts oberhalb der Step-Box (×, ↑, ↓)
+                        // Step-Tool-Buttons rechts oberhalb der Step-Box (×, ↑, ↓).
+                        // Das × ist Kind der Step-Gruppe (Hover-only), ↑/↓
+                        // bleiben global auf dem SVG (immer sichtbar, weil sie
+                        // sonst beim Verschieben mehrerer Steps unauffindbar wären).
                         if (isEditable) {
                             const tY = y - 10;
                             renderToolBtn(svg, colX - W/2 - 14, tY, '↑', 'step-up',   chain.name, step.name);
                             renderToolBtn(svg, colX - W/2 + 4,  tY, '↓', 'step-down', chain.name, step.name);
-                            renderToolBtn(svg, colX + W/2 - 4,  tY, '×', 'step-del',  chain.name, step.name);
+                            renderToolBtn(g,   colX + W/2 - 4,  tY, '×', 'step-del',  chain.name, step.name);
+                        }
+                        // Force-Active-Button (Feature 11): wird IMMER mitgerendert
+                        // (wenn Kette editierbar ist + einen MODE_MAN/OUT_MAN_ON-
+                        // Eintrag im CONTROL hat), Sichtbarkeit toggelt
+                        // highlightActive() pro Tick basierend auf Sim-Status +
+                        // MAN-Mode. Sonst wäre der Button nach Sim-Start nicht
+                        // sichtbar, weil render() nur bei Code-Änderungen feuert.
+                        const _ctl = (chain.control && chain.control.keys) || new Map();
+                        const _hasManCfg = _ctl.has('MODE_MAN') || _ctl.has('OUT_MAN_ON');
+                        if (isEditable && _hasManCfg) {
+                            const fg = el('g', {
+                                class: 'sk-tool-btn sk-force-btn',
+                                transform: 'translate(' + (colX - W/2 - 24) + ',' + (y + H/2) + ')',
+                                'data-tool':       'step-force',
+                                'data-chain-name': chain.name,
+                                'data-step-name':  step.name,
+                                'data-man-out':    _ctl.get('OUT_MAN_ON') || '',
+                                'data-man-in':     _ctl.get('MODE_MAN')   || '',
+                                style:             'display:none;'
+                            }, svg);
+                            el('circle', { r: 9 }, fg);
+                            const ft = el('text', { 'text-anchor': 'middle', y: 4, 'font-size': 12 }, fg);
+                            ft.textContent = '⚡';
+                            const tt = document.createElementNS(SVG_NS, 'title');
+                            tt.textContent = 'Schritt zwangs-aktivieren (MAN-Modus, nur Sim)';
+                            fg.appendChild(tt);
                         }
                         y += H;
 
@@ -9684,30 +10002,97 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             return { time, helper: 'TON__TMR_' + chain.name + '_' + step.name + '_' + safeTime };
                         };
                         if (step.interlock)   badgeLines.push({
+                            kind: 'il',
                             cls: 'sk-step-il-badge', text: '🔒 IL: ' + step.interlock.expr,
                             after: _mkAfter(step.interlock.expr)
                         });
                         if (step.supervision) badgeLines.push({
+                            kind: 'sv',
                             cls: 'sk-step-sv-badge', text: '⚠ SV: '  + step.supervision.expr,
                             faultVar: '_FAULT_' + chain.name + '_Q' + num,
                             after: _mkAfter(step.supervision.expr)
                         });
                         badgeLines.forEach((b, bi) => {
+                            // Wrapper-Row direkt am SVG (nicht im g.sk-step),
+                            // sodass sie NACH der Action-Box gerendert wird
+                            // und nicht von ihr überdeckt wird. Hover-Scope
+                            // bleibt sauber: CSS triggert über `.sk-cond-row`,
+                            // nicht über das Step-Group.
+                            const row = el('g', { class: 'sk-cond-row' }, svg);
+                            // Großzügiger Hit-Bereich, damit Hover auch über
+                            // den Lücken zwischen Glyphen greift.
+                            el('rect', {
+                                class: 'sk-cond-hit',
+                                x: colX - W/2 - 18, y: y + bi * 12,
+                                width: W + 36, height: 14
+                            }, row);
+                            const _cls = b.cls + (isEditable ? ' sk-editable' : '');
                             const t = el('text', {
                                 x: colX - W/2, y: y + 10 + bi * 12,
-                                class: b.cls
-                            }, svg);
+                                class: _cls,
+                                'data-edit-kind':  isEditable ? b.kind : '',
+                                'data-chain-name': chain.name,
+                                'data-step-name':  step.name
+                            }, row);
                             if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
-                            t.textContent = b.text;
+                            // Truncation: passt der Text nicht in die Step-Breite,
+                            // wird er gekürzt + `…`. Volltext landet im SVG-<title>,
+                            // den der Browser als nativen Tooltip zeigt. Editieren
+                            // (Klick) liest weiterhin step.interlock.expr / .supervision.expr
+                            // → volle Bearbeitung möglich.
+                            const _maxLen = Math.max(8, Math.floor((W + 8) / 6.2));
+                            const _disp = (b.text.length > _maxLen)
+                                ? b.text.slice(0, _maxLen - 1) + '…'
+                                : b.text;
+                            t.textContent = _disp;
+                            if (_disp !== b.text) {
+                                const _ti = document.createElementNS(SVG_NS, 'title');
+                                _ti.textContent = b.text;
+                                t.appendChild(_ti);
+                            }
                             // AFTER-Countdown markieren (Live-Update fügt ` ⏱Rs` an).
+                            // data-after-base auf den ANGEZEIGTEN Text setzen, damit
+                            // das Suffix sauber daran hängt.
                             if (b.after) {
                                 t.setAttribute('data-after-helper', b.after.helper);
                                 t.setAttribute('data-after-time',   String(b.after.time));
-                                t.setAttribute('data-after-base',   b.text);
+                                t.setAttribute('data-after-base',   _disp);
                             }
-                            maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
+                            // ✕-Lösch-Button LINKS neben dem Badge (kein Überlappen
+                            // mit der gelben Action-Box selbst bei sehr langen
+                            // Bedingungstexten). Sichtbar nur bei Row-Hover.
+                            if (isEditable) {
+                                renderToolBtn(row, colX - W/2 - 14, y + 10 + bi * 12 - 4, '×',
+                                              b.kind + '-del', chain.name, step.name);
+                            }
+                            maxX = Math.max(maxX, colX - W/2 + _disp.length * 6.5);
                         });
-                        if (badgeLines.length) y += 12 * badgeLines.length + 2;
+                        // ⊕-Hinzufügen-Badges für fehlende IL/SV — klein, dezent
+                        // unter den vorhandenen Badges. Klick öffnet leeren Inline-
+                        // Edit (data-edit-kind=il/sv landet im selben Pfad wie
+                        // das Editieren bestehender).
+                        if (isEditable) {
+                            const _missing = [];
+                            if (!step.interlock)   _missing.push({ k: 'il', label: '＋ INTERLOCK',   cls: 'sk-step-il-badge sk-il-add' });
+                            if (!step.supervision) _missing.push({ k: 'sv', label: '＋ SUPERVISION', cls: 'sk-step-sv-badge sk-sv-add' });
+                            _missing.forEach((m, mi) => {
+                                const yy = y + 10 + (badgeLines.length + mi) * 12;
+                                const t = el('text', {
+                                    x: colX - W/2, y: yy,
+                                    class: m.cls + ' sk-editable',
+                                    'data-edit-kind':  m.k,
+                                    'data-chain-name': chain.name,
+                                    'data-step-name':  step.name
+                                }, svg);
+                                t.textContent = m.label;
+                                maxX = Math.max(maxX, colX - W/2 + m.label.length * 6.5);
+                            });
+                            if (badgeLines.length) y += 12 * badgeLines.length;
+                            if (_missing.length)   y += 12 * _missing.length;
+                            if (badgeLines.length || _missing.length) y += 2;
+                        } else if (badgeLines.length) {
+                            y += 12 * badgeLines.length + 2;
+                        }
 
                         // Übergänge ausgehend von diesem Schritt — alle Visuals in
                         // einer .sk-transition-Gruppe für die Firing-Animation.
@@ -9789,8 +10174,48 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }, svg);
                     title.textContent = 'GRAPH-FB „' + chain.name + '"';
                     y += 22;
+                    // Recognizer-Banner (Feature 13) — siehe Grafcet-Variante.
+                    if (!isEditable) {
+                        el('rect', {
+                            x: PAD, y: y,
+                            width: 380, height: 24,
+                            rx: 3,
+                            fill: '#fff3e0', stroke: '#f57c00', 'stroke-width': 1
+                        }, svg);
+                        const bt = el('text', {
+                            x: PAD + 8, y: y + 16,
+                            fill: '#e65100', 'font-size': 11,
+                            'font-family': "'Segoe UI', Tahoma, sans-serif"
+                        }, svg);
+                        bt.textContent = '🔎 aus RS-Form erkannt — nicht editierbar';
+                        const btn = el('g', {
+                            class: 'sk-rs-convert-btn',
+                            transform: 'translate(' + (PAD + 290) + ',' + (y + 4) + ')',
+                            'data-tool': 'rs-to-dsl',
+                            'data-chain-name': chain.name,
+                            style: 'cursor:pointer;'
+                        }, svg);
+                        el('rect', {
+                            x: 0, y: 0, width: 84, height: 16, rx: 3,
+                            fill: '#f57c00', stroke: '#e65100'
+                        }, btn);
+                        const btnText = el('text', {
+                            x: 42, y: 12, 'text-anchor': 'middle',
+                            fill: '#fff', 'font-size': 10, 'font-weight': 'bold',
+                            'font-family': "'Segoe UI', Tahoma, sans-serif"
+                        }, btn);
+                        btnText.textContent = '→ In DSL umwandeln';
+                        const tooltip = document.createElementNS(SVG_NS, 'title');
+                        tooltip.textContent = 'Aus dem erkannten RS-Glied-Muster die SCHRITTKETTE-DSL erzeugen und im Editor ersetzen.';
+                        btn.appendChild(tooltip);
+                        maxX = Math.max(maxX, PAD + 380);
+                        y += 30;
+                    }
 
                     chain.steps.forEach((step, si) => {
+                        // Editierbarkeits-Flag hier oben definieren, damit es
+                        // sowohl für Actions als auch für IL/SV-Badges sichtbar ist.
+                        const isEdit_S7 = editableSet && editableSet.has(chain);
                         const num = base + si;
                         const isInit = si === 0;
                         const g = el('g', {
@@ -9815,12 +10240,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (step.actions.length) {
                             const ax = colX + W/2 + 14;
                             const aH = Math.max(H, step.actions.length * 14 + 6);
-                            const aBox = el('g', { class: 'sk-action-box' }, svg);
+                            // Action-Box-Wrapper trägt selbst data-chain-name +
+                            // data-step-name — sonst findet der Drag-Drop-Hit-Test
+                            // den Step nicht, wenn die Box leer ist (keine
+                            // Text-Spans mit data-step-name als Kinder).
+                            const aBox = el('g', {
+                                class: 'sk-action-box',
+                                'data-chain-name': chain.name,
+                                'data-step-name': step.name
+                            }, svg);
                             el('rect', { x: ax, y: y, width: 230, height: aH }, aBox);
                             // S7-GRAPH-Layout: kompaktere Badge (~38 px) — Q-Label
                             // ist meist nur 1–4 Zeichen ("D1.5" ohne Leerzeichen).
                             const QUAL_W_S7 = 38;
-                            const isEdit_S7 = editableSet && editableSet.has(chain);
                             step.actions.forEach((a, ai) => {
                                 const q = a.qualifier || { kind: 'N' };
                                 let qLabel;
@@ -9863,29 +10295,81 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         };
                         const badgeLines = [];
                         if (step.interlock)   badgeLines.push({
+                            kind: 'il',
                             cls: 'sk-step-il-badge', text: '🔒 V: ' + step.interlock.expr,
                             after: _mkAfter(step.interlock.expr)
                         });
                         if (step.supervision) badgeLines.push({
+                            kind: 'sv',
                             cls: 'sk-step-sv-badge', text: '⚠ S: '  + step.supervision.expr,
                             faultVar: '_FAULT_' + chain.name + '_Q' + num,
                             after: _mkAfter(step.supervision.expr)
                         });
                         badgeLines.forEach((b, bi) => {
+                            // Wrapper-Row direkt am SVG (siehe Grafcet-Variante) —
+                            // sonst überdeckt die später gerenderte Action-Box den
+                            // IL/SV-Text und die Hit-Rect erbt unerwünschtes Styling.
+                            const row = el('g', { class: 'sk-cond-row' }, svg);
+                            el('rect', {
+                                class: 'sk-cond-hit',
+                                x: colX - W/2 - 18, y: y + bi * 12,
+                                width: W + 36, height: 14
+                            }, row);
+                            const _cls = b.cls + (isEdit_S7 ? ' sk-editable' : '');
                             const t = el('text', {
                                 x: colX - W/2, y: y + 10 + bi * 12,
-                                class: b.cls
-                            }, svg);
+                                class: _cls,
+                                'data-edit-kind':  isEdit_S7 ? b.kind : '',
+                                'data-chain-name': chain.name,
+                                'data-step-name':  step.name
+                            }, row);
                             if (b.faultVar) t.setAttribute('data-fault-var', b.faultVar);
-                            t.textContent = b.text;
+                            // Truncation analog zur Grafcet-Variante.
+                            const _maxLen = Math.max(8, Math.floor((W + 8) / 6.2));
+                            const _disp = (b.text.length > _maxLen)
+                                ? b.text.slice(0, _maxLen - 1) + '…'
+                                : b.text;
+                            t.textContent = _disp;
+                            if (_disp !== b.text) {
+                                const _ti = document.createElementNS(SVG_NS, 'title');
+                                _ti.textContent = b.text;
+                                t.appendChild(_ti);
+                            }
                             if (b.after) {
                                 t.setAttribute('data-after-helper', b.after.helper);
                                 t.setAttribute('data-after-time',   String(b.after.time));
-                                t.setAttribute('data-after-base',   b.text);
+                                t.setAttribute('data-after-base',   _disp);
                             }
-                            maxX = Math.max(maxX, colX - W/2 + b.text.length * 6.5);
+                            if (isEdit_S7) {
+                                // × links neben dem Badge, kein Overflow in die Action-Box.
+                                renderToolBtn(row, colX - W/2 - 14, y + 10 + bi * 12 - 4, '×',
+                                              b.kind + '-del', chain.name, step.name);
+                            }
+                            maxX = Math.max(maxX, colX - W/2 + _disp.length * 6.5);
                         });
-                        if (badgeLines.length) y += 12 * badgeLines.length + 2;
+                        // ⊕-Hinzufügen-Badges für fehlende IL/SV (S7-GRAPH).
+                        if (isEdit_S7) {
+                            const _missing = [];
+                            if (!step.interlock)   _missing.push({ k: 'il', label: '＋ INTERLOCK',   cls: 'sk-step-il-badge sk-il-add' });
+                            if (!step.supervision) _missing.push({ k: 'sv', label: '＋ SUPERVISION', cls: 'sk-step-sv-badge sk-sv-add' });
+                            _missing.forEach((m, mi) => {
+                                const yy = y + 10 + (badgeLines.length + mi) * 12;
+                                const t = el('text', {
+                                    x: colX - W/2, y: yy,
+                                    class: m.cls + ' sk-editable',
+                                    'data-edit-kind':  m.k,
+                                    'data-chain-name': chain.name,
+                                    'data-step-name':  step.name
+                                }, svg);
+                                t.textContent = m.label;
+                                maxX = Math.max(maxX, colX - W/2 + m.label.length * 6.5);
+                            });
+                            if (badgeLines.length) y += 12 * badgeLines.length;
+                            if (_missing.length)   y += 12 * _missing.length;
+                            if (badgeLines.length || _missing.length) y += 2;
+                        } else if (badgeLines.length) {
+                            y += 12 * badgeLines.length + 2;
+                        }
 
                         const outs = chain.transitions.filter(t => t.from === step.name);
                         if (outs.length) {
@@ -10065,6 +10549,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const svg = $svg();
                 if (!svg) return;
                 const state = (typeof spsState !== 'undefined') ? spsState : (window.spsState || {});
+                // Force-Active-Buttons (Feature 11): Sichtbarkeit anhand Sim-
+                // Status + MAN-Mode-State der jeweiligen Kette. data-man-out
+                // bevorzugt (latched OUT_MAN_ON), Fallback auf data-man-in
+                // (MODE_MAN-Eingangs-Taster).
+                const _simOn = !!window.isSimulationActive
+                              || (typeof isSimulationActive !== 'undefined' && isSimulationActive);
+                svg.querySelectorAll('.sk-force-btn').forEach(fb => {
+                    const outV = fb.getAttribute('data-man-out');
+                    const inV  = fb.getAttribute('data-man-in');
+                    const manOn = (outV && !!state[outV]) || (inV && !!state[inV]);
+                    fb.style.display = (_simOn && manOn) ? '' : 'none';
+                });
                 // Step-Aktiv-Markierung + Fault-Markierung. Wenn eine SUPERVISION
                 // einen Fault-Helper hat und der gerade TRUE ist, blinkt der Step rot.
                 const currentQ = new Map();
@@ -10430,6 +10926,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 step.actions.push(p);
                 return true;
             }
+            // Feature 12: Action zwischen Steps verschieben (per Drag-Drop).
+            // Splice-entfernen aus Source, append in Target. Bei Same-Step
+            // no-op. Returns true wenn etwas geändert wurde.
+            function moveAction(chain, fromStepName, actionIdx, toStepName, toIdx) {
+                if (fromStepName === toStepName && toIdx == null) return false;
+                const src = chain.steps.find(s => s.name === fromStepName);
+                const dst = chain.steps.find(s => s.name === toStepName);
+                if (!src || !dst || actionIdx < 0 || actionIdx >= src.actions.length) return false;
+                const [moved] = src.actions.splice(actionIdx, 1);
+                if (toIdx == null || toIdx > dst.actions.length) dst.actions.push(moved);
+                else dst.actions.splice(toIdx, 0, moved);
+                return true;
+            }
             // Wrapper: mutation + sync. Liefert true wenn sich etwas änderte.
             function mutateChain(chain, mutationFn) {
                 if (mutationFn(chain)) syncChainToEditor(chain);
@@ -10442,6 +10951,149 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (q.kind === 'P' || q.kind === 'S' || q.kind === 'R' || q.kind === 'C') prefix = q.kind + ': ';
                 else if (q.kind === 'D' || q.kind === 'L') prefix = q.kind + ' ' + (q.time != null ? q.time : 1.0) + ': ';
                 return prefix + a.lhs + ' := ' + a.rhs;
+            }
+
+            // Feature 16: Quick-Insert-Menü für neue Actions. Statt direkt in
+            // den freien Inline-Edit zu springen, bekommt der User eine Liste
+            // bekannter Output-Variablen (häufigster Fall: `OUT := TRUE`),
+            // dazu Quick-Toggle-Vorschläge (`:= FALSE`) und einen Fallback auf
+            // freie Eingabe für neue/komplexe Ausdrücke.
+            function openActionInsertMenu(x, y, chain, stepName) {
+                const _menuDoc = _skDoc();
+                const existing = _menuDoc.getElementById('sk-action-insert-menu');
+                if (existing) existing.remove();
+                const menu = _menuDoc.createElement('div');
+                menu.id = 'sk-action-insert-menu';
+                // Schritte dieser Kette bereits genutzte LHS-Vars sammeln,
+                // damit der User in derselben Action-Liste nicht zweimal die
+                // gleiche Variable bekommt (häufigste Fehlerquelle).
+                const usedInStep = new Set(
+                    (chain.steps.find(s => s.name === stepName)?.actions || [])
+                        .map(a => String(a.lhs).toUpperCase())
+                );
+                // Quellen für „assignable" Variablen:
+                //   1) globalOutputs — alles, was im aktuellen Code als LHS
+                //      einer Zuweisung vorkommt (inkl. Auto-Helper aus der
+                //      SK-Expansion: _MODE_*, _FAULT_*, _IL_*, _TMR_*, _SK_*).
+                //   2) stickyVars mit role='out' — alles, was HMI-/Factory-
+                //      gebunden ist (also auch Ausgaben, die noch NICHT im Code
+                //      stehen — der User will sie ja gerade per Action verbinden).
+                //   3) componentTypes-Keys, wo der Typ ein Aktor ist.
+                // Ergebnis dedupliziert, RS-Q-Pins/Helper-Pseudo-Vars entfernt.
+                const _candidates = new Set();
+                const _addCand = (v) => { if (v && /^[A-Za-z_][A-Za-z0-9_]*$/.test(v)) _candidates.add(v.toUpperCase()); };
+                (Array.isArray(globalOutputs) ? globalOutputs : []).forEach(_addCand);
+                if (window._stickyVars) {
+                    window._stickyVars.forEach((info, name) => {
+                        if (info && info.role === 'out') _addCand(name);
+                    });
+                }
+                if (typeof componentTypes !== 'undefined' && componentTypes) {
+                    const OUT_TYPES = new Set([
+                        'led','siren','motor','contactor','conveyor','valve',
+                        'relais','heater','meter','screen','segment'
+                    ]);
+                    for (const k in componentTypes) {
+                        if (OUT_TYPES.has(componentTypes[k])) _addCand(k);
+                    }
+                }
+                // Filter: RS-Q-Pins NICHT zum Zuweisen (die werden von der Kette
+                // selbst getrieben).
+                const _isQPin = (v) => /^Q\d+(_(?:SR|RS))?$/i.test(v);
+                const outs = Array.from(_candidates).filter(v => !_isQPin(v));
+                // User-Variablen (kein führender `_`) vs. Auto-Helper. Helper
+                // kommen ans Ende, weil sie nur in Sonderfällen direkt
+                // zugewiesen werden sollen.
+                const _isHelper = (v) => v.startsWith('_');
+                outs.sort((a, b) => {
+                    const ha = _isHelper(a), hb = _isHelper(b);
+                    if (ha !== hb) return ha ? 1 : -1;
+                    const ua = usedInStep.has(a), ub = usedInStep.has(b);
+                    if (ua !== ub) return ua ? 1 : -1;
+                    return a.localeCompare(b);
+                });
+                const _addItem = (label, sub, applyText) => {
+                    const item = _menuDoc.createElement('div');
+                    item.className = 'sk-qual-opt';
+                    item.innerHTML = '<b>' + label + '</b>'
+                                   + (sub ? '<span>' + sub + '</span>' : '');
+                    item.addEventListener('click', () => {
+                        menu.remove();
+                        mutateChain(chain, c => addAction(c, stepName, applyText));
+                    });
+                    menu.appendChild(item);
+                };
+                const _addSection = (label) => {
+                    const h = _menuDoc.createElement('div');
+                    h.style.cssText = 'padding:4px 10px 2px;color:#90caf9;font-size:10px;'
+                                    + 'text-transform:uppercase;letter-spacing:0.5px;'
+                                    + 'border-top:1px solid #455a64;margin-top:4px;';
+                    h.textContent = label;
+                    menu.appendChild(h);
+                };
+                if (outs.length === 0) {
+                    const note = _menuDoc.createElement('div');
+                    note.style.cssText = 'padding:6px 10px;color:#90a4ae;font-style:italic;font-size:11px;';
+                    note.textContent = '— keine Output-Variablen verfügbar —';
+                    menu.appendChild(note);
+                }
+                let _userShown = false, _helperShown = false;
+                outs.forEach(v => {
+                    if (!_isHelper(v) && !_userShown) {
+                        _addSection('Ausgänge / HMI-Bindungen');
+                        _userShown = true;
+                    } else if (_isHelper(v) && !_helperShown) {
+                        _addSection('Auto-Helfer (Mode/Fault/IL/Timer)');
+                        _helperShown = true;
+                    }
+                    const sub = usedInStep.has(v)
+                        ? '⚠ bereits im Step → wird überschrieben'
+                        : ':= TRUE';
+                    _addItem(v, sub, v + ' := TRUE');
+                });
+                // Separator + Spezialeinträge
+                const sep = _menuDoc.createElement('div');
+                sep.style.cssText = 'border-top:1px solid #455a64;margin:4px 0;';
+                menu.appendChild(sep);
+                // Freie Eingabe — fällt zurück auf den bisherigen openInlineEdit-Pfad.
+                const freeItem = _menuDoc.createElement('div');
+                freeItem.className = 'sk-qual-opt';
+                freeItem.innerHTML = '<b>✏️ Neue / Andere</b><span>freie Eingabe (z.B. <code>VAR := ¬COND</code>)</span>';
+                freeItem.addEventListener('click', () => {
+                    menu.remove();
+                    // Anchor: existierender Action-Add-Button im Step oder Body.
+                    const svg = $svg();
+                    let anchor = null;
+                    if (svg) {
+                        anchor = svg.querySelector('.sk-tool-btn[data-tool="action-add"][data-step-name="' + stepName + '"]');
+                    }
+                    if (!anchor) anchor = svg;
+                    if (anchor) {
+                        openInlineEdit(anchor, 'NEU := TRUE', (val) => {
+                            mutateChain(chain, c => addAction(c, stepName, val));
+                        });
+                    }
+                });
+                menu.appendChild(freeItem);
+                // Position klemmen.
+                menu.style.left = x + 'px';
+                menu.style.top  = y + 'px';
+                _menuDoc.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                const winW = (_menuDoc.defaultView || window).innerWidth;
+                const winH = (_menuDoc.defaultView || window).innerHeight;
+                if (r.right > winW - 8) menu.style.left = Math.max(8, winW - r.width - 8) + 'px';
+                if (r.bottom > winH - 8) menu.style.top  = Math.max(8, winH - r.height - 8) + 'px';
+                // Outside-Click schließt.
+                setTimeout(() => {
+                    const off = (e) => {
+                        if (!menu.contains(e.target)) {
+                            menu.remove();
+                            _menuDoc.removeEventListener('mousedown', off);
+                        }
+                    };
+                    _menuDoc.addEventListener('mousedown', off);
+                }, 0);
             }
 
             // Quick-Qualifier-Wechsel-Menü: HTML-Popup mit allen 7 Qualifier-
@@ -10505,6 +11157,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 setTimeout(() => document.addEventListener('mousedown', onDoc, true), 50);
             }
             $svg() && $svg().addEventListener('click', (e) => {
+                // Recognizer-Banner-Button (Feature 13): „In DSL umwandeln" auf
+                // einer aus RS-Form erkannten Kette. Hat eigenes data-tool, vor
+                // allen anderen Handlern prüfen.
+                const rsConvert = e.target.closest('.sk-rs-convert-btn');
+                if (rsConvert) {
+                    e.stopPropagation();
+                    const chainName = rsConvert.getAttribute('data-chain-name');
+                    if (chainName && typeof window._toggleHandRStoSchrittkette === 'function') {
+                        window._toggleHandRStoSchrittkette(chainName);
+                    }
+                    return;
+                }
                 // Qualifier-Badge hat Vorrang vor allem anderen — sie ist eine
                 // sichtbare, klickbare „Pille" links neben jedem Action-Body.
                 // Read-only-Badges (Recognized Hand-RS-Ketten) öffnen kein Menü.
@@ -10536,6 +11200,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const actionIdx = tool.getAttribute('data-action-idx');
                     const chain = findChainByName(chainName);
                     if (!chain) return;
+                    if (op === 'step-force') {
+                        // Force-Active (Feature 11): alle Q's der Kette in spsState
+                        // zurücksetzen, dieses Q setzen. Wirkt sofort beim nächsten
+                        // Sim-Tick; ohne Sim ist die Operation no-op.
+                        const baseMap = window._schrittkettenChainBase || new Map();
+                        const baseNum = baseMap.get(chainName) || 1;
+                        const idx = chain.steps.findIndex(s => s.name === stepName);
+                        if (idx < 0) return;
+                        const st = (typeof spsState !== 'undefined') ? spsState : (window.spsState || {});
+                        chain.steps.forEach((s, i) => { st['Q' + (baseNum + i)] = false; });
+                        st['Q' + (baseNum + idx)] = true;
+                        // Visuelles Sofort-Update.
+                        if (typeof window._highlightActiveSchrittketten === 'function') {
+                            window._highlightActiveSchrittketten();
+                        }
+                        return;
+                    }
                     if (op === 'step-up')        mutateChain(chain, c => moveStep(c, stepName, -1));
                     else if (op === 'step-down') mutateChain(chain, c => moveStep(c, stepName, +1));
                     else if (op === 'step-del') {
@@ -10549,10 +11230,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     } else if (op === 'action-del') {
                         mutateChain(chain, c => removeAction(c, stepName, parseInt(actionIdx, 10)));
                     } else if (op === 'action-add') {
-                        // Inline-Edit mit leerem Initial-Wert; bei Apply parsen.
-                        openInlineEdit(tool, 'NEU := TRUE', (val) => {
-                            mutateChain(chain, c => addAction(c, stepName, val));
-                        });
+                        // Quick-Insert (Feature 16): Popup mit Output-Variablen
+                        // statt direkt freier Texteingabe — der häufigste Fall
+                        // ist `OUT := TRUE`, einklick-fertig.
+                        const r = tool.getBoundingClientRect();
+                        openActionInsertMenu(r.left, r.bottom + 4, chain, stepName);
+                    } else if (op === 'il-del' || op === 'sv-del') {
+                        const step = chain.steps.find(s => s.name === stepName);
+                        if (!step) return;
+                        const prop = (op === 'il-del') ? 'interlock' : 'supervision';
+                        if (step[prop]) { delete step[prop]; syncChainToEditor(chain); }
                     }
                     return;
                 }
@@ -10587,13 +11274,465 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     openInlineEdit(t, formatActionInline(step.actions[actionIdx]), (newVal) => {
                         if (editAction(chain, stepName, actionIdx, newVal)) syncChainToEditor(chain);
                     });
+                } else if (kind === 'il' || kind === 'sv') {
+                    // INTERLOCK / SUPERVISION inline editieren. Leerer Wert
+                    // löscht die Bedingung. Bei neu Hinzufügen (data-edit-kind
+                    // sitzt auf dem ⊕-Badge ohne bestehende Bedingung) startet
+                    // der Edit mit leerem String.
+                    const stepName = t.getAttribute('data-step-name');
+                    const step = chain.steps.find(s => s.name === stepName);
+                    if (!step) return;
+                    const prop = (kind === 'il') ? 'interlock' : 'supervision';
+                    const cur  = step[prop] ? step[prop].expr : '';
+                    openInlineEdit(t, cur, (newVal) => {
+                        const trimmed = (newVal || '').trim();
+                        if (!trimmed) {
+                            if (step[prop]) { delete step[prop]; syncChainToEditor(chain); }
+                        } else {
+                            step[prop] = { expr: trimmed };
+                            syncChainToEditor(chain);
+                        }
+                    });
                 }
             });
 
+            // ===== Feature 12: Action-Drag-Drop zwischen Steps =====
+            // Mousedown auf Action-Body startet einen potentiellen Drag. Erst
+            // wenn der Cursor > 6 px wegfährt, wird Drag aktiv (sonst läuft
+            // der existierende Click → Inline-Edit-Pfad). Bei aktivem Drag:
+            // - Source-Action transparent, Floating-Ghost folgt Cursor
+            // - Step-Gruppen unter dem Cursor bekommen .drop-target (CSS-Highlight)
+            // - mouseup auf Step-Gruppe → moveAction + syncChainToEditor
+            (function _initActionDragDrop() {
+                let drag = null;  // { chainName, fromStep, actionIdx, startX, startY, active, ghost, suppressClick }
+                let _suppressNextClick = false;
+                const _onMouseDown = (e) => {
+                    if (e.button !== 0) return;
+                    const svg = $svg();
+                    if (!svg || !svg.contains(e.target)) return;
+                    const t = e.target.closest('[data-edit-kind="action"]');
+                    if (!t) return;
+                    // Tool-Buttons / Qualifier-Badge ignorieren — die haben ihre
+                    // eigenen Handler.
+                    if (e.target.closest('.sk-tool-btn, .sk-qual-badge')) return;
+                    const chainName = t.getAttribute('data-chain-name');
+                    const stepName  = t.getAttribute('data-step-name');
+                    const actionIdx = parseInt(t.getAttribute('data-action-idx'), 10);
+                    if (!chainName || !stepName || isNaN(actionIdx)) return;
+                    // Browser-Default unterdrücken: sonst startet bei SVG-Text
+                    // direkt das native Text-Markieren mit, was Drag&Drop visuell
+                    // verschmiert und Fokus zieht.
+                    e.preventDefault();
+                    drag = {
+                        chainName, fromStep: stepName, actionIdx,
+                        startX: e.clientX, startY: e.clientY,
+                        active: false, srcEl: t.closest('.sk-action-box'),
+                        ghost: null, suppressClick: false
+                    };
+                };
+                const _onMouseMove = (e) => {
+                    if (!drag) return;
+                    if (!drag.active) {
+                        const dx = e.clientX - drag.startX;
+                        const dy = e.clientY - drag.startY;
+                        if (dx*dx + dy*dy < 36) return; // < 6 px → noch kein Drag
+                        // Drag aktivieren.
+                        drag.active = true;
+                        drag.suppressClick = true;
+                        if (drag.srcEl) drag.srcEl.classList.add('dragging');
+                        // Während des Drags global Text-Selektion sperren und
+                        // Cursor auf „grabbing" — sonst markiert der Browser
+                        // jeden Hover-Text mit und visuell entsteht Chaos.
+                        const ghostDoc = (drag.srcEl && drag.srcEl.ownerDocument) || document;
+                        ghostDoc.body.style.userSelect = 'none';
+                        ghostDoc.body.style.webkitUserSelect = 'none';
+                        ghostDoc.body.style.cursor = 'grabbing';
+                        if (ghostDoc !== document) {
+                            document.body.style.userSelect = 'none';
+                            document.body.style.cursor = 'grabbing';
+                        }
+                        // Auch eine evtl. schon vorhandene Selektion sofort wegräumen.
+                        try { ghostDoc.getSelection().removeAllRanges(); } catch(_e) {}
+                        // Floating-Ghost in HTML (kein SVG, einfacher zu positionieren).
+                        const chain = findChainByName(drag.chainName);
+                        const step = chain && chain.steps.find(s => s.name === drag.fromStep);
+                        const a = step && step.actions[drag.actionIdx];
+                        const label = a ? formatActionInline(a) : 'Aktion';
+                        const g = ghostDoc.createElement('div');
+                        g.textContent = '↪ ' + label;
+                        g.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;'
+                            + 'background:#1976d2;color:#fff;padding:3px 8px;border-radius:3px;'
+                            + 'font-family:Consolas,monospace;font-size:11px;'
+                            + 'box-shadow:0 4px 10px rgba(0,0,0,0.5);';
+                        ghostDoc.body.appendChild(g);
+                        drag.ghost = g;
+                    }
+                    if (drag.ghost) {
+                        drag.ghost.style.left = (e.clientX + 12) + 'px';
+                        drag.ghost.style.top  = (e.clientY + 12) + 'px';
+                    }
+                    // Während eines aktiven Drags fortwährend Text-Selektion clearen
+                    // (Browser bauen sie sonst aus jedem mousemove-Tick neu auf).
+                    try { (drag.srcEl ? drag.srcEl.ownerDocument : document).getSelection().removeAllRanges(); } catch(_e) {}
+                    // Drop-Target unter Cursor markieren — Step-Gruppen UND die
+                    // Aktion-Box (gelbes Feld neben dem Step). Beide gelten als
+                    // gültige Drop-Zonen → der zugehörige Step ist Ziel.
+                    const svg = $svg();
+                    if (!svg) return;
+                    const steps = svg.querySelectorAll('.sk-step');
+                    const boxes = svg.querySelectorAll('.sk-action-box');
+                    let hitStep = null, hitBox = null;
+                    steps.forEach(gr => {
+                        const r = gr.getBoundingClientRect();
+                        if (e.clientX >= r.left && e.clientX <= r.right
+                            && e.clientY >= r.top && e.clientY <= r.bottom) {
+                            hitStep = gr;
+                        }
+                    });
+                    boxes.forEach(bx => {
+                        const r = bx.getBoundingClientRect();
+                        if (e.clientX >= r.left && e.clientX <= r.right
+                            && e.clientY >= r.top && e.clientY <= r.bottom) {
+                            hitBox = bx;
+                        }
+                    });
+                    steps.forEach(gr => gr.classList.toggle('drop-target', gr === hitStep));
+                    boxes.forEach(bx => bx.classList.toggle('drop-target', bx === hitBox));
+                };
+                const _onMouseUp = (e) => {
+                    if (!drag) return;
+                    const wasActive = drag.active;
+                    // Aufräumen.
+                    if (drag.srcEl) drag.srcEl.classList.remove('dragging');
+                    if (drag.ghost && drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+                    const ghostDoc = (drag.srcEl && drag.srcEl.ownerDocument) || document;
+                    ghostDoc.body.style.userSelect = '';
+                    ghostDoc.body.style.webkitUserSelect = '';
+                    ghostDoc.body.style.cursor = '';
+                    if (ghostDoc !== document) {
+                        document.body.style.userSelect = '';
+                        document.body.style.cursor = '';
+                    }
+                    const svg = $svg();
+                    if (svg) {
+                        svg.querySelectorAll('.sk-step.drop-target, .sk-action-box.drop-target')
+                            .forEach(gr => gr.classList.remove('drop-target'));
+                    }
+                    if (!wasActive) { drag = null; return; }
+                    // Hit-Test: Step-Gruppe ODER Action-Box unter dem Cursor.
+                    // Beide referenzieren denselben Step über Suchen nach
+                    // [data-step-name] (oder zur Box: nächste Action-Box gehört
+                    // zur selben Step-Reihe — wir suchen das nächste data-step-name
+                    // im selben gerenderten Block).
+                    let targetStepName = null;
+                    if (svg) {
+                        const within = (gr) => {
+                            const r = gr.getBoundingClientRect();
+                            return e.clientX >= r.left && e.clientX <= r.right
+                                && e.clientY >= r.top && e.clientY <= r.bottom;
+                        };
+                        // Erst Step-Gruppe prüfen — eindeutiger Treffer.
+                        svg.querySelectorAll('.sk-step').forEach(gr => {
+                            if (!within(gr)) return;
+                            const lbl = gr.querySelector('[data-step-name]');
+                            if (lbl) targetStepName = lbl.getAttribute('data-step-name');
+                        });
+                        // Falls kein Step-Hit: Action-Box prüfen (User hat auf
+                        // das gelbe Feld eines anderen Steps gedroppt). data-step-name
+                        // sitzt jetzt direkt auf dem Box-Wrapper, damit das auch
+                        // bei leeren (action-losen) Boxen funktioniert.
+                        if (!targetStepName) {
+                            svg.querySelectorAll('.sk-action-box').forEach(bx => {
+                                if (!within(bx)) return;
+                                const sn = bx.getAttribute('data-step-name')
+                                        || (bx.querySelector('[data-step-name]') &&
+                                            bx.querySelector('[data-step-name]').getAttribute('data-step-name'));
+                                if (sn) targetStepName = sn;
+                            });
+                        }
+                    }
+                    if (targetStepName && targetStepName !== drag.fromStep) {
+                        const chain = findChainByName(drag.chainName);
+                        if (chain) {
+                            mutateChain(chain, c => moveAction(c, drag.fromStep, drag.actionIdx, targetStepName));
+                        }
+                    }
+                    _suppressNextClick = true;
+                    drag = null;
+                };
+                // Click-Suppression nach Drag, damit nicht direkt der Inline-Edit aufgeht.
+                const _onClick = (e) => {
+                    if (_suppressNextClick) {
+                        _suppressNextClick = false;
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
+                };
+                const svg = $svg();
+                if (svg) {
+                    svg.addEventListener('mousedown', _onMouseDown);
+                    // Click-Suppression: capturing, damit wir VOR dem regulären
+                    // Click-Handler kommen.
+                    svg.addEventListener('click', _onClick, true);
+                }
+                // mousemove/up auf document, damit ein Drag auch über die
+                // SVG-Grenze hinweg funktioniert.
+                document.addEventListener('mousemove', _onMouseMove);
+                document.addEventListener('mouseup', _onMouseUp);
+            })();
+
+            // ===== Feature 9: CONTROL-Block-Editor =====
+            // Kleines HTML-Panel unter dem SK-Header, das pro Kette mit
+            // CONTROL-Block alle Keys (MODE_*, S_ON, S_OFF, S_SEL, OUT_*) als
+            // editierbare Inputs zeigt. Änderungen schreiben über
+            // `chain.control.keys.set(...) → syncChainToEditor` direkt zurück
+            // in den Quelltext.
+            const CONTROL_KEY_GROUPS = [
+                { label: 'Allgemein',
+                  keys: ['INIT_SQ','OFF_SQ','ACK_EF','T_PUSH'] },
+                { label: 'Modus-Wahl (Eingänge)',
+                  keys: ['MODE_AUTO','MODE_TAP','MODE_TOP','MODE_MAN','S_ON','S_OFF'] },
+                { label: 'Schritt-Wahl',
+                  keys: ['S_SEL'], pattern: /^S_SEL(_[A-Z][A-Z0-9_]*)?$/ },
+                { label: 'Ausgänge (Status)',
+                  keys: ['OUT_AUTO_ON','OUT_TAP_ON','OUT_TOP_ON','OUT_MAN_ON','OUT_ERR_FLT',
+                         'OUT_CYCLE_COUNT','OUT_FAULT_COUNT'],
+                  pattern: /^(OUT_AUTO_ON|OUT_TAP_ON|OUT_TOP_ON|OUT_MAN_ON|OUT_ERR_FLT|OUT_CYCLE_COUNT|OUT_FAULT_COUNT|OUT_S_NO(_[A-Z][A-Z0-9_]*)?)$/ }
+            ];
+            function renderControlEditor() {
+                const host = _skDoc().getElementById('sk-control-editor');
+                const btn  = _skDoc().getElementById('btn-sk-control');
+                if (!host || !btn) return;
+                const chains = (window._schrittkettenChains || [])
+                    .filter(c => c.control && c.control.keys);
+                // Button nur zeigen, wenn mindestens eine Kette einen CONTROL-Block
+                // hat ODER der User explizit einen anlegen können soll (bei DSL-Ketten).
+                const dslChains = (window._schrittkettenChains || []).filter(
+                    c => (window._schrittkettenChainBase || new Map()).has(c.name));
+                btn.style.display = dslChains.length ? '' : 'none';
+                if (host.style.display === 'none') return; // collapsed → nicht neu bauen
+                if (!dslChains.length) { host.innerHTML = ''; return; }
+                let html = '';
+                dslChains.forEach(chain => {
+                    const keys = (chain.control && chain.control.keys) || new Map();
+                    html += '<div class="skc-chain" data-chain="' + chain.name + '">';
+                    html += '<div class="skc-title">' + chain.name
+                          + (keys.size ? '' : ' <span style="font-weight:normal;color:#90a4ae;">(noch kein CONTROL-Block)</span>')
+                          + '</div>';
+                    html += '<div class="skc-grid">';
+                    keys.forEach((val, key) => {
+                        html += '<div class="skc-key">' + key + '</div>';
+                        html += '<input class="skc-input" data-key="' + key + '" value="' + String(val).replace(/"/g,'&quot;') + '">';
+                        html += '<button class="skc-del" data-key="' + key + '" title="Key entfernen">×</button>';
+                    });
+                    html += '</div>';
+                    // „Key hinzufügen"-Zeile: Dropdown mit den Standard-Keys
+                    // (die noch nicht vergeben sind) + freies Eingabefeld für die
+                    // Variable. S_SEL_<NAME>/OUT_S_NO_<NAME> bieten einen
+                    // Step-Suffix-Dropdown an (alle Step-Namen der Kette).
+                    const stepOpts = (chain.steps || []).map(s => s.name);
+                    const standard = ['INIT_SQ','OFF_SQ','ACK_EF','T_PUSH',
+                        'MODE_AUTO','MODE_TAP','MODE_TOP','MODE_MAN','S_ON','S_OFF',
+                        'S_SEL','OUT_S_NO','OUT_AUTO_ON','OUT_TAP_ON','OUT_TOP_ON',
+                        'OUT_MAN_ON','OUT_ERR_FLT','OUT_CYCLE_COUNT','OUT_FAULT_COUNT'];
+                    const stepKeys = stepOpts.flatMap(sn => ['S_SEL_' + sn, 'OUT_S_NO_' + sn]);
+                    const free = [...standard, ...stepKeys].filter(k => !keys.has(k));
+                    if (free.length) {
+                        html += '<div class="skc-add">';
+                        html += '<select data-chain-add="' + chain.name + '">';
+                        free.forEach(k => { html += '<option>' + k + '</option>'; });
+                        html += '</select>';
+                        html += '<input data-chain-add-val="' + chain.name + '" placeholder="Variable…">';
+                        html += '<button data-chain-add-btn="' + chain.name + '">+ Hinzufügen</button>';
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                });
+                host.innerHTML = html;
+                // Edit-Listener: jedes Input ändert auf change/blur die Map und
+                // schreibt die Kette zurück.
+                host.querySelectorAll('.skc-input').forEach(inp => {
+                    inp.addEventListener('change', () => {
+                        const chainName = inp.closest('.skc-chain').getAttribute('data-chain');
+                        const key = inp.getAttribute('data-key');
+                        const chain = findChainByName(chainName);
+                        if (!chain || !chain.control) return;
+                        chain.control.keys.set(key, inp.value.trim());
+                        syncChainToEditor(chain);
+                    });
+                });
+                host.querySelectorAll('.skc-del').forEach(b => {
+                    b.addEventListener('click', () => {
+                        const chainName = b.closest('.skc-chain').getAttribute('data-chain');
+                        const key = b.getAttribute('data-key');
+                        const chain = findChainByName(chainName);
+                        if (!chain || !chain.control) return;
+                        chain.control.keys.delete(key);
+                        syncChainToEditor(chain);
+                    });
+                });
+                host.querySelectorAll('[data-chain-add-btn]').forEach(b => {
+                    b.addEventListener('click', () => {
+                        const chainName = b.getAttribute('data-chain-add-btn');
+                        const chain = findChainByName(chainName);
+                        if (!chain) return;
+                        const sel = host.querySelector('[data-chain-add="' + chainName + '"]');
+                        const valI = host.querySelector('[data-chain-add-val="' + chainName + '"]');
+                        if (!sel || !valI) return;
+                        const newKey = sel.value;
+                        const newVal = valI.value.trim();
+                        if (!newKey || !newVal) {
+                            alert('Bitte Key auswählen und eine Variable angeben.');
+                            return;
+                        }
+                        if (!chain.control) chain.control = { keys: new Map() };
+                        if (!chain.control.keys) chain.control.keys = new Map();
+                        chain.control.keys.set(newKey, newVal);
+                        syncChainToEditor(chain);
+                    });
+                });
+            }
+            window._toggleSkControlEditor = function() {
+                const host = _skDoc().getElementById('sk-control-editor');
+                if (!host) return;
+                const isOpen = host.style.display !== 'none';
+                host.style.display = isOpen ? 'none' : 'block';
+                if (!isOpen) renderControlEditor();
+            };
+
             window._renderSchrittketten = render;
             window._highlightActiveSchrittketten = highlightActive;
+            // CONTROL-Editor nach jedem Render mit-aktualisieren, damit
+            // Step-Name-Änderungen + Key-Edits durchs Editor-Sync sofort sichtbar werden.
+            const _origRender = render;
+            const _renderWrapped = function() {
+                _origRender();
+                try { renderControlEditor(); } catch(_e) {}
+            };
+            window._renderSchrittketten = _renderWrapped;
         })();
+        // FBS-Visibility-Helper: berechnet pro Knoten, ob er im aktuellen
+        // Render-Modus sichtbar sein soll. Wird sowohl vom Layout (Spalten-
+        // Bildung) als auch vom Renderer (drawGraph) konsultiert.
+        //
+        // Regeln:
+        //  - Helper-Hide aktiv → alle Auto-Vars aus SCHRITTKETTEn ausblenden
+        //  - Const-Hide aktiv → TRUE/FALSE-Knoten ausblenden
+        //  - Focus-Modus aktiv → nur Vorgänger/Nachfolger des Fokus-Knotens
+        function _fbsIsHelperId(id) {
+            // Pattern aus dem SK-Codegen + manuelle Helper.
+            return /^_(FAULT|IL|MODE|TMR|SK|AUTO_ON|TAP_ON|TOP_ON|MAN_ON|ERR_FLT|CYCLE_COUNT|FAULT_COUNT|SR_)/.test(id)
+                || /^_/.test(id) && /(_AUTO_ON|_TAP_ON|_TOP_ON|_MAN_ON|_ERR_FLT|_CYCLE_COUNT|_FAULT_COUNT)$/.test(id);
+        }
+        function _fbsBuildFocusSet(graph, focusId) {
+            // Zwei separate BFS ab focusId:
+            //  - Upstream:   alle Vorgänger (rekursiv die Quellen)
+            //  - Downstream: alle Nachfolger (rekursiv die Ziele)
+            // Vorher lief eine einzige Schleife mit beide Richtungen, was bei
+            // jedem besuchten Knoten erneut in BEIDE Richtungen expandierte
+            // und damit die komplette zusammenhängende Komponente einzog —
+            // der Fokus zeigte effektiv den gesamten Plan.
+            const out = new Set([focusId]);
+            const dirIn  = new Map();   // targetId → [sourceId]
+            const dirOut = new Map();   // sourceId → [targetId]
+            graph.edges.forEach(e => {
+                if (!dirIn.has(e.targetId))  dirIn.set(e.targetId, []);
+                if (!dirOut.has(e.sourceId)) dirOut.set(e.sourceId, []);
+                dirIn.get(e.targetId).push(e.sourceId);
+                dirOut.get(e.sourceId).push(e.targetId);
+            });
+            // Upstream
+            const upQ = [focusId];
+            while (upQ.length) {
+                const id = upQ.shift();
+                (dirIn.get(id) || []).forEach(p => {
+                    if (!out.has(p)) { out.add(p); upQ.push(p); }
+                });
+            }
+            // Downstream
+            const downQ = [focusId];
+            while (downQ.length) {
+                const id = downQ.shift();
+                (dirOut.get(id) || []).forEach(p => {
+                    if (!out.has(p)) { out.add(p); downQ.push(p); }
+                });
+            }
+            return out;
+        }
+        // Fokus-Modus-Code-Underline (Feature): markiert im Code-Editor alle
+        // Zeilen, deren LHS-Variable zum aktuell fokussierten Subgraph gehört.
+        // Wird aus drawGraph() heraus aufgerufen UND aus dem Highlighter-
+        // Refresh, damit die Klassen nach updateHighlighting() wieder sitzen.
+        function _fbsCollectFocusLines(graph) {
+            const out = new Set();
+            const ta = document.getElementById('code');
+            if (!ta) return out;
+            const codeLines = ta.value.split('\n');
+            const focusVars = new Set();
+            graph.nodes.forEach((node) => {
+                if (node._fbsHidden) return;
+                if (['OUTPUT','ARITH','INPUT','PURE_INPUT'].includes(node.type)) {
+                    focusVars.add(String(node.id).toUpperCase());
+                }
+                // RS/SR/CTU/TON/TOF/TP-Bausteine — die ID ist synthetisch
+                // (z.B. RS_1). Wir leiten die zugehörigen Quelltext-LHS daraus
+                // ab: S<n>, R<n>, CU<n>, RES<n>, etc. — und auch die Q<n>-
+                // Variante, falls jemand `OUT := Q1` schreibt.
+                let m = node.id.match(/^(RS|SR)_(\d+)$/);
+                if (m) {
+                    const num = m[2];
+                    ['S','R','Q'].forEach(p => focusVars.add(p + num));
+                    ['S','R','Q'].forEach(p => focusVars.add(p + num + '_' + m[1]));
+                }
+                m = node.id.match(/^(TON|TOF|TP)_(.+)$/);
+                if (m) {
+                    // Beim TON-Block ist die LHS oft der Output selbst,
+                    // nicht der TON-Helper. Wir lassen das aus, der Output-
+                    // Knoten ist separat im focusSet.
+                }
+                m = node.id.match(/^CTU_(.+)$/);
+                if (m) {
+                    // dito
+                }
+            });
+            codeLines.forEach((line, idx) => {
+                // LHS-Pattern: Variable links vom :=/=/<-/IST/GLEICH.
+                const lm = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=|<-|\bIST\b|\bGLEICH\b)/i);
+                if (lm && focusVars.has(lm[1].toUpperCase())) out.add(idx);
+            });
+            return out;
+        }
+        window._fbsApplyFocusLineHighlight = function(graph) {
+            const hc = document.getElementById('highlighting-content');
+            if (!hc) return;
+            // Alte Markierung immer wegräumen — auch im Aus-Pfad, sonst
+            // bleiben „eingefrorene" Unterstreichungen nach ESC stehen.
+            hc.querySelectorAll('span.fbs-focus-line').forEach(el => el.classList.remove('fbs-focus-line'));
+            if (!window.fbsFocusNodeId || !graph) return;
+            const lines = _fbsCollectFocusLines(graph);
+            const spans = hc.children;
+            lines.forEach(idx => {
+                if (spans[idx]) spans[idx].classList.add('fbs-focus-line');
+            });
+        };
+        window._fbsVisibilityMark = function(graph) {
+            const focusOn = window.fbsFocusNodeId && graph.nodes.has(window.fbsFocusNodeId);
+            const focusSet = focusOn ? _fbsBuildFocusSet(graph, window.fbsFocusNodeId) : null;
+            graph.nodes.forEach((node, id) => {
+                let hidden = false;
+                if (window.fbsHideHelpers && _fbsIsHelperId(id)) hidden = true;
+                if (window.fbsHideConsts && (id === 'TRUE' || id === 'FALSE')) hidden = true;
+                if (focusSet && !focusSet.has(id)) hidden = true;
+                node._fbsHidden = hidden;
+            });
+        };
         function calculateLayout(graph) {
+            // Sichtbarkeit pro Knoten markieren (Helper-Hide / Const-Hide /
+            // Fokus-Modus). Unsichtbare Knoten fließen NICHT in die Spalten-
+            // Bildung mit ein → der Plan rückt entsprechend zusammen.
+            if (typeof window._fbsVisibilityMark === 'function') {
+                try { window._fbsVisibilityMark(graph); } catch(_e) {}
+            }
             graph.nodes.forEach(node => { if (node.type === 'PURE_INPUT') node.level = 0; });
             let changed = true;
             let maxLoops = 100;
@@ -10614,11 +11753,33 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
             }
             let maxLevel = 0;
-            graph.nodes.forEach(n => { if(n.level > maxLevel) maxLevel = n.level; });
+            graph.nodes.forEach(n => { if(!n._fbsHidden && n.level > maxLevel) maxLevel = n.level; });
             const hasOut = new Set(graph.edges.map(e => e.sourceId));
             graph.nodes.forEach(n => { if(n.type === 'OUTPUT' && !hasOut.has(n.id)) n.level = maxLevel + 1; });
+            // RS-Spalte-Modus (Feature): RS/SR/Timer/Counter alle auf max_level,
+            // Outputs eine Spalte weiter rechts. Sorgt für klare visuelle
+            // Trennung „erst Logik, dann Speicher/Zeit, dann Ausgänge".
+            if (window.fbsRSColumn) {
+                const RS_TYPES = new Set(['RS', 'SR', 'TON', 'TOF', 'TP', 'CTU']);
+                let rsLevel = maxLevel;
+                let outLevel = maxLevel + 1;
+                graph.nodes.forEach(n => {
+                    if (n._fbsHidden) return;
+                    if (RS_TYPES.has(n.type)) n.level = rsLevel;
+                    else if (n.type === 'OUTPUT') n.level = outLevel;
+                });
+                maxLevel = outLevel;
+            }
             const columns = {};
             graph.nodes.forEach(node => {
+                // Hidden-Knoten kommen in eine Schattenspalte (-1), die nirgendwo
+                // gerendert wird, aber für Edge-Quellen-Auflösung im Live-State
+                // weiterhin existiert.
+                if (node._fbsHidden) {
+                    if (!columns[-1]) columns[-1] = [];
+                    columns[-1].push(node);
+                    return;
+                }
                 if (!columns[node.level]) columns[node.level] = [];
                 columns[node.level].push(node);
             });
@@ -10628,7 +11789,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const _s = window.fbsLayoutScale || 1.0;
             const MIN_GAP = Math.round(20 * _s);
             const WIRE_PADDING = Math.round(70 * _s);
-            let sortedLevels = Object.keys(columns).sort((a,b) => parseInt(a) - parseInt(b));
+            // Hidden-Schattenspalte (-1) NICHT mit-iterieren — sie wird im
+            // Renderer ohnehin übersprungen, aber soll auch hier kein Layout
+            // konsumieren.
+            let sortedLevels = Object.keys(columns)
+                .filter(k => parseInt(k) >= 0)
+                .sort((a,b) => parseInt(a) - parseInt(b));
             // --- 1. EINGÄNGE ALPHABETISCH VORSORTIEREN ---
             if (columns[0]) columns[0].sort((a, b) => a.id.localeCompare(b.id));
             // --- 2. BARYCENTER SORTIERUNG (Verhindert Kreuzungen) ---
@@ -10861,13 +12027,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             graph.edges.forEach(edge => {
                 const target = graph.nodes.get(edge.targetId);
                 if (!target) return;
+                // Hidden-Targets (Helper-/Const-/Focus-Filter): keine Pin-Blockade.
+                if (target._fbsHidden) return;
                 let endY = target.y + (target.height / 2);
                 if (target.type === 'GATE') {
                     let inIndex = target.inputs.indexOf(edge.originalSourceId);
-                    if(inIndex === -1) inIndex = 0; 
-                    const usableHeight = target.height - 20; 
+                    if(inIndex === -1) inIndex = 0;
+                    const usableHeight = target.height - 20;
                     const spacing = usableHeight / Math.max(1, target.inputs.length);
-                    endY = target.y + 20 + spacing * (inIndex + 0.5); 
+                    endY = target.y + 20 + spacing * (inIndex + 0.5);
                 } else if (target.type === 'RS' || target.type === 'SR' || target.type === 'CTU') {
                     if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
                     if (edge.targetPin === 'R') endY = target.y + target.height - 15;
@@ -10881,6 +12049,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const source = graph.nodes.get(edge.sourceId);
                 const target = graph.nodes.get(edge.targetId);
                 if(!source || !target) return;
+                // Hidden-Filter: Edges, deren Source/Target ausgeblendet ist,
+                // werden nicht in nets aufgenommen → kein Rendering, kein
+                // Routing-Platzbedarf.
+                if (source._fbsHidden || target._fbsHidden) return;
                 let startY = source.y + (source.height / 2);
                 if (source.type === 'RS' || source.type === 'SR') startY = source.y + 15;
                 const netKey = edge.sourceId + '_' + startY;
@@ -10982,7 +12154,81 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     drawDot(dx, dy, net.color, net.source.id);
                 });
             });
+            // Stub-Pass: Edges mit ausgeblendeter Quelle (Helper/Const-Hide oder
+            // Fokus-Modus) hinterlassen sonst „unverbundene" Pins am Target.
+            // Wir zeichnen einen kurzen Stub-Strich + den Variablennamen direkt
+            // links vom Target-Pin, damit der User weiß welche Variable hier
+            // eingespeist wird, ohne dass die Quelle visuell ablenkt.
+            const _drawnStubs = new Set();
+            graph.edges.forEach(edge => {
+                const source = graph.nodes.get(edge.sourceId);
+                const target = graph.nodes.get(edge.targetId);
+                if (!source || !target) return;
+                if (!source._fbsHidden || target._fbsHidden) return;
+                // Bei mehreren Edges einer Source zum SELBEN Pin (GATE-Inputs)
+                // jeden Pin nur einmal labeln.
+                const stubKey = target.id + '|' + (edge.targetPin || '') + '|' + (edge.originalSourceId || '');
+                if (_drawnStubs.has(stubKey)) return;
+                _drawnStubs.add(stubKey);
+                let endY = target.y + (target.height / 2);
+                if (target.type === 'GATE') {
+                    let inIndex = target.inputs.indexOf(edge.originalSourceId);
+                    if (inIndex === -1) inIndex = 0;
+                    const usableHeight = target.height - 20;
+                    const spacing = usableHeight / Math.max(1, target.inputs.length);
+                    endY = target.y + 20 + spacing * (inIndex + 0.5);
+                } else if (target.type === 'RS' || target.type === 'SR' || target.type === 'CTU') {
+                    if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
+                    if (edge.targetPin === 'R') endY = target.y + target.height - 15;
+                }
+                // Negations-Bubble respektieren — der Pin-Anfang sitzt dann
+                // ein paar Pixel weiter links.
+                const stubEndX = target.x - (edge.inverted ? 10 : 2);
+                const stubLen = 16;
+                const stubStartX = stubEndX - stubLen;
+                // Stub-Strich (gestrichelt, gedimmt).
+                const stub = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                stub.setAttribute('x1', safe(stubStartX));
+                stub.setAttribute('y1', safe(endY));
+                stub.setAttribute('x2', safe(stubEndX));
+                stub.setAttribute('y2', safe(endY));
+                stub.setAttribute('stroke', '#90a4ae');
+                stub.setAttribute('stroke-width', '1.5');
+                stub.setAttribute('stroke-dasharray', '3 2');
+                stub.setAttribute('class', 'fbs-helper-stub');
+                svgLines.appendChild(stub);
+                // Negations-Bubble bei invertierter Edge.
+                if (edge.inverted) {
+                    const bub = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    bub.setAttribute('cx', safe(stubEndX + 5));
+                    bub.setAttribute('cy', safe(endY));
+                    bub.setAttribute('r', '4');
+                    bub.setAttribute('fill', '#fff');
+                    bub.setAttribute('stroke', '#90a4ae');
+                    bub.setAttribute('stroke-width', '1.5');
+                    bub.setAttribute('class', 'fbs-helper-stub');
+                    svgLines.appendChild(bub);
+                }
+                // Label: Variablenname der ausgeblendeten Quelle.
+                const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                lbl.setAttribute('x', safe(stubStartX - 3));
+                lbl.setAttribute('y', safe(endY + 3));
+                lbl.setAttribute('text-anchor', 'end');
+                lbl.setAttribute('font-family', "'Consolas','Courier New',monospace");
+                lbl.setAttribute('font-size', '9');
+                lbl.setAttribute('fill', '#607d8b');
+                lbl.setAttribute('class', 'fbs-helper-stub-label');
+                lbl.textContent = source.label || source.id;
+                // SVG-Title für Volltext-Hover (gleicher Trick wie IL/SV).
+                const ti = document.createElementNS("http://www.w3.org/2000/svg", "title");
+                ti.textContent = 'Quelle ausgeblendet: ' + (source.label || source.id);
+                lbl.appendChild(ti);
+                svgLines.appendChild(lbl);
+            });
             graph.nodes.forEach(node => {
+                // Hidden-Filter (Feature: Helper/Const/Focus): den Knoten nicht
+                // rendern, aber im Graph-Objekt behalten (Sim-State braucht ihn).
+                if (node._fbsHidden) return;
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${safe(node.x)}, ${safe(node.y)})`);
                 g.setAttribute("data-node-id", node.id);
@@ -10991,6 +12237,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 g.addEventListener('contextmenu', (e) => {
                     e.preventDefault(); e.stopPropagation();
                     showFbsContextMenu(e.clientX, e.clientY, node);
+                });
+                // Fokus-Modus-Klick (Feature): aktiviert/wechselt den Fokus auf
+                // diesen Knoten. Im normalen Modus passiert nichts (Klicks gehen
+                // an pan-zoom-Library bzw. die regulären Handler).
+                g.addEventListener('click', (e) => {
+                    if (!window.fbsFocusModeOn) return;
+                    if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+                    e.stopPropagation();
+                    window.fbsFocusNodeId = node.id;
+                    if (typeof currentGraph !== 'undefined' && currentGraph) {
+                        calculateLayout(currentGraph);
+                        drawGraph(currentGraph);
+                    }
                 });
                 if (node.type === 'GATE' || node.type === 'RS' || node.type === 'SR') {
                     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -11096,6 +12355,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = null; }
             // Fehler-Hervorhebung (rote Glow-Markierung) anwenden, falls aktiviert
             try { _fbsApplyErrorHighlight(); } catch(e) { console.warn('Fehler-Highlight fehlgeschlagen:', e); }
+            // Fokus-Modus: passende Code-Zeilen im Editor unterstreichen.
+            try { if (window._fbsApplyFocusLineHighlight) window._fbsApplyFocusLineHighlight(graph); } catch(e) {}
             // FIX: Timeout gibt dem Browser Zeit, die SVG-Kästen zu rendern, bevor die Größe abgefragt wird!
             // NEU: Nicht zerstören! Wir aktualisieren stattdessen einfach die Bounding-Boxen der bestehenden Instanz.
             setTimeout(() => {
@@ -12110,6 +13371,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (window._codeEditorSettings && window._codeEditorSettings.bracketMatch
                 && typeof window._refreshBracketMatch === 'function') {
                 window._refreshBracketMatch();
+            }
+            // Fokus-Underline (FBS): innerHTML-Reset hat die Klassen abgeräumt
+            // — neu aufsetzen, sofern noch ein Fokus-Knoten aktiv ist.
+            if (window.fbsFocusNodeId && typeof window._fbsApplyFocusLineHighlight === 'function') {
+                try { window._fbsApplyFocusLineHighlight(window.currentGraph || currentGraph); } catch(_e) {}
             }
         }
 		// Funktion zum Einfügen von Symbolen an der aktuellen Cursor-Position
@@ -31054,7 +32320,230 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             _positionContextMenu(x, y);
         }
+        // Recycle-Bin für gelöschte HMI/Factory-Objekte (Feature 10). Ringpuffer
+        // mit den letzten 20 Top-Level-Löschungen, persistiert in
+        // localStorage.valisHmiRecycleBin. Children werden mit-archiviert, damit
+        // ein Restore die volle Baumstruktur wiederherstellt. Keine Pipes/Hoses —
+        // die werden bei Restore neu verkabelt.
+        window.HMI_RECYCLE_MAX = 20;
+        window._hmiRecycleBin = [];
+        try {
+            const raw = localStorage.getItem('valisHmiRecycleBin');
+            if (raw) window._hmiRecycleBin = JSON.parse(raw) || [];
+        } catch(_e) {}
+        function _serializeForRecycle(obj) {
+            // Plain-Copy aller Felder außer DOM/Element/Parent-Referenzen.
+            const out = {};
+            for (const k in obj) {
+                if (k === 'el' || k === 'parent') continue;
+                const v = obj[k];
+                if (k === 'children' && Array.isArray(v)) {
+                    out.children = v.map(_serializeForRecycle);
+                } else if (v && typeof v === 'object' && v.nodeType) {
+                    continue; // skip DOM nodes
+                } else if (typeof v === 'function') {
+                    continue;
+                } else {
+                    try { JSON.stringify(v); out[k] = v; } catch(_e) { /* skip cyclic */ }
+                }
+            }
+            return out;
+        }
+        window._pushToHmiRecycleBin = function(obj) {
+            if (!obj) return;
+            const snap = {
+                deletedAt: Date.now(),
+                data: _serializeForRecycle(obj),
+                // Welche Variablen waren gebunden? Wird im Restore-UI angezeigt
+                // und im Tooltip-Hinweis genutzt.
+                vars: (function() {
+                    const out = [];
+                    const KEYS = window._STICKY_LINKED_KEYS || [];
+                    const walk = (o) => {
+                        KEYS.forEach(k => { if (o[k] && typeof o[k] === 'string') out.push(o[k]); });
+                        if (Array.isArray(o.children)) o.children.forEach(walk);
+                    };
+                    walk(obj);
+                    return Array.from(new Set(out));
+                })()
+            };
+            window._hmiRecycleBin.unshift(snap);
+            // Cap auf MAX.
+            if (window._hmiRecycleBin.length > window.HMI_RECYCLE_MAX) {
+                window._hmiRecycleBin.length = window.HMI_RECYCLE_MAX;
+            }
+            try { localStorage.setItem('valisHmiRecycleBin', JSON.stringify(window._hmiRecycleBin)); } catch(_e) {}
+            if (typeof window._refreshHmiRecycleUi === 'function') window._refreshHmiRecycleUi();
+        };
+        // Stellt ein archiviertes Objekt + seine Children wieder her. Nutzt
+        // den existierenden loadFactoryState-Pfad: aktuellen State holen,
+        // recycled-Objekt(e) anhängen, neu laden. Frische IDs vergeben,
+        // damit es niemals zu Kollisionen mit bestehenden Objekten kommt.
+        window._restoreFromHmiRecycleBin = function(index) {
+            const snap = window._hmiRecycleBin && window._hmiRecycleBin[index];
+            if (!snap || !snap.data) return;
+            try { saveFactoryState(); } catch(_e) {}
+            let stateRaw = localStorage.getItem('logikFactoryState');
+            if (!stateRaw) { alert('Konnte aktuellen Factory-State nicht lesen.'); return; }
+            let state;
+            try { state = JSON.parse(stateRaw); } catch(_e) { alert('Factory-State korrupt.'); return; }
+            state.objects = state.objects || [];
+            // Walk: parent→children flatten unter Wiederverwendung der Original-Hierarchy.
+            const idMap = new Map();
+            const newId = () => Math.random().toString(36).substr(2, 9);
+            const collect = (o, parentNewId) => {
+                const copy = Object.assign({}, o);
+                delete copy.children;
+                const oldId = copy.id;
+                const myNewId = newId();
+                copy.id = myNewId;
+                if (oldId) idMap.set(oldId, myNewId);
+                if (parentNewId) copy.parentId = parentNewId;
+                state.objects.push(copy);
+                if (Array.isArray(o.children)) o.children.forEach(c => collect(c, myNewId));
+            };
+            collect(snap.data, null);
+            // Pipe-/Hose-Connections werden NICHT mit-restored (sind nicht
+            // archiviert). targetCylinderId-Verweise auf inzwischen wieder
+            // existierende Aktoren via idMap remappen.
+            state.objects.forEach(o => {
+                if (o.targetCylinderId && idMap.has(o.targetCylinderId)) {
+                    o.targetCylinderId = idMap.get(o.targetCylinderId);
+                }
+            });
+            localStorage.setItem('logikFactoryState', JSON.stringify(state));
+            try { loadFactoryState(); } catch(_e) { console.error(_e); }
+            window._hmiRecycleBin.splice(index, 1);
+            try { localStorage.setItem('valisHmiRecycleBin', JSON.stringify(window._hmiRecycleBin)); } catch(_e) {}
+            window._refreshHmiRecycleUi();
+        };
+        // Counter-Badge im Top-Bar-Button aktualisieren.
+        window._refreshHmiRecycleUi = function() {
+            const cnt = document.getElementById('hmi-recycle-count');
+            const n = (window._hmiRecycleBin && window._hmiRecycleBin.length) || 0;
+            if (cnt) cnt.textContent = n > 0 ? '(' + n + ')' : '';
+            const list = document.getElementById('hmi-recycle-list');
+            if (list) _renderRecycleBinList(list);
+        };
+        function _renderRecycleBinList(container) {
+            const bin = window._hmiRecycleBin || [];
+            if (!bin.length) {
+                container.innerHTML = '<div style="color:#90a4ae;font-style:italic;text-align:center;padding:20px;">Keine gelöschten Bauteile.</div>';
+                return;
+            }
+            const TYPE_LBL = {
+                taster:'Taster', taster_nc:'Taster (Öffner)',
+                schalter:'Schalter', nothalt:'Not-Aus', key_switch:'Schlüsselschalter',
+                led:'LED', siren:'Sirene', motor:'Motor', contactor:'Schütz',
+                conveyor:'Förderband', valve_pneu:'Ventil (pneu)',
+                valve_hyd:'Ventil (hyd)', zylinder_single:'Zylinder (einf.)',
+                zylinder_double:'Zylinder (doppelt)', relais:'Relais',
+                light_curtain:'Lichtgitter', mech_sensor:'Endschalter',
+                heater:'Heizung'
+            };
+            const fmt = (ts) => {
+                const d = ts - Date.now();
+                const mins = Math.round(-d / 60000);
+                if (mins < 1) return 'gerade eben';
+                if (mins < 60) return 'vor ' + mins + ' Min';
+                const h = Math.round(mins / 60);
+                if (h < 24) return 'vor ' + h + ' h';
+                return 'vor ' + Math.round(h/24) + ' Tagen';
+            };
+            container.innerHTML = bin.map((snap, i) => {
+                const d = snap.data || {};
+                const tlbl = TYPE_LBL[d.type] || (d.type ? String(d.type).replace(/_/g,' ') : 'Bauteil');
+                const vars = (snap.vars || []).slice(0, 3).join(', ')
+                           + ((snap.vars || []).length > 3 ? ' (+' + (snap.vars.length - 3) + ')' : '');
+                return '<div class="hrb-item" data-i="' + i + '">'
+                     + '<div class="hrb-info">'
+                     +   '<div class="hrb-title">' + tlbl + '</div>'
+                     +   '<div class="hrb-meta">' + fmt(snap.deletedAt)
+                     +     (vars ? ' · <span style="color:#dcdcaa;">' + vars + '</span>' : '')
+                     +   '</div>'
+                     + '</div>'
+                     + '<button class="hrb-restore" data-i="' + i + '" title="Wiederherstellen">↩ Restore</button>'
+                     + '<button class="hrb-drop" data-i="' + i + '" title="Endgültig löschen">×</button>'
+                     + '</div>';
+            }).join('');
+            container.querySelectorAll('.hrb-restore').forEach(b => {
+                b.addEventListener('click', () => {
+                    window._restoreFromHmiRecycleBin(parseInt(b.getAttribute('data-i'), 10));
+                });
+            });
+            container.querySelectorAll('.hrb-drop').forEach(b => {
+                b.addEventListener('click', () => {
+                    const i = parseInt(b.getAttribute('data-i'), 10);
+                    if (!confirm('Diesen Eintrag endgültig aus dem Papierkorb löschen?')) return;
+                    window._hmiRecycleBin.splice(i, 1);
+                    try { localStorage.setItem('valisHmiRecycleBin', JSON.stringify(window._hmiRecycleBin)); } catch(_e) {}
+                    window._refreshHmiRecycleUi();
+                });
+            });
+        }
+        window._openHmiRecycleBin = function(evt) {
+            // Existierendes Popup zumachen, falls offen.
+            let pop = document.getElementById('hmi-recycle-popup');
+            if (pop) { pop.remove(); return; }
+            pop = document.createElement('div');
+            pop.id = 'hmi-recycle-popup';
+            pop.style.cssText = 'position:fixed;z-index:5000;background:#2d2d30;border:1px solid #555;border-radius:6px;'
+                + 'box-shadow:0 8px 28px rgba(0,0,0,0.7);padding:10px 12px;min-width:340px;max-width:420px;max-height:60vh;overflow:auto;color:#d4d4d4;font-size:12px;';
+            // Position relativ zum Button
+            const btn = document.getElementById('btn-hmi-recycle');
+            if (btn) {
+                const r = btn.getBoundingClientRect();
+                pop.style.top = (r.bottom + 6) + 'px';
+                pop.style.left = Math.max(8, r.right - 360) + 'px';
+            } else {
+                pop.style.top = '60px';
+                pop.style.right = '20px';
+            }
+            pop.innerHTML =
+                '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+              +   '<b style="color:#ffab91;">🗑️ HMI-Papierkorb</b>'
+              +   '<div>'
+              +     '<button id="hrb-empty" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;cursor:pointer;margin-right:4px;">Leeren</button>'
+              +     '<button id="hrb-close" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 8px;font-size:11px;cursor:pointer;">×</button>'
+              +   '</div>'
+              + '</div>'
+              + '<div id="hmi-recycle-list"></div>';
+            document.body.appendChild(pop);
+            _renderRecycleBinList(pop.querySelector('#hmi-recycle-list'));
+            pop.querySelector('#hrb-close').addEventListener('click', () => pop.remove());
+            pop.querySelector('#hrb-empty').addEventListener('click', () => {
+                if (!confirm('Papierkorb komplett leeren? Das kann nicht rückgängig gemacht werden.')) return;
+                window._hmiRecycleBin = [];
+                try { localStorage.removeItem('valisHmiRecycleBin'); } catch(_e) {}
+                window._refreshHmiRecycleUi();
+            });
+            // Click-outside schließt das Popup.
+            setTimeout(() => {
+                const off = (e) => {
+                    if (!pop.contains(e.target) && e.target !== btn) {
+                        pop.remove();
+                        document.removeEventListener('mousedown', off);
+                    }
+                };
+                document.addEventListener('mousedown', off);
+            }, 0);
+            if (evt && evt.stopPropagation) evt.stopPropagation();
+        };
+        // Initialer Badge-Refresh nach DOM-ready (Counter aus localStorage anzeigen).
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => window._refreshHmiRecycleUi());
+        } else {
+            setTimeout(() => window._refreshHmiRecycleUi(), 0);
+        }
+
         function deleteObjRecursive(obj) {
+            // Nur Top-Level-Löschungen archivieren — bei Rekursion sind die
+            // Children bereits in obj.children enthalten und werden mit-serialisiert.
+            if (!window._recycleSuppress) {
+                window._recycleSuppress = true;
+                try { window._pushToHmiRecycleBin(obj); } catch(_e) {}
+                setTimeout(() => { window._recycleSuppress = false; }, 0);
+            }
             obj.el.remove(); factoryObjects = factoryObjects.filter(o => o !== obj); factoryItems = factoryItems.filter(o => o !== obj); fluidGridDirty = true;
             if (obj.children) obj.children.forEach(child => deleteObjRecursive(child));
             if (obj.parent && obj.parent.children) obj.parent.children = obj.parent.children.filter(c => c !== obj);
@@ -39418,11 +40907,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };
+        // Helper: aktuelles FBS-Document (Hauptfenster oder Pop-out).
+        function _fbsDoc() {
+            return (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
+                   ? window.popOutWindows['fbs-wrapper'].document : document;
+        }
+        // Helper: speichert ein FBS-Setting persistent (try-fenced).
+        function _fbsSave(key, val) {
+            try { localStorage.setItem(key, val); } catch(_e) {}
+        }
         window.toggleFbsColors = function() {
             window.fbsColorMode = !window.fbsColorMode;
-            let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
-                      ? window.popOutWindows['fbs-wrapper'].document : document;
-            const btn = doc.getElementById('btn-fbs-colors');
+            _fbsSave('valisFbsColors', window.fbsColorMode ? '1' : '0');
+            const btn = _fbsDoc().getElementById('btn-fbs-colors');
             if (btn) {
                 if (window.fbsColorMode) {
                     btn.style.backgroundColor = '#911eb4';
@@ -39444,9 +40941,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window.fbsLayoutIndex = ((window.fbsLayoutIndex || 0) + 1) % _fbsLayoutSteps.length;
             const step = _fbsLayoutSteps[window.fbsLayoutIndex];
             window.fbsLayoutScale = step.scale;
-            let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
-                      ? window.popOutWindows['fbs-wrapper'].document : document;
-            const btn = doc.getElementById('btn-fbs-layout');
+            _fbsSave('valisFbsLayoutIdx', String(window.fbsLayoutIndex));
+            const btn = _fbsDoc().getElementById('btn-fbs-layout');
             if (btn) {
                 btn.style.backgroundColor = step.color;
                 btn.textContent = step.label;
@@ -39457,8 +40953,155 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };
+        // Linienstärke-Cycle (Feature: Linien-Stil). Wirkt auf alle gezeichneten
+        // Edges per CSS-Variable, sodass kein Re-Layout nötig ist.
+        const _fbsStrokeSteps = [
+            { width: 1.2, label: '✏️ Linie: Dünn',   color: '#4363d8' },
+            { width: 2.0, label: '✏️ Linie: Normal', color: '#555'    },
+            { width: 3.0, label: '✏️ Linie: Fett',   color: '#3cb44b' },
+        ];
+        window.cycleFbsStroke = function() {
+            window.fbsStrokeIndex = ((window.fbsStrokeIndex || 1) + 1) % _fbsStrokeSteps.length;
+            const step = _fbsStrokeSteps[window.fbsStrokeIndex];
+            _fbsSave('valisFbsStrokeIdx', String(window.fbsStrokeIndex));
+            const btn = _fbsDoc().getElementById('btn-fbs-stroke');
+            if (btn) { btn.style.backgroundColor = step.color; btn.textContent = step.label; }
+            // CSS-Variable an die SVG-Wrapper setzen — drawGraph nutzt sie via CSS-Regel.
+            const svg = _fbsDoc().getElementById('custom-svg');
+            if (svg) svg.style.setProperty('--fbs-stroke-w', step.width + 'px');
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        // Helper-Knoten ausblenden (Feature). Filter wird in calculateLayout/
+        // drawGraph respektiert (siehe _fbsIsVisibleNode).
+        window.toggleFbsHelpers = function() {
+            window.fbsHideHelpers = !window.fbsHideHelpers;
+            _fbsSave('valisFbsHideHelpers', window.fbsHideHelpers ? '1' : '0');
+            const btn = _fbsDoc().getElementById('btn-fbs-helpers');
+            if (btn) {
+                if (window.fbsHideHelpers) {
+                    btn.style.backgroundColor = '#7b1fa2';
+                    btn.textContent = '🛠 Helper: AUS';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '🛠 Helper: AN';
+                }
+            }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                calculateLayout(currentGraph);
+                drawGraph(currentGraph);
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        window.toggleFbsConsts = function() {
+            window.fbsHideConsts = !window.fbsHideConsts;
+            _fbsSave('valisFbsHideConsts', window.fbsHideConsts ? '1' : '0');
+            const btn = _fbsDoc().getElementById('btn-fbs-consts');
+            if (btn) {
+                if (window.fbsHideConsts) {
+                    btn.style.backgroundColor = '#1976d2';
+                    btn.textContent = '🔢 Konstanten: AUS';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '🔢 Konstanten: AN';
+                }
+            }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                calculateLayout(currentGraph);
+                drawGraph(currentGraph);
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        window.toggleFbsRSColumn = function() {
+            window.fbsRSColumn = !window.fbsRSColumn;
+            _fbsSave('valisFbsRSColumn', window.fbsRSColumn ? '1' : '0');
+            const btn = _fbsDoc().getElementById('btn-fbs-rscol');
+            if (btn) {
+                if (window.fbsRSColumn) {
+                    btn.style.backgroundColor = '#388e3c';
+                    btn.textContent = '⚏ RS-Spalte: AN';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '⚏ RS-Spalte: AUS';
+                }
+            }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                calculateLayout(currentGraph);
+                drawGraph(currentGraph);
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        // Fokus-Modus: Toggle aktiviert nur den MODE. Erst Klick auf Knoten setzt
+        // window.fbsFocusNodeId, dann werden nur Vor-/Nachfolger gerendert.
+        window.fbsFocusModeOn = false;
+        window.toggleFbsFocusMode = function() {
+            window.fbsFocusModeOn = !window.fbsFocusModeOn;
+            const btn = _fbsDoc().getElementById('btn-fbs-focus');
+            const svg = _fbsDoc().getElementById('custom-svg');
+            if (svg) svg.classList.toggle('fbs-focus-armed', window.fbsFocusModeOn);
+            if (btn) {
+                if (window.fbsFocusModeOn) {
+                    btn.style.backgroundColor = '#f57c00';
+                    btn.textContent = '🎯 Fokus: AN (Knoten klicken)';
+                } else {
+                    btn.style.backgroundColor = '#555';
+                    btn.textContent = '🎯 Fokus: AUS';
+                    window.fbsFocusNodeId = null;
+                    if (typeof currentGraph !== 'undefined' && currentGraph) {
+                        calculateLayout(currentGraph);
+                        drawGraph(currentGraph);
+                    }
+                }
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        // ESC verlässt den Fokus-Modus + Reset.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if (!window.fbsFocusModeOn && !window.fbsFocusNodeId) return;
+            window.fbsFocusModeOn = false;
+            window.fbsFocusNodeId = null;
+            const btn = _fbsDoc().getElementById('btn-fbs-focus');
+            const svg = _fbsDoc().getElementById('custom-svg');
+            if (svg) svg.classList.remove('fbs-focus-armed');
+            if (btn) { btn.style.backgroundColor = '#555'; btn.textContent = '🎯 Fokus: AUS'; }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                calculateLayout(currentGraph);
+                drawGraph(currentGraph);
+            }
+        });
+        // Wendet die geladenen Settings auf die Buttons + CSS-Variablen an
+        // (Beschriftung/Hintergrundfarbe). Wird nach DOM-Ready aufgerufen.
+        function _applyFbsSettingsToButtons() {
+            const d = _fbsDoc();
+            const set = (id, on, onLabel, offLabel, onBg, offBg) => {
+                const b = d.getElementById(id);
+                if (!b) return;
+                b.style.backgroundColor = on ? onBg : offBg;
+                b.textContent = on ? onLabel : offLabel;
+            };
+            set('btn-fbs-colors',   window.fbsColorMode,     '🌈 Bunte Linien: AN', '🌈 Bunte Linien: AUS', '#911eb4', '#555');
+            set('btn-fbs-errorglow',window.fbsErrorHighlight,'🚨 Fehler-Glow: AN',  '🚨 Fehler-Glow: AUS',  '#d50000', '#555');
+            set('btn-fbs-helpers',  window.fbsHideHelpers,   '🛠 Helper: AUS',      '🛠 Helper: AN',         '#7b1fa2', '#555');
+            set('btn-fbs-consts',   window.fbsHideConsts,    '🔢 Konstanten: AUS',  '🔢 Konstanten: AN',     '#1976d2', '#555');
+            set('btn-fbs-rscol',    window.fbsRSColumn,      '⚏ RS-Spalte: AN',    '⚏ RS-Spalte: AUS',     '#388e3c', '#555');
+            // Dichte + Linienstärke (Mehrstufen-Cycles).
+            const ls = _fbsLayoutSteps[window.fbsLayoutIndex || 0];
+            const lb = d.getElementById('btn-fbs-layout');
+            if (lb) { lb.style.backgroundColor = ls.color; lb.textContent = ls.label; }
+            const ss = _fbsStrokeSteps[window.fbsStrokeIndex || 1];
+            const sb = d.getElementById('btn-fbs-stroke');
+            if (sb) { sb.style.backgroundColor = ss.color; sb.textContent = ss.label; }
+            const svg = d.getElementById('custom-svg');
+            if (svg) svg.style.setProperty('--fbs-stroke-w', ss.width + 'px');
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', _applyFbsSettingsToButtons);
+        } else {
+            setTimeout(_applyFbsSettingsToButtons, 0);
+        }
         window.toggleFbsErrorHighlight = function() {
             window.fbsErrorHighlight = (window.fbsErrorHighlight === false);
+            _fbsSave('valisFbsErrorHi', window.fbsErrorHighlight ? '1' : '0');
             let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
                       ? window.popOutWindows['fbs-wrapper'].document : document;
             const btn = doc.getElementById('btn-fbs-errorglow');

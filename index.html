@@ -1483,7 +1483,30 @@
         .tb-submenu-content { display: none; position: absolute; left: 100%; top: -1px; background-color: #2d2d30; min-width: 170px; box-shadow: 4px 4px 10px rgba(0,0,0,0.6); border-radius: 4px; border: 1px solid #555; z-index: 1001; }
         .tb-submenu:hover > .tb-submenu-content { display: block; }
         .tb-submenu::after { content: '▶'; position: absolute; right: 10px; font-size: 9px; color: #aaa; top: 12px; }
-        .f2d-zone span { font-size: 10px; font-weight: bold; color: rgba(255,255,255,0.7); pointer-events: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        /* Zonen sind reine Markierungen — der Body fängt KEINE Klicks ab,
+           damit darüberliegende Bauteile (Band, Tisch, …) immer erreichbar
+           bleiben, egal in welcher Z-Ebene die Zone liegt. Selektieren/
+           Verschieben passiert über die Label-Pille oben links (mit Move-
+           Icon davor), Resize über das Handle unten rechts. */
+        .f2d-zone { pointer-events: none; }
+        .f2d-zone span {
+            position: absolute; top: 4px; left: 4px;
+            padding: 2px 7px 2px 18px;
+            background: rgba(0,0,0,0.55); border-radius: 3px;
+            color: rgba(255,255,255,0.95);
+            font-size: 10px; font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            pointer-events: auto; cursor: move;
+            user-select: none;
+        }
+        /* Move-Icon (sechs Punkte) links in der Pille */
+        .f2d-zone span::before {
+            content: '⠿';
+            position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+            font-size: 12px; line-height: 1; opacity: 0.85;
+        }
+        .f2d-zone span:hover { background: rgba(0,0,0,0.75); }
+        .f2d-zone .f2d-resize-handle-xy { pointer-events: auto; }
         .zone-top { background: rgba(33, 150, 243, 0.15); border: 2px dashed #2196f3; }
         .zone-side { background: rgba(76, 175, 80, 0.15); border: 2px dashed #4caf50; }
         /* NEU: Größerer, deutlicherer 2D-Skalierungsanfasser */
@@ -1788,12 +1811,23 @@
             pointer-events: none;
         }
         #tutorial-tooltip {
-            position: fixed; width: 300px;
+            position: fixed;
+            /* Feste, großzügigere Breite — passt kurze Tour-Texte UND lange
+               Lektions-Erklärungen. Auf schmalen Viewports schrumpft die
+               Breite via max-width. `box-sizing: border-box` damit padding
+               die effektive Breite nicht überschießt. */
+            width: 460px; max-width: 92vw;
+            box-sizing: border-box;
             background: #1a2332; border: 1.5px solid #2196f3; border-radius: 10px;
             padding: 18px 18px 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
             color: #e8eaf6; pointer-events: all; z-index: 8902;
             transition: left 0.3s ease, top 0.3s ease;
+            /* Bewusst KEIN overflow:auto und KEIN max-height — diese würden
+               horizontale (CSS-Spec-Quirk) und vertikale Scrollbars triggern.
+               Stattdessen lange Wörter umbrechen, damit Inhalt nicht überläuft. */
+            overflow-wrap: break-word; word-break: break-word;
         }
+        #tutorial-tooltip code { word-break: break-all; }
         #tutorial-tooltip h4 { margin: 0 0 9px; font-size: 14px; color: #64b5f6; font-weight: 700; }
         #tutorial-tooltip p  { margin: 0 0 13px; font-size: 12px; line-height: 1.6; color: #b0bec5; }
         .tut-nav { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -2034,9 +2068,9 @@
                         <div onclick="switchLanguage('en')">🇬🇧 English</div>
                     </div>
                 </div>
-                <button class="btn-export" onclick="openHelpModal()" style="background: #17a2b8; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_help">ℹ️ Hilfe / Tipps</button>
                 <button class="btn-export" onclick="openSaveLoadModal()" style="background: #2196f3; font-size: 11px; padding: 3px 8px; box-shadow: none;" data-i18n="btn_save_load">💾 Speichern / Laden</button>
                 <button class="btn-export" onclick="startTutorial()" style="background: #5c6bc0; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Interaktive Schritt-für-Schritt-Tour">🎓 Tour</button>
+                <button class="btn-export" onclick="openLessonsModal()" style="background: #00897b; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="Interaktive Lektionen: führen Schritt-für-Schritt durch SPS-Grundprinzipien (Eingang/Ausgang, UND, ODER, Negation, Selbsthaltung)">📚 Lektionen</button>
                 <button id="btn-pro-toggle" class="btn-export" onclick="window._toggleProMode()" style="background: #424242; font-size: 11px; padding: 3px 8px; box-shadow: none;" title="PRO-Modus: schaltet die Schrittketten-Features (DSL, Grafcet/S7-GRAPH-Panel, Beispiele, Toggle DSL↔RS) ein/aus.">⚙️ PRO</button>
             </div>
         </div>
@@ -2114,6 +2148,7 @@
         <div class="section-header" onclick="toggleSection('simulator-container', this)" style="justify-content:space-between;">
             <span><span class="toggle-icon">▼</span> Simulation (Ein- & Ausgänge)</span>
             <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
+                <button onclick="openHelpModal('sim')" title="Hinweise zu Hardware-Kopplung und Taster-Einrasten" style="background:#17a2b8;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:help;line-height:1;">ℹ️</button>
                 <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="E-Pneumatik-Modus: blendet Schließer/Öffner-Wahl bei Tastern/Schaltern aus (Notaus & Lichtgitter bleiben Öffner). Verändert NICHT den Code." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
                 <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
                 <button onclick="openAnalyzerModal()" title="Oszilloskop öffnen" style="background:#607d8b;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📊</button>
@@ -2210,6 +2245,7 @@
                         <button id="btn-fbs-smartorder" class="btn-export" style="background-color: #00838f; border: 1px solid #333;" onclick="toggleFbsSmartOrder()" title="Pin-Reihenfolge an Gates und Eingangs-Spalte nach Y-Position der Quellen/Ziel-Pins sortieren. Verhindert unnötige Kreuzungen (z.B. START/FREIGABE) und Knicke (z.B. NOTHALT→S, RESET→R).">🧲 Pin-Sortierung: AN</button>
                         <button id="btn-fbs-pinsnap" class="btn-export" style="background-color: #5d4037; border: 1px solid #333;" onclick="toggleFbsPinSnap()" title="Nach der Relaxation Eingangs- und Ausgangs-Spalte hart auf die Ziel-/Quell-Pin-Y schnappen. Akzeptiert größere Lücken zwischen Inputs/Outputs, dafür minimal Knicke (NOTHALT direkt auf S-Y, RESET zwischen R-Y's, BAND direkt auf AND-Q-Y usw.).">📏 Pin-Snap: AN</button>
                         <button id="btn-fbs-glowhover" class="btn-export" style="background-color: #b8860b; border: 1px solid #333;" onclick="toggleFbsGlowHover()" title="Im Simulations-Modus: Maus über einen Knoten → goldgelber Glow zeigt den minimalen Pfad, der seinen aktuellen Wert GERADE treibt (AND TRUE = alle Eingänge; AND FALSE = nur die FALSE-Eingänge; OR TRUE = nur die TRUE-Eingänge; …).">✨ Glow-Hover: AN<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
+                        <button id="btn-fbs-glowsegtrunks" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsGlowSegmentedTrunks()" title="Trunks (horizontale Hauptkanäle) edge-weise zeichnen statt als einen Bus pro Quelle — der Glow-Hover zeigt dann punktgenau nur die Trunk-Anteile, die wirklich zum getracten Edge gehören (kein Überschuss bei mehrfach-verzweigten Quellen wie STOP). Kostet ein paar zusätzliche SVG-Pfade pro Net.">🪓 Trunk segmentiert: AUS<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
                         <button id="btn-fbs-errorglow" class="btn-export" style="background-color: #d50000; border: 1px solid #333;" onclick="toggleFbsErrorHighlight()" title="Code-Fehler im Logikplan durch rotes Leuchten an den betroffenen Variablen und Linien sichtbar machen.">🚨 Fehler-Glow: AN</button>
                     </div>
                 </div>
@@ -2592,6 +2628,7 @@
                         </div>
                     </div>
                     <button class="tool-btn" onclick="openTutIndex()" style="background-color: #1565c0; margin-left: 10px; border-left: 1px solid #555; padding-left: 14px;" title="Komponenten-Tutorials">📚 Tutorials</button>
+                    <button class="tool-btn" onclick="openHelpModal('fac')" style="background-color: #17a2b8; padding: 3px 8px; cursor: help;" title="Hinweise zu Profi-Steuerung und Kamera der 2D-Anlage">ℹ️</button>
                     <button id="btn-viewmode" class="tool-btn" onclick="toggleGlobalViewMode()" style="margin-left: auto; background-color: #4caf50;" data-i18n="fac_btn_view_side">🌍 Global: Seitenansicht</button>
                     <button class="tool-btn" onclick="clearFactory()" style="background-color: #b71c1c; margin-left: 10px;" data-i18n="fac_btn_clear">🗑️ Alles löschen</button>
                 </div>
@@ -3030,14 +3067,8 @@
                 </div>
             </div>
 <div id="help-modal" style="display: none; position: absolute; top: 10%; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.8); z-index: 2000; width: 450px; color: #ccc; font-size: 12px; line-height: 1.6;">
-			<h3 style="margin-top:0; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px;">ℹ️ Wichtige Bedienungshinweise</h3>
-			<ul style="padding-left: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
-				<li><strong style="color: #9CDCFE;">Hardware-Kopplung:</strong> Sobald ein Signal (Taster, Sensor etc.) einem echten Bauteil in der 2D-Anlage zugewiesen wird, übernimmt die 2D-Mechanik die Kontrolle. Die manuelle Eingabe im linken Simulationsfenster wird für diese Variable dann gesperrt – klicke stattdessen direkt auf die Bauteile in der Anlage!</li>
-				<li><strong style="color: #9CDCFE;">Taster einrasten:</strong> Halte <kbd>STRG</kbd> oder <kbd>CMD</kbd> gedrückt, während du einen Taster anklickst, um ihn dauerhaft einrasten zu lassen (Dauerfeuer).</li>
-				<li><strong style="color: #9CDCFE;">Profi-Steuerung (2D):</strong> Ziehe bei gestoppter Simulation mit der Maus einen Rahmen in den Hintergrund, um mehrere Objekte gleichzeitig auszuwählen. Nutze <kbd>STRG+C</kbd> und <kbd>STRG+V</kbd> zum Kopieren ganzer Anlagenteile und <kbd>ENTF</kbd> zum Löschen.</li>
-				<li><strong style="color: #9CDCFE;">Kamera 2D-Anlage:</strong> Halte <kbd>STRG</kbd> (bzw. <kbd>CMD</kbd>) + Mausrad, um stufenlos zu <b>zoomen</b>. Nutze die <b>mittlere Maustaste</b> (Mausrad-Klick) oder <kbd>ALT</kbd> + Linksklick, um die Anlage zu <b>verschieben</b>.</li>
-				<li><strong style="color: #9CDCFE;">Kamera Schaltpläne:</strong> Hier reicht das normale Mausrad zum Zoomen und die gedrückte linke Maustaste zum Verschieben aus.</li>
-			</ul>
+			<h3 id="help-modal-title" style="margin-top:0; color:#fff; border-bottom: 1px solid #555; padding-bottom: 10px;">ℹ️ Wichtige Bedienungshinweise</h3>
+			<ul id="help-modal-body" style="padding-left: 20px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;"></ul>
 			<div style="display: flex; justify-content: flex-end;">
 				<button onclick="closeHelpModal()" style="background: #007acc; color: white; border: none; padding: 6px 16px; border-radius: 3px; cursor: pointer; font-weight: bold;">Verstanden</button>
 			</div>
@@ -3053,6 +3084,19 @@
                     <button onclick="closeTutIndex()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Schließen">✕</button>
                 </div>
                 <div class="tut-index-body" id="tut-index-body"></div>
+            </div>
+        </div>
+        <!-- Lektionen Modal -->
+        <div id="lessons-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.88); z-index:3600; justify-content:center; align-items:center;" onclick="if(event.target===this)closeLessonsModal()">
+            <div class="tut-index-box">
+                <div class="tut-index-header">
+                    <div>
+                        <div class="tut-index-header-title">📚 Lektionen — SPS-Grundlagen</div>
+                        <div class="tut-index-header-sub">Wähle eine Lektion. Sie schreibt Code in den Editor und erklärt Schritt für Schritt was passiert.</div>
+                    </div>
+                    <button onclick="closeLessonsModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Schließen">✕</button>
+                </div>
+                <div class="tut-index-body" id="lessons-list"></div>
             </div>
         </div>
         <!-- Tutorial Modal -->
@@ -5241,6 +5285,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.fbsSmartOrder    = true;   // Pin-/Eingangs-Reihenfolge nach Y → weniger Kreuzungen/Knicke
         window.fbsPinSnap       = true;   // Inputs/Outputs nach Relaxation hart auf Ziel-/Quell-Pin-Y schnappen
         window.fbsGlowHover     = false;  // [BETA] Hover über Knoten im Sim-Modus → aktiv treibende Vor-Kette gold-glüht — Default AUS (Opt-In)
+        window.fbsGlowSegmentedTrunks = false; // [BETA] Trunks segmentweise zeichnen (1 pro Edge statt 1 pro Net) → Glow-Hover präzise ohne Überschuss. Mehr DOM-Pfade!
         (function _initFbsSettings() {
             try {
                 const _ls = (k) => localStorage.getItem(k);
@@ -5264,6 +5309,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 // bewusst ein-/ausschalten dürfen sollen ohne dass Refresh es resetted.
                 if (_ls('valisFbsGlowHover') === '0') window.fbsGlowHover = false;
                 else if (_ls('valisFbsGlowHover') === '1') window.fbsGlowHover = true;
+                if (_ls('valisFbsGlowSegTrunks') === '0') window.fbsGlowSegmentedTrunks = false;
+                else if (_ls('valisFbsGlowSegTrunks') === '1') window.fbsGlowSegmentedTrunks = true;
                 const si = parseInt(_ls('valisFbsStrokeIdx'), 10);
                 if (Number.isFinite(si) && si >= 0 && si < 3) window.fbsStrokeIndex = si;
             } catch(_e) {}
@@ -6058,9 +6105,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let oldWidth = resizingElement.data.width;
                 resizingElement.data.x = startX + (totalDw / 2) * (Math.cos(pRad) - 1);
                 resizingElement.data.y = startY + (totalDw / 2) * Math.sin(pRad);
-                resizingElement.data.width = newWidth; 
-                resizingElement.el.style.width = newWidth + 'px'; 
+                resizingElement.data.width = newWidth;
+                resizingElement.el.style.width = newWidth + 'px';
                 updateObjTransform(resizingElement.data);
+                // Plugin-Resize-Hook (analog zum XY-Pfad weiter unten) — sonst
+                // sehen Komponenten mit internem Layout (z. B. carrier_belt mit
+                // pro-Station positionierten Markern) die Größenänderung
+                // erst beim nächsten Klick.
+                if (ComponentRegistry[resizingElement.data.type] && ComponentRegistry[resizingElement.data.type].onResize) {
+                    ComponentRegistry[resizingElement.data.type].onResize(resizingElement.data);
+                }
                 if(resizingElement.data.children) {
                     resizingElement.data.children.forEach(child => {
                         let oldCx = resizingElement.data.x - (realDw / 2) * (Math.cos(pRad) - 1) + (newWidth - realDw)/2;
@@ -7069,7 +7123,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // 🌟 WIEDERHERGESTELLT: Globale Gatter-Erstellung ohne Target-Zwang
             function createGate(type, inputObjs) {
                 let gateId = (type === '&' ? 'AND_' : 'OR_') + graph.gateCounter++;
-                graph.addNode(gateId, 'GATE', type === '&' ? '&' : '>=1');
+                graph.addNode(gateId, 'GATE', type === '&' ? '&' : '≥1');
                 inputObjs.forEach(inp => graph.addEdge(inp.id, gateId, '', inp.inverted));
                 const operator = type === '&' ? '&&' : '||';
                 const jsInputs = inputObjs.map(inp => (inp.inverted ? '!' : '') + `state['${inp.id}']`).join(` ${operator} `);
@@ -11915,7 +11969,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let drivers;
                 if (node.type === 'GATE') {
                     const isAnd = node.id.indexOf('AND_') === 0 || node.label === '&';
-                    const isOr  = node.id.indexOf('OR_')  === 0 || node.label === '>=1';
+                    const isOr  = node.id.indexOf('OR_')  === 0 || node.label === '≥1';
                     if (isAnd) {
                         drivers = incoming.filter(e => {
                             const sVal = !!state[e.sourceId] !== !!e.inverted; // XOR mit invert
@@ -11958,21 +12012,41 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const blk = svg.querySelector('#node-block-' + CSS.escape(id));
                 if (blk) blk.classList.add('fbs-glow-drive');
             });
-            // Edges: drawPath setzt class `fbs-edge-<src>___<tgt>___<pin>` und data-edge-id.
-            // Wir matchen über data-edge-id, weil das eindeutig pro Drop ist und sowohl
-            // den eigentlichen Pfad als auch den Halo trifft.
-            //
-            // BEWUSST WEGGELASSEN: Trunks (Haupt-Bus pro Quelle), Verteiler-Dots und
-            // NOT-Bubbles. Die tragen alle nur `net-source-<sourceId>` ohne Edge-Info
-            // — d. h. wir können nicht unterscheiden, ob ein bestimmter Dot zu einer
-            // Abzweigung gehört, die im Trace ist oder zu einer, die wegführt. Lieber
-            // gar nicht highlighten als irreführend (User-Report: irrelevante Zweige
-            // glüheten mit).
+            // 1) Edge-Drops (L-Stücke zum Target-Pin) per data-edge-id-Match —
+            //    eindeutig pro Edge, trifft Halo + Path.
             trace.edges.forEach(key => {
                 svg.querySelectorAll('[data-edge-id="' + CSS.escape(key) + '"]').forEach(el => {
                     el.classList.add('fbs-glow-drive');
                 });
             });
+            // 2) Trunks (horizontale Hauptkanäle pro Quelle) — nur im
+            //    Nicht-segmentierten Modus (Default): da hat der Trunk
+            //    keine data-edge-id und wir müssen ihn über die Source-
+            //    Klasse aufschlagen. Akzeptierter Trade-off: bei mehrfach-
+            //    verzweigten Quellen reicht der Trunk-Glow über die
+            //    relevante Abzweigung hinaus bis zur rechtsäußersten.
+            //
+            //    Im Segmented-Mode (BETA): drawGraph zeichnet pro Edge
+            //    einen eigenen Trunk-Pfad mit `data-edge-id` — die
+            //    obenstehende edge-id-Schleife trifft sie bereits präzise.
+            //    Wir dürfen hier NICHT zusätzlich source-basiert glühen,
+            //    sonst leuchten ALLE Per-Edge-Trunks (auch die, deren Edge
+            //    nicht im Trace ist).
+            //
+            //    Dots/Bubbles bleiben bewusst dunkel — sie sitzen an
+            //    Abzweigpunkten und wären als falsche Wegweiser besonders
+            //    irreführend (vorheriger User-Report).
+            if (!window.fbsGlowSegmentedTrunks) {
+                const tracedSources = new Set();
+                trace.edges.forEach(key => {
+                    tracedSources.add(key.split('___')[0]);
+                });
+                tracedSources.forEach(srcId => {
+                    svg.querySelectorAll('.fbs-trunk-' + CSS.escape(srcId)).forEach(el => {
+                        el.classList.add('fbs-glow-drive');
+                    });
+                });
+            }
         };
         window._fbsClearGlowHover = function(svgArg) {
             const svg = svgArg || document.getElementById('custom-svg');
@@ -12645,13 +12719,39 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let drawLeft = hasKnick ? leftExtent : Math.min(startX, minMidX);
                 let drawRight = hasKnick ? rightExtent : Math.max(startX, maxMidX);
                 if (net.edges.length > 0) {
-                    let trunkD = "";
-                    if (hasKnick) {
-                        trunkD = `M ${startX} ${net.startY} L ${dropX} ${net.startY} L ${dropX} ${trunkY} M ${drawLeft} ${trunkY} L ${drawRight} ${trunkY}`;
+                    if (window.fbsGlowSegmentedTrunks) {
+                        // [BETA] SEGMENTED-MODE: ein Trunk-Pfad PRO Edge,
+                        // jeder mit der `data-edge-id` seines Edges. Die
+                        // Glow-Hover-Logik trifft so per Edge präzise auch
+                        // den Trunk-Anteil — kein Überschuss bei Quellen,
+                        // die mehrere Targets bedienen (z. B. STOP).
+                        // Visuell stapeln sich die Pfade exakt → sieht wie
+                        // ein normaler Trunk aus solange nichts highlightet
+                        // wird. Mehr DOM-Pfade, dafür chirurgisches Glow.
+                        net.edges.forEach(edge => {
+                            const segEndX = edge.calcMidX;
+                            let segD;
+                            if (hasKnick) {
+                                // Knick (Source-Pin → trunkY) + Horizontal
+                                // bis zur Edge-Abzweigung. dropX kann links
+                                // ODER rechts von segEndX liegen — beides ok.
+                                segD = `M ${startX} ${net.startY} L ${dropX} ${net.startY} L ${dropX} ${trunkY} L ${segEndX} ${trunkY}`;
+                            } else {
+                                // Ohne Knick: Quelle sitzt schon auf trunkY.
+                                segD = `M ${startX} ${trunkY} L ${segEndX} ${trunkY}`;
+                            }
+                            const edgeId = `${edge.sourceId}___${edge.targetId}___${edge.targetPin}`;
+                            drawPath(segD, net.color, net.source.id, edgeId, true);
+                        });
                     } else {
-                        trunkD = `M ${drawLeft} ${trunkY} L ${drawRight} ${trunkY}`; 
+                        let trunkD = "";
+                        if (hasKnick) {
+                            trunkD = `M ${startX} ${net.startY} L ${dropX} ${net.startY} L ${dropX} ${trunkY} M ${drawLeft} ${trunkY} L ${drawRight} ${trunkY}`;
+                        } else {
+                            trunkD = `M ${drawLeft} ${trunkY} L ${drawRight} ${trunkY}`;
+                        }
+                        drawPath(trunkD, net.color, net.source.id, null, true); // TRUNK (Stamm)
                     }
-                    drawPath(trunkD, net.color, net.source.id, null, true); // TRUNK (Stamm)
                 }
                 const dots = new Set();
                 net.edges.forEach(edge => {
@@ -12937,8 +13037,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
             if (window.fbsErrorHighlight === false) return;
             if (typeof window._collectAllErrors !== 'function') return;
-            const errLines = window._collectAllErrors();
-            if (!errLines || errLines.size === 0) return;
+            const allErrLines = window._collectAllErrors();
+            if (!allErrLines || allErrLines.size === 0) return;
+            // Info-Severity-Zeilen rausfiltern — z. B. das Selbsthaltungs-Muster
+            // `LHS := f(LHS)` ist KEIN Fehler, sondern ein optionaler Hinweis auf
+            // die RS/SR-Umwandlung. Würden wir es rot leuchten lassen, sähe der
+            // User eine falsche Fehler-Anzeige bei einer voll funktionierenden
+            // Selbsthaltung. Der Code-Editor-Gutter zeigt die Info weiterhin
+            // mit gelbem i-Symbol — das ist der richtige Ort dafür.
+            const infoLines = window._infoLines || new Set();
+            const errLines = new Set();
+            allErrLines.forEach(idx => { if (!infoLines.has(idx)) errLines.add(idx); });
+            if (errLines.size === 0) return;
 
             const ta = document.getElementById('code');
             if (!ta) return;
@@ -18138,19 +18248,103 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let t = createSvgElement('text', {x, y, 'font-size': '9px', fill: '#666', 'font-family': 'monospace', 'text-anchor': anchor});
                 t.textContent = txt; parent.appendChild(t);
             };
-            const addLabelText = (parentG, x, y, textContent, isBold = false) => {
+            // Variable-Klammer-Zeile umbrechen wenn länger als maxChars.
+            // Greedy-Wrapping an natürlichen Bruchstellen — ZWEISTUFIG:
+            //   1) Erst an Wort-Grenzen (Leerzeichen, &&, ||) splitten — das
+            //      sind die „sauberen" Bruchstellen wie zwischen `-KF11` und
+            //      `&& ¬-KF16` in Boolean-Expressions.
+            //   2) Wörter, die einzeln länger als maxChars sind, intern an
+            //      `_` aufbrechen (SPS-Naming-Konvention) — der Unterstrich
+            //      bleibt an seinem linken Chunk als Continuation-Hinweis.
+            // Klammern/Operatoren werden NICHT zerlegt — bleiben mit ihrem
+            // Token zusammen, damit `(STAMP_PULSE)-KF11` als zusammenhängender
+            // Bezeichner gelesen werden kann.
+            const _wrapVarLabel = (text, maxChars) => {
+                if (text.length <= maxChars) return [text];
+                // Phase 1: Wort-Split an Whitespace und logischen Operatoren.
+                // Die Trenner werden mit-getokent → trial-String enthält sie
+                // weiterhin, der Lese-Fluss bleibt erhalten.
+                const words = text.split(/(\s+|&&|\|\|)/).filter(t => t.length > 0);
+                // Phase 2: einzelne Wörter > maxChars an `_` zerlegen.
+                const atoms = [];
+                for (const w of words) {
+                    if (w.length > maxChars && w.indexOf('_') !== -1) {
+                        const subs = w.split('_');
+                        for (let i = 0; i < subs.length; i++) {
+                            atoms.push(i === subs.length - 1 ? subs[i] : subs[i] + '_');
+                        }
+                    } else {
+                        atoms.push(w);
+                    }
+                }
+                // Phase 3: greedy Zeilen bauen.
+                const lines = [];
+                let cur = '';
+                for (const a of atoms) {
+                    const trial = cur + a;
+                    if (cur.length === 0 || trial.length <= maxChars) {
+                        cur = trial;
+                    } else {
+                        lines.push(cur.replace(/\s+$/, ''));
+                        cur = a.replace(/^\s+/, '');
+                    }
+                }
+                if (cur.length > 0) lines.push(cur.replace(/\s+$/, ''));
+                if (lines.length === 0) lines.push('');
+                return lines;
+            };
+            // Schätzt die LINKS-Ausdehnung eines (rechts-anker) Labels in Pixeln
+            // ab Komponenten-Mitte. Nutzt dieselbe Wrap-Logik wie addLabelText.
+            // Char-Breiten sind großzügig gewählt (eher zu groß als zu knapp),
+            // damit das Strang-Widening nicht zu eng wird:
+            //   13 px bold (line1, z. B. `-KF15`) ≈ 7 px/char
+            //   10 px regular (line2, z. B. `(STAMP_PULSE)`) ≈ 6 px/char
+            //   + 25 px Label-x-Offset (addLabelText setzt x-25)
+            //   + 5 px Sicherheits-Puffer
+            const _estimateLabelLeftPx = (label) => {
+                if (!label) return 0;
+                const splitIdx = label.indexOf(' (');
+                let line1W, line2W = 0;
+                if (splitIdx === -1) {
+                    line1W = label.length * 7;
+                } else {
+                    line1W = label.substring(0, splitIdx).length * 7;
+                    const line2 = label.substring(splitIdx + 1);
+                    const lines2 = _wrapVarLabel(line2, 12);
+                    const longest = lines2.reduce((m, l) => Math.max(m, l.length), 0);
+                    line2W = longest * 6;
+                }
+                return Math.max(line1W, line2W) + 25 + 5;
+            };
+            // Erforderlicher Strang-zu-Strang-Abstand, damit das LINKS-Label des
+            // nächsten Strangs nicht in den vorherigen Strang hineinragt.
+            //   = next_label_left_extent + previous_strand_right_extent (~15 px
+            //     Pin-Nummern + NC-Stub) + 5 px Puffer
+            const _neededLabelSpacingPx = (nextLabel) => {
+                if (!nextLabel) return 0;
+                return _estimateLabelLeftPx(nextLabel) + 15 + 5;
+            };
+            const addLabelText = (parentG, x, y, textContent, isBold = false, textAnchor = 'start') => {
                 let fontSize = isBold ? '13px' : '12px';
                 let fontWeight = isBold ? 'bold' : 'normal';
                 let splitIdx = textContent.indexOf(' (');
                 if (splitIdx !== -1) {
                     let line1 = textContent.substring(0, splitIdx);
-                    let line2 = textContent.substring(splitIdx + 1); 
-                    let t1 = createSvgElement('text', {x: x, y: y - 2, 'font-size': fontSize, fill: '#000', 'font-weight': fontWeight, 'font-family': 'Segoe UI, Tahoma, sans-serif'});
+                    let line2 = textContent.substring(splitIdx + 1);
+                    let t1 = createSvgElement('text', {x: x, y: y - 2, 'font-size': fontSize, fill: '#000', 'font-weight': fontWeight, 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': textAnchor});
                     t1.textContent = line1; parentG.appendChild(t1);
-                    let t2 = createSvgElement('text', {x: x, y: y + 10, 'font-size': '10px', fill: '#444', 'font-weight': 'normal', 'font-family': 'Segoe UI, Tahoma, sans-serif'});
-                    t2.textContent = line2; parentG.appendChild(t2);
+                    // Mehrzeiliges Wrapping bei langer Variable in Klammern.
+                    // 12 Zeichen deckt den 100-px-Aux-Relais-Fall noch ab; für
+                    // schmalere OR-Branches (90 px) oder breitere Boolean-
+                    // Expressions, die selbst hier nicht reinpassen, springt
+                    // das dynamische Strang-Widening im processNode-Loop ein.
+                    const lines2 = _wrapVarLabel(line2, 12);
+                    lines2.forEach((ln, i) => {
+                        let t2 = createSvgElement('text', {x: x, y: y + 10 + i * 11, 'font-size': '10px', fill: '#444', 'font-weight': 'normal', 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': textAnchor});
+                        t2.textContent = ln; parentG.appendChild(t2);
+                    });
                 } else {
-                    let t = createSvgElement('text', {x: x, y: y + 4, 'font-size': fontSize, fill: '#000', 'font-weight': fontWeight, 'font-family': 'Segoe UI, Tahoma, sans-serif'});
+                    let t = createSvgElement('text', {x: x, y: y + 4, 'font-size': fontSize, fill: '#000', 'font-weight': fontWeight, 'font-family': 'Segoe UI, Tahoma, sans-serif', 'text-anchor': textAnchor});
                     t.textContent = textContent; parentG.appendChild(t);
                 }
             };
@@ -18170,7 +18364,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     relayContactCount[varName]++;
                 }
                 let prefix = (window.configSeqNum && varName && varName !== 'NONE') ? relayContactCount[varName] : 1;
-                addLabelText(g, x + 15, y, label, false);
+                addLabelText(g, x - 25, y, label, false, 'end');
                 g.appendChild(createSvgElement('circle', {cx: x, cy: y - 15, r: 2.5, fill: '#000', class: 'circ-static'}));
                 g.appendChild(createSvgElement('circle', {cx: x, cy: y + 15, r: 2.5, fill: '#000', class: 'circ-static'}));
                 g.appendChild(createSvgElement('line', {x1: x, y1: y - 15, x2: x, y2: y - 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
@@ -18197,7 +18391,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } else {
                     pinTop = isNC ? prefix + '1' : prefix + '3'; pinBot = isNC ? prefix + '2' : prefix + '4';
                 }
-                drawSmallText(g, x - 5, y - 10, pinTop, 'end'); drawSmallText(g, x - 5, y + 15, pinBot, 'end');
+                drawSmallText(g, x + 5, y - 10, pinTop, 'start'); drawSmallText(g, x + 5, y + 15, pinBot, 'start');
                 if (type === 'taster' || type === 'schalter' || type === 'nothalt' || (ComponentRegistry[type] && ComponentRegistry[type].iecSymbol)) {
                     let dashEndX = isNC ? x + 3 : x - 5;
                     g.appendChild(createSvgElement('line', {x1: dashEndX, y1: y + 2.5, x2: x - 18, y2: y + 2.5, stroke: '#000', 'stroke-width': 1.5, 'stroke-dasharray': '2,2'}));
@@ -18253,11 +18447,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     g.appendChild(createSvgElement('polygon', {points: `${vx-7},${y-8} ${vx+7},${y-8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width': 1.5}));
                     g.appendChild(createSvgElement('polygon', {points: `${vx-7},${y+8} ${vx+7},${y+8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width': 1.5}));
                 }
-                const labelX = (type === 'valve') ? x + 50 : x + 30;
-                addLabelText(g, labelX, y, label, true);
+                const labelX = x - 30;
+                addLabelText(g, labelX, y, label, true, 'end');
                 let pinTop = type === 'valve' ? '1' : (label.includes('(R)') ? 'A3' : 'A1');
                 let pinBot = type === 'valve' ? '2' : (label.includes('(R)') ? 'A4' : 'A2');
-                drawSmallText(g, x - 5, y - 15, pinTop, 'end'); drawSmallText(g, x - 5, y + 20, pinBot, 'end');
+                drawSmallText(g, x + 5, y - 15, pinTop, 'start'); drawSmallText(g, x + 5, y + 20, pinBot, 'start');
                 circuitContent.appendChild(g);
                 return g;
             };
@@ -18273,8 +18467,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 g.appendChild(circ);
                 g.appendChild(createSvgElement('line', {x1: x - 10.6, y1: y - 10.6, x2: x + 10.6, y2: y + 10.6, stroke: '#000', 'stroke-width': 2}));
                 g.appendChild(createSvgElement('line', {x1: x - 10.6, y1: y + 10.6, x2: x + 10.6, y2: y - 10.6, stroke: '#000', 'stroke-width': 2}));
-                addLabelText(g, x + 25, y, label, true);
-                drawSmallText(g, x - 5, y - 18, 'X1', 'end'); drawSmallText(g, x - 5, y + 24, 'X2', 'end');
+                addLabelText(g, x - 25, y, label, true, 'end');
+                drawSmallText(g, x + 5, y - 18, 'X1', 'start'); drawSmallText(g, x + 5, y + 24, 'X2', 'start');
                 circuitContent.appendChild(g);
                 return g;
             };
@@ -18288,8 +18482,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 g.appendChild(createSvgElement('line', {x1: x, y1: y + 10, x2: x, y2: y + 20, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));
                 let sirenPath = `M ${x-10} ${y-10} A 10 10 0 0 0 ${x-10} ${y+10} L ${x+10} ${y+15} L ${x+10} ${y-15} Z`;
                 g.appendChild(createSvgElement('path', {d: sirenPath, class: 'circ-component', fill: '#fff', stroke: '#000', 'stroke-width': 2}));
-                addLabelText(g, x + 20, y, label, true);
-                drawSmallText(g, x - 5, y - 12, 'X1', 'end'); drawSmallText(g, x - 5, y + 18, 'X2', 'end');
+                addLabelText(g, x - 20, y, label, true, 'end');
+                drawSmallText(g, x + 5, y - 12, 'X1', 'start'); drawSmallText(g, x + 5, y + 18, 'X2', 'start');
                 circuitContent.appendChild(g);
                 return g;
             };
@@ -18305,8 +18499,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 g.appendChild(circle);
                 let txt = createSvgElement('text', {x: x, y: y + 5, 'font-size': '14px', 'font-weight': '900', 'text-anchor': 'middle', 'font-family': 'Arial'});
                 txt.textContent = 'M'; g.appendChild(txt);
-                addLabelText(g, x + 25, y, label, true);
-                drawSmallText(g, x - 5, y - 18, 'U1', 'end'); drawSmallText(g, x - 5, y + 24, 'U2', 'end');
+                addLabelText(g, x - 25, y, label, true, 'end');
+                drawSmallText(g, x + 5, y - 18, 'U1', 'start'); drawSmallText(g, x + 5, y + 24, 'U2', 'start');
                 circuitContent.appendChild(g);
                 return g;
             };
@@ -18323,8 +18517,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 g.appendChild(createSvgElement('path', {d: `M ${x-8} ${y-4} Q ${x-5} ${y-8} ${x-2} ${y-4} T ${x+4} ${y-4} T ${x+10} ${y-4}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
                 g.appendChild(createSvgElement('path', {d: `M ${x-8} ${y+1} Q ${x-5} ${y-3} ${x-2} ${y+1} T ${x+4} ${y+1} T ${x+10} ${y+1}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
                 g.appendChild(createSvgElement('path', {d: `M ${x-8} ${y+6} Q ${x-5} ${y+2} ${x-2} ${y+6} T ${x+4} ${y+6} T ${x+10} ${y+6}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
-                addLabelText(g, x + 25, y, label, true);
-                drawSmallText(g, x - 5, y - 12, 'X1', 'end'); drawSmallText(g, x - 5, y + 18, 'X2', 'end');
+                addLabelText(g, x - 25, y, label, true, 'end');
+                drawSmallText(g, x + 5, y - 12, 'X1', 'start'); drawSmallText(g, x + 5, y + 18, 'X2', 'start');
                 circuitContent.appendChild(g);
                 return g;
             };
@@ -18407,8 +18601,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // getreuer ¬R-Strang gerendert werden: ¬(A && B) = ¬A || ¬B.
                 let effectiveLabel = node.label;
                 if (isTargetInverted) {
-                    if (node.label === '&') effectiveLabel = '>=1';
-                    else if (node.label === '>=1') effectiveLabel = '&';
+                    if (node.label === '&') effectiveLabel = '≥1';
+                    else if (node.label === '≥1') effectiveLabel = '&';
                 }
                 const childInv = (edge) => (!!edge.inverted) !== (!!isTargetInverted);
                 if (effectiveLabel === '&') {
@@ -18418,7 +18612,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         currY = res.bottomY; currCond = res.cond;
                     });
                     return { bottomY: currY, cond: currCond };
-                } else if (effectiveLabel === '>=1') {
+                } else if (effectiveLabel === '≥1') {
                     let branches = inEdges.length;
                     let startXArray = []; let totalW = getTreeW(nodeId);
                     let startX = cx - totalW/2; let currX = startX;
@@ -18700,7 +18894,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             }
                         }
                     }
-                    else if (node.label === '>=1') { 
+                    else if (node.label === '≥1') { 
                         let branches = inEdges.length;
                         if(branches > 0) {
                             let startX = currX, endX = currX + (branches - 1) * 90;
@@ -18943,8 +19137,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             };
-            nodesToDraw.forEach(n => processNode(n, 1));
+            // Strang-Widening: nach jedem processNode prüfen, ob der vom
+            // processNode hinterlassene currX-Vorschub für das NÄCHSTE
+            // Strand-Label ausreicht. Wenn nicht, currX um genau das Delta
+            // erhöhen — so wenig wie nötig, so viel wie nötig.
+            for (let _ni = 0; _ni < nodesToDraw.length; _ni++) {
+                const _node = nodesToDraw[_ni];
+                const _strandX = currX;
+                processNode(_node, 1);
+                const _nextNode = nodesToDraw[_ni + 1];
+                if (_nextNode) {
+                    let _nextLabel = symMap[_nextNode.id] || '';
+                    // CTU hat zwei Spulen → für den unmittelbar nächsten Strang
+                    // ist symMap-Label korrekt (Zähl-Spule oder Reset-Spule mit ' (R)'
+                    // ist bereits am selben Strang erledigt); next ist der NÄCHSTE Knoten.
+                    const _needed = _neededLabelSpacingPx(_nextLabel);
+                    const _actual = currX - _strandX;
+                    if (_needed > _actual) currX += (_needed - _actual);
+                }
+            }
             // 🌟 FIX: Koppelrelais Strompfade am Ende des Plans anhängen!
+            let _prevAuxStrandX = null;
             requiredAuxRelays.forEach(hwId => {
                 let p = pathCounter++;
                 let cType = componentTypes[hwId] || 'taster';
@@ -18953,6 +19166,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let name = symMap[hwId] || hwId;
                 let auxName = auxRelayNames[hwId]; // Nutzt den generierten -KF Namen!
                 currX += (currX === 100 ? 0 : 40);
+                // Strang-Widening: wenn das Label dieses Aux-Relais mehr Platz
+                // braucht als der bisherige Abstand zum vorherigen Aux-Strang,
+                // currX um genau das Delta erhöhen.
+                if (_prevAuxStrandX !== null) {
+                    const _need = _neededLabelSpacingPx(name);
+                    const _have = currX - _prevAuxStrandX;
+                    if (_need > _have) currX += (_need - _have);
+                }
                 drawText(currX, yTop - 25, p.toString(), true);
                 setPower(drawLine(currX, yTop, currX, 135, 2, hwId, srcCol), "true");
                 let g = drawContact(currX, 150, name, pNC, cType.replace('_nc', ''), hwId, srcCol, p, hwId);
@@ -18962,6 +19183,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let coilG = drawCoil(currX, coilY, auxName, `AUX_${hwId}`, 'relais', srcCol, p);
                 setPower(coilG, pCond);
                 setPower(drawLine(currX, coilExitY, currX, yBot, 2, hwId, srcCol), pCond);
+                _prevAuxStrandX = currX;
                 currX += 130;
             });
             let totalWidth = currX <= 100 ? Math.max(400, currX + 50) : Math.max(1000, currX + 50);
@@ -30108,7 +30330,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // numPositions ist im Kontextmenü 2..8 einstellbar.
         'carrier_belt': {
             role: 'input', color: '#90a4ae', noRodAttach: true, hasHeight: false,
-            directSpawn: true,
+            directSpawn: true, view: 'top',
             i18n: {
                 de: { name: 'Werkstückträger-Band', desc: 'Lineares Indexier-Band. STEP-Flanke schiebt den Träger eine Station weiter, jede Station meldet per INDEX_n-Sensor.' },
                 en: { name: 'Carrier Belt',         desc: 'Indexed linear belt. Rising edge on STEP advances the carrier one station; each station reports via INDEX_n sensor.' }
@@ -30157,8 +30379,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 obj.linkedVarStep = obj.linkedVarStep || null;
                 obj.linkedVarHome = obj.linkedVarHome || null;
                 obj.linkedIndex   = Array.isArray(obj.linkedIndex) ? obj.linkedIndex : new Array(obj.numPositions).fill(null);
+                obj.movementMode  = obj.movementMode || 'loop';  // 'loop' = 1→2→3→4→1, 'pendel' = 1→2→3→4→3→2→1→2
+                obj._direction    = obj._direction || +1;        // nur für pendel: +1 = vorwärts, -1 = rückwärts
                 obj._stepPrev = false; obj._homePrev = false;
-                obj.width = obj.width || (60 + obj.numPositions * 60);
+                // WICHTIG: kein `|| fallback` — createFactoryObject setzt obj.width
+                // schon auf 20 (truthy), das würde das || verschlucken. Hart setzen.
+                // Bei einem späteren Reload überschreibt onLoadState mit der
+                // gespeicherten Breite.
+                obj.width = 60 + obj.numPositions * 60;
                 obj.height = 60;
                 el.className = 'f2d-obj f2d-cb-wrap';
                 el.innerHTML = `<div class="f2d-cb-belt"></div><div class="f2d-cb-carrier"></div>`;
@@ -30167,7 +30395,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer; el.appendChild(resizer);
                 let lbl = document.createElement('div'); lbl.className = 'f2d-label'; lbl.style.bottom = '-18px'; lbl.style.top = 'auto';
                 lbl.textContent = 'Träger-Band'; el.appendChild(lbl); obj.labelEl = lbl;
-                obj.useCollision = false;
+                // useCollision MUSS true bleiben, sonst dispatcht der Main-Loop
+                // den physics-Callback (Snap-Logik) nicht. Items kollidieren
+                // dadurch nicht „hart" mit dem Band — physics() macht nur
+                // sanften Pull, keine echte Collision.
+                obj.useCollision = true;
                 ComponentRegistry['carrier_belt']._applyLayout(obj);
             },
             onResize: function(obj) { ComponentRegistry['carrier_belt']._applyLayout(obj); },
@@ -30177,6 +30409,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (saved.linkedVarStep != null) obj.linkedVarStep = saved.linkedVarStep;
                 if (saved.linkedVarHome != null) obj.linkedVarHome = saved.linkedVarHome;
                 if (Array.isArray(saved.linkedIndex)) obj.linkedIndex = saved.linkedIndex.slice();
+                if (saved.movementMode != null) obj.movementMode = saved.movementMode;
+                if (saved._direction   != null) obj._direction   = saved._direction;
                 // linkedIndex auf numPositions trimmen / füllen
                 while (obj.linkedIndex.length < obj.numPositions) obj.linkedIndex.push(null);
                 obj.linkedIndex.length = obj.numPositions;
@@ -30184,17 +30418,29 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             animate: function(obj, spsState) {
                 const N = obj.numPositions || 4;
-                // STEP: steigende Flanke schiebt eine Station weiter (Wrap-Around).
+                // STEP: steigende Flanke schiebt eine Station weiter.
+                //  - loop:   1→2→3→4→1→2→…
+                //  - pendel: 1→2→3→4→3→2→1→2→…  (an Endstationen kehrt die Richtung um)
                 const stepNow = !!(obj.linkedVarStep && spsState[obj.linkedVarStep]);
                 if (stepNow && !obj._stepPrev) {
-                    obj.currentPos = ((obj.currentPos + 1) % N + N) % N;
+                    if (obj.movementMode === 'pendel') {
+                        if (!obj._direction) obj._direction = +1;
+                        let next = obj.currentPos + obj._direction;
+                        if (next >= N) { obj._direction = -1; next = obj.currentPos - 1; }
+                        else if (next < 0) { obj._direction = +1; next = obj.currentPos + 1; }
+                        obj.currentPos = Math.max(0, Math.min(N - 1, next));
+                    } else {
+                        obj.currentPos = ((obj.currentPos + 1) % N + N) % N;
+                    }
                     ComponentRegistry['carrier_belt']._applyLayout(obj);
                 }
                 obj._stepPrev = stepNow;
                 // HOME (optional): steigende Flanke setzt auf Station 1 zurück.
+                // Bei Pendel auch Richtung zurück auf vorwärts.
                 const homeNow = !!(obj.linkedVarHome && spsState[obj.linkedVarHome]);
                 if (homeNow && !obj._homePrev) {
                     obj.currentPos = 0;
+                    obj._direction = +1;
                     ComponentRegistry['carrier_belt']._applyLayout(obj);
                 }
                 obj._homePrev = homeNow;
@@ -30236,6 +30482,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (cm) cm.style.display = 'none';
                 };
                 wrapN.appendChild(selN); ctxMenu.appendChild(wrapN);
+                // Bewegungs-Modus: loop vs. pendel
+                let sepM = document.createElement('div'); sepM.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepM);
+                let wrapM = document.createElement('div'); wrapM.style.cssText = 'padding:4px 15px 6px;'; wrapM.onclick = e => e.stopPropagation();
+                wrapM.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:4px;" title="Loop: 1→2→3→4→1 (Wrap-Around). Pendel: 1→2→3→4→3→2→1 (Richtungswechsel an den Endstationen).">🔁 Bewegungs-Modus</div>`;
+                let selM = document.createElement('select');
+                selM.style.cssText = 'width:100%;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:3px;font-size:11px;';
+                [['loop', '🔁 Loop  (1→2→3→4→1)'], ['pendel', '↔️ Pendel  (1→2→3→4→3→2→1)']].forEach(([val, label]) => {
+                    const o = document.createElement('option'); o.value = val; o.textContent = label;
+                    if (val === (obj.movementMode || 'loop')) o.selected = true;
+                    selM.appendChild(o);
+                });
+                selM.onchange = e => {
+                    obj.movementMode = e.target.value;
+                    if (obj.movementMode === 'pendel') obj._direction = +1; // Pendel-Start vorwärts
+                    saveFactoryState();
+                };
+                wrapM.appendChild(selM); ctxMenu.appendChild(wrapM);
                 // INDEX-Sensoren je Station
                 let sepI = document.createElement('div'); sepI.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sepI);
                 let hdr = document.createElement('div'); hdr.style.cssText = 'padding:2px 15px 0;color:#90a4ae;font-size:10px;font-weight:bold;'; hdr.textContent = '📡 INDEX-Sensoren (eine Variable je Station)';
@@ -30269,10 +30532,75 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             },
             clickSimulate: function(obj) {
-                // Manueller Schub bei Klick (Demo ohne Logik-STEP).
+                // Manueller Schub bei Klick (Demo ohne Logik-STEP) — respektiert
+                // den Bewegungs-Modus.
                 const N = obj.numPositions || 4;
-                obj.currentPos = ((obj.currentPos + 1) % N + N) % N;
+                if (obj.movementMode === 'pendel') {
+                    if (!obj._direction) obj._direction = +1;
+                    let next = obj.currentPos + obj._direction;
+                    if (next >= N) { obj._direction = -1; next = obj.currentPos - 1; }
+                    else if (next < 0) { obj._direction = +1; next = obj.currentPos + 1; }
+                    obj.currentPos = Math.max(0, Math.min(N - 1, next));
+                } else {
+                    obj.currentPos = ((obj.currentPos + 1) % N + N) % N;
+                }
                 ComponentRegistry['carrier_belt']._applyLayout(obj);
+            },
+            // Snapping: Item rastet auf dem TRÄGER (Carrier) ein und reist
+            // mit ihm mit. Ablauf:
+            //   1) Item wird AUF DEM BAND irgendwo abgelegt → bekommt
+            //      Ownership zum carrier_belt zugewiesen.
+            //   2) Solange Ownership besteht, wird das Item bei jedem Tick
+            //      sanft zur aktuellen Carrier-Mitte gezogen — bei STEP
+            //      bewegt sich der Carrier zur nächsten Station, das Item
+            //      folgt automatisch.
+            //   3) Bei hohem Geschwindigkeits-Push (Zylinder) wird die
+            //      Ownership aufgehoben, das Item kann sauber wegfliegen.
+            // Cross-Komponenten-Schutz: bereits anders zugeordnete Items
+            // (anderer Belt / rotary_table) werden hier nicht angefasst.
+            physics: function(obj, item, _isActive, _rad) {
+                if (item.activeMode === 'side') return;
+                if (typeof draggedElement !== 'undefined' && draggedElement && draggedElement.data === item) return;
+                if (item._carrierObjId && item._carrierObjId !== obj.id) return;
+                if (item._rotaryObjId) return;
+                const vx = item.vx || 0, vy = item.vy || 0;
+                const v2 = vx*vx + vy*vy;
+                // Heftiger Push → Ownership weg, kein Pull
+                if (v2 > 25) {
+                    if (item._carrierObjId === obj.id) delete item._carrierObjId;
+                    return;
+                }
+                // Moderat bewegtes Item: kein Pull, aber Ownership behalten
+                if (v2 > 4) return;
+                const N = obj.numPositions || 4;
+                const margin = 30;
+                const stride = (obj.width - 2 * margin) / Math.max(1, N - 1);
+                const cur = (obj.currentPos != null ? obj.currentPos : 0) % N;
+                const carrierX = obj.x + margin + cur * stride;
+                const carrierY = obj.y + (obj.height || 60) / 2;
+                const icx = item.x + (item.width || 20) / 2;
+                const icy = item.y + (item.height || item.width || 20) / 2;
+                // Ownership-Übernahme: Item muss im Band-Bereich liegen.
+                const wasOwned = (item._carrierObjId === obj.id);
+                const overBelt = (icx >= obj.x - 8 && icx <= obj.x + obj.width + 8
+                                  && icy >= obj.y - 8 && icy <= obj.y + (obj.height || 60) + 8);
+                if (!wasOwned) {
+                    if (!overBelt) return;
+                    item._carrierObjId = obj.id;
+                }
+                // Ownership-Release: wenn Item weit ausserhalb der Band-Box
+                else if (!overBelt) {
+                    const dx0 = carrierX - icx, dy0 = carrierY - icy;
+                    if (dx0*dx0 + dy0*dy0 > 120*120) {
+                        delete item._carrierObjId;
+                        return;
+                    }
+                }
+                // Pull zur Carrier-Mitte
+                const dx = carrierX - icx, dy = carrierY - icy;
+                item.x += dx * 0.28 * window.simSpeed * timeScale;
+                item.y += dy * 0.32 * window.simSpeed * timeScale;
+                item.vx *= 0.5; item.vy *= 0.5;
             }
         },
         // === Drehtisch mit Slots =================================================
@@ -30281,7 +30609,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Pro Slot ein INDEX-Sensor — ON wenn der Slot gerade unter dem Pointer.
         'rotary_table': {
             role: 'input', color: '#90a4ae', noRodAttach: true, hasHeight: false,
-            directSpawn: true,
+            directSpawn: true, view: 'top',
             i18n: {
                 de: { name: 'Rundtakttisch', desc: 'Indexier-Tisch (Schrittkette). STEP-Flanke dreht um 360°/N zum nächsten Slot. Pointer markiert die Bearbeitungs-Station (Station 1). Nicht zu verwechseln mit dem 90°-Drehtisch (Item-Weiche) aus dem Aktoren-Menü.' },
                 en: { name: 'Indexing Rotary Table', desc: 'Indexed rotary table for step chains. Rising edge on STEP rotates by 360°/N to the next slot. Pointer marks the work station (station 1).' }
@@ -30363,15 +30691,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // currentPos abgeleitet, damit der Anfangs-Winkel ohne CSS-
                 // Animation gesetzt werden kann.
                 obj._rotDeg = -obj.currentPos * (360 / obj.numPositions);
-                obj.width = obj.width || 200;
-                obj.height = obj.width;
+                // siehe carrier_belt-Build: kein `|| fallback`, hart setzen,
+                // weil createFactoryObject obj.width schon mit 20 initialisiert.
+                obj.width = 200;
+                obj.height = 200;
                 el.className = 'f2d-obj f2d-rt-wrap';
                 el.innerHTML = `<div class="f2d-rt-pointer"></div><div class="f2d-rt-plate"><div class="f2d-rt-hub"></div></div>`;
                 obj.plateEl = el.querySelector('.f2d-rt-plate');
                 let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                 let lbl = document.createElement('div'); lbl.className = 'f2d-label'; lbl.style.bottom = '-18px'; lbl.style.top = 'auto';
                 lbl.textContent = 'Rundtakttisch'; el.appendChild(lbl); obj.labelEl = lbl;
-                obj.useCollision = false;
+                // useCollision MUSS true bleiben, sonst dispatcht der Main-Loop
+                // den physics-Callback (Snap-Logik) nicht.
+                obj.useCollision = true;
                 ComponentRegistry['rotary_table']._setRotInstant(obj);
             },
             onResize: function(obj) { ComponentRegistry['rotary_table']._applyLayout(obj); },
@@ -30478,6 +30810,79 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 obj.currentPos = ((obj.currentPos + 1) % N + N) % N;
                 obj._rotDeg -= 360 / N;
                 ComponentRegistry['rotary_table']._applyLayout(obj);
+            },
+            // Snapping mit Ownership-Tracking: Item rastet in einem SLOT ein
+            // und dreht mit der Platte mit (Slot-Positionen rotieren mit
+            // _rotDeg). Ohne Ownership würde die Rotation das Item beim
+            // Überschreiten der Mittel-Achse zum nächsten Slot „abgeben" —
+            // mit Tracking bleibt das Item beim Slot, dem es zuerst zugeordnet
+            // wurde, und wird zu dessen aktueller world-Position gezogen.
+            // Cross-Komponenten-Schutz: bereits anders zugeordnete Items
+            // werden hier nicht angefasst.
+            physics: function(obj, item, _isActive, _rad) {
+                if (item.activeMode === 'side') return;
+                if (typeof draggedElement !== 'undefined' && draggedElement && draggedElement.data === item) return;
+                if (item._rotaryObjId && item._rotaryObjId !== obj.id) return;
+                if (item._carrierObjId) return;
+                const vx = item.vx || 0, vy = item.vy || 0;
+                const v2 = vx*vx + vy*vy;
+                if (v2 > 25) {
+                    if (item._rotaryObjId === obj.id) {
+                        delete item._rotaryObjId;
+                        delete item._rotarySlotIdx;
+                    }
+                    return;
+                }
+                if (v2 > 4) return;
+                const N = obj.numPositions || 4;
+                const side = Math.max(obj.width || 200, obj.height || 200);
+                const r = side * 0.38;
+                const cx = obj.x + (obj.width  || side) / 2;
+                const cy = obj.y + (obj.height || side) / 2;
+                const icx = item.x + (item.width || 20) / 2;
+                const icy = item.y + (item.height || item.width || 20) / 2;
+                const rotRad = (obj._rotDeg || 0) * Math.PI / 180;
+                const slotPos = (k) => {
+                    const ang = (k * 360 / N - 90) * Math.PI / 180 + rotRad;
+                    return { x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r };
+                };
+                let targetK = -1;
+                if (item._rotaryObjId === obj.id && item._rotarySlotIdx != null
+                    && item._rotarySlotIdx >= 0 && item._rotarySlotIdx < N) {
+                    // Bestehender Slot — bleibt zugewiesen solange das Item
+                    // grob im Tisch-Bereich liegt. WICHTIG: NICHT die Distanz
+                    // zur (neuen) Slot-Position prüfen — bei einer Rotation
+                    // springt die Slot-Welt-Position um bis zu r·√2 ≈ 1.4·r;
+                    // das ist mehr als jeder vernünftige Release-Radius und
+                    // würde das Item sofort vom Tisch verstoßen.
+                    const dxC = cx - icx, dyC = cy - icy;
+                    const releaseR = side * 0.55;        // außerhalb sichtbarer Platte → release
+                    if (dxC*dxC + dyC*dyC < releaseR * releaseR) {
+                        targetK = item._rotarySlotIdx;
+                    } else {
+                        delete item._rotaryObjId;
+                        delete item._rotarySlotIdx;
+                    }
+                } else {
+                    // Neue Zuordnung: nächsten Slot in Snap-Range suchen
+                    let bestK = -1, bestD2 = Infinity;
+                    for (let k = 0; k < N; k++) {
+                        const sp = slotPos(k);
+                        const dx = sp.x - icx, dy = sp.y - icy;
+                        const d2 = dx*dx + dy*dy;
+                        if (d2 < bestD2) { bestD2 = d2; bestK = k; }
+                    }
+                    if (bestK >= 0 && bestD2 < 35*35) {
+                        item._rotaryObjId = obj.id;
+                        item._rotarySlotIdx = bestK;
+                        targetK = bestK;
+                    }
+                }
+                if (targetK < 0) return;
+                const sp = slotPos(targetK);
+                item.x += (sp.x - icx) * 0.32 * window.simSpeed * timeScale;
+                item.y += (sp.y - icy) * 0.32 * window.simSpeed * timeScale;
+                item.vx *= 0.5; item.vy *= 0.5;
             }
         },
         'fluid_outlet': {
@@ -35924,6 +36329,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     vibDuration: o.vibDuration !== undefined ? o.vibDuration : null,
                     centerOnly: o.centerOnly !== undefined ? o.centerOnly : null,
                     centerTolerance: o.centerTolerance !== undefined ? o.centerTolerance : null,
+                    // carrier_belt + rotary_table — Konfiguration (Anzahl
+                    // Stationen/Slots, aktuelle Position, Bewegungs-Modus,
+                    // STEP/HOME/INDEX-Bindings, Pendel-Richtung).
+                    numPositions:  o.numPositions  != null ? o.numPositions  : null,
+                    currentPos:    o.currentPos    != null ? o.currentPos    : null,
+                    linkedVarStep: o.linkedVarStep || null,
+                    linkedVarHome: o.linkedVarHome || null,
+                    linkedIndex:   Array.isArray(o.linkedIndex) ? o.linkedIndex.slice() : null,
+                    movementMode:  o.movementMode  || null,
+                    _direction:    o._direction    != null ? o._direction    : null,
                     wallThickness: o.wallThickness || null,
                     cavityShape: o.cavityShape || null, gearTeeth: o.gearTeeth || null, requiredMaterial: o.requiredMaterial || null, spawnedMaterial: o.spawnedMaterial || null, linkedVarOpen: o.linkedVarOpen || null, ejectSide: o.ejectSide || null,
                     capacity: o.capacity || null, currentFill: o.currentFill !== undefined ? o.currentFill : null, containedMaterial: o.containedMaterial || null,
@@ -37625,7 +38040,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         })();
 
 		// --- NEU: HILFE MODAL STEUERUNG ---
-        window.openHelpModal = function() {
+        // Bedienungshinweise nach Bereich gegliedert — werden über kleine
+        // ℹ️-Buttons in den jeweiligen Panels aufgerufen, statt einer einzigen
+        // Sammel-Liste oben im Header. Der frühere „Kamera Schaltpläne"-Hinweis
+        // ist bewusst NICHT mehr aufgeführt (entfällt komplett).
+        const _HELP_SECTIONS = {
+            sim: {
+                title: 'ℹ️ Hinweise zur Simulation',
+                items: [
+                    { t: 'Hardware-Kopplung', body: 'Sobald ein Signal (Taster, Sensor etc.) einem echten Bauteil in der 2D-Anlage zugewiesen wird, übernimmt die 2D-Mechanik die Kontrolle. Die manuelle Eingabe im linken Simulationsfenster wird für diese Variable dann gesperrt – klicke stattdessen direkt auf die Bauteile in der Anlage!' },
+                    { t: 'Taster einrasten', body: 'Halte <kbd>STRG</kbd> oder <kbd>CMD</kbd> gedrückt, während du einen Taster anklickst, um ihn dauerhaft einrasten zu lassen (Dauerfeuer).' }
+                ]
+            },
+            fac: {
+                title: 'ℹ️ Hinweise zur 2D-Anlage',
+                items: [
+                    { t: 'Profi-Steuerung (2D)', body: 'Ziehe bei gestoppter Simulation mit der Maus einen Rahmen in den Hintergrund, um mehrere Objekte gleichzeitig auszuwählen. Nutze <kbd>STRG+C</kbd> und <kbd>STRG+V</kbd> zum Kopieren ganzer Anlagenteile und <kbd>ENTF</kbd> zum Löschen.' },
+                    { t: 'Kamera 2D-Anlage', body: 'Halte <kbd>STRG</kbd> (bzw. <kbd>CMD</kbd>) + Mausrad, um stufenlos zu <b>zoomen</b>. Nutze die <b>mittlere Maustaste</b> (Mausrad-Klick) oder <kbd>ALT</kbd> + Linksklick, um die Anlage zu <b>verschieben</b>.' }
+                ]
+            }
+        };
+        window.openHelpModal = function(section) {
+            const sec = _HELP_SECTIONS[section] || _HELP_SECTIONS.sim;
+            const title = document.getElementById('help-modal-title');
+            const body  = document.getElementById('help-modal-body');
+            if (title) title.textContent = sec.title;
+            if (body) body.innerHTML = sec.items.map(it =>
+                `<li><strong style="color:#9CDCFE;">${it.t}:</strong> ${it.body}</li>`
+            ).join('');
             document.getElementById('help-modal').style.display = 'block';
         };
         window.closeHelpModal = function() {
@@ -39535,7 +39977,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!m) return;
                 const tp = m[1];
                 if (tp.startsWith('zone_') || tp.startsWith('sensor_') || tp.startsWith('spawner_') || _noBadge.has(tp)) return;
-                if (ComponentRegistry[tp] && ComponentRegistry[tp].role === 'input') return;
+                // role:'input'-Komponenten bekommen normalerweise keinen Badge
+                // (typische Sensoren sind ansichtsneutral). Ausnahme: Komponenten,
+                // die `view` explizit setzen — wollen den Badge bewusst (z. B.
+                // carrier_belt / rotary_table mit STEP-Eingang).
+                if (ComponentRegistry[tp] && ComponentRegistry[tp].role === 'input'
+                    && !ComponentRegistry[tp].view) return;
                 const vw = _typeView(tp);
                 const badge = document.createElement('span');
                 badge.className = 'f2d-view-badge';
@@ -42064,6 +42511,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };
+        window.toggleFbsGlowSegmentedTrunks = function() {
+            window.fbsGlowSegmentedTrunks = !window.fbsGlowSegmentedTrunks;
+            _fbsSave('valisFbsGlowSegTrunks', window.fbsGlowSegmentedTrunks ? '1' : '0');
+            const btn = _fbsDoc().getElementById('btn-fbs-glowsegtrunks');
+            if (btn) {
+                btn.style.backgroundColor = window.fbsGlowSegmentedTrunks ? '#b8860b' : '#555';
+                btn.innerHTML = (window.fbsGlowSegmentedTrunks ? '🪓 Trunk segmentiert: AN' : '🪓 Trunk segmentiert: AUS') + _FBS_BETA_TAG;
+            }
+            // Renderpfad ändert sich → Plan neu zeichnen.
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                drawGraph(currentGraph);
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
         // Fokus-Modus: Toggle aktiviert nur den MODE. Erst Klick auf Knoten setzt
         // window.fbsFocusNodeId, dann werden nur Vor-/Nachfolger gerendert.
         window.fbsFocusModeOn = false;
@@ -42189,6 +42650,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (_gh) {
                 _gh.style.backgroundColor = window.fbsGlowHover ? '#b8860b' : '#555';
                 _gh.innerHTML = (window.fbsGlowHover ? '✨ Glow-Hover: AN' : '✨ Glow-Hover: AUS') + _FBS_BETA_TAG;
+            }
+            const _gst = d.getElementById('btn-fbs-glowsegtrunks');
+            if (_gst) {
+                _gst.style.backgroundColor = window.fbsGlowSegmentedTrunks ? '#b8860b' : '#555';
+                _gst.innerHTML = (window.fbsGlowSegmentedTrunks ? '🪓 Trunk segmentiert: AN' : '🪓 Trunk segmentiert: AUS') + _FBS_BETA_TAG;
             }
             // Dichte + Linienstärke (Mehrstufen-Cycles).
             const ls = _fbsLayoutSteps[window.fbsLayoutIndex || 0];
@@ -44434,80 +44900,122 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // 🎓 TUTORIAL MODE
         // ==========================================
         (function () {
-            const STEPS = [
-                {
-                    title: '🎓 Willkommen bei VALIS!',
-                    text: 'Diese kurze Tour führt dich durch die wichtigsten Bereiche der Anwendung. Klicke auf "Weiter →" um zu starten.',
-                    target: null
-                },
-                {
-                    title: '💻 ST-Code-Editor',
-                    text: 'Hier tippst du deinen Structured Text (ST) Code. VALIS versteht UND, ODER, NICHT, Flip-Flops (SR/RS), Timer (TON/TOF) und Zähler (CTU).',
-                    target: '#code', pos: 'right'
-                },
-                {
-                    title: '▶️ Simulation starten',
-                    text: 'Startet die Live-Simulation. Die Eingänge erscheinen bereits beim Eintippen des Codes im linken Panel und können dort angeklickt werden. Mit gedrückter STRG-Taste können mehrere Taster gleichzeitig aktiv bleiben. Alternativ lassen sich Eingänge auch per Tastaturzuweisung steuern.',
-                    target: '#btn-toggle-sim', pos: 'bottom'
-                },
-                {
-                    title: '🧩 Logikplan (FBS)',
-                    text: 'Dein Code als grafischer Funktionsbausteinplan – wird automatisch generiert. Neue Blöcke lassen sich per Drag & Drop aus der Seitenleiste hinzufügen, per Rechtsklick können Verbindungen und Blöcke bearbeitet werden. Während der Simulation wird der Logikfluss farbig animiert.',
-                    target: '#btn-view-fbs', pos: 'bottom'
-                },
-                {
-                    title: '⚡ Schaltplan – Auto',
-                    text: 'Automatisch aus dem Code erzeugter IEC-Schaltplan mit Kontakten und Spulen. Verschiedene Darstellungsoptionen stehen zur Wahl: Im bunten Modus stimmen die Strangfarben mit den Gattern und Signalen des Logikplans überein. Eigene Bearbeitungsfunktionen für Anpassungen direkt im Plan.',
-                    target: '#btn-view-iec', pos: 'bottom'
-                },
-                {
-                    title: '🎨 Schaltplan – Editor',
-                    text: 'Freier Schaltplan-Editor: ziehe Komponenten (Kontakte, Spulen, Sensoren, Hilfskontakte) per Drag & Drop zwischen die +24V/0V-Schienen und verdrahte sie. Aus deiner Verdrahtung wird automatisch der ST-Code erkannt – inklusive Selbsthaltungen als RS/SR-Glieder. Mit Marquee-Selektion, Auto-Ausrichten und vielem mehr.',
-                    target: '#btn-view-iec-edit', pos: 'bottom'
-                },
-                {
-                    title: '🏭 2D-Anlage',
-                    text: 'Baue eine virtuelle Anlage mit Förderband, Zylindern, Sensoren, LEDs und Pneumatik. Wichtig: Sobald ein Bauteil mit einer SPS-Variable verbunden ist, übernimmt die Anlage die Kontrolle – die manuelle Steuerung dieses Eingangs im linken Panel wird dann gesperrt.',
-                    target: '#btn-view-fac', pos: 'bottom'
-                },
-                {
-                    title: '📊 Oszilloskop & Aufnahme',
-                    text: 'Im Header der Simulations-Sektion (links) findest du das Oszilloskop für Signalanalysen sowie den roten Aufnahme-Button um die Simulation als Video festzuhalten.',
-                    target: '#btn-record', pos: 'right'
-                },
-                {
-                    title: '🎯 Aufgaben',
-                    text: 'Aufgaben-Modus: vorgefertigte Übungsaufgaben oder eigene erstellen mit definierten Erfolgsbedingungen, gesperrten Bearbeitungsbereichen und Musterlösung.',
-                    target: '[onclick="window._openTaskManager()"]', pos: 'bottom'
-                },
-                {
-                    title: '💾 Speichern & Laden',
-                    text: 'Exportiere Projekte als .valisave-Datei oder importiere gespeicherte Projekte. Projekte lassen sich auch als URL-Parameter teilen.',
-                    target: '[onclick="openSaveLoadModal()"]', pos: 'bottom'
-                },
-                {
-                    title: '📋 Beispielprojekte',
-                    text: 'Starte direkt mit einem der vorbereiteten Beispiele – von einfacher Motorsteuerung bis zur komplexen Pneumatikanlage mit Förderband.',
-                    target: '[onclick="openExamplesModal()"]', pos: 'bottom'
-                },
-                {
-                    title: '🎓 Tour abgeschlossen!',
-                    text: 'Du kennst jetzt alle wichtigen Bereiche von VALIS. Der Hilfe-Button (ℹ️) steht dir jederzeit zur Verfügung. Viel Spaß beim Automatisieren! 🚀',
-                    target: null
+            // STEPS werden bei jedem Tour-Start frisch gebaut, damit der
+            // Schrittketten-Schritt nur erscheint, wenn Pro-Modus aktiv ist.
+            function _buildSteps() {
+                const proOn = typeof window._isProMode === 'function' && window._isProMode();
+                const steps = [
+                    {
+                        title: '🎓 Willkommen bei VALIS!',
+                        text: 'Diese kurze Tour führt dich durch die wichtigsten Bereiche der Anwendung. Klicke auf "Weiter →" um zu starten.',
+                        target: null
+                    },
+                    {
+                        title: '💻 ST-Code-Editor',
+                        text: 'Hier tippst du deinen Structured Text (ST) Code. VALIS versteht UND, ODER, NICHT, Flip-Flops (SR/RS), Timer (TON/TOF) und Zähler (CTU).',
+                        target: '#code', pos: 'right'
+                    },
+                    {
+                        title: '⚡ SPS- / E-Pneumatik-Modus',
+                        text: 'Schaltet zwischen SPS-Interpretation und E-Pneumatik-Modus um. Im E-Pneumatik-Modus repräsentieren Variablen den PHYSISCHEN Press-Zustand (NOTAUS = 1 wenn gedrückt), Schließer/Öffner-Wahl wird in der UI ausgeblendet. Der Code bleibt unverändert — nur die Semantik der Eingänge wechselt.',
+                        target: '#btn-epneu-mode', pos: 'bottom'
+                    },
+                    {
+                        title: '📖 Erklärmodus',
+                        text: 'Blendet unter dem Editor ein Panel ein, das die aktuelle Code-Zeile in einen lesbaren deutschen Satz übersetzt. Folgt der Cursor-Position — perfekt für Lernende, die noch unsicher mit ST-Syntax sind.',
+                        target: '#btn-explain-toggle', pos: 'bottom'
+                    },
+                    {
+                        title: '▶️ Simulation starten',
+                        text: 'Startet die Live-Simulation. Die Eingänge erscheinen bereits beim Eintippen des Codes im linken Panel und können dort angeklickt werden. Mit gedrückter STRG-Taste können mehrere Taster gleichzeitig aktiv bleiben. Alternativ lassen sich Eingänge auch per Tastaturzuweisung steuern.',
+                        target: '#btn-toggle-sim', pos: 'bottom'
+                    },
+                    {
+                        title: '🧩 Logikplan (FBS)',
+                        text: 'Dein Code als grafischer Funktionsbausteinplan – wird automatisch generiert. Neue Blöcke lassen sich per Drag & Drop aus der Seitenleiste hinzufügen, per Rechtsklick können Verbindungen und Blöcke bearbeitet werden. Während der Simulation wird der Logikfluss farbig animiert.',
+                        target: '#btn-view-fbs', pos: 'bottom'
+                    },
+                    {
+                        title: '⚡ Schaltplan – Auto',
+                        text: 'Automatisch aus dem Code erzeugter IEC-Schaltplan mit Kontakten und Spulen. Verschiedene Darstellungsoptionen stehen zur Wahl: Im bunten Modus stimmen die Strangfarben mit den Gattern und Signalen des Logikplans überein. Eigene Bearbeitungsfunktionen für Anpassungen direkt im Plan.',
+                        target: '#btn-view-iec', pos: 'bottom'
+                    },
+                    {
+                        title: '🎨 Schaltplan – Editor',
+                        text: 'Freier Schaltplan-Editor: ziehe Komponenten (Kontakte, Spulen, Sensoren, Hilfskontakte) per Drag & Drop zwischen die +24V/0V-Schienen und verdrahte sie. Aus deiner Verdrahtung wird automatisch der ST-Code erkannt – inklusive Selbsthaltungen als RS/SR-Glieder. Mit Marquee-Selektion, Auto-Ausrichten und vielem mehr.',
+                        target: '#btn-view-iec-edit', pos: 'bottom'
+                    },
+                    {
+                        title: '🏭 2D-Anlage',
+                        text: 'Baue eine virtuelle Anlage mit Förderband, Zylindern, Sensoren, LEDs und Pneumatik. Wichtig: Sobald ein Bauteil mit einer SPS-Variable verbunden ist, übernimmt die Anlage die Kontrolle – die manuelle Steuerung dieses Eingangs im linken Panel wird dann gesperrt.',
+                        target: '#btn-view-fac', pos: 'bottom'
+                    }
+                ];
+                if (proOn) {
+                    steps.push({
+                        title: '📋 Schrittkette (Pro)',
+                        text: 'Grafcet- bzw. S7-GRAPH-Darstellung der Schrittketten in deinem Code. Wird automatisch sichtbar, sobald der Editor eine gültige SCHRITTKETTE oder eine erkennbare RS-Glied-Kette enthält. Pro-Modus-Feature.',
+                        target: '#btn-view-sk', pos: 'bottom'
+                    });
                 }
-            ];
+                steps.push(
+                    {
+                        title: '🔊 Ton',
+                        text: 'Schaltet den Sound-Modus durch: Logik-Klicks (Schaltplan-Relais), Anlagen-Geräusche (2D-Anlage), beides oder aus. Hilfreich um z. B. Schalt-Häufigkeiten oder Pneumatik-Aktivität auch akustisch wahrzunehmen.',
+                        target: '#btn-toggle-sound', pos: 'bottom'
+                    },
+                    {
+                        title: '⚙️ Optionen aller Panels',
+                        text: 'Jedes Arbeits-Panel hat ein eigenes Optionsmenü mit Darstellungs- und Layout-Einstellungen: Logikplan (Farben, Dichte, Pin-Sortierung, Glow-Hover …), Elektro-Schaltplan (Modus, Wechslernummerierung, Details …), Pneumatik (Drücke). Alle drei Buttons hier — schau bei Bedarf jeweils rein.',
+                        target: ['#btn-fbs-options', '#btn-iec-toggle', '#btn-pneu-options'], pos: 'bottom'
+                    },
+                    {
+                        title: '📋 Beispielprojekte',
+                        text: 'Starte direkt mit einem der vorbereiteten Beispiele – von einfacher Motorsteuerung bis zur komplexen Pneumatikanlage mit Förderband.',
+                        target: '[onclick="openExamplesModal()"]', pos: 'bottom'
+                    },
+                    {
+                        title: '🎯 Aufgaben',
+                        text: 'Aufgaben-Modus: vorgefertigte Übungsaufgaben oder eigene erstellen mit definierten Erfolgsbedingungen, gesperrten Bearbeitungsbereichen und Musterlösung.',
+                        target: '[onclick="window._openTaskManager()"]', pos: 'bottom'
+                    },
+                    {
+                        title: '💾 Speichern & Laden',
+                        text: 'Exportiere Projekte als .valisave-Datei oder importiere gespeicherte Projekte. Projekte lassen sich auch als URL-Parameter teilen.',
+                        target: '[onclick="openSaveLoadModal()"]', pos: 'bottom'
+                    },
+                    {
+                        title: '🎓 Tour abgeschlossen!',
+                        text: 'Du kennst jetzt alle wichtigen Bereiche von VALIS. Der Hilfe-Button (ℹ️) steht dir jederzeit zur Verfügung. Viel Spaß beim Automatisieren! 🚀',
+                        target: null
+                    }
+                );
+                return steps;
+            }
 
+            let STEPS = _buildSteps();
             let _step = 0;
+            // _activeSteps zeigt entweder auf STEPS (Tour) oder auf eine
+            // externe Steps-Liste (z. B. eine Lektion). Navigation/Anzeige
+            // arbeiten generisch auf _activeSteps, damit der Spotlight-Engine
+            // von außen wiederverwendet werden kann (siehe window._startWalk).
+            let _activeSteps = STEPS;
+            let _activeOnClose = null;
 
             function _show(i) {
-                const step = STEPS[i];
+                const step = _activeSteps[i];
                 const spotlight = document.getElementById('tutorial-spotlight');
                 const tip = document.getElementById('tutorial-tooltip');
                 document.getElementById('tut-title').textContent = step.title;
-                document.getElementById('tut-text').textContent = step.text;
-                document.getElementById('tut-progress').textContent = `${i + 1} / ${STEPS.length}`;
+                document.getElementById('tut-text').innerHTML = step.text;
+                document.getElementById('tut-progress').textContent = `${i + 1} / ${_activeSteps.length}`;
                 document.getElementById('tut-prev').disabled = (i === 0);
-                document.getElementById('tut-next').textContent = (i === STEPS.length - 1) ? '✓ Fertig' : 'Weiter →';
+                document.getElementById('tut-next').textContent = (i === _activeSteps.length - 1) ? '✓ Fertig' : 'Weiter →';
+                // Optional: Schritt darf vor Render etwas erledigen (Panel
+                // sichtbar machen, Code einfügen, …).
+                if (typeof step.before === 'function') {
+                    try { step.before(); } catch(_) {}
+                }
                 tip.className = '';
                 tip.style.removeProperty('--tut-ax');
                 tip.style.removeProperty('--tut-ay');
@@ -44520,11 +45028,31 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return;
                 }
 
-                const el = document.querySelector(step.target);
-                if (!el) { spotlight.style.display = 'none'; return; }
+                // Target kann String ODER Array von Strings sein. Bei Array
+                // bauen wir das Spotlight um die UNION-BBox aller (sichtbaren)
+                // Treffer — so kann ein einziger Schritt z. B. alle drei
+                // Options-Buttons gleichzeitig hervorheben.
+                const sels = Array.isArray(step.target) ? step.target : [step.target];
+                const els = sels.map(s => document.querySelector(s))
+                                .filter(e => e && e.getClientRects().length > 0
+                                          && (e.offsetWidth > 0 || e.offsetHeight > 0));
+                if (els.length === 0) { spotlight.style.display = 'none'; return; }
 
-                const r = el.getBoundingClientRect();
-                const pad = 8, mg = 14, tw = 300, th = 165;
+                let _l = Infinity, _t = Infinity, _r2 = -Infinity, _b = -Infinity;
+                els.forEach(e => {
+                    const br = e.getBoundingClientRect();
+                    _l = Math.min(_l, br.left); _t = Math.min(_t, br.top);
+                    _r2 = Math.max(_r2, br.right); _b = Math.max(_b, br.bottom);
+                });
+                const r = { left: _l, top: _t, right: _r2, bottom: _b, width: _r2 - _l, height: _b - _t };
+                const pad = 8, mg = 14;
+                // Tatsächliche Tooltip-Geometrie verwenden statt fixer Werte
+                // — der Tooltip ist heute breitenadaptiv (CSS max-content +
+                // max-width), also schwankt sowohl Breite als auch Höhe.
+                const _measuredW = (tip && tip.offsetWidth)  ? tip.offsetWidth  : 300;
+                const _measuredH = (tip && tip.offsetHeight) ? tip.offsetHeight : 165;
+                const tw = Math.min(_measuredW, window.innerWidth  - 16);
+                const th = Math.min(_measuredH, window.innerHeight - 16);
                 spotlight.style.display = 'block';
                 spotlight.style.left   = `${r.left   - pad}px`;
                 spotlight.style.top    = `${r.top    - pad}px`;
@@ -44560,12 +45088,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
 
             window.startTutorial = function () {
+                // Pro-Modus-Status kann sich seit letztem Aufruf geändert
+                // haben — STEPS frisch aufbauen, damit der Schrittketten-
+                // Schritt korrekt ein- oder ausgeblendet ist.
+                STEPS = _buildSteps();
+                _activeSteps = STEPS;
                 _step = 0;
+                _activeOnClose = null;
                 document.getElementById('tutorial-overlay').classList.add('active');
                 _show(0);
             };
             window.tutorialNext = function () {
-                if (_step >= STEPS.length - 1) { closeTutorial(); return; }
+                // Gate: ein Step kann via `canAdvance()` blockieren — z. B.
+                // wenn der User eine bestimmte Aktion noch nicht ausgeführt
+                // hat. Optional `advanceBlockMsg` als Hinweis-Text.
+                const cur = _activeSteps[_step];
+                if (cur && typeof cur.canAdvance === 'function') {
+                    let ok = false;
+                    try { ok = cur.canAdvance() === true; } catch(_) { ok = true; }
+                    if (!ok) {
+                        if (cur.advanceBlockMsg) {
+                            alert(cur.advanceBlockMsg);
+                        }
+                        return;
+                    }
+                }
+                if (_step >= _activeSteps.length - 1) { window.closeTutorial(); return; }
                 _step++; _show(_step);
             };
             window.tutorialPrev = function () {
@@ -44574,6 +45122,486 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             window.closeTutorial = function () {
                 document.getElementById('tutorial-overlay').classList.remove('active');
+                if (typeof _activeOnClose === 'function') {
+                    try { _activeOnClose(); } catch(_) {}
+                }
+                _activeOnClose = null;
+                _activeSteps = STEPS;   // zurück auf Tour-Default
+            };
+            // Externer Einstiegspunkt — Lektionen-Runner (und potentiell andere
+            // Walkthroughs) füllen hier ihre eigene Steps-Liste rein und nutzen
+            // dieselbe Spotlight/Tooltip-Engine wie die Tour. `opts.onClose`
+            // wird bei Schließen aufgerufen (z. B. Lektions-Cleanup).
+            window._startWalk = function(steps, opts) {
+                if (!Array.isArray(steps) || steps.length === 0) return;
+                _activeSteps = steps;
+                _step = 0;
+                _activeOnClose = (opts && typeof opts.onClose === 'function') ? opts.onClose : null;
+                document.getElementById('tutorial-overlay').classList.add('active');
+                _show(0);
+            };
+        })();
+
+        // ==========================================
+        // 📚 LEKTIONEN — Interaktive Lernpfade
+        // ==========================================
+        (function() {
+            // Helper: stellt sicher, dass ein Arbeits-Panel sichtbar ist
+            // (Logikplan, Schaltplan-Auto, 2D-Anlage). Falls zugeklappt:
+            // ruft toggleWorkspaceView auf — dieselbe Funktion wie der
+            // View-Pill-Toggle im Header.
+            const _ensurePanel = (id) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (el.style.display === 'none' && typeof window.toggleWorkspaceView === 'function') {
+                    try { window.toggleWorkspaceView(id); } catch(_) {}
+                }
+            };
+            const _setEditorCode = (code) => {
+                const ta = document.getElementById('code');
+                if (!ta) return;
+                ta.value = code;
+                // input-Event auslösen, damit Highlighter + Parser + alle
+                // Panels neu rendern.
+                ta.dispatchEvent(new Event('input'));
+                if (typeof updateEditor === 'function') {
+                    try { updateEditor(); } catch(_) {}
+                }
+            };
+            const LESSONS = [
+                {
+                    id: 'io',
+                    icon: '↦',
+                    title: '1. Eingang & Ausgang',
+                    desc: 'Wie ein Eingang direkt einen Ausgang treibt — die einfachste mögliche SPS-Zuweisung.',
+                    // Reset gegen „klebrige" Typen aus früheren Sitzungen —
+                    // sonst könnte z. B. START als Sensor oder LAMPE als Motor
+                    // erscheinen, was die Lektions-Erklärungen verwirrt.
+                    forceTypes: { 'START': 'taster', 'LAMPE': 'led' },
+                    code: '// Lektion 1: Eingang → Ausgang\n// START treibt LAMPE direkt — ohne weitere Logik.\n\nLAMPE := START\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 Der Code',
+                            text: 'Die Zeile <code>LAMPE := START</code> bedeutet wörtlich: <b>Die Lampe ist genau dann an (= sie leuchtet), wenn START an ist</b> (z. B. der Taster gedrückt).<br><br>Das <code>:=</code> ist die <b>Zuweisung</b> — daran erkennst du, was wovon abhängt:<br>• <b>Links</b> vom <code>:=</code> steht das, was <i>gesteuert wird</i> — der <b>Ausgang</b> (hier die Lampe). VALIS rechnet zyklisch aus, welchen Wert die linke Seite bekommt, und schaltet sie entsprechend an oder aus.<br>• <b>Rechts</b> vom <code>:=</code> steht der <b>Ausdruck</b>, der <i>bestimmt, unter welcher Bedingung</i> die linke Seite an wird. Hier ist es einfach nur <code>START</code> — was rechts steht, wird direkt nach links übernommen. Später wird die rechte Seite komplexer (z. B. <code>START && FREIGABE</code>).<br><br>📖 <b>Begriffe:</b> Wenn etwas an, gedrückt oder aktiv ist, nennen wir das in der Logik eine <b>1</b>, <b>WAHR</b> oder auf Englisch <b>TRUE</b>. Ist es aus, ist das eine <b>0</b>, <b>FALSCH</b> bzw. <b>FALSE</b>. Diese vier Wörter meinen jeweils dasselbe.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Sim-Panel',
+                            text: 'Links siehst du <b>START</b> als Eingang, rechts <b>LAMPE</b> als Ausgang. VALIS hat die beiden Variablen aus dem Code automatisch erkannt.<br><br>🔧 <b>Bauteil-Typ (wichtig für später):</b> VALIS macht standardmäßig aus jedem Eingang einen <b>Taster (Schließer)</b> und aus jedem Ausgang eine <b>LED/Lampe</b>. Soll deine Variable etwas anderes sein — z. B. ein Schalter, Sensor, Not-Halt, Motor, Schütz oder eine Sirene — klickst du direkt im Sim-Panel auf die Variable und wählst den passenden Typ. Das hat zwei Auswirkungen:<br>• Der <b>Schaltplan</b> wird mit dem richtigen Schaltbild gezeichnet (z. B. Öffner-Kontakt für einen Not-Halt, Motor-Symbol -M statt LED).<br>• In der <b>2D-Anlage</b> kannst du die Variable nur Bauteilen zuweisen, deren Typ dazu passt — ein Eingang vom Typ „Sensor" lässt sich nicht an einen Taster hängen und umgekehrt.<br><br>Für diese Lektion bleiben wir bei den Defaults: START als Taster, LAMPE als LED.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan',
+                            text: 'Im Logikplan steht <b>START links</b> und <b>LAMPE rechts</b> — eine direkte Linie verbindet sie. Keine Logik dazwischen.<br><br>⚠️ <b>Achtung — anders als im Code!</b> Im Code stand LAMPE <i>links</i> vom <code>:=</code>, hier im Logikplan steht der Ausgang <i>rechts</i>.<br><br>Stell dir den Logikplan wie einen <b>Fluss</b> vor: das Signal fließt <b>von links nach rechts</b>, wie Wasser bergab.<br>• <b>Links</b> = die <b>Quellen</b> (Eingänge — woher das Signal kommt: Taster, Sensoren)<br>• <b>Rechts</b> = die <b>Verbraucher</b> (Ausgänge — wohin es wirkt: Lampen, Motoren)<br>• <b>Dazwischen</b> = die <b>Logik</b> (Gatter, Negationen — kommt in den nächsten Lektionen)<br><br>Das ist dieselbe Lese-Richtung wie in einem echten Schaltplan oder einem Stromlauf. Die Code-Schreibweise „Ausgang := Bedingung" dagegen liest sich eher wie eine Formel — sie sagt nur <i>wie</i> der Wert ausgerechnet wird. Beide Sichtweisen beschreiben dieselbe Logik, nur aus unterschiedlichen Blickwinkeln.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan',
+                            text: 'Im Auto-Schaltplan: <b>ein Kontakt</b> für START in Reihe mit <b>einer Spule</b> für LAMPE. Schaltet der Kontakt durch, fließt Strom durch die Spule.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 2D-Anlage',
+                            text: 'Hier kannst du die Steuerung physisch nachbauen: über das ➕-Menü oben links einen <b>Taster</b> (für START) und eine <b>LED</b> (für LAMPE) platzieren und ihnen die Variablen zuweisen. Sobald ein Bauteil zugewiesen ist, übernimmt die 2D-Mechanik die Kontrolle und der manuelle Sim-Taster wird gesperrt.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: '#btn-toggle-sim', pos: 'bottom',
+                            title: '▶️ Ausprobieren',
+                            text: 'Starte die Simulation und klicke im Sim-Panel auf <b>START</b>. Du siehst sofort: Solange START gedrückt ist, leuchtet die LAMPE. Lässt du START los, geht sie aus.'
+                        }
+                    ]
+                },
+                {
+                    id: 'and',
+                    icon: '&',
+                    title: '2. UND-Verknüpfung',
+                    desc: 'Beide Eingänge müssen gleichzeitig an sein — wie zwei Sicherheits-Tasten, die zusammen gedrückt sein müssen.',
+                    // Default-Typen sicherstellen — die Lektion teacht den User
+                    // dann explizit, LÜFTER auf Motor umzustellen.
+                    forceTypes: { 'START': 'taster', 'FREIGABE': 'taster', 'LÜFTER': 'led' },
+                    code: '// Lektion 2: UND-Verknüpfung\n// LÜFTER läuft nur wenn START UND FREIGABE gleichzeitig.\n// In VALIS-Syntax: && bedeutet "und".\n\nLÜFTER := START && FREIGABE\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 && im Code',
+                            text: '<code>LÜFTER := START && FREIGABE</code>: Der Lüfter läuft nur, wenn <b>beide</b> Eingänge gleichzeitig an sind. In VALIS schreibst du <code>&&</code> (zwei Et-Zeichen) für „und". Du kannst auch das mathematische Symbol <code>∧</code> über die Symbolleiste rechts vom Editor einfügen — VALIS akzeptiert beides.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Sim-Panel: LÜFTER auf Motor umstellen',
+                            text: 'Aus Lektion 1 kennst du: VALIS macht aus jedem Ausgang standardmäßig eine <b>LED</b>. Für unseren <b>LÜFTER</b> stimmt das aber nicht — ein Lüfter wird in echten Anlagen von einem <b>Motor</b> angetrieben (das Lüfter-Rad sitzt auf der Motorwelle).<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel rechts unten findest du <code>LÜFTER</code> als Ausgang. Klicke auf das Typ-Dropdown daneben und wähle <b>Motor (-M)</b> statt LED.<br><br>Das hat zwei Konsequenzen:<br>• Der <b>Schaltplan</b> zeichnet jetzt das richtige Motor-Symbol <code>-M</code> (Kreis mit „M") statt einer LED.<br>• In der <b>2D-Anlage</b> kannst du dem LÜFTER nachher nur Motor-Bauteile zuweisen (z. B. einen echten Lüfter, eine Förderband-Rolle, …) — keine Lampen.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan: das UND-Gatter',
+                            text: 'Im Logikplan taucht jetzt zum ersten Mal ein <b>Gatter</b> auf — ein Kästchen, das eine logische Verknüpfung berechnet. Das UND-Gatter ist mit dem Symbol <b>&</b> in der Mitte beschriftet.<br><br>📐 <b>Wichtige Konvention bei Gattern:</b><br>• Eingänge sind <b>immer links</b> (eine Linie geht von links ins Gatter rein).<br>• Der Ausgang ist <b>immer rechts</b> (eine Linie verlässt das Gatter nach rechts).<br>• <b>Oben und unten</b> sind bei Gattern <i>nie</i> Anschlüsse — die Gatter-Höhe ergibt sich aus der Anzahl der Eingänge.<br><br>Damit bleibt die Lese-Richtung aus Lektion 1 erhalten: das Signal fließt durch den ganzen Plan stets von links nach rechts, durch die Gatter hindurch.<br><br>Beim UND-Gatter gilt: der Ausgang ist nur dann an, wenn <b>alle</b> Eingänge gleichzeitig an sind. Hier sind das START und FREIGABE — beide müssen aktiv sein, sonst bleibt LÜFTER aus.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan: Relais & Reihenschaltung',
+                            text: 'Im Schaltplan ist UND eine <b>Reihenschaltung</b>: START-Kontakt und FREIGABE-Kontakt sitzen hintereinander im selben Strompfad. Strom fließt nur, wenn <b>beide</b> Kontakte gleichzeitig geschlossen sind — die elektrische Entsprechung des UND-Gatters.<br><br>🔌 <b>Was du zusätzlich siehst — ein Relais:</b> VALIS zeichnet den Schaltplan standardmäßig im Modus <b>Relais (Klassisch)</b>. Dabei wird jedes Gatter aus dem Logikplan mit einem <b>Hilfsrelais</b> (Bezeichnung <code>-KFn</code>) umgesetzt — so wie es in echten Industrie-Schaltschränken Standard ist.<br><br>Ein <b>Relais</b> ist ein elektromagnetischer Schalter. Es besteht aus zwei Teilen:<br>• eine <b>Spule</b> (das Rechteck oben) — wird sie bestromt, baut sie ein Magnetfeld auf,<br>• ein oder mehrere <b>Kontakte</b> in anderen Strompfaden — diese werden vom Magnetfeld der Spule angezogen und schalten dort z. B. einen Motor oder eine Lampe ein.<br><br>Hier siehst du also <b>zwei Strompfade</b>: Der erste enthält die Reihenschaltung START + FREIGABE und steuert die Spule des Relais. Der zweite enthält einen Kontakt desselben Relais, der erst dann durchschaltet und den Motor (LÜFTER, dargestellt als <code>-M</code>) einschaltet, wenn die Spule angezogen hat.<br><br>🔎 <b>Woran erkennst du, dass Spule und Kontakt zusammengehören?</b> An der <b>selben Bezeichnung</b> (z. B. <code>-KF1</code>): die Spule trägt sie, und jeder ihrer Kontakte trägt sie ebenfalls. Im Schaltplan stehen sie auf verschiedenen Seiten — <b>in der Realität sind sie aber ein und dasselbe Bauteil</b>. Spule und Kontakte sitzen mechanisch gekoppelt in einem einzigen Relais-Gehäuse; der Schaltplan zeichnet sie nur deshalb getrennt, weil sie in unterschiedlichen Strompfaden mitwirken.<br><br>🔧 <b>Alternative: Modus „Direkt"</b> — Über die Toolbar oben (<b>⚡ Elektro-Optionen</b>, dann auf den Button <b>💼 Modus: Relais (Klassisch)</b> klicken) lässt sich der Schaltplan auf <b>Direkt (Wirtschaftlich)</b> umstellen. Dann zeichnet VALIS dieselbe Logik ohne Zwischen-Relais — die Reihenschaltung steuert den Motor direkt. Kompakter, aber weniger nah an realer Industrie-Verdrahtung.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 2D-Anlage',
+                            text: 'Real platzieren: <b>zwei Taster</b> (START und FREIGABE) plus <b>einen Lüfter</b> (LÜFTER).<br><br>📍 <b>Wo findest du die Bauteile?</b> In der Bauteil-Leiste oben in der 2D-Anlage:<br>• Die Taster sitzen im Menü <b>🎛️ Bedienpult ▼</b> → <b>🟢 Taster (Schließer)</b>.<br>• Den Lüfter findest du im Menü <b>⚙️ Aktoren ▼</b> → in der Untergruppe <b>▶ Umgebung</b> → <b>🌀 Lüfter / Gebläse</b>.<br><br>Sobald du den Lüfter platzierst und ihm die Variable LÜFTER zuweist, dreht sich das Lüfter-Rad sichtbar, wenn die Logik den Ausgang einschaltet. Damit das funktioniert, muss der Variable-Typ im Sim-Panel auf <b>Motor</b> stehen (siehe vorheriger Schritt).<br><br>Beide Taster müssen gleichzeitig gedrückt werden, damit der Lüfter sich dreht.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: '#btn-toggle-sim', pos: 'bottom',
+                            title: '▶️ Ausprobieren',
+                            text: 'Starte die Simulation und probier im Sim-Panel:<br>• <b>Nur START</b> → LÜFTER bleibt aus.<br>• <b>Nur FREIGABE</b> → LÜFTER bleibt aus.<br>• <b>START und FREIGABE gleichzeitig</b> → LÜFTER läuft.<br><br>⌨️ <b>Wie man zwei Taster gleichzeitig drückt:</b> Halte die <b>STRG-Taste gedrückt</b>, während du auf einen Taster klickst — dann rastet er ein und bleibt aktiv, auch wenn du losslässt. So kannst du beide Taster nacheinander einrasten und dann das Verhalten beobachten.<br><br>🔑 <b>Alternative: Tastenzuweisung.</b> Jeder Eingang im Sim-Panel hat rechts daneben ein kleines <b>⌨️-Symbol</b>. Klick drauf und drücke die Taste, die du diesem Eingang zuordnen willst — z. B. <kbd>A</kbd> für START, <kbd>B</kbd> für FREIGABE. Danach kannst du beide Eingänge ganz natürlich mit der Tastatur gleichzeitig halten — wie bei einem Computerspiel.'
+                        }
+                    ]
+                },
+                {
+                    id: 'or',
+                    icon: '≥1',
+                    title: '3. ODER-Verknüpfung',
+                    desc: 'Einer der Eingänge genügt — wie zwei Lichtschalter für eine Lampe (von zwei Stellen).',
+                    forceTypes: { 'TASTER_OBEN': 'taster', 'TASTER_UNTEN': 'taster', 'LAMPE': 'led' },
+                    code: '// Lektion 3: ODER-Verknüpfung\n// LAMPE leuchtet wenn TASTER_OBEN ODER TASTER_UNTEN.\n// In VALIS-Syntax: || bedeutet "oder".\n\nLAMPE := TASTER_OBEN || TASTER_UNTEN\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 || im Code',
+                            text: '<code>LAMPE := TASTER_OBEN || TASTER_UNTEN</code>: Die Lampe leuchtet wenn <b>mindestens einer der beiden</b> Taster gedrückt ist (auch beide gleichzeitig sind in Ordnung). <code>||</code> (zwei senkrechte Striche) ist „oder" in VALIS. Du kannst auch das mathematische Symbol <code>∨</code> über die Symbolleiste rechts vom Editor einfügen.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Sim-Panel: Defaults passen',
+                            text: 'VALIS hat <b>TASTER_OBEN</b> und <b>TASTER_UNTEN</b> als Eingänge erkannt und ihnen den Standard-Typ <b>Taster</b> gegeben — passt. Auch der Ausgang <b>LAMPE</b> bleibt beim Standard-Typ <b>LED / Meldeleuchte</b> — das passt zu unserer Lampe.<br><br>Diese Lektion braucht also <b>keine Typ-Umstellung</b> im Sim-Panel. (Erinnerung an Lektion 2: Wenn Variablen-Name und gewünschtes reales Bauteil nicht zusammenpassen, ist genau hier der Ort zum Umstellen.)',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan: das ODER-Gatter',
+                            text: 'Das ODER wird als <b>≥1-Gatter</b> dargestellt (gelesen: „mindestens 1"). Wie alle Gatter (siehe Lektion 2): Eingänge <b>links</b>, Ausgang <b>rechts</b>, nichts oben oder unten.<br><br>📊 <b>So liest du das Gatter:</b><br>• Beide Eingänge (TASTER_OBEN, TASTER_UNTEN) laufen von links ins Gatter rein.<br>• Der Ausgang ist <b>an, sobald mindestens ein Eingang an ist</b>.<br>• Sind beide aus, ist auch der Ausgang aus.<br><br>Vergleich zu Lektion 2: Das UND-Gatter brauchte <i>alle</i> Eingänge an, das ODER-Gatter braucht nur <i>einen</i>.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan: Parallelschaltung',
+                            text: 'ODER ist im Schaltplan eine <b>Parallelschaltung</b>: die zwei Kontakte sitzen <i>nebeneinander</i> (nicht hintereinander wie beim UND), und die Strompfade vereinigen sich danach wieder.<br><br>💡 <b>Strom-Fluss:</b> Sobald <i>einer</i> der beiden Kontakte schließt, hat der Strom einen Weg von oben (L+) nach unten (L−) und die Lampe leuchtet. Klassisches Beispiel: Treppenhaus-Beleuchtung — Schalter unten und oben sind parallel verdrahtet, beide schalten dasselbe Licht.<br><br>🔌 <b>Auch hier ein Relais</b> (Wiederholung aus Lektion 2): VALIS zeichnet im Modus <b>Relais (Klassisch)</b> wieder ein <code>-KFn</code> als Hilfsrelais. Die Parallelschaltung steuert die Spule, ein Kontakt desselben Relais schaltet die LAMPE im zweiten Strompfad ein. Im Modus <b>Direkt</b> würde die Parallelschaltung die Lampe direkt versorgen.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 2D-Anlage',
+                            text: 'Real platzieren: <b>zwei Taster</b> (TASTER_OBEN, TASTER_UNTEN) plus <b>eine Meldeleuchte</b> (LAMPE).<br><br>📍 <b>Wo findest du die Bauteile?</b> Alle drei sitzen im selben Menü oben:<br>• <b>🎛️ Bedienpult ▼ → 🟢 Taster (Schließer)</b> für die zwei Taster.<br>• <b>🎛️ Bedienpult ▼ → 💡 Meldeleuchte (LED)</b> für die Lampe.<br><br>Beim Platzieren bekommst du gefragt, welche Variable das Bauteil bekommen soll — wähle TASTER_OBEN / TASTER_UNTEN bzw. LAMPE.<br><br>Effekt: Jeder der beiden Taster reicht, um die LED zum Leuchten zu bringen — wie zwei Lichtschalter an Treppen-Anfang und -Ende.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: '#btn-toggle-sim', pos: 'bottom',
+                            title: '▶️ Ausprobieren',
+                            text: 'Starte die Simulation und probier im Sim-Panel:<br>• <b>Nur TASTER_OBEN</b> → LAMPE leuchtet.<br>• <b>Nur TASTER_UNTEN</b> → LAMPE leuchtet.<br>• <b>Beide gleichzeitig</b> → LAMPE leuchtet (ändert nichts).<br>• <b>Keiner</b> → LAMPE aus.<br><br>⌨️ <b>Mehrere Taster gleichzeitig drücken:</b> Wie in Lektion 2 — STRG-Taste gedrückt halten und auf einen Taster klicken → er rastet ein. Oder über die ⌨️-Buttons im Sim-Panel jedem Taster eine Tastatur-Taste zuweisen und beide auf der Tastatur gleichzeitig halten.'
+                        }
+                    ]
+                },
+                {
+                    id: 'not',
+                    icon: '¬',
+                    title: '4. Negation (NICHT)',
+                    desc: 'Den Wert eines Eingangs umkehren — z. B. ein Not-Aus, der „aus" bedeutet wenn gedrückt.',
+                    // NOT_AUS startet bewusst als normaler Taster — die Lektion
+                    // teacht den User dann, den Typ auf „Not-Halt (Öffner)" zu
+                    // wechseln, damit der Schaltplan das richtige Symbol zeigt.
+                    forceTypes: { 'START': 'taster', 'NOT_AUS': 'taster', 'MOTOR': 'led' },
+                    code: '// Lektion 4: Negation\n// MOTOR läuft wenn START gedrückt UND NOT_AUS NICHT gedrückt.\n// In VALIS-Syntax: ¬ (oder !) vor einer Variable kehrt deren Wert um.\n\nMOTOR := START && ¬NOT_AUS\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 ¬ im Code',
+                            text: '<code>¬NOT_AUS</code> bedeutet „NOT_AUS ist NICHT an" — also <b>der Wert wird umgekehrt</b>. Wenn der Not-Aus losgelassen (aus) ist, gilt <code>¬NOT_AUS</code> als an; wenn er gedrückt ist, gilt er als aus. Das Negationszeichen <code>¬</code> kannst du über die Symbolleiste rechts vom Editor einfügen — oder einfach <code>!</code> tippen, VALIS akzeptiert beides.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Sim-Panel: NOT_AUS auf Not-Halt umstellen',
+                            text: '⚡ <b>Du bist im E-Pneumatik-Modus</b> (oben links am Header-Button <code>⚡ E-Pneu</code> erkennbar — VALIS hat ihn für diese Lektion automatisch aktiviert). In diesem Modus stehen Variablen <i>direkt</i> für den physischen Zustand: NOT_AUS = an heißt „Taster gedrückt", NOT_AUS = aus heißt „Taster nicht gedrückt". Genau wie ein realer Elektriker es lesen würde.<br><br>VALIS hat START und NOT_AUS standardmäßig als <b>Taster</b> angelegt. Für START stimmt das, aber NOT_AUS soll ein echter <b>Not-Halt-Taster</b> sein — die typische rote Pilztaste mit Öffner-Kontakt, die in echten Maschinen den Stromkreis bei Gefahr unterbricht.<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel auf das Typ-Dropdown neben NOT_AUS klicken und <b>Not-Halt (Öffner)</b> wählen. Auch MOTOR könntest du auf <b>Motor (-M)</b> umstellen — für diese Lektion behalten wir aber die Standard-LED, damit der Fokus auf der Negation bleibt.<br><br>📐 <b>Folgen der Umstellung:</b><br>• Der <b>Schaltplan</b> zeichnet automatisch das richtige Symbol — einen <b>Öffner-Kontakt</b> mit rotem Pilz-Symbol davor.<br>• Die <b>2D-Anlage</b> erlaubt für NOT_AUS nur noch Not-Halt-Bauteile (verhindert Verwechslung mit normalen Tastern).',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan: die Negations-Bubble',
+                            text: 'Du siehst wieder ein UND-Gatter wie in Lektion 2 — Eingänge links, Ausgang rechts. Diesmal hat <b>einer der Eingangs-Pins</b> eine kleine Besonderheit: eine <b>Bubble (kleiner Kreis)</b> sitzt auf der Linie zwischen NOT_AUS und dem Gatter-Eingang.<br><br>⚪ <b>Die Bubble = die Negation visuell:</b> Sie sagt „kehre diesen Wert vor dem Gatter um". Aus „NOT_AUS gedrückt" (= 1) wird vor dem Gatter eine 0; aus „NOT_AUS losgelassen" (= 0) wird eine 1.<br><br>Das UND-Gatter kombiniert dann START (direkt) und den umgekehrten NOT_AUS — und schaltet MOTOR nur ein, wenn beide diese „Vor-Gatter-Werte" an sind. Also: START gedrückt UND NOT_AUS NICHT gedrückt.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan: der Öffner-Kontakt',
+                            text: 'Im Schaltplan erscheint NOT_AUS jetzt als <b>Öffner-Kontakt</b> (durch die Typ-Umstellung in Schritt 2): zwei Kontaktpunkte und eine waagrechte Linie, die im Ruhezustand <b>verbunden</b> ist — anders als der „normale" Schließer-Kontakt, der im Ruhezustand offen ist.<br><br>🔴 <b>Wie ein echter Not-Halt funktioniert:</b><br>• Ist die rote Pilztaste <b>nicht gedrückt</b> (Ruhezustand) → Kontakt geschlossen → Strom kann fließen.<br>• Wird die Taste <b>gedrückt</b> → Kontakt öffnet → Stromkreis unterbrochen → Motor stoppt.<br><br>🛡 <b>Failsafe-Prinzip:</b> Diese Verdrahtung ist absichtlich so gewählt — auch bei einem Kabelbruch oder Drahtschaden fällt der Kontakt aus, und der Motor stoppt. Sicherheit zuerst.<br><br>🔌 <b>Wieder ein Relais</b> (wie in Lektion 2): Die Reihenschaltung START + Öffner-NOT_AUS steuert die Spule eines Hilfsrelais <code>-KFn</code>; dessen Kontakt schaltet im zweiten Strompfad den MOTOR ein. Modus „Direkt" würde das Relais weglassen.<br><br>💡 <b>Hinweis fürs Spätere:</b> Was du hier siehst, ist ein <b>echter Elektro-Schaltplan</b> — er bildet die reale Verdrahtung im Schaltschrank ab. Im <b>SPS-Modus</b> (Header-Button <code>⚡ E-Pneu</code> umstellen auf <code>⚡ SPS</code>) wechselt VALIS die Semantik: dort steht <code>NOT_AUS = an</code> für „Taster <i>nicht</i> gedrückt" (so wie es im SPS-Programmcode ankommt — ein Öffner liefert im Ruhezustand 1). Der generierte Schaltplan wird dann auch eher zu einer <b>virtuellen Darstellung des Programms</b> als zu einem realitätsnahen Verdrahtungsplan. Beide Modi sind wertvoll, aber sie zeigen unterschiedliche Sichten. Für diese Lektion bleiben wir bewusst im E-Pneu-Modus, weil die Negation hier direkt an der realen Hardware nachvollziehbar wird.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 2D-Anlage',
+                            text: 'Real platzieren: einen normalen <b>Taster</b> für START, einen <b>Not-Halt</b> für NOT_AUS, und eine <b>Meldeleuchte</b> für MOTOR.<br><br>📍 <b>Menü-Pfade</b> (alle drei sitzen unter Bedienpult):<br>• <b>🎛️ Bedienpult ▼ → 🟢 Taster (Schließer)</b> für START.<br>• <b>🎛️ Bedienpult ▼ → 🍄 Not-Halt (Öffner)</b> für NOT_AUS (das rote Pilz-Symbol macht ihn sofort als Sicherheits-Element erkennbar).<br>• <b>🎛️ Bedienpult ▼ → 💡 Meldeleuchte (LED)</b> für MOTOR.<br><br>Die 2D-Anlage erlaubt nur die Zuweisung NOT_AUS → Not-Halt-Bauteil, weil du den Typ im Sim-Panel umgestellt hast (s. Schritt 2). Der Not-Halt unterbricht beim Drücken zuverlässig den Stromkreis — exakt wie in echten Maschinen.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: '#btn-toggle-sim', pos: 'bottom',
+                            title: '▶️ Ausprobieren',
+                            text: 'Starte die Simulation und probier durch:<br>• Drücke <b>START</b> → MOTOR läuft.<br>• Drücke jetzt zusätzlich <b>NOT_AUS</b> → MOTOR stoppt <i>sofort</i>.<br>• Lass NOT_AUS wieder los → MOTOR läuft wieder (solange START noch gedrückt).<br>• Drücke <b>nur NOT_AUS</b> ohne START → es passiert nichts (der Motor sollte ja eh nicht laufen).<br><br>⌨️ <b>Tipps zum gleichzeitigen Drücken:</b> Wie in Lektion 2 — entweder STRG-Taste halten und auf einen Taster klicken zum Einrasten, oder den Tastern über die ⌨️-Buttons im Sim-Panel Tastatur-Tasten zuweisen (z. B. <kbd>S</kbd> für START, <kbd>X</kbd> für NOT_AUS).'
+                        }
+                    ]
+                },
+                {
+                    id: 'selfhold',
+                    icon: '⟲',
+                    title: '5. Selbsthaltung',
+                    desc: 'Ein kurzer START-Impuls hält den Motor dauerhaft an — bis ein STOP ihn explizit ausschaltet. Wir bauen sie zweimal: erst als Rückkopplung, dann sauber als RS-Glied.',
+                    // Lektion 5 zeigt im ersten Durchgang ein bewusst über
+                    // sich selbst rückgekoppeltes MOTOR — VALIS klassifiziert
+                    // das ohnehin als Hilfsrelais. Damit der Schaltplan im
+                    // ersten Pass nicht zusätzlich VOLLE Gate-Hilfsrelais-
+                    // Strompfade auch noch dazu zeichnet (was den Plan unnötig
+                    // aufbläht), erzwingen wir hier den Wirtschaftlich-Modus.
+                    enforceEconMode: true,
+                    // STOP & START müssen logische Schließer-Taster sein —
+                    // sonst kippt die Selbsthalt-Semantik. Wenn aus einer
+                    // früheren Sitzung z. B. STOP als Legacy-Öffner (taster_nc)
+                    // hängengeblieben ist, würde die Logik MOTOR fälschlich
+                    // anders einschalten/ausschalten als die Lektion erklärt.
+                    forceTypes: { 'START': 'taster', 'STOP': 'taster' },
+                    code: '// Lektion 5: Selbsthaltung\n// Ein kurzer START-Druck startet den Motor DAUERHAFT.\n// STOP setzt den Motor wieder zurück.\n//\n// Die Magie: MOTOR taucht auf BEIDEN Seiten auf — der Ausgang\n// hält sich über sich selbst (Rückkopplung).\n\nMOTOR := (MOTOR || START) && ¬STOP\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 Die Rückkopplung',
+                            text: 'Schau genau hin: <code>MOTOR</code> steht <b>links und rechts</b> in der Gleichung. Das ist die <b>Selbsthaltung</b>:<br><br>• Solange MOTOR <b>aus</b> ist, ist <code>MOTOR || START</code> nur durch START an — du musst START drücken, damit überhaupt etwas passiert.<br>• Sobald MOTOR durch START einmal <b>an</b> wurde, hält der MOTOR-Anteil im <code>||</code> die Gleichung an, auch wenn START schon losgelassen ist — der Motor hält sich selbst.<br>• Erst ein <b>gedrücktes STOP</b> macht <code>¬STOP</code> zu „aus" und unterbricht damit die ganze rechte Seite → MOTOR wird aus, und die Selbsthaltung ist gebrochen.<br><br>💡 <b>Gelber Hinweis im Editor:</b> Links neben der Zeile siehst du ein gelbes „i"-Symbol. VALIS erkennt das Muster <code>VAR := f(VAR)</code> und schlägt vor, es in ein RS-/SR-Glied umzuwandeln (sauberer in der Visualisierung). <b>Ignoriere den Hinweis für diesen Durchgang</b> — wir bauen die Schaltung erst <i>als Rückkopplung</i> nach, um das Prinzip zu verstehen. Im zweiten Durchgang nutzen wir die Umwandlung.<br><br>Diese Konstruktion ist der wichtigste Klassiker in der SPS-Welt — sie steckt in jeder Motor-Start/Stop-Schaltung.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Sim-Panel: MOTOR wird Hilfsrelais',
+                            text: 'Im Sim-Panel siehst du etwas <b>Neues</b>: <b>START</b> und <b>STOP</b> sind wie gewohnt als Taster angelegt — bei <b>MOTOR</b> aber steht kein Typ-Dropdown mehr, sondern fix das Label <b>„Hilfsrelais"</b>.<br><br>⚠️ <b>Warum?</b> Weil MOTOR <i>links und rechts</i> in der Code-Zeile vorkommt, ist die Variable nicht nur ein Ausgang, sondern hat einen <b>internen, gespeicherten Logik-Zustand</b>, der mehrfach gelesen wird. VALIS bildet das mit einem <b>Hilfsrelais</b> ab — und ein Hilfsrelais ist in der Realität ein eigenes Bauteil mit Spule und Kontakten.<br><br>🛑 <b>Konsequenz:</b> Du kannst MOTOR in diesem ersten Durchgang <b>nicht</b> direkt einem Motor in der 2D-Anlage zuweisen — ein echter Motor und eine Hilfsrelais-Spule sind unterschiedliche physische Bauteile, das eine kann nicht das andere sein. Auch das Typ-Dropdown bleibt gesperrt: für ein Hilfsrelais ergibt der Bauteil-Typ keinen Sinn.<br><br>👀 <b>Wo siehst du das MOTOR-Verhalten dann?</b> An der LED neben dem „Hilfsrelais"-Label im Sim-Panel — sie leuchtet, wenn die Logik den Hilfsrelais-Zustand auf „an" setzt. Der Schaltplan zeichnet dazu ein eigenes Relais <code>-KFn</code>. In der 2D-Anlage gibt es vorerst nichts zu platzieren für MOTOR — das ändert sich erst im zweiten Durchgang, wenn wir die Selbsthaltung in ein <b>RS-Glied</b> umwandeln.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan: die Rück-Schleife',
+                            text: 'Hier siehst du zum ersten Mal eine <b>Schleife</b> im Logikplan: Eine Linie vom Ausgang MOTOR läuft <b>zurück nach links</b> und wird selbst zum Eingang des ODER-Gatters.<br><br>📊 <b>Was im Plan steht:</b><br>• Das <b>ODER (≥1)</b> hat zwei Eingänge: START und den rückgekoppelten MOTOR.<br>• Sein Ausgang läuft in ein <b>UND (&)</b>, dessen zweiter Eingang die <i>negierte</i> STOP-Linie ist (Bubble auf der Linie, wie in Lektion 4).<br>• Der UND-Ausgang treibt MOTOR — und gleichzeitig die Rück-Linie zurück ins ODER.<br><br>🔄 <b>So entsteht die Selbsthaltung:</b> Sobald MOTOR einmal an ist, hält die Rück-Linie das ODER an, das UND bleibt an, MOTOR bleibt an — eine sich selbst tragende Schleife. Bricht STOP die UND-Kette, fällt die Schleife zusammen.<br><br>Trotz der Schleife bleibt die Lese-Richtung von links nach rechts erhalten (siehe Lektion 1) — die Rück-Linie ist nur ein Sonderfall.',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan: Selbsthaltung des Hilfsrelais',
+                            text: 'Im Schaltplan zeichnet VALIS die Rückkopplung als <b>klassische Selbsthalte-Schaltung</b> (Modus „Relais (Klassisch)" aus Lektion 2):<br><br>📐 <b>Was du siehst:</b><br>• Ein Hilfsrelais <code>-KFn</code> (das ist unser MOTOR — VALIS hat ihn ja als Hilfsrelais erkannt, siehe Sim-Panel-Schritt).<br>• <b>Parallel zum START-Kontakt</b> sitzt ein <b>Kontakt desselben Relais</b> — das ist die Hardware-Umsetzung der Rück-Schleife. Sobald die Spule einmal angezogen hat, schließt der Hilfskontakt und überbrückt START.<br>• <b>In Reihe</b> dazu sitzt der STOP-Kontakt als Öffner — er kann die Selbsthaltung unterbrechen.<br><br>🔁 <b>Lese-Schema:</b> START schließt → Spule zieht an → Hilfskontakt parallel zu START schließt → auch nach Loslassen von START bleibt die Spule an. STOP drücken → Öffner unterbricht → Spule fällt ab → Hilfskontakt öffnet → Selbsthaltung ist weg.<br><br>🛑 <b>Kein echter Verbraucher im Schaltplan:</b> Du siehst hier <b>nur das Hilfsrelais selbst</b> — kein Motor-Symbol, keine Lampe. Das ist korrekt: solange MOTOR ein Hilfsrelais ist, gibt es keinen „realen" Ausgang, der angeschlossen werden könnte. In der Praxis würdest du dann <i>einen zweiten Kontakt</i> des Hilfsrelais nehmen und damit z. B. ein Motor-Schütz <code>-K1</code> ansteuern — das ist aber genau das, was wir im zweiten Durchgang mit dem RS-Glied sauber lösen.<br><br>Im nächsten Schritt testen wir das Verhalten am LED-Indikator neben „Hilfsrelais" im Sim-Panel.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: ['#simulator-container', '#fbs-wrapper', '#circuit-wrapper'], pos: 'right',
+                            title: '▶️ Erster Test (Rückkopplung)',
+                            text: '<b>Klicke oben links auf „Simulation starten"</b> und behalte die <b>drei hervorgehobenen Panels</b> im Auge:<br>• <b>Ein- &amp; Ausgänge</b> (Sim-Panel links) — Taster zum Drücken und LED-Indikator neben MOTOR.<br>• <b>Logikplan</b> — die aktiven Linien werden bunt animiert, du siehst die Rück-Schleife in Aktion.<br>• <b>Auto-Schaltplan</b> — der Stromfluss durch die Selbsthalte-Schaltung wird live mit-koloriert.<br><br>📋 <b>Probier dann am LED-Indikator neben MOTOR im Sim-Panel:</b><br>• <b>Kurz auf START</b> drücken und loslassen → MOTOR-LED bleibt <i>an</i>. <i>Das ist die Magie der Selbsthaltung — das Hilfsrelais hält seinen Zustand.</i><br>• <b>STOP</b> → LED geht aus.<br>• <b>START</b> erneut → LED an, bleibt an.<br>• <b>START + STOP gleichzeitig</b> → STOP gewinnt (die UND-Kette wird unterbrochen). Diese Eigenschaft „Stop hat Vorrang" ist sicherheitstechnisch wichtig.<br><br>⌨️ STRG halten + Klick zum Einrasten, oder ⌨️-Buttons im Sim-Panel zur Tastenzuweisung — wie in den vorigen Lektionen.<br><br>🏭 <b>Und die 2D-Anlage?</b> Im ersten Durchgang gibt es dort nichts zu zeigen, weil MOTOR ein Hilfsrelais ist und sich kein reales Bauteil zuordnen lässt. Das holen wir im zweiten Durchgang nach.<br><br>Stopp die Simulation wieder, wenn du fertig bist — im nächsten Schritt nutzen wir den Editor-Hinweis und wandeln die Zeile in ein RS-Glied um.'
+                        },
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '🔧 Zweiter Durchgang: Umwandlung ins RS-Glied',
+                            text: 'Jetzt nutzen wir den gelben Hinweis: <b>Klicke auf das gelbe „i"-Symbol</b> links neben der Selbsthaltungs-Zeile. Im Popup unten findest du den Block „🔧 Automatisch umwandeln" mit zwei Buttons: <b>→ RS-Glied einsetzen</b> und <b>→ SR-Glied einsetzen</b>.<br><br>VALIS empfiehlt hier <b>RS-Glied</b> (der türkis hervorgehobene Button) — klicke ihn an.<br><br>📝 <b>Was passiert:</b> VALIS ersetzt die eine Zeile durch <b>drei klare Zeilen</b>:<br><pre style="background:#1a1a2e;padding:6px 8px;border-radius:3px;margin:4px 0;font-size:11px;">S1 := START\nR1 := STOP\nMOTOR := Q1</pre>Keine Rück-Schleife mehr im Code — stattdessen ein expliziter Speicherbaustein, der seinen Zustand intern hält.<br><br>👉 <b>Erst nach der Umwandlung geht die Lektion weiter.</b> Der „Weiter →"-Button bleibt ohne Wirkung, solange die drei Zeilen nicht im Editor stehen.',
+                            before: () => _ensurePanel('fbs-wrapper'),
+                            // Gate: Schritt nur freigeben, wenn die Umwandlung
+                            // tatsächlich vollzogen wurde (Code enthält jetzt
+                            // S<n>:= / R<n>:= / MOTOR := Q<n>).
+                            canAdvance: () => {
+                                const ta = document.getElementById('code');
+                                if (!ta) return true;
+                                const code = ta.value || '';
+                                const hasS = /^\s*S\d+(_(?:RS|SR))?\s*:=/im.test(code);
+                                const hasR = /^\s*R\d+(_(?:RS|SR))?\s*:=/im.test(code);
+                                const hasQ = /\bMOTOR\s*:=\s*Q\d+(_(?:RS|SR))?\b/i.test(code);
+                                return hasS && hasR && hasQ;
+                            },
+                            advanceBlockMsg: 'Die Umwandlung ist noch nicht vollzogen.\n\n' +
+                                'Klicke auf das gelbe „i"-Symbol links vom Code, dann auf den Button „→ RS-Glied einsetzen" im Popup. Erst danach geht die Lektion weiter.'
+                        },
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📚 Die S/R/Q-Semantik',
+                            text: 'Was bedeuten die Pins?<br>• <b>S<sub>n</sub> (Set)</b> — wird <code>S1</code> einmal kurz an, schaltet der Baustein dauerhaft auf an.<br>• <b>R<sub>n</sub> (Reset)</b> — wird <code>R1</code> einmal kurz an, schaltet er dauerhaft auf aus.<br>• <b>Q<sub>n</sub></b> — der Ausgang, der den gespeicherten Zustand liefert.<br><br>📍 <b>Achte auf die Seiten beim <code>:=</code></b> (Rückbezug Lektion 1: links = was wird gesteuert, rechts = die Bedingung/Quelle):<br>• <code>S1 := START</code> — <code>S1</code> steht <b>links</b>, weil wir den Set-Pin des Glieds <i>treiben</i> (er bekommt die START-Bedingung als Wert).<br>• <code>R1 := STOP</code> — analog: <code>R1</code> wird <b>vom Code-Schreiber getrieben</b> mit der STOP-Bedingung.<br>• <code>MOTOR := Q1</code> — hier steht <code>Q1</code> bewusst <b>rechts</b>! Q ist der <i>Ausgang</i> des RS-Glieds, also eine <b>Quelle</b>, die wir <i>lesen</i>. Wir nehmen den Q-Wert und weisen ihn der Variable MOTOR (links) zu, damit der eigentliche Motor mit dem gespeicherten Zustand des Glieds geschaltet wird. Stünde Q1 links, würden wir versuchen, den Ausgang des Glieds selbst zu beschreiben — das wäre logisch widersprüchlich und VALIS würde den Code als Fehler markieren.<br><br>Die Zahl <code>n</code> (hier 1) verbindet die drei Zeilen <i>logisch</i>: <code>S1</code>, <code>R1</code>, <code>Q1</code> gehören zu <b>einem</b> Speicherbaustein. Für eine zweite Selbsthaltung würdest du <code>S2</code>/<code>R2</code>/<code>Q2</code> nehmen, usw.<br><br>⚖️ <b>RS oder SR? Wer hat bei gleichzeitigem S und R Vorrang?</b><br>• <b>RS-Glied</b> (ohne Suffix): <b>RESET-Vorrang</b> → bei <code>S1=R1=an</code> gewinnt R, Q geht aus. Sicherheits-Default.<br>• <b>SR-Glied</b> (Suffix <code>_SR</code>): <b>SET-Vorrang</b> → bei <code>S1_SR=R1_SR=an</code> gewinnt S, Q bleibt/wird an.<br><br>VALIS hat hier <b>RS empfohlen</b>, weil die ursprüngliche Selbsthaltung <code>(MOTOR || START) && ¬STOP</code> oben ein <b>UND</b> hat — STOP als äußerer Faktor hat Vorrang. Das entspricht der RS-Logik (Reset gewinnt = STOP gewinnt). Gleicher Sicherheitsgedanke wie eben: STOP soll im Konflikt-Fall immer durchgreifen.'
+                        },
+                        {
+                            target: '#fbs-wrapper', pos: 'left',
+                            title: '🧩 Logikplan: jetzt mit RS-Block',
+                            text: 'Der Logikplan zeigt jetzt einen ganz anderen Anblick — kein Schleifen-Konstrukt mehr, sondern ein <b>RS-Block</b> mit drei Anschlüssen:<br>• <b>S</b> oben links (von START gespeist).<br>• <b>R1</b> unten links (von STOP gespeist).<br>• <b>Q</b> rechts (treibt MOTOR).<br><br>Der Block selbst trägt das Label „RS-Glied 1".<br><br>⚠️ <b>Wichtig — zwei verschiedene „1"-Bedeutungen, nicht verwechseln:</b><br><br>1️⃣ <b>Die „1" hinter R am Pin (R1)</b> ist die <b>Dominanz-Markierung nach IEC 61131-3</b>: sie zeigt an, dass beim Konflikt (S und R gleichzeitig an) der <b>R-Eingang gewinnt</b> — also Reset-Vorrang. Bei einem <b>SR-Glied</b> wäre stattdessen S1 (und R ohne Zahl) gezeichnet → dann hätte S Vorrang. Das wird also <b>im Symbol direkt sichtbar</b>, ohne dass du den Code lesen musst.<br><br>2️⃣ <b>Die „1" im Block-Label „RS-Glied 1" und in deinem Code (S1, R1, Q1)</b> ist hingegen nur die <b>Nummer dieses speziellen Glieds</b> — du könntest später ein weiteres mit S2, R2, Q2 anlegen. Das hat <i>nichts</i> mit Dominanz zu tun.<br><br>📊 <b>Vorteile gegenüber der Rück-Schleife:</b><br>• Klarer Lese-Fluss von links nach rechts ohne Rück-Linie.<br>• Eingaben und Ausgänge sind sauber getrennt.<br>• Bei komplexen Set-/Reset-Bedingungen bleibt der Plan übersichtlich (du füllst nur S1 und R1 mit den jeweiligen Logik-Ausdrücken).',
+                            before: () => _ensurePanel('fbs-wrapper')
+                        },
+                        {
+                            target: '#circuit-wrapper', pos: 'left',
+                            title: '⚡ Schaltplan: jetzt explizit gekennzeichnetes RS-Glied',
+                            text: 'Im Schaltplan ändert sich die Darstellung sichtbar: jetzt steht dort ein <b>explizit beschriftetes RS-Glied</b> als eigener Block mit S-, R- und Q-Anschlüssen und der RS-Glied-Nummer. Der Block übernimmt die ganze Speicher-Logik — keine sichtbare Parallel-Verdrahtung von Hilfskontakten mehr.<br><br>📐 <b>Lese-Schema neu:</b><br>• START-Kontakt steuert den <b>S-Eingang</b> des RS-Glieds.<br>• STOP-Kontakt steuert den <b>R-Eingang</b>.<br>• Der <b>Q-Ausgang</b> treibt den Motor <code>-M</code>.<br><br>Vergleiche mit dem vorigen Schritt: dieselbe Funktion, andere Darstellung. Das vorherige Bild (Hilfsrelais mit Parallel-Kontakt zum START) war die <b>Hardware-Umsetzung</b> mit Diskret-Relais. Dieser Block ist die <b>logische Speicher-Funktion</b> als eigenes Symbol — wie in jedem modernen SPS-Schaltplan üblich.<br><br>Beide Darstellungen sind „richtig", sie zeigen nur unterschiedliche Abstraktions-Ebenen.',
+                            before: () => _ensurePanel('circuit-wrapper')
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 2D-Anlage',
+                            text: 'Real platzieren: <b>zwei Taster</b> (START, STOP) plus einen <b>Motor-getriebenen Verbraucher</b> für MOTOR — z. B. wieder einen Lüfter.<br><br>📍 <b>Menü-Pfade:</b><br>• <b>🎛️ Bedienpult ▼ → 🟢 Taster (Schließer)</b> für START und STOP.<br>• <b>⚙️ Aktoren ▼ → ▶ Umgebung → 🌀 Lüfter / Gebläse</b> für MOTOR.<br><br>Die Typ-Umstellung MOTOR → Motor (aus Schritt 2) gilt weiterhin — die Variable MOTOR ist immer noch derselbe Ausgang, nur intern speichert sie ihren Zustand jetzt über das RS-Glied statt über die Rückkopplung.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: ['#btn-toggle-sim', '#simulator-container', '#fbs-wrapper', '#circuit-wrapper', '#factory-wrapper'], pos: 'bottom',
+                            title: '▶️ Zweiter Test (RS-Glied)',
+                            text: '<b>Starte die Simulation erneut</b> und behalte die hervorgehobenen Panels im Auge — Sim-Panel, Logikplan, Auto-Schaltplan und (jetzt im zweiten Durchgang relevant) die 2D-Anlage.<br><br>📋 <b>Teste:</b><br>• <b>Kurz START</b> + Loslassen → MOTOR läuft dauerhaft. ✓<br>• <b>STOP</b> drücken → MOTOR stoppt. ✓<br>• Erneut <b>START</b> → MOTOR läuft wieder. ✓<br>• <b>START + STOP gleichzeitig</b> → STOP gewinnt (RS-Glied, RESET-Vorrang). ✓<br><br>🎯 <b>Das Verhalten ist identisch zum ersten Test!</b> Die RS-Umwandlung verändert nicht <i>was</i> die Schaltung tut, sondern nur <i>wie</i> sie aufgebaut ist. Du hast jetzt dasselbe Ergebnis, aber:<br>• einen aufgeräumteren Code (drei klare Zeilen statt einer Rückkopplungs-Formel),<br>• einen schleifen-freien Logikplan,<br>• einen modernen Schaltplan mit explizitem RS-Block.<br><br>In der Praxis schreiben SPS-Programmierer Selbsthaltungen <i>direkt</i> als RS-/SR-Glieder — die Rückkopplungs-Form ist gut zum Verstehen, die RS-Form ist gut zum Arbeiten.'
+                        },
+                        {
+                            target: null,
+                            title: '🎓 Glückwunsch!',
+                            text: 'Du hast die fünf SPS-Grundprinzipien durchgearbeitet:<br><br>• Lektion 1 — <b>Eingang & Ausgang</b> + die Begriffe an/aus, 1/0, WAHR/TRUE<br>• Lektion 2 — <b>UND (&&)</b> + Gatter-Konventionen + Hilfsrelais im Schaltplan + Bauteil-Typ-Auswahl<br>• Lektion 3 — <b>ODER (||)</b> + Parallelschaltung + Vergleich zum UND<br>• Lektion 4 — <b>Negation (¬)</b> + Öffner-Kontakt + Failsafe-Prinzip am Beispiel Not-Halt<br>• Lektion 5 — <b>Selbsthaltung</b> + Rück-Schleife im Logikplan + RS-Glied im Schaltplan + RS-/SR-Umwandlung<br><br>Mit diesen vier Bausteinen (Eingang/Ausgang, UND, ODER, Negation) plus dem Selbsthaltungs-Muster lassen sich erstaunlich viele reale Steuerungen aufbauen. Probier ruhig eigene Kombinationen aus — die 2D-Anlage und das Sim-Panel sind dein Test-Labor!'
+                        }
+                    ]
+                }
+            ];
+            window.openLessonsModal = function() {
+                const list = document.getElementById('lessons-list');
+                if (!list) return;
+                list.innerHTML = LESSONS.map(l => `
+                    <div style="background:#1c2128; border:1px solid #30363d; border-radius:8px; padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:14px;">
+                        <div style="font-size:28px; width:46px; height:46px; display:flex; align-items:center; justify-content:center; background:#00897b; color:#fff; border-radius:8px; font-weight:bold; flex-shrink:0; font-family:'Cambria Math','Times New Roman',serif;">${l.icon}</div>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:3px;">${l.title}</div>
+                            <div style="font-size:11px; color:#90a4ae; line-height:1.45;">${l.desc}</div>
+                        </div>
+                        <button onclick="startLesson('${l.id}')" style="background:#00897b; color:#fff; border:none; border-radius:5px; padding:8px 14px; font-size:12px; font-weight:bold; cursor:pointer; flex-shrink:0;" title="Lektion starten">▶ Starten</button>
+                    </div>
+                `).join('');
+                document.getElementById('lessons-overlay').style.display = 'flex';
+            };
+            window.closeLessonsModal = function() {
+                document.getElementById('lessons-overlay').style.display = 'none';
+            };
+            // Lektions-Modi erzwingen:
+            //   1) E-Pneumatik-Modus — GLOBAL für alle Lektionen (NOT_AUS-Logik
+            //      & Variable-Semantik = physischer Press-Zustand).
+            //   2) Schaltplan-Modus — PRO LEKTION wählbar via `lesson.enforceEconMode`:
+            //        true  → Direkt (Wirtschaftlich) erzwingen
+            //        false → Klassisch (Relais) erzwingen
+            //        undefined → nicht antasten (User-Wahl bleibt)
+            // Der User kann nach den Lektionen jederzeit wieder umstellen.
+            const _enforceLessonModes = (lesson) => {
+                // --- E-Pneu-Modus (global) ---
+                if (window.epneuMode !== true) {
+                    window.epneuMode = true;
+                    try { localStorage.setItem('valisEpneuMode', '1'); } catch(_) {}
+                    const btn = document.getElementById('btn-epneu-mode');
+                    if (btn) {
+                        btn.textContent = '⚡ E-Pneu';
+                        btn.style.background = '#0288d1';
+                        btn.style.color = '#fff';
+                    }
+                    // spsState der NC-Hardware-Variablen (NOTAUS, Lichtgitter)
+                    // löschen — die hatten im SPS-Modus invertierte Semantik
+                    // und würden sonst „falsch gedrückt" beim ersten Sim-Tick
+                    // erscheinen.
+                    if (typeof spsState !== 'undefined' && typeof componentTypes !== 'undefined') {
+                        Object.keys(componentTypes).forEach(k => {
+                            const t = componentTypes[k];
+                            if (t === 'nothalt' || t === 'light_curtain'
+                                || (typeof ComponentRegistry !== 'undefined' && ComponentRegistry[t] && ComponentRegistry[t].isNC)) {
+                                delete spsState[k];
+                            }
+                        });
+                    }
+                }
+                // --- Schaltplan-Modus: nur erzwingen, wenn Lektion das explizit anfordert ---
+                // `configEconMode = true` heißt Direkt, `false` heißt Klassisch.
+                if (lesson && typeof lesson.enforceEconMode === 'boolean') {
+                    const wantDirect = lesson.enforceEconMode;
+                    if (window.configEconMode !== wantDirect) {
+                        window.configEconMode = wantDirect;
+                        const btnE = document.getElementById('btn-toggle-econ');
+                        if (btnE) {
+                            if (wantDirect) {
+                                btnE.style.backgroundColor = '#4caf50';
+                                btnE.setAttribute('data-i18n', 'iec_mode_direct');
+                                btnE.textContent = (typeof t === 'function')
+                                    ? t('iec_mode_direct')
+                                    : '💼 Modus: Direkt (Wirtschaftlich)';
+                            } else {
+                                btnE.style.backgroundColor = '#555';
+                                btnE.setAttribute('data-i18n', 'iec_mode_relay');
+                                btnE.textContent = (typeof t === 'function')
+                                    ? t('iec_mode_relay')
+                                    : '💼 Modus: Relais (Klassisch)';
+                            }
+                        }
+                    }
+                }
+            };
+            window.startLesson = function(id) {
+                const lesson = LESSONS.find(l => l.id === id);
+                if (!lesson) return;
+                const ta = document.getElementById('code');
+                const hasCode = ta && ta.value.trim();
+                const hasFactory = (typeof factoryObjects !== 'undefined' && factoryObjects.length > 0)
+                                || (typeof factoryItems !== 'undefined' && factoryItems.length > 0);
+                const modeNotes = [
+                    '  • E-Pneumatik-Modus (NOT_AUS-Logik & Variable-Semantik = physischer Press-Zustand)'
+                ];
+                if (lesson.enforceEconMode === true) {
+                    modeNotes.push('  • Schaltplan-Modus „Direkt (Wirtschaftlich)" — VALIS zeichnet einfache Ausgänge ohne zusätzliche Hilfsrelais-Strompfade');
+                } else if (lesson.enforceEconMode === false) {
+                    modeNotes.push('  • Schaltplan-Modus „Relais (Klassisch)" — realer Schaltschrank-Look mit Hilfsrelais pro Gatter');
+                }
+                if ((hasCode || hasFactory) && !confirm(
+                    'Diese Lektion ersetzt den aktuellen Code-Editor-Inhalt UND leert die 2D-Anlage,\n' +
+                    'damit du sauber von vorn anfangen kannst.\n\n' +
+                    'Zusätzlich werden — sofern nötig — diese Modi gesetzt:\n' +
+                    modeNotes.join('\n') + '\n\n' +
+                    'Du kannst alle Modi nach den Lektionen jederzeit manuell zurückstellen.\n\n' +
+                    'Möchtest du fortfahren? (Vorher ggf. unter „💾 Speichern" sichern.)'
+                )) return;
+                window.closeLessonsModal();
+                // 2D-Anlage leeren (gleiche Aktion wie der „🗑️ Alles löschen"-
+                // Button in der Factory-Toolbar). clearFactory() prompted normal-
+                // erweise auch — wir umgehen das, indem wir die Arrays/Objekte
+                // direkt zurücksetzen.
+                if (typeof factoryObjects !== 'undefined') {
+                    factoryObjects.forEach(o => { if (o.el && o.el.parentNode) o.el.parentNode.removeChild(o.el); });
+                    factoryObjects.length = 0;
+                }
+                if (typeof factoryItems !== 'undefined') {
+                    factoryItems.forEach(i => { if (i.el && i.el.parentNode) i.el.parentNode.removeChild(i.el); });
+                    factoryItems.length = 0;
+                }
+                if (typeof saveFactoryState === 'function') {
+                    try { saveFactoryState(); } catch(_) {}
+                }
+                // Lektions-Modi (E-Pneu global, Schaltplan-Modus pro Lektion)
+                // VOR dem Setzen des Codes erzwingen, damit Parser/Renderer
+                // direkt mit der richtigen Semantik und Darstellung starten.
+                _enforceLessonModes(lesson);
+                // Variable-Typ-Reset für Lektions-Variablen: bestimmte Variablen
+                // (z. B. STOP in Lektion 5) könnten aus einer früheren Sitzung
+                // einen abweichenden Komponenten-Typ tragen (z. B. taster_nc =
+                // Legacy-Öffner), was die Lektions-Semantik verfälscht. Wir
+                // setzen sie hier explizit auf den von der Lektion erwarteten
+                // Typ zurück — sowohl in componentTypes als auch im Sticky-Pool.
+                if (lesson.forceTypes && typeof componentTypes !== 'undefined') {
+                    Object.entries(lesson.forceTypes).forEach(([varName, type]) => {
+                        componentTypes[varName] = type;
+                        if (window._stickyVars && window._stickyVars.has(varName)) {
+                            const entry = window._stickyVars.get(varName);
+                            if (entry) entry.compType = type;
+                        }
+                    });
+                    // componentTypes ist in localStorage persistiert — Änderung
+                    // sichern, damit sie auch nach Reload greift.
+                    try { localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes)); } catch(_) {}
+                }
+                if (typeof _setEditorCode === 'function') _setEditorCode(lesson.code);
+                // Kurz warten, damit der Parser/Renderer das neue Code-Update
+                // verarbeitet hat, bevor wir Spotlights auf Plan-Panels werfen.
+                setTimeout(() => {
+                    if (typeof window._startWalk === 'function') {
+                        window._startWalk(lesson.steps);
+                    }
+                }, 150);
             };
         })();
 

@@ -2310,6 +2310,7 @@
                             <div onclick="detachPanel('circuit-editor-wrapper', 'Editor')" data-i18n="extra_detach_iec_edit" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Editor</div>
                             <div onclick="detachPanel('factory-wrapper', '2D-Anlage')" data-i18n="extra_detach_fac" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ 2D-Anlage</div>
                             <div onclick="detachPanel('sk-wrapper', 'Schrittkette')" data-i18n="extra_detach_sk" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Schrittkette</div>
+                            <div onclick="detachPanel('festo-wrapper', 'FESTO-Aufbau')" data-i18n="extra_detach_festo" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ FESTO-Aufbau</div>
                             <div onclick="detachPanel('analyzer-modal', 'Oszilloskop')" data-i18n="extra_detach_osc" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">⏏️ Oszilloskop</div>
                         </div>
                       </div><!-- /flex-row wrapper -->
@@ -17413,7 +17414,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Banner verstecken — keine Modal-Wiederholung.
             try { if (typeof window._syncFestoDualBanner === 'function') window._syncFestoDualBanner(); } catch(_) {}
             if (window.configDualCircuit) {
-                const festoWrap = document.getElementById('festo-wrapper');
+                const festoWrap = window._festoDoc().getElementById('festo-wrapper');
                 const festoVisible = festoWrap && festoWrap.style.display !== 'none';
                 if (festoVisible && typeof window._showFestoDualWarning === 'function') {
                     try { window._showFestoDualWarning(false); } catch(_) {}
@@ -39629,34 +39630,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // NEU: MULTI-MONITOR / POP-OUT ENGINE
         // ==========================================
         window.popOutWindows = {};
-        window.detachPanel = function(panelId, titleName) {
-			// Beende Grid-Mode VOR dem Abkoppeln (sonst bricht das CSS-Grid zusammen)
-            if (currentLayout.startsWith('grid-')) {
-                document.getElementById('btn-layout-text').textContent = 'Layout: ◫';
-                changeWorkspaceLayout('flex-row');
-            }
-            const panel = document.getElementById(panelId);
-            if (!panel) return;
-            // Wenn das Fenster schon offen ist, holen wir es in den Vordergrund
-            if (window.popOutWindows[panelId] && !window.popOutWindows[panelId].closed) {
-                window.popOutWindows[panelId].focus();
-                return;
-            }
-            // Platzhalter erstellen, damit die Engine weiß, wohin das Panel beim Schließen zurückmuss
-            const placeholder = document.createElement('div');
-            placeholder.id = panelId + '-placeholder';
-            placeholder.style.display = 'none';
-            panel.parentNode.insertBefore(placeholder, panel);
-            // Reines, nacktes Browser-Fenster ohne Tabs öffnen
-            const extWin = window.open('', '', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
-            window.popOutWindows[panelId] = extWin;
-            extWin.document.title = "VALIS - " + titleName;
-            extWin.document.body.style.margin = '0';
-            extWin.document.body.style.height = '100vh';
-            extWin.document.body.style.backgroundColor = '#1e1e1e';
-            extWin.document.body.style.overflow = 'hidden';
-            extWin.document.body.style.display = 'flex';
-            // 🌟 MAGIE: Wir kopieren das gesamte CSS live in das neue Fenster!
+        // Geteiltes Pop-out-Fenster: alle abgekoppelten Workspace-Panels
+        // teilen sich ein Fenster mit Side-by-Side-Layout (flex-row). So kann
+        // der User mehrere Panels parallel auf einem Zweitbildschirm sehen,
+        // ohne pro Panel ein eigenes Fenster zu jonglieren.
+        // (Ausnahme: das Analyzer-Modal bleibt in einem eigenen Fenster, weil
+        // es kein Workspace-Panel sondern ein Overlay-Modal ist.)
+        window._sharedDetachWindow = null;
+
+        // === Helper: CSS-Live-Kopie in ein externes Fenster ===
+        function _copyDocStylesTo(extWin) {
             Array.from(document.styleSheets).forEach(sheet => {
                 try {
                     if (sheet.cssRules) {
@@ -39666,44 +39649,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 } catch(e) {
                     if (sheet.href) {
-                        const l = extWin.document.createElement('link'); 
-                        l.rel = 'stylesheet'; l.href = sheet.href; 
+                        const l = extWin.document.createElement('link');
+                        l.rel = 'stylesheet'; l.href = sheet.href;
                         extWin.document.head.appendChild(l);
                     }
                 }
             });
-            // Panel aus dem Hauptfenster reißen und ins externe Fenster kleben
-            panel.style.display = 'flex';
-            if (panelId === 'analyzer-modal') {
-                panel._oldCss = panel.style.cssText;
-                panel.style.position = 'relative'; panel.style.width = '100%'; panel.style.height = '100%'; panel.style.top = '0'; panel.style.left = '0'; panel.style.transform = 'none'; panel.style.boxShadow = 'none';
-            } else {
-                // 🌟 FIX 1: Flexbox-Fesseln lösen, damit das Panel 100% des neuen Bildschirms füllt!
-                panel.style.width = '100vw'; 
-                panel.style.height = '100vh';
-                panel.style.flex = 'none'; 
-            }
-            extWin.document.body.appendChild(panel);
-            // 🌟 FIX 2: Wir machen alle UI-Funktionen im neuen Fenster bekannt!
-            // Dadurch funktionieren die onClick-Befehle der Buttons weiterhin.
-            for (let key in window) {
-                if (typeof window[key] === 'function') {
-                    extWin[key] = window[key];
-                }
-            }
-            // SVG-Engines kurz neustarten, da sie beim Frame-Wechsel die Kamera-Koordinaten verlieren
-            setTimeout(() => {
-                if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
-                if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
-                if (panelId === 'analyzer-modal') drawAnalyzer(); // Oszilloskop an neue Größe anpassen
-                if (panelId === 'sk-wrapper') {
-                    if (typeof window._reBindSkPanelHandlers === 'function') window._reBindSkPanelHandlers();
-                    if (typeof window._renderSchrittketten === 'function') window._renderSchrittketten();
-                }
-            }, 100);
-            // 🌟 MOUSE-EVENT-ROUTING: Klicks im 2. Fenster werden zurück an die Engine im 1. Fenster gesendet!
-            // WICHTIG: instanceof-Checks über Fenster-Grenzen schlagen fehl (jedes Fenster hat eigene Konstruktoren)!
-            // Deshalb: Prüfung über e.type statt instanceof.
+        }
+
+        // === Helper: Maus/Tastatur-Relay zum Hauptfenster ===
+        function _bindWindowRelay(extWin) {
             const relayEvent = (e) => {
                 let init = { bubbles: true, cancelable: true, view: window };
                 const mouseTypes = ['mousemove', 'mouseup', 'mousedown', 'click'];
@@ -39721,24 +39676,254 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             extWin.addEventListener('mousemove', relayEvent);
             extWin.addEventListener('mouseup', relayEvent);
             extWin.addEventListener('keydown', relayEvent);
-            // Wenn der Nutzer das externe Fenster schließt -> Panel zurückholen!
+        }
+
+        // === Per-Panel Re-Init nach Frame-Wechsel (Detach UND Reattach) ===
+        function _reInitDetachedPanel(panelId) {
+            if (panelId === 'fbs-wrapper' && panZoomInstance) { panZoomInstance.destroy(); panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
+            if (panelId === 'circuit-wrapper' && panZoomCircuitInstance) { panZoomCircuitInstance.destroy(); panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
+            if (panelId === 'sk-wrapper') {
+                if (typeof window._reBindSkPanelHandlers === 'function') window._reBindSkPanelHandlers();
+                if (typeof window._renderSchrittketten === 'function') window._renderSchrittketten();
+            }
+            if (panelId === 'festo-wrapper') {
+                if (typeof window._renderFestoPanel === 'function') window._renderFestoPanel();
+            }
+        }
+        function _reInitReattachedPanel(panelId) {
+            const el = document.getElementById(panelId);
+            if (!el || el.style.display === 'none') return;
+            if (panelId === 'fbs-wrapper') { panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
+            if (panelId === 'circuit-wrapper') { panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
+            if (panelId === 'festo-wrapper' && typeof window._renderFestoPanel === 'function') {
+                window._renderFestoPanel();
+            }
+            if (panelId === 'sk-wrapper' && typeof window._renderSchrittketten === 'function') {
+                window._renderSchrittketten();
+            }
+        }
+
+        // === Resizer zwischen zwei Cells im Shared-Window ===
+        function _wireDetachedResizer(resizer) {
+            const doc = resizer.ownerDocument;
+            let dragging = false, startX = 0, prevCell = null, nextCell = null, prevW = 0, nextW = 0;
+            resizer.addEventListener('mousedown', (e) => {
+                prevCell = resizer.previousElementSibling;
+                nextCell = resizer.nextElementSibling;
+                if (!prevCell || !nextCell) return;
+                dragging = true;
+                startX = e.clientX;
+                prevW = prevCell.getBoundingClientRect().width;
+                nextW = nextCell.getBoundingClientRect().width;
+                doc.body.style.cursor = 'col-resize';
+                doc.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+            doc.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                const dx = e.clientX - startX;
+                const nP = Math.max(160, prevW + dx);
+                const nN = Math.max(160, nextW - dx);
+                prevCell.style.flex = `0 0 ${nP}px`;
+                nextCell.style.flex = `0 0 ${nN}px`;
+            });
+            doc.addEventListener('mouseup', () => {
+                if (!dragging) return;
+                dragging = false;
+                doc.body.style.cursor = '';
+                doc.body.style.userSelect = '';
+            });
+        }
+
+        // === Shared-Detach-Window anlegen oder zurückgeben ===
+        function _ensureSharedDetachWindow() {
+            if (window._sharedDetachWindow && !window._sharedDetachWindow.closed) {
+                window._sharedDetachWindow.focus();
+                return window._sharedDetachWindow;
+            }
+            const extWin = window.open('', '', 'width=1600,height=900,menubar=no,toolbar=no,location=no,status=no');
+            if (!extWin) return null;
+            window._sharedDetachWindow = extWin;
+            extWin.document.title = 'VALIS - Abgekoppelte Panels';
+            extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex; flex-direction:column; font-family:Segoe UI,sans-serif;';
+            _copyDocStylesTo(extWin);
+            const container = extWin.document.createElement('div');
+            container.id = 'detached-container';
+            container.style.cssText = 'display:flex; flex-direction:row; flex:1 1 auto; min-height:0; overflow:hidden;';
+            extWin.document.body.appendChild(container);
+            // UI-Funktionen ans neue Fenster — sodass onclick="…"-Handler greifen.
+            for (let key in window) {
+                if (typeof window[key] === 'function') {
+                    try { extWin[key] = window[key]; } catch(_) {}
+                }
+            }
+            _bindWindowRelay(extWin);
+            // Beim Schließen: ALLE Cells → Panels zurück ins Hauptfenster.
+            extWin.addEventListener('beforeunload', () => {
+                const cont = extWin.document.getElementById('detached-container');
+                const pids = cont ? Array.from(cont.querySelectorAll('.detached-cell')).map(c => c.dataset.panelId) : [];
+                pids.forEach(pid => window._reattachSinglePanel(pid, { _silentSharedClose: true }));
+                window._sharedDetachWindow = null;
+                updateWorkspace();
+            });
+            return extWin;
+        }
+
+        // === Cell-Wrapper: Header mit Reattach-Knopf + Panel als flex-grow ===
+        function _buildDetachedCell(extWin, panelId, titleName, panel) {
+            const cell = extWin.document.createElement('div');
+            cell.className = 'detached-cell';
+            cell.dataset.panelId = panelId;
+            cell.style.cssText = 'flex:1 1 0; min-width:220px; display:flex; flex-direction:column; background:#1e1e1e; overflow:hidden;';
+            const header = extWin.document.createElement('div');
+            header.className = 'detached-cell-header';
+            header.style.cssText = 'background:#37474f; color:#fff; padding:5px 10px; font-size:11px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid #263238;';
+            const titleSpan = extWin.document.createElement('span');
+            titleSpan.textContent = '⏏️ ' + titleName;
+            titleSpan.style.fontWeight = 'bold';
+            const btn = extWin.document.createElement('button');
+            btn.textContent = '↩ Zurück ins Hauptfenster';
+            btn.style.cssText = 'background:#455a64; color:#fff; border:1px solid #607d8b; padding:2px 10px; font-size:10px; cursor:pointer; border-radius:3px;';
+            btn.title = 'Nur dieses Panel zurück ins Hauptfenster';
+            btn.onclick = () => window._reattachSinglePanel(panelId);
+            header.appendChild(titleSpan);
+            header.appendChild(btn);
+            cell.appendChild(header);
+            // Panel: alte Pop-out-Größen reset, im Cell flex-grown.
+            panel.style.display = 'flex';
+            panel.style.width = '';
+            panel.style.height = '';
+            panel.style.flex = '1 1 auto';
+            panel.style.minHeight = '0';
+            cell.appendChild(panel);
+            return cell;
+        }
+
+        // === Einzelnes Panel zurück ins Hauptfenster ===
+        window._reattachSinglePanel = function(panelId, opts) {
+            const extWin = window._sharedDetachWindow;
+            if (!extWin || extWin.closed) return;
+            const panel = extWin.document.getElementById(panelId);
+            if (!panel) return;
+            const cont = extWin.document.getElementById('detached-container');
+            const cell = cont && cont.querySelector('.detached-cell[data-panel-id="' + panelId + '"]');
+            // Zugehörigen Resizer (links oder rechts der Cell) mit entfernen.
+            if (cell) {
+                const prev = cell.previousElementSibling, next = cell.nextElementSibling;
+                if (prev && prev.classList.contains('detached-resizer')) prev.remove();
+                else if (next && next.classList.contains('detached-resizer')) next.remove();
+            }
+            // Panel zurück an seinen Placeholder im Hauptfenster.
+            const ph = document.getElementById(panelId + '-placeholder');
+            if (ph) {
+                ph.parentNode.insertBefore(panel, ph);
+                ph.remove();
+            } else {
+                // Fallback: in den ersten Workspace-Container.
+                const ws = document.getElementById('workspace-container');
+                if (ws) ws.appendChild(panel);
+            }
+            panel.style.width = '';
+            panel.style.height = '';
+            panel.style.flex = '';
+            panel.style.minHeight = '';
+            panel.style.display = 'none';
+            if (cell) cell.remove();
+            delete window.popOutWindows[panelId];
+            setTimeout(() => _reInitReattachedPanel(panelId), 100);
+            // Shared-Window automatisch schließen, wenn keine Cell mehr drin.
+            if (cont && cont.children.length === 0 && (!opts || !opts._silentSharedClose)) {
+                try { extWin.close(); } catch(_) {}
+            }
+            updateWorkspace();
+        };
+
+        // === Analyzer-Modal: behält eigenes Fenster (Modal-Logik) ===
+        function _detachAnalyzerToOwnWindow(panel, titleName) {
+            const panelId = 'analyzer-modal';
+            if (window.popOutWindows[panelId] && !window.popOutWindows[panelId].closed) {
+                window.popOutWindows[panelId].focus();
+                return;
+            }
+            const placeholder = document.createElement('div');
+            placeholder.id = panelId + '-placeholder';
+            placeholder.style.display = 'none';
+            panel.parentNode.insertBefore(placeholder, panel);
+            const extWin = window.open('', '', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
+            if (!extWin) return;
+            window.popOutWindows[panelId] = extWin;
+            extWin.document.title = 'VALIS - ' + titleName;
+            extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex;';
+            _copyDocStylesTo(extWin);
+            panel._oldCss = panel.style.cssText;
+            panel.style.position = 'relative';
+            panel.style.width = '100%'; panel.style.height = '100%';
+            panel.style.top = '0'; panel.style.left = '0';
+            panel.style.transform = 'none'; panel.style.boxShadow = 'none';
+            panel.style.display = 'flex';
+            extWin.document.body.appendChild(panel);
+            for (let key in window) {
+                if (typeof window[key] === 'function') {
+                    try { extWin[key] = window[key]; } catch(_) {}
+                }
+            }
+            setTimeout(() => drawAnalyzer(), 100);
+            _bindWindowRelay(extWin);
             extWin.addEventListener('beforeunload', () => {
                 const ph = document.getElementById(panelId + '-placeholder');
                 if (ph) { ph.parentNode.insertBefore(panel, ph); ph.remove(); }
-                if (panelId === 'analyzer-modal') {
-                    panel.style.cssText = panel._oldCss; panel.style.display = 'none'; isAnalyzerOpen = false;
-                } else {
-                    panel.style.width = ''; panel.style.height = ''; panel.style.display = 'none';
-                }
+                panel.style.cssText = panel._oldCss;
+                panel.style.display = 'none';
+                isAnalyzerOpen = false;
                 delete window.popOutWindows[panelId];
-                // SVG-Engines wieder für das Hauptfenster kalibrieren
-                setTimeout(() => {
-                    if (panelId === 'fbs-wrapper' && document.getElementById('fbs-wrapper').style.display !== 'none') { panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions); }
-                    if (panelId === 'circuit-wrapper' && document.getElementById('circuit-wrapper').style.display !== 'none') { panZoomCircuitInstance = svgPanZoom(circuitSvg, svgPanZoomOptions); }
-                }, 100);
-                updateWorkspace();
             });
-            if (panelId !== 'analyzer-modal') updateWorkspace();
+        }
+
+        // === Haupt-Detach-Funktion ===
+        window.detachPanel = function(panelId, titleName) {
+            // Grid-Mode beenden, sonst bricht das Workspace-Grid zusammen.
+            if (currentLayout.startsWith('grid-')) {
+                document.getElementById('btn-layout-text').textContent = 'Layout: ◫';
+                changeWorkspaceLayout('flex-row');
+            }
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            // Analyzer-Modal: eigenes Fenster.
+            if (panelId === 'analyzer-modal') {
+                _detachAnalyzerToOwnWindow(panel, titleName);
+                return;
+            }
+            // Schon abgekoppelt → Shared-Window fokussieren.
+            if (window.popOutWindows[panelId] && !window.popOutWindows[panelId].closed) {
+                window.popOutWindows[panelId].focus();
+                return;
+            }
+            // Placeholder im Hauptfenster.
+            const placeholder = document.createElement('div');
+            placeholder.id = panelId + '-placeholder';
+            placeholder.style.display = 'none';
+            panel.parentNode.insertBefore(placeholder, panel);
+            // Shared-Window anlegen oder holen.
+            const extWin = _ensureSharedDetachWindow();
+            if (!extWin) return;
+            const container = extWin.document.getElementById('detached-container');
+            // Resizer-Strip einfügen, falls schon eine Cell drin ist.
+            if (container.children.length > 0) {
+                const resizer = extWin.document.createElement('div');
+                resizer.className = 'detached-resizer';
+                resizer.style.cssText = 'width:6px; flex-shrink:0; background:#263238; cursor:col-resize; transition:background 0.15s;';
+                resizer.title = 'Spaltenbreite ändern';
+                resizer.addEventListener('mouseenter', () => resizer.style.background = '#0288d1');
+                resizer.addEventListener('mouseleave', () => resizer.style.background = '#263238');
+                _wireDetachedResizer(resizer);
+                container.appendChild(resizer);
+            }
+            // Cell mit Header + Panel anhängen.
+            const cell = _buildDetachedCell(extWin, panelId, titleName, panel);
+            container.appendChild(cell);
+            window.popOutWindows[panelId] = extWin;
+            setTimeout(() => _reInitDetachedPanel(panelId), 100);
+            updateWorkspace();
         };
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
@@ -45498,8 +45683,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Wechsel zum Schritt-Modus die Train-Session ebenfalls beenden
             // würde.
             const _lockFestoTrainToggle = () => {
+                const fdoc = (typeof window._festoDoc === 'function') ? window._festoDoc() : document;
                 ['festo-train-toggle', 'festo-step-toggle'].forEach(id => {
-                    const cb = document.getElementById(id);
+                    const cb = fdoc.getElementById(id);
                     if (!cb || !cb.parentElement) return;
                     cb.disabled = true;
                     cb.parentElement.style.opacity = '0.45';
@@ -45508,8 +45694,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
             };
             const _unlockFestoTrainToggle = () => {
+                const fdoc = (typeof window._festoDoc === 'function') ? window._festoDoc() : document;
                 ['festo-train-toggle', 'festo-step-toggle'].forEach(id => {
-                    const cb = document.getElementById(id);
+                    const cb = fdoc.getElementById(id);
                     if (!cb || !cb.parentElement) return;
                     cb.disabled = false;
                     cb.parentElement.style.opacity = '';
@@ -45524,7 +45711,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const _wallLessonOnClose = () => {
                 _unlockFestoTrainToggle();
                 try {
-                    const t = document.getElementById('festo-train-toggle');
+                    const fdoc = (typeof window._festoDoc === 'function') ? window._festoDoc() : document;
+                    const t = fdoc.getElementById('festo-train-toggle');
                     if (t && t.checked && typeof window._setFestoTrainMode === 'function') {
                         t.checked = false;
                         window._setFestoTrainMode(false);
@@ -50946,6 +51134,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //   belegten Slot. Auto-Skaliert weitere Panels dazu, wenn die
         //   Standard-Konfig nicht ausreicht. Kabel-Routing kommt in Phase 2.
         // ====================================================================
+        // Pop-out-aware DOM-Lookup für das FESTO-Panel: wenn der Wrapper
+        // in einem detached Fenster lebt (window.popOutWindows['festo-wrapper']),
+        // gehören alle FESTO-DOM-Elemente in dessen document. Sonst Hauptfenster.
+        // Wird global gemacht, weil ein paar FESTO-Hilfsfunktionen auch
+        // außerhalb der festoIIFE leben (toggleDualCircuit, Lessons-Lock-
+        // Helper, …).
+        window._festoDoc = function() {
+            const w = window.popOutWindows && window.popOutWindows['festo-wrapper'];
+            return (w && !w.closed && w.document) ? w.document : document;
+        };
         (function festoIIFE() {
             const SVGNS = 'http://www.w3.org/2000/svg';
             const el = (tag, attrs, parent) => {
@@ -50954,6 +51152,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (parent) parent.appendChild(e);
                 return e;
             };
+            // Lokaler Alias auf den globalen Lookup — bequemer Aufruf im IIFE.
+            const _festoDoc = () => window._festoDoc();
             // Optische Konstanten für alle Boards
             const PALETTE = {
                 bodyFill: '#f0f0eb',     // Aluminium-Optik
@@ -52315,7 +52515,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._showFestoDualWarning = function(force) {
                 if (!force && window._festoDualWarningShown) return;
                 window._festoDualWarningShown = true;
-                let overlay = document.getElementById('festo-dual-warning-overlay');
+                let overlay = _festoDoc().getElementById('festo-dual-warning-overlay');
                 if (overlay) { overlay.style.display = 'flex'; return; }
                 overlay = document.createElement('div');
                 overlay.id = 'festo-dual-warning-overlay';
@@ -52356,7 +52556,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // jedem Render aktualisiert (siehe _renderFestoPanel) und auch
             // direkt aus toggleDualCircuit angefasst.
             window._syncFestoDualBanner = function() {
-                const banner = document.getElementById('festo-dual-banner');
+                const banner = _festoDoc().getElementById('festo-dual-banner');
                 if (!banner) return;
                 banner.style.display = window.configDualCircuit ? 'block' : 'none';
             };
@@ -52368,8 +52568,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (window.configDualCircuit) {
                     try { window._showFestoDualWarning(false); } catch(_) {}
                 }
-                const svg = document.getElementById('festo-svg');
-                const wrap = document.getElementById('festo-wrapper');
+                const svg = _festoDoc().getElementById('festo-svg');
+                const wrap = _festoDoc().getElementById('festo-wrapper');
                 if (!svg || !wrap || wrap.style.display === 'none') return;
                 while (svg.firstChild) svg.removeChild(svg.firstChild);
                 const data = buildAssignment();
@@ -52586,7 +52786,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.dataset.baseH = totalH;
                 svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
                 // Stats-Anzeige in der Toolbar
-                const stats = document.getElementById('festo-stats');
+                const stats = _festoDoc().getElementById('festo-stats');
                 if (stats) {
                     const parts = [];
                     parts.push(`${data.tCount}× Signaleingabe`);
@@ -52634,7 +52834,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             //   NC Öffner    (Variable=true → gedrückt): Lever kippt weiter
             //     nach rechts → öffnet, weg vom Stub
             function _updateFestoLevers() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 const assignments = window._festoLastAssignments || {};
                 const hasState = (typeof spsState !== 'undefined' && spsState);
@@ -52815,7 +53015,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // sich das Strang-Tag mit dem Coil und werden synchron animiert,
             // was den geschlossenen Stromkreis als Ganzes visualisiert.
             function _updateFestoCableFlow() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 const enabled = !!window._festoFlowAnimEnabled;
                 const hasState = (typeof spsState !== 'undefined' && spsState);
@@ -52841,7 +53041,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // die globale Regel und Scrollbars im festo-body wachsen mit.
             let _festoZoom = 1.0;
             function _applyFestoZoom() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 const bw = parseFloat(svg.dataset.baseW || '0');
                 const bh = parseFloat(svg.dataset.baseH || '0');
@@ -52869,7 +53069,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // damit das Drag auch fortgesetzt wird, wenn die Maus kurz aus dem
             // Body herauskommt.
             function _attachDragPan() {
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (!body || body.dataset.dragBound) return;
                 body.dataset.dragBound = '1';
                 let isDragging = false;
@@ -52906,7 +53106,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Plain Mausrad-Scroll am festo-body zoomt; Strg+Wheel ebenso
             // (für Konsistenz mit anderen Apps). Pan via Scrollbars/Touchpad.
             function _attachWheelZoom() {
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (!body || body.dataset.wheelBound) return;
                 body.dataset.wheelBound = '1';
                 body.addEventListener('wheel', (e) => {
@@ -52936,13 +53136,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _initialRenderIfVisible() {
                 _attachWheelZoom();
                 _attachDragPan();
-                const wrap = document.getElementById('festo-wrapper');
+                const wrap = _festoDoc().getElementById('festo-wrapper');
                 if (wrap && wrap.style.display !== 'none' && typeof window._renderFestoPanel === 'function') {
                     try { window._renderFestoPanel(); } catch (_) {}
                 }
             }
             function _setupVisibilityObserver() {
-                const wrap = document.getElementById('festo-wrapper');
+                const wrap = _festoDoc().getElementById('festo-wrapper');
                 if (!wrap || wrap.dataset.observerBound) return;
                 wrap.dataset.observerBound = '1';
                 let lastDisplay = wrap.style.display;
@@ -53078,7 +53278,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // berechnet absolute (cx,cy) durch Auflösen aller translate()-
             // Transforms der Vorfahren-<g>.
             function _findSocketPos(socketKey) {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return null;
                 // Primär: data-festo-socket (eindeutige ID des Sockels).
                 // Fallback: data-festo-bus-0v (sekundäre Identität für die
@@ -53555,7 +53755,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Eigene <g>-Layer, pointer-events:none, immer LETZTES Kind der SVG
             // damit Kabel über Panels sichtbar sind ohne Sockel-Clicks zu blocken.
             function _renderFestoCables() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 // Alten Layer entfernen
                 const old = svg.querySelector('#festo-cable-layer');
@@ -53708,7 +53908,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Strang-Filter-Dropdown befüllen
                 _populateStrandFilter();
                 // Stats erweitern um Kabel-Zahl
-                const stats = document.getElementById('festo-stats');
+                const stats = _festoDoc().getElementById('festo-stats');
                 if (stats && cables.length > 0) {
                     const cur = stats.textContent;
                     if (!cur.includes('Kabel')) {
@@ -53721,7 +53921,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Step-Counter-Anzeige in der Toolbar aktualisieren — mit
                 // aktuellem Strang, damit erkennbar wird ob ein Strang fertig
                 // ist oder Kabel folgen. Strang-Label aus window._festoStrandList.
-                const stepCounter = document.getElementById('festo-step-counter');
+                const stepCounter = _festoDoc().getElementById('festo-step-counter');
                 if (stepCounter) {
                     if (stepMode && stepLimit > 0) {
                         const lastCable = cables[stepLimit - 1];
@@ -53735,9 +53935,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 // Info-Panel im Schritt-Modus mit Beschreibung des aktuellen
                 // Kabels füllen. Trainingsmodus bedient das Panel selber.
-                const infoPanel = document.getElementById('festo-info-panel');
-                const infoHead  = document.getElementById('festo-info-headline');
-                const infoTxt   = document.getElementById('festo-info-text');
+                const infoPanel = _festoDoc().getElementById('festo-info-panel');
+                const infoHead  = _festoDoc().getElementById('festo-info-headline');
+                const infoTxt   = _festoDoc().getElementById('festo-info-text');
                 if (stepMode && !window._festoTrainModeActive && infoPanel && infoHead && infoTxt) {
                     infoPanel.style.display = 'block';
                     if (stepLimit > 0 && cables[stepLimit - 1]) {
@@ -53764,7 +53964,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // ── Strang-Filter Dropdown ──
             function _populateStrandFilter() {
-                const sel = document.getElementById('festo-strand-filter');
+                const sel = _festoDoc().getElementById('festo-strand-filter');
                 if (!sel) return;
                 const list = window._festoStrandList || [];
                 const current = sel.value;
@@ -53996,7 +54196,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Verkabelung, Training erwartet leere Schaltwand zum Selbst-
                 // bauen). Spiegelbildlich zur Logik in _setFestoTrainMode(true).
                 if (enabled) {
-                    const trainToggle = document.getElementById('festo-train-toggle');
+                    const trainToggle = _festoDoc().getElementById('festo-train-toggle');
                     if ((trainToggle && trainToggle.checked) || window._festoTrainModeActive) {
                         if (trainToggle) trainToggle.checked = false;
                         if (window._setFestoTrainMode) window._setFestoTrainMode(false);
@@ -54006,10 +54206,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Reset: bei Aktivierung mit 0 starten, bei Deaktivierung Counter
                 // auf Total setzen, damit Re-Render konsistent wirkt.
                 window._festoCableStep = enabled ? 0 : (window._festoCableTotalCount || 0);
-                const ctrls = document.getElementById('festo-step-controls');
+                const ctrls = _festoDoc().getElementById('festo-step-controls');
                 if (ctrls) ctrls.style.display = enabled ? 'inline-flex' : 'none';
                 // body fokussierbar machen, damit Tastatur funktioniert
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (body) {
                     if (enabled) {
                         body.setAttribute('tabindex', '0');
@@ -54034,7 +54234,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Tastatur: ←/→ und Home/End wenn festo-body fokussiert ist
             document.addEventListener('keydown', function(e) {
                 if (!window._festoStepModeActive) return;
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (!body || document.activeElement !== body) return;
                 if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); window._festoStep(1); }
                 else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); window._festoStep(-1); }
@@ -54048,7 +54248,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // und stopPropagation den Zoom verhindert — nur dann, wenn auch
             // wirklich gesteppt wird.
             function _wireFestoStepWheelOnce() {
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (!body || body.dataset.stepWheelBound) return;
                 body.dataset.stepWheelBound = '1';
                 body.addEventListener('wheel', function(e) {
@@ -54086,7 +54286,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Eigener SVG-Layer für Trainings-Kabel (überschreibt nicht den
             // normalen Cable-Layer).
             function _trainEnsureLayers() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return null;
                 let placed = svg.querySelector('#festo-train-placed-layer');
                 if (!placed) {
@@ -54110,7 +54310,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Defaults: Hinweise an, sobald window noch keinen Wert hat.
             if (window._festoTrainHintsEnabled === undefined) window._festoTrainHintsEnabled = true;
             function _trainHighlightStrand() {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 svg.querySelectorAll('[data-festo-socket]').forEach(el => {
                     el.classList.remove('festo-train-hint');
@@ -54137,12 +54337,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Info-Panel + Highlight + Dropdown auf den aktuellen Strang
             // synchronisieren. Wird aus advance und jump gemeinsam aufgerufen.
             function _trainSyncCurrentUI() {
-                const infoHead = document.getElementById('festo-info-headline');
-                const infoTxt  = document.getElementById('festo-info-text');
+                const infoHead = _festoDoc().getElementById('festo-info-headline');
+                const infoTxt  = _festoDoc().getElementById('festo-info-text');
                 const cables   = window._festoCablesList || [];
                 const strand   = window._festoTrainCurrentStrand;
                 const strandList = window._festoStrandList || [];
-                const sel = document.getElementById('festo-strand-filter');
+                const sel = _festoDoc().getElementById('festo-strand-filter');
                 if (sel && strand && sel.value !== strand) sel.value = strand;
                 // Auto-Schaltplan-Strang-Fokus mitziehen — der gewählte
                 // Aufbau-Strang ist gleichzeitig der „Auftrag" und sollte
@@ -54203,7 +54403,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Maus-Position auf SVG-Koordinaten umrechnen (berücksichtigt Zoom
             // via inline width/height vs viewBox).
             function _trainEventToSvgPoint(evt) {
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return null;
                 const rect = svg.getBoundingClientRect();
                 const bw = parseFloat(svg.dataset.baseW || rect.width);
@@ -54244,7 +54444,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
                 // 2) Snap auf nächsten Sockel im Toleranzbereich
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return null;
                 const pt = _trainEventToSvgPoint(evt);
                 if (!pt) return null;
@@ -54345,7 +54545,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _trainOptimalBusPin(userKey, otherEndPos) {
                 const kind = _trainBusKind(userKey);
                 if (!kind || !otherEndPos) return userKey;
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return userKey;
                 const used = window._festoTrainUsedPins || new Set();
                 // Im Dual-Stromkreis-Modus: L1/N-Pool nur auf Verbraucher-
@@ -54409,7 +54609,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // Feedback an den User (Info-Panel).
             function _trainFeedback(kind, msg) {
-                const infoTxt = document.getElementById('festo-info-text');
+                const infoTxt = _festoDoc().getElementById('festo-info-text');
                 if (!infoTxt) return;
                 const colorMap = { ok: '#2e7d32', err: '#c62828', info: '#37474f' };
                 const icon = kind === 'ok' ? '✓' : kind === 'err' ? '✗' : '·';
@@ -54437,7 +54637,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             function _trainCheckEdgeAndScroll(clientX, clientY) {
                 if (!_trainDrag) { _trainStopEdgeScroll(); return; }
-                const body = document.getElementById('festo-body');
+                const body = _festoDoc().getElementById('festo-body');
                 if (!body) { _trainStopEdgeScroll(); return; }
                 const r = body.getBoundingClientRect();
                 // Außerhalb des Body → kein Scroll (User darf zum Tooltip ziehen).
@@ -54529,7 +54729,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 _trainDrag.path.setAttribute('d', _cablePath(_trainDrag.fromPos, endPt));
                 // Snap-Hervorhebung pflegen
-                const svg = document.getElementById('festo-svg');
+                const svg = _festoDoc().getElementById('festo-svg');
                 if (svg) {
                     const cur = _trainDrag.snapTarget;
                     const newKey = sock && sock.key !== _trainDrag.fromKey ? sock.key : null;
@@ -54554,7 +54754,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (drag.path && drag.path.parentNode) drag.path.parentNode.removeChild(drag.path);
                 // Snap-Highlight aufräumen
                 if (drag.snapTarget) {
-                    const svg = document.getElementById('festo-svg');
+                    const svg = _festoDoc().getElementById('festo-svg');
                     if (svg) {
                         const el = svg.querySelector(`[data-festo-socket="${CSS.escape(drag.snapTarget)}"]`);
                         if (el) el.classList.remove('festo-train-snap');
@@ -54627,7 +54827,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._setFestoTrainHints = function(enabled) {
                 window._festoTrainHintsEnabled = !!enabled;
                 _trainHighlightStrand();
-                const infoTxt = document.getElementById('festo-info-text');
+                const infoTxt = _festoDoc().getElementById('festo-info-text');
                 const strand = window._festoTrainCurrentStrand;
                 if (!infoTxt || !strand) return;
                 const cables = window._festoCablesList || [];
@@ -54640,9 +54840,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Setter, vom Toolbar-Toggle aufgerufen.
             window._setFestoTrainMode = function(enabled) {
                 window._festoTrainModeActive = !!enabled;
-                const infoPanel = document.getElementById('festo-info-panel');
-                const stepToggle = document.getElementById('festo-step-toggle');
-                const hintsLabel = document.getElementById('festo-train-hints-label');
+                const infoPanel = _festoDoc().getElementById('festo-info-panel');
+                const stepToggle = _festoDoc().getElementById('festo-step-toggle');
+                const hintsLabel = _festoDoc().getElementById('festo-train-hints-label');
                 if (hintsLabel) hintsLabel.style.display = enabled ? 'flex' : 'none';
                 if (enabled) {
                     // Step-Modus deaktivieren, falls aktiv — beide gleichzeitig
@@ -54669,7 +54869,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // disabled, Sync auf aktuellen Strang).
                     _populateStrandFilter();
                     // Drag-Handler an SVG binden (Pointer-Events nutzen einheitlich Maus+Touch)
-                    const svg = document.getElementById('festo-svg');
+                    const svg = _festoDoc().getElementById('festo-svg');
                     if (svg && !svg.dataset.trainBound) {
                         svg.dataset.trainBound = '1';
                         svg.addEventListener('pointerdown', _trainOnPointerDown, true);
@@ -54701,7 +54901,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (typeof _applyAutoSchemaStrandFilter === 'function') {
                         try { _applyAutoSchemaStrandFilter(''); } catch (_) {}
                     }
-                    const sel = document.getElementById('festo-strand-filter');
+                    const sel = _festoDoc().getElementById('festo-strand-filter');
                     if (sel) sel.value = '';
                     // Dropdown wieder als normaler Filter darstellen.
                     _populateStrandFilter();
@@ -54716,7 +54916,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window.drawCircuitPlan = function() {
                     const ret = _origDrawCircuit.apply(this, arguments);
                     try {
-                        const wrap = document.getElementById('festo-wrapper');
+                        const wrap = _festoDoc().getElementById('festo-wrapper');
                         if (wrap && wrap.style.display !== 'none' && typeof window._renderFestoPanel === 'function') {
                             window._renderFestoPanel();
                         }
@@ -54731,7 +54931,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window.runSimulationTick = function() {
                     const ret = _origSimTick.apply(this, arguments);
                     try {
-                        const wrap = document.getElementById('festo-wrapper');
+                        const wrap = _festoDoc().getElementById('festo-wrapper');
                         if (wrap && wrap.style.display !== 'none') {
                             _updateFestoLevers();
                         }

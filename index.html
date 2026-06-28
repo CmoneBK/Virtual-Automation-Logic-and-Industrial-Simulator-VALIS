@@ -174,6 +174,23 @@
             box-sizing: border-box;
             pointer-events: auto;
         }
+        /* --- Spezifisch: Sicht-Toggle Programm/Anschluss (analog zu FESTO) --- */
+        /* Ohne diese Regel würde der Button auf die Container-Regel zurück-
+           fallen (clamp font-size, padding 3px 6px, flex-shrink:1) und damit
+           dünner aussehen UND sich in schmalen Toolbars zusammenquetschen
+           lassen. Mit fester Höhe + nowrap matcht er die anderen
+           Top-Level-Buttons. */
+        #btn-iec-anschluss {
+            flex: 0 0 auto !important;
+            height: 30px !important;
+            padding: 0 12px !important;
+            font-size: 11px;
+            white-space: nowrap;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+            pointer-events: auto;
+        }
         #btn-pneu-options.expanded {
             background-color: #f44336 !important;
             color: #fff !important;
@@ -806,6 +823,37 @@
            Dezenter Hover-Hinweis, damit der User die Interaktion entdeckt. */
         .sim-var-name { text-decoration: underline dotted transparent; transition: text-decoration-color 0.15s, color 0.15s; }
         .sim-var-name:hover { color: #fff; text-decoration-color: #569cd6; }
+        /* SPS-Adressen-Chip im Sim-Panel — nur im SPS-Modus sichtbar.
+           Zeigt die Siemens-S7-Adresse (Ex.y / Ax.y) einer I/O-Variable.
+           Klick öffnet einen Edit-Dialog. */
+        .sps-addr-chip {
+            background: #0288d1; color: #fff;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 10px; font-weight: bold; letter-spacing: 0.3px;
+            padding: 1px 6px; border-radius: 3px;
+            cursor: pointer; user-select: none;
+            margin-right: 6px; flex-shrink: 0;
+            border: 1px solid #0277bd;
+        }
+        .sps-addr-chip:hover { background: #0277bd; }
+        .switch-row.is-orphan .sps-addr-chip,
+        .led-row.is-orphan .sps-addr-chip { opacity: 0.55; }
+        /* Anschluss-Sicht aktiv: Auto-Schaltplan-Optionen, die hier keine
+           Wirkung haben, werden ausgegraut und deaktiviert. */
+        #circuit-wrapper.iec-anschluss-active #btn-circ-palette,
+        #circuit-wrapper.iec-anschluss-active #btn-iec-focus,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-nh-aux,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-econ,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-wech,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-seq,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-dual,
+        #circuit-wrapper.iec-anschluss-active #btn-toggle-details,
+        #circuit-wrapper.iec-anschluss-active #btn-pneu-options,
+        #circuit-wrapper.iec-anschluss-active #btn-pneu-pressures {
+            opacity: 0.35;
+            pointer-events: none;
+            filter: grayscale(80%);
+        }
         /* Gruppen-Überschrift in der Sim-Liste (wenn Gruppierung aktiv). */
         .sim-group-header {
             color: #90caf9; font-size: 10px; font-weight: bold;
@@ -2255,7 +2303,7 @@
             <span><span class="toggle-icon">▼</span> Simulation (Ein- & Ausgänge)</span>
             <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
                 <button onclick="openHelpModal('sim')" title="Hinweise zu Hardware-Kopplung und Taster-Einrasten" style="background:#17a2b8;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:help;line-height:1;">ℹ️</button>
-                <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="E-Pneumatik-Modus: blendet Schließer/Öffner-Wahl bei Tastern/Schaltern aus (Notaus & Lichtgitter bleiben Öffner). Verändert NICHT den Code." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
+                <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="Schaltet zwischen zwei Lese-Sichten desselben Codes:&#10;&#10;⚡ SPS-Modus: Der Code ist das, was das SPS-Programm tatsächlich ausführt — Variablen = Signal an der SPS-Eingangsklemme. Ein NC-Kontakt (Öffner) liefert in Ruhe 1; NOTAUS==1 heißt 'nicht gedrückt' (Failsafe).&#10;&#10;⚡ E-Pneu-Modus: Der Code ist ein direktes Abbild der Schaltplanlogik — Variablen = physischer Press-Zustand. NOTAUS==1 heißt 'gedrückt'. Schließer = Variable, Öffner = ¬Variable (1:1 Plan-zu-Code).&#10;&#10;Der Unterschied wird ausschließlich bei NC-Kontakten (Notaus, Lichtgitter, Öffner-Schalter) sichtbar — Schließer verhalten sich in beiden Modi gleich. Der Code-Text selbst bleibt unverändert; nur seine Semantik wechselt." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
                 <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
                 <button onclick="openAnalyzerModal()" title="Oszilloskop öffnen" style="background:#607d8b;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📊</button>
                 <button id="btn-hmi-recycle" onclick="window._openHmiRecycleBin(event)" title="Papierkorb für gelöschte HMI/Anlage-Bauteile — letzte 20, mit One-Click-Restore." style="background:#5d4037;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">🗑️ <span id="hmi-recycle-count" style="font-size:10px;opacity:0.8;"></span></button>
@@ -2368,7 +2416,8 @@
                 <div class="circuit-btn-container" style="align-items: center;">
                     <button id="btn-circ-palette" class="tool-btn" title="Bearbeiten (Drag &amp; Drop)" onclick="toggleCircPalette()">➕</button>
                     <button id="btn-iec-focus" class="tool-btn" style="background: #555; padding: 0; font-size: 16px; pointer-events: auto; border-radius: 50%; flex: 0 0 34px; width: 34px; height: 34px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);" onclick="toggleIecFocusMode()" title="Fokus-Modus: aktivieren, dann auf ein Bauteil klicken → nur die elektrisch verbundenen Stränge bleiben sichtbar. Erneut klicken oder ESC = zurück. Im Logikplan parallel aktiv: synchronisiert sich.">🎯</button>
-                    <button id="btn-view-festo" class="btn-export view-btn" style="border: 1px solid #333;" onclick="toggleWorkspaceView('festo-wrapper')" title="FESTO Didactic Aufbau-Panel: zeigt die konkrete Verkabelung des Schaltplans auf den realen Lehr-Boards (Taster-Panels, Relais-Panels, LED-Panel) — wo welches Kabel in welche Buchse muss.">🔌 FESTO<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
+                    <button id="btn-view-festo" class="btn-export view-btn" style="border: 1px solid #333;" onclick="toggleWorkspaceView('festo-wrapper')" title="FESTO Didactic Aufbau-Panel: zeigt die konkrete Verkabelung des Schaltplans auf den realen Lehr-Boards (Taster-Panels, Relais-Panels, LED-Panel) — wo welches Kabel in welche Buchse muss.">🔌 FESTO</button>
+                    <button id="btn-iec-anschluss" class="btn-export" style="background-color: #0288d1; border: 1px solid #01579b; display: none;" onclick="window._toggleIecAnschlussView && window._toggleIecAnschlussView()" title="Wechselt im SPS-Modus zwischen der programmzentrierten Schaltplan-Sicht (was die SPS intern verschaltet) und der Anschluss-/Klemmenplan-Sicht (DIN EN 60204 — reine I/O-Zuordnung zur SPS, das was der Elektriker am Schaltschrank braucht). Nur im SPS-Modus verfügbar.">👁 Programm</button>
                     <button id="btn-iec-toggle" class="btn-export" style="background-color: #607d8b; border: 1px solid #455a64;" onclick="toggleIecToolbar()" data-i18n="iec_options">⚡ Elektro-Optionen</button>
                     <div id="iec-button-group">
                         <button id="btn-toggle-strict" class="btn-export" style="background-color: #4caf50; border: 1px solid #333;" onclick="toggleStrictHardware()">♾️ Hardware-Limit: MULTI</button>
@@ -2969,7 +3018,16 @@
                         <button type="button" id="festo-step-all" onclick="window._festoStep && window._festoStep('all')" title="Alle Kabel anzeigen" style="background:#37474f; color:#80deea; border:1px solid #455a64; padding:2px 6px; font-size:10px; cursor:pointer; border-radius:3px;">Alle</button>
                     </span>
                     <span id="festo-stats" style="color:#90a4ae; font-size:10px; font-family:'Consolas',monospace; margin-left:10px;"></span>
-                    <span style="margin-left:auto; color:#80deea; font-size:10px;">Maus-Drag = Pan, Mausrad = Zoom.</span>
+                    <span style="position:relative; margin-left:auto; display:inline-flex; align-items:center;">
+                        <button id="festo-settings-btn" type="button" onclick="window._toggleFestoSettingsMenu && window._toggleFestoSettingsMenu(event)" title="FESTO-Aufbau Einstellungen" style="background:transparent; color:#cfd8dc; border:1px solid #455a64; border-radius:3px; padding:2px 7px; font-size:14px; cursor:pointer; line-height:1;">⚙️</button>
+                        <div id="festo-settings-menu" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background:#263238; border:1px solid #455a64; border-radius:5px; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,0.45); z-index:50; min-width:210px;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; color:#eceff1; font-size:11px;" title="Färbt jedes FESTO-Kabel nach seinem logischen Strang ein (statt der Standard-Farben Rot für +24V und Blau für die übrige Verdrahtung).">
+                                <input type="checkbox" id="festo-colorful-cables" onchange="window._toggleFestoColorfulCables && window._toggleFestoColorfulCables(this.checked)" style="margin:0;">
+                                <span>🌈 Bunte Kabel</span>
+                            </label>
+                        </div>
+                    </span>
+                    <span style="color:#80deea; font-size:10px;">Maus-Drag = Pan, Mausrad = Zoom.</span>
                 </div>
                 <!-- Info-Panel: zeigt im Schritt-Modus die Beschreibung des
                      gerade platzierten Kabels, im Trainingsmodus den
@@ -6421,10 +6479,26 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
         // -----------------------------------------
 		let componentTypes = JSON.parse(localStorage.getItem('logikComponentTypes')) || {};
+        // SPS-Adressen pro Variable (Siemens-S7-Style: Ex.y für Eingänge, Ax.y
+        // für Ausgänge, Bit 0–7 pro Byte). Wird im SPS-Modus pro Variable beim
+        // ersten Sehen sequenziell vergeben und kann manuell überschrieben
+        // werden. Persistent in localStorage, sticky bei Variablen-Cleanup.
+        let spsAddresses = JSON.parse(localStorage.getItem('valisSpsAddresses')) || {};
         // E-Pneumatik-Modus (Phase 0): rein präsentationaler Modus. Code-first bleibt unverändert,
         // nur die Eingangstyp-Dropdowns werden umetikettiert (Logischer Taster statt Schließer/Öffner).
         // Die internen componentTypes-Werte bleiben dieselben → keine Simulation/Schaltplan-Brüche.
-        window.epneuMode = (localStorage.getItem('valisEpneuMode') === '1');
+        // Default beim allerersten Start: E-Pneu-Modus AN (User-Wunsch). Auf
+        // jedem weiteren Start gilt die zuletzt gespeicherte Wahl.
+        {
+            let _ep;
+            try { _ep = localStorage.getItem('valisEpneuMode'); } catch(_) { _ep = null; }
+            window.epneuMode = (_ep === null) ? true : (_ep === '1');
+            // Frische Installationen direkt persistieren, damit andere Boot-
+            // Checks (z. B. Mode-abhängige UI-Defaults) konsistent sind.
+            if (_ep === null) {
+                try { localStorage.setItem('valisEpneuMode', '1'); } catch(_) {}
+            }
+        }
         // Kanonische NC-Detection — vorher waren in VALIS ~8 verschiedene `let isNC = …` mit
         // unterschiedlichen Listen verstreut (light_curtain mal drin, mal nicht; ComponentRegistry.isNC
         // mal berücksichtigt, mal nicht). Das hier ist die EINZIGE Quelle der Wahrheit.
@@ -6601,6 +6675,202 @@ You must output exactly this JSON format. The logic code goes as a single string
             } else if (typeof window.cedRender === 'function') {
                 try { window.cedRender(); } catch (_e) { /* dito */ }
             }
+            // Anschluss-Sicht-Toggle (nur im SPS-Modus sinnvoll) sichtbar/un-
+            // sichtbar schalten — und im E-Pneu-Modus zwangsweise auf Programm-
+            // Sicht zurückkippen, falls Anschluss aktiv war.
+            if (typeof window._syncIecAnschlussBtnVisibility === 'function') {
+                try { window._syncIecAnschlussBtnVisibility(); } catch(_) {}
+            }
+        };
+
+        // ===== Anschluss-/Klemmenplan-Sicht (SPS-Modus, DIN EN 60204) =====
+        // Toggle innerhalb des Auto-Schaltplans: Programm-Sicht (was VALIS
+        // intern verschaltet) ↔ Anschluss-Sicht (reine I/O-Zuordnung an die
+        // SPS-Klemmen, wie sie der Elektriker im Schaltschrank verdrahtet).
+        // Wird vom Render-Schalter in drawCircuitPlan ausgewertet.
+        // Persistierte Sicht-Wahl wiederherstellen. Wenn nichts gespeichert,
+        // ist Anschluss-Sicht der Default — aber nur effektiv im SPS-Modus
+        // (epneuMode=false). Im E-Pneu-Modus zwingt _syncIecAnschlussBtnVisibility
+        // den Flag ohnehin auf false.
+        {
+            let _av;
+            try { _av = localStorage.getItem('valisIecAnschlussView'); } catch(_) { _av = null; }
+            const wantAnschluss = (_av === null) ? true : (_av === '1');
+            window._iecAnschlussView = wantAnschluss && !window.epneuMode;
+        }
+        // Pan-Zoom-Instanz zwangs-zerstören (gemeinsame Helfer-Funktion für beide
+        // View-Wechsel-Richtungen). Anschluss-Sicht und Programm-Sicht verwenden
+        // grundverschiedene viewBoxes; ohne destroy kleben die Zoom-Controls
+        // (+ Reset −) an der alten Größe und schweben mitten ins Bild.
+        function _resetCircuitPanZoom() {
+            if (typeof panZoomCircuitInstance !== 'undefined' && panZoomCircuitInstance) {
+                try { panZoomCircuitInstance.destroy(); } catch(_) {}
+                panZoomCircuitInstance = null;
+            }
+        }
+        function _syncCircuitAnschlussClass() {
+            const wrapper = document.getElementById('circuit-wrapper');
+            if (wrapper) wrapper.classList.toggle('iec-anschluss-active', !!window._iecAnschlussView && !window.epneuMode);
+        }
+        // Beschriftet + färbt den Sicht-Toggle-Button anhand des aktuellen
+        // _iecAnschlussView-Zustands. Zentral, damit Toggle, View-Sync und
+        // Boot-Init dieselbe Darstellung benutzen.
+        function _syncIecAnschlussBtnLabel() {
+            const btn = document.getElementById('btn-iec-anschluss');
+            if (!btn) return;
+            btn.textContent = window._iecAnschlussView ? '👁 Anschluss' : '👁 Programm';
+            btn.style.background = window._iecAnschlussView ? '#01579b' : '#0288d1';
+        }
+        window._syncIecAnschlussBtnLabel = _syncIecAnschlussBtnLabel;
+        window._toggleIecAnschlussView = function() {
+            if (window.epneuMode) return;
+            window._iecAnschlussView = !window._iecAnschlussView;
+            try { localStorage.setItem('valisIecAnschlussView', window._iecAnschlussView ? '1' : '0'); } catch(_) {}
+            _syncIecAnschlussBtnLabel();
+            _syncCircuitAnschlussClass();
+            _resetCircuitPanZoom();
+            // Signatur-Caches leeren — sonst skippen die Renderer beim
+            // erneuten Wechsel den nötigen Re-Render, weil das SVG noch
+            // den jeweils anderen Sicht-Inhalt enthält.
+            window._ansLastSig = null;
+            window._ansFestoLastSig = null;
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof drawCircuitPlan === 'function') {
+                try { drawCircuitPlan(currentGraph, globalInputs, globalOutputs); } catch(_) {}
+            }
+            // FESTO-Panel mit-umschalten — Anschluss-Sicht ⇄ Steuerstromkreis-
+            // Panels haben komplett unterschiedliche Renderer. Auch hier neu
+            // einpassen, da die beiden Sichten unterschiedlich groß sind.
+            if (typeof window._renderFestoPanel === 'function') {
+                window._festoNeedsFit = true;
+                try { window._renderFestoPanel(); } catch(_) {}
+            }
+        };
+        window._syncIecAnschlussBtnVisibility = function() {
+            const btn = document.getElementById('btn-iec-anschluss');
+            if (!btn) return;
+            btn.style.display = window.epneuMode ? 'none' : '';
+            if (window.epneuMode && window._iecAnschlussView) {
+                // Im E-Pneu-Modus gibt es keinen Anschlussplan — Sicht zwangs-
+                // zurücksetzen. localStorage NICHT überschreiben, damit die
+                // präferierte SPS-Default-Sicht beim nächsten SPS-Wechsel
+                // wieder greift.
+                window._iecAnschlussView = false;
+                _syncIecAnschlussBtnLabel();
+                _syncCircuitAnschlussClass();
+                _resetCircuitPanZoom();
+                window._ansLastSig = null;
+                window._ansFestoLastSig = null;
+                if (typeof currentGraph !== 'undefined' && currentGraph && typeof drawCircuitPlan === 'function') {
+                    try { drawCircuitPlan(currentGraph, globalInputs, globalOutputs); } catch(_) {}
+                }
+                if (typeof window._renderFestoPanel === 'function') {
+                    window._festoNeedsFit = true;
+                    try { window._renderFestoPanel(); } catch(_) {}
+                }
+            } else if (!window.epneuMode && !window._iecAnschlussView) {
+                // Frischer Wechsel in den SPS-Modus: prüfen, ob die
+                // präferierte Default-Sicht „Anschluss" ist. Standard ist
+                // Anschluss-Sicht (User-Wunsch: Sicht Anschluss = Standard
+                // in SPS-Modus). Nur greifen wenn noch keine explizite Wahl
+                // im localStorage steht, sonst die User-Wahl respektieren.
+                let pref = null;
+                try { pref = localStorage.getItem('valisIecAnschlussView'); } catch(_) {}
+                const wantAnschluss = (pref === null) ? true : (pref === '1');
+                if (wantAnschluss) {
+                    window._iecAnschlussView = true;
+                    window._ansLastSig = null;
+                    window._ansFestoLastSig = null;
+                    _resetCircuitPanZoom();
+                    if (typeof currentGraph !== 'undefined' && currentGraph && typeof drawCircuitPlan === 'function') {
+                        try { drawCircuitPlan(currentGraph, globalInputs, globalOutputs); } catch(_) {}
+                    }
+                    if (typeof window._renderFestoPanel === 'function') {
+                        window._festoNeedsFit = true;
+                        try { window._renderFestoPanel(); } catch(_) {}
+                    }
+                }
+                _syncIecAnschlussBtnLabel();
+                _syncCircuitAnschlussClass();
+            } else {
+                _syncIecAnschlussBtnLabel();
+                _syncCircuitAnschlussClass();
+            }
+        };
+
+        // Vertiefendes Erklärungs-Modal zum SPS-/E-Pneu-Toggle. Wird aus
+        // dem Tour-Walker (Walk-Through-Tooltip) per „Mehr erfahren" und
+        // potenziell aus anderen Hilfen aufgerufen. Modal ist dynamisch
+        // ins document.body gehängt — beim zweiten Aufruf wird der alte
+        // Overlay nur wieder eingeblendet.
+        window._showEpneuVsSpsInfo = function() {
+            let overlay = document.getElementById('epneu-vs-sps-info-overlay');
+            if (overlay) { overlay.style.display = 'flex'; return; }
+            overlay = document.createElement('div');
+            overlay.id = 'epneu-vs-sps-info-overlay';
+            overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.72); z-index:9600; display:flex; align-items:center; justify-content:center; padding:20px;';
+            overlay.innerHTML = ''
+                + '<div style="background:#0d1117; border:1px solid #30363d; border-radius:10px; max-width:780px; width:100%; max-height:90vh; overflow-y:auto; box-shadow:0 18px 60px rgba(0,0,0,0.7); color:#e6edf3;">'
+                +   '<div style="background:linear-gradient(135deg,#0288d1,#455a64); color:#fff; padding:16px 22px; border-radius:6px 6px 0 0; display:flex; align-items:center; gap:14px;">'
+                +     '<div style="font-size:30px; line-height:1;">⚡</div>'
+                +     '<div>'
+                +       '<div style="font-size:16px; font-weight:bold;">SPS- vs. E-Pneumatik-Modus</div>'
+                +       '<div style="font-size:11px; opacity:0.85; margin-top:2px;">Zwei Lese-Sichten desselben Codes — wann nutze ich welche?</div>'
+                +     '</div>'
+                +   '</div>'
+                +   '<div style="padding:20px 24px; font-size:13px; line-height:1.6;">'
+                +     '<p style="margin:0 0 14px;">Der Code im Editor ist <b>identisch</b> in beiden Modi — VALIS ändert weder Variablen-Namen noch Operatoren noch Logik-Struktur. Was sich ändert, ist <b>was eine Variable bedeutet</b>, sobald sie an einen physischen Schaltkontakt im Sim-Panel gekoppelt ist.</p>'
+                +     '<div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:18px 0 22px;">'
+                +       '<div style="background:#161b22; border:1px solid #30363d; border-left:4px solid #607d8b; border-radius:6px; padding:14px 16px;">'
+                +         '<div style="font-weight:bold; color:#90caf9; font-size:14px; margin-bottom:8px;">⚡ SPS-Modus</div>'
+                +         '<div style="font-size:11px; color:#9da7b3; margin-bottom:10px;">Programmcode-Sicht</div>'
+                +         '<p style="margin:0 0 8px;"><b>Variablen = Signal an der SPS-Klemme</b>, exakt wie es im CPU-Programm landet.</p>'
+                +         '<p style="margin:0 0 8px;">Ein NC-Kontakt (Öffner, z. B. Not-Aus) ist in Ruhe mechanisch geschlossen → leitet 24V → liefert an die SPS <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">1</code>.</p>'
+                +         '<p style="margin:0; color:#80cbc4;">→ <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">NOTAUS == 1</code> bedeutet <i>„nicht gedrückt"</i> (Failsafe-Konvention).</p>'
+                +       '</div>'
+                +       '<div style="background:#161b22; border:1px solid #30363d; border-left:4px solid #0288d1; border-radius:6px; padding:14px 16px;">'
+                +         '<div style="font-weight:bold; color:#80deea; font-size:14px; margin-bottom:8px;">⚡ E-Pneumatik-Modus</div>'
+                +         '<div style="font-size:11px; color:#9da7b3; margin-bottom:10px;">Verdrahtungslogik-Sicht</div>'
+                +         '<p style="margin:0 0 8px;"><b>Variablen = physischer Press-Zustand</b> des Bauteils — die Sicht eines Elektrikers/Pneumatikers, der den Schaltplan zeichnet.</p>'
+                +         '<p style="margin:0 0 8px;">Plan-zu-Code übersetzt 1:1: <b>Schließer → <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">X</code></b>, <b>Öffner → <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">¬X</code></b>.</p>'
+                +         '<p style="margin:0; color:#ffab91;">→ <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">NOTAUS == 1</code> bedeutet <i>„gedrückt"</i>.</p>'
+                +       '</div>'
+                +     '</div>'
+                +     '<div style="background:#0c2c44; border:1px solid #1565c0; border-radius:6px; padding:14px 18px; margin-bottom:18px;">'
+                +       '<div style="font-weight:bold; color:#90caf9; margin-bottom:8px;">🎯 Wann nutzt man welchen Modus?</div>'
+                +       '<p style="margin:0 0 8px;"><b>SPS-Modus wählen, wenn …</b></p>'
+                +       '<ul style="margin:0 0 12px 22px; padding:0;">'
+                +         '<li>du ein <b>echtes SPS-Programm</b> schreibst, das später auf einer Hardware-Steuerung laufen soll;</li>'
+                +         '<li>deine Eingänge an reale Hardware-Kontakte gehen und auch <b>physische Öffner</b> (Not-Aus, Lichtgitter, Sicherheits-Endschalter) im Spiel sind;</li>'
+                +         '<li>du willst, dass der Code <b>genau das zeigt, was die CPU rechnet</b> — inklusive der Failsafe-Logik, dass NC-Kontakte in Ruhe 1 liefern.</li>'
+                +       '</ul>'
+                +       '<p style="margin:0 0 8px;"><b>E-Pneumatik-Modus wählen, wenn …</b></p>'
+                +       '<ul style="margin:0 0 0 22px; padding:0;">'
+                +         '<li>du <b>kein SPS-Programm</b> schreibst, sondern reine <b>Verdrahtungslogik</b> simulieren willst (Elektropneumatik-Schulung, Schaltplan-Lehre, Lehrkasten-Übungen);</li>'
+                +         '<li>du willst, dass der Code 1:1 dem entspricht, was du im Schaltplan zeichnest — Schließer steht ohne Negation, Öffner mit <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">¬</code>;</li>'
+                +         '<li>du den <b>physischen Press-Zustand</b> direkt an der Variable ablesen willst, ohne im Kopf zwischen „Klemmen-Signal" und „Hardware-Zustand" hin und her zu rechnen.</li>'
+                +       '</ul>'
+                +     '</div>'
+                +     '<div style="background:#1c1c0a; border:1px solid #f9a825; border-radius:6px; padding:12px 16px; margin-bottom:18px;">'
+                +       '<div style="font-weight:bold; color:#fff59d; margin-bottom:6px;">🔍 Wo wird der Unterschied sichtbar?</div>'
+                +       '<p style="margin:0;"><b>Ausschließlich bei NC-Kontakten</b> (mechanischen Öffnern). Normale Schließer verhalten sich in beiden Modi gleich: Ruhe = 0, betätigt = 1. Erst dort, wo physisch ein Öffner sitzt, drift die Bedeutung der Variable zwischen den Modi auseinander — und entsprechend braucht der Code im einen Modus eine Negation, im anderen nicht.</p>'
+                +     '</div>'
+                +     '<div style="background:#161b22; border:1px solid #30363d; border-radius:6px; padding:14px 18px;">'
+                +       '<div style="font-weight:bold; color:#80cbc4; margin-bottom:8px;">📋 Konkretes Beispiel: Motor mit Not-Aus-Verriegelung</div>'
+                +       '<p style="margin:0 0 6px;"><b>SPS-Modus:</b> <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">MOTOR := START && NOTAUS</code> &nbsp;<span style="color:#9da7b3;">(NOTAUS == 1 wenn nicht gedrückt — also Motor läuft solange Not-Aus losgelassen)</span></p>'
+                +       '<p style="margin:0 0 8px;"><b>E-Pneu-Modus:</b> <code style="background:#0d1117; padding:1px 5px; border-radius:3px;">MOTOR := START && ¬NOTAUS</code> &nbsp;<span style="color:#9da7b3;">(NOTAUS == 1 wenn gedrückt — also Motor läuft solange Not-Aus NICHT gedrückt)</span></p>'
+                +       '<p style="margin:6px 0 0; color:#80cbc4;">Dasselbe physische Verhalten — zwei syntaktisch unterschiedliche Code-Formulierungen, je nach Bedeutungs-Sicht. Beide sind korrekt.</p>'
+                +     '</div>'
+                +   '</div>'
+                +   '<div style="padding:0 24px 22px; text-align:right;">'
+                +     '<button id="epneu-vs-sps-info-close" style="background:#0288d1; color:#fff; border:none; padding:9px 22px; font-size:13px; font-weight:bold; border-radius:5px; cursor:pointer;">Verstanden</button>'
+                +   '</div>'
+                + '</div>';
+            document.body.appendChild(overlay);
+            const closeBtn = overlay.querySelector('#epneu-vs-sps-info-close');
+            if (closeBtn) closeBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) overlay.style.display = 'none';
+            });
         };
 
         // ============================================================
@@ -7235,6 +7505,68 @@ You must output exactly this JSON format. The logic code goes as a single string
                 try { window._refreshSimMismatchMarkers(); } catch(_e) {}
             }
             if (activeTask && !taskSolved) window._taskCheckConditions?.();
+        };
+
+        // -------- SPS-Adressen-Verwaltung (Siemens-S7-Style) --------
+        // Adressen werden im SPS-Modus pro Variable sequenziell vergeben:
+        //   Eingänge:  E0.0, E0.1, … E0.7, E1.0, E1.1, …
+        //   Ausgänge:  A0.0, A0.1, … A0.7, A1.0, A1.1, …
+        // Q-Pin-Ausgänge (RS-Glied) und Hilfsrelais (usedAsSource) sind SPS-
+        // intern und bekommen KEINE Adresse. Auto-Vergabe ist sticky pro
+        // Variable; manuelles Editing via _editSpsAddress mit Format-Check
+        // und Duplikat-Schutz.
+        window._spsAddrPrefix = function(role) { return role === 'in' ? 'E' : 'A'; };
+        window._nextFreeSpsAddress = function(role) {
+            const prefix = window._spsAddrPrefix(role);
+            const used = new Set();
+            for (const a of Object.values(spsAddresses)) {
+                if (typeof a === 'string' && a.startsWith(prefix)) used.add(a);
+            }
+            for (let byte = 0; byte < 256; byte++) {
+                for (let bit = 0; bit < 8; bit++) {
+                    const cand = `${prefix}${byte}.${bit}`;
+                    if (!used.has(cand)) return cand;
+                }
+            }
+            return `${prefix}99.7`;
+        };
+        window._ensureSpsAddress = function(name, role) {
+            if (spsAddresses[name]) return spsAddresses[name];
+            const addr = window._nextFreeSpsAddress(role);
+            spsAddresses[name] = addr;
+            try { localStorage.setItem('valisSpsAddresses', JSON.stringify(spsAddresses)); } catch(_) {}
+            return addr;
+        };
+        window._editSpsAddress = function(name, role) {
+            const current = spsAddresses[name] || '';
+            const prefix = window._spsAddrPrefix(role);
+            const example = `${prefix}0.0`;
+            const v = prompt(
+                `SPS-Adresse für „${name}" (Format ${prefix}x.y mit Bit 0–7, z. B. ${example}).\n\n` +
+                `Leer lassen, um die Adresse zu entfernen — sie wird beim nächsten Render neu vergeben.`,
+                current
+            );
+            if (v === null) return;
+            const trimmed = v.trim().toUpperCase();
+            if (trimmed === '') {
+                delete spsAddresses[name];
+            } else {
+                const re = new RegExp('^' + prefix + '\\d+\\.[0-7]$');
+                if (!re.test(trimmed)) {
+                    alert(`Ungültiges Format. Erwartet wird ${prefix}x.y mit Bit 0–7 (z. B. ${example}).`);
+                    return;
+                }
+                const dup = Object.entries(spsAddresses).find(([n, a]) => n !== name && a === trimmed);
+                if (dup) {
+                    alert(`Die Adresse ${trimmed} ist bereits an „${dup[0]}" vergeben.`);
+                    return;
+                }
+                spsAddresses[name] = trimmed;
+            }
+            try { localStorage.setItem('valisSpsAddresses', JSON.stringify(spsAddresses)); } catch(_) {}
+            if (typeof currentGraph !== 'undefined' && currentGraph && typeof buildSimulatorUI === 'function') {
+                try { buildSimulatorUI(globalInputs, globalOutputs, currentGraph); } catch(_) {}
+            }
         };
         function safe(val) { return isNaN(val) ? 0 : Math.round(val); }
         class LogicGraph {
@@ -17006,6 +17338,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     : `<button class="taster-btn ${isActuated ? 'pressed' : ''}" id="sim_taster_${name}" onmousedown="setTaster('${name}', true, event)" onmouseup="setTaster('${name}', false, event)" onmouseleave="setTaster('${name}', false, event)" ontouchstart="setTaster('${name}', true, event)" ontouchend="setTaster('${name}', false, event)">${window.t('btn_pushbutton')}</button>`;
                 let _bk = window.inputKeyBindings[name]; let boundKey = _bk ? `[${_bk === ' ' ? '␣' : _bk.toUpperCase()}]` : '⌨️';
                 let keyBtnHTML = `<button id="btn_key_${name}" class="key-bind-btn" onclick="assignKey('${name}')" title="Klicken, um Taste zuzuweisen (Entf zum Löschen)">${boundKey}</button>`;
+                // SPS-Adressen-Chip — nur im SPS-Modus. Auto-Vergabe beim
+                // ersten Rendern, Klick öffnet manuellen Edit-Dialog.
+                let _spsAddrInHTML = !window.epneuMode
+                    ? `<span class="sps-addr-chip" onclick="window._editSpsAddress('${name}', 'in')" title="SPS-Adresse — Klick zum Ändern">${window._ensureSpsAddress(name, 'in')}</span>`
+                    : '';
                 const _mmIn = window._fctFindMismatchedAssignmentsForVar
                     ? window._fctFindMismatchedAssignmentsForVar(name) : [];
                 const _mmInLabels = _mmIn.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
@@ -17015,7 +17352,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _mmInHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmIn.length > 0 ? '' : 'display:none;'}" title="${_mmInTitle}">⚠️</span>`;
                 // .sim-var-name: clickable Variablen-Span (Click=Code-Sprung, Dblclick=Rename).
                 return `<div class="switch-row flex-col">
-                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}${_spsAddrInHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;">${controlHTML}</div>
                 </div>`;
             };
@@ -17061,8 +17398,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
                     : '';
                 const _mmOutHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmOut.length > 0 ? '' : 'display:none;'}" title="${_mmOutTitle}">⚠️</span>`;
+                // SPS-Adressen-Chip — nur im SPS-Modus UND nur für echte physische
+                // Ausgänge. Q-Pins (RS-Glied) und Hilfsrelais (intern als Source
+                // benutzt) bekommen keine A-Adresse, weil sie SPS-intern sind.
+                const _isInternalOut = !!(name.match(/^Q\d+(_(?:SR|RS))?$/i) || usedAsSource.has(name));
+                const _spsAddrOutHTML = (!window.epneuMode && !_isInternalOut)
+                    ? `<span class="sps-addr-chip" onclick="window._editSpsAddress('${name}', 'out')" title="SPS-Adresse — Klick zum Ändern">${window._ensureSpsAddress(name, 'out')}</span>`
+                    : '';
                 return `<div class="led-row flex-col">
-                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;"><span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${_spsAddrOutHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;"><div class="led" id="sim_out_${name}"></div></div>
                 </div>`;
             };
@@ -17239,6 +17583,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // Sync Splash engine pause state
             if (_splashEngine) _splashEngine.setPaused(!isSimulationActive);
+            // FESTO-Anschluss-LEDs/Halos sofort nachziehen (Start: aktuelle
+            // Zustände an; Stop: alles dunkel) — runSimulationTick übernimmt
+            // das auch laufend, aber hier bekommen wir die unmittelbare
+            // Reaktion auf den Klick.
+            if (typeof window._updateFestoAnschlussLive === 'function') {
+                try { window._updateFestoAnschlussLive(); } catch(_) {}
+            }
         };
 		// --- BUNTE PFADE LOGIK ---
         window.toggleCircuitColors = function() {
@@ -17820,7 +18171,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (panelId === 'circuit-editor-wrapper' && window.cedInit) window.cedInit();
                     if (panelId === 'factory-wrapper') startFactoryEngine();
                     if (panelId === 'sk-wrapper' && typeof window._renderSchrittketten === 'function') window._renderSchrittketten();
-                    if (panelId === 'festo-wrapper' && typeof window._renderFestoPanel === 'function') window._renderFestoPanel();
+                    if (panelId === 'festo-wrapper' && typeof window._renderFestoPanel === 'function') {
+                        window._festoNeedsFit = true;  // beim Öffnen einmalig in den Viewport einpassen
+                        window._renderFestoPanel();
+                    }
                     updateWorkspace();
                 });
             } else {
@@ -18340,6 +18694,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 });
             }
+            // FESTO-Anschluss-Panel: LEDs + Sockel-Halos live nachziehen,
+            // falls die Anschluss-Sicht aktiv ist und das Panel sichtbar.
+            if (typeof window._updateFestoAnschlussLive === 'function'
+                && !window.epneuMode && window._iecAnschlussView) {
+                try { window._updateFestoAnschlussLive(); } catch(_) {}
+            }
 			// 5. Oszilloskop aufzeichnen (Jeden Tick mitschneiden)
             if (typeof analyzerHistory !== 'undefined') {
                 // Wir kopieren den aktuellen Booleschen Zustand aller Variablen
@@ -18392,7 +18752,575 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return tNode.id;
         };
         const _checkPowerCache = new Map();
+
+        // ===== Anschluss-/Klemmenplan-Renderer (DIN EN 60204) =====
+        // Stellt im SPS-Modus alternativ zum programmzentrierten Schaltplan
+        // die reine I/O-Verkabelung der SPS dar:
+        //   - 24V- und 0V-Schiene oben für Eingänge
+        //   - Eingangs-Bauteile mit IEC-Label (-SF/-BG) und Adressbox
+        //     (Bauteil / Adresse / Beschreibung) für jedes Eingangs-Signal
+        //   - implizite SPS in der Mitte (gar nicht gezeichnet — der Code
+        //     erledigt das interne Verschalten)
+        //   - Ausgangs-Adressbox + Ausgangs-Bauteile mit IEC-Label
+        //   - 0V-Schiene unten
+        // Q-Pins (RS/SR-Outputs) und Hilfsrelais (usedAsSource) sind SPS-
+        // intern und tauchen im Anschlussplan NICHT auf.
+        window._renderAnschlussPlan = function(graph, inputsList, outputsList, keepView) {
+            const doc = _iecDoc();
+            const svg = doc.getElementById('circuit-svg');
+            const content = doc.getElementById('circuit-content');
+            if (!svg || !content) return;
+
+            // Signatur des sichtbaren Zustands. Bei keepView=true (z.B. factoryLoop
+            // ruft drawCircuitPlan periodisch wegen Fluid-Animation auf) und
+            // unverändertem Inhalt früh aussteigen — sonst rebuilt der Renderer
+            // 30× pro Sekunde das ganze SVG und das Bild "zappelt". Die
+            // laufende Simulation aktualisiert ihre .active/.open-Klassen
+            // weiterhin über runSimulationTick auf den bestehenden Elementen.
+            const _sig = JSON.stringify({
+                in: (inputsList || []).map(n => [n, componentTypes[n] || 'taster', spsAddresses[n] || '']),
+                out: (outputsList || []).map(n => [n, componentTypes[n] || 'led', spsAddresses[n] || ''])
+            });
+            if (keepView && window._ansLastSig === _sig && content.firstChild) {
+                return;
+            }
+            window._ansLastSig = _sig;
+
+            while (content.firstChild) content.removeChild(content.firstChild);
+
+            const NS = 'http://www.w3.org/2000/svg';
+            const SENSOR_TYPES = new Set(['sensor_ind','sensor_kap','sensor_mag','sensor_opt']);
+            const MECH_TYPES   = new Set(['mech_sensor','light_curtain']);
+
+            // Physische I/Os filtern (Q-Pins + Hilfsrelais sind SPS-intern).
+            const physIn = (inputsList || []).slice();
+            const usedAsSource = new Set((graph && graph.edges) ? graph.edges.map(e => e.sourceId) : []);
+            const physOut = (outputsList || []).filter(n =>
+                !/^[QSR]\d+(_(?:SR|RS))?$/i.test(n) && !usedAsSource.has(n)
+            );
+
+            // IEC-Norm-Labels berechnen — Konvention wie im cedGenerateFromCode.
+            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0 };
+            const iecLabels = {};
+            physIn.forEach(n => {
+                const t = componentTypes[n] || 'taster';
+                if (SENSOR_TYPES.has(t) || MECH_TYPES.has(t)) {
+                    NORM.bg++; iecLabels[n] = '-BG' + NORM.bg;
+                } else {
+                    NORM.sf++; iecLabels[n] = '-SF' + NORM.sf;
+                }
+            });
+            physOut.forEach(n => {
+                const t = componentTypes[n] || 'led';
+                if      (t === 'led')    { NORM.p++;  iecLabels[n] = '-P'  + NORM.p; }
+                else if (t === 'motor')  { NORM.m++;  iecLabels[n] = '-M'  + NORM.m; }
+                else if (t === 'valve')  { NORM.mb++; iecLabels[n] = '-MB' + NORM.mb; }
+                else if (t === 'siren')  { NORM.h++;  iecLabels[n] = '-H'  + NORM.h; }
+                else if (t === 'heater') { NORM.e++;  iecLabels[n] = '-E'  + NORM.e; }
+                else                     { NORM.kf++; iecLabels[n] = '-KF' + NORM.kf; }
+            });
+
+            // Adressen sicherstellen — falls neue Variablen ohne Sim-Render hinzukamen.
+            if (typeof window._ensureSpsAddress === 'function') {
+                physIn.forEach(n => window._ensureSpsAddress(n, 'in'));
+                physOut.forEach(n => window._ensureSpsAddress(n, 'out'));
+            }
+
+            // ---------- Layout ----------
+            const COL_W      = 130;
+            const PAD_X      = 60;
+            const TOP_24_Y   = 60;
+            const TOP_0_Y    = 78;
+            const IN_SYM_TOP = 110;
+            const IN_SYM_BOT = 220;
+            const IN_BOX_TOP = 245;
+            const IN_BOX_BOT = 345;
+            const OUT_BOX_TOP = 400;
+            const OUT_BOX_BOT = 500;
+            const OUT_SYM_TOP = 525;
+            const OUT_SYM_BOT = 635;
+            const BOT_0_Y    = 665;
+            const cols = Math.max(physIn.length, physOut.length, 6);
+            const W = PAD_X * 2 + cols * COL_W;
+            const H = 720;
+            svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+            // ---------- Mini-Helpers ----------
+            const el = (n, a) => {
+                const e = doc.createElementNS(NS, n);
+                if (a) for (const k in a) e.setAttribute(k, a[k]);
+                return e;
+            };
+            const add = (...c) => c.forEach(x => content.appendChild(x));
+            function txt(x, y, s, opts) {
+                opts = opts || {};
+                const t = el('text', {
+                    x, y,
+                    'font-family': opts.mono ? "'Consolas', monospace" : 'Arial, sans-serif',
+                    'font-size': opts.size || 11,
+                    'text-anchor': opts.anchor || 'start',
+                    fill: opts.fill || '#000',
+                    'font-weight': opts.bold ? 'bold' : 'normal',
+                });
+                t.textContent = s;
+                return t;
+            }
+            const line = (x1,y1,x2,y2,sw) => el('line', { x1,y1,x2,y2, stroke:'#000', 'stroke-width': sw || 1.5 });
+            const rect = (x,y,w,h,sw) => el('rect', { x,y, width:w, height:h, stroke:'#000', 'stroke-width': sw || 1, fill:'none' });
+            const dot  = (x,y,r) => el('circle', { cx:x, cy:y, r: r || 2.5, fill:'#000' });
+            const cir  = (cx,cy,r,sw) => el('circle', { cx, cy, r, stroke:'#000', fill:'none', 'stroke-width': sw || 1.2 });
+
+            // ---------- Farb-Helper für Bunte Pfade ----------
+            // Priorität:
+            //   1) graph.nodes.get(id).color — wird vom Logikplan-Renderer
+            //      nach getStableColor mit Alias-Propagation überschrieben
+            //      (Outputs erben ihre Quellfarbe). Genau diese Farbe nutzt
+            //      auch drawCircuitPlan, deshalb hier vorrangig.
+            //   2) fbsNodeColors[id] — Original-Stable-Color vor Alias-Prop.
+            //   3) Hash-Fallback (FNV-1a + goldener Schnitt) für Fälle ohne
+            //      Graph-Eintrag (z.B. orphan-Variable, manueller Address-Edit).
+            function _ansColor(name) {
+                if (!name) return null;
+                try {
+                    if (graph && graph.nodes && typeof graph.nodes.get === 'function') {
+                        const n = graph.nodes.get(name);
+                        if (n && n.color) return n.color;
+                    }
+                } catch(_) {}
+                try {
+                    if (window.fbsNodeColors && window.fbsNodeColors[name]) return window.fbsNodeColors[name];
+                } catch(_) {}
+                let h = 2166136261;
+                for (let i = 0; i < name.length; i++) {
+                    h ^= name.charCodeAt(i);
+                    h = (h * 16777619) >>> 0;
+                }
+                const hue = (h * 0.61803398875) % 1;
+                const hDeg = Math.floor(hue * 360);
+                const sat  = 65 + ((h >>> 16) & 0x0F);
+                const lig  = 42 + ((h >>> 8)  & 0x07);
+                return `hsl(${hDeg}, ${sat}%, ${lig}%)`;
+            }
+            // Animierter Wire — eigene Gruppe mit circ-var- + circ-wire-Klassen
+            // und _checkPower, damit runSimulationTick ihn beim Sim auf .active
+            // zieht und CSS .colorful ihn auf die Variable-Farbe einfärbt.
+            function _ansWire(x1, y1, x2, y2, varName) {
+                const w = el('line', {
+                    x1, y1, x2, y2,
+                    stroke: '#000', 'stroke-width': 1.5,
+                    class: 'circ-wire circ-var-' + (varName || 'NONE'),
+                });
+                if (varName) {
+                    const c = _ansColor(varName);
+                    if (c) w.style.setProperty('--logic-color', c);
+                    w._checkPower = function(state) { return !!state[varName]; };
+                }
+                return w;
+            }
+
+            // ---------- Spalten-Nummerierung ----------
+            const HEAD_Y = 30;
+            const HEAD_LINE_Y = 42;
+            for (let i = 0; i < cols; i++) {
+                const colX  = PAD_X + i * COL_W;
+                add(line(colX, HEAD_LINE_Y, colX, TOP_24_Y, 1));
+                add(txt(colX + COL_W / 2, HEAD_Y + 4, String(i + 1), { size: 11, bold: true, anchor: 'middle' }));
+                if (i === cols - 1) add(line(colX + COL_W, HEAD_LINE_Y, colX + COL_W, TOP_24_Y, 1));
+            }
+            if (cols > 0) {
+                add(line(PAD_X, HEAD_LINE_Y, PAD_X + cols * COL_W, HEAD_LINE_Y, 1));
+            }
+
+            // ---------- Stromschienen ----------
+            add(line(PAD_X, TOP_24_Y, W - PAD_X, TOP_24_Y, 2));
+            add(line(PAD_X, TOP_0_Y,  W - PAD_X, TOP_0_Y,  2));
+            add(line(PAD_X, BOT_0_Y,  W - PAD_X, BOT_0_Y,  2));
+            add(txt(PAD_X - 6, TOP_24_Y - 4, '24 V', { size: 11, bold: true, anchor: 'end' }));
+            add(txt(PAD_X - 6, TOP_0_Y - 4,  '0 V',  { size: 11, bold: true, anchor: 'end' }));
+            add(txt(PAD_X - 6, BOT_0_Y - 4,  '0 V',  { size: 11, bold: true, anchor: 'end' }));
+
+            // ---------- Empty-State ----------
+            if (physIn.length === 0 && physOut.length === 0) {
+                add(txt(W/2, H/2, 'Keine I/O-Variablen im Code definiert.', { size:14, anchor:'middle', fill:'#888' }));
+                return;
+            }
+
+            // ---------- Klemmen-Box (Bauteil / Adresse / Beschreibung) ----------
+            // Wenn opts.varName gesetzt ist, kommen alle Box-Elemente in eine
+            // Gruppe mit `circ-var-VARNAME`-Klasse — damit der Strang-Filter die
+            // Box auch dimmen kann (sonst bliebe sie bei aktivem Filter sichtbar
+            // und das Bild wirkte halb-gefiltert).
+            function drawIoBox(x, y, w, h, opts) {
+                const varName = opts && opts.varName;
+                let group = null;
+                let addLocal = add;
+                if (varName) {
+                    group = el('g', { class: 'circ-var-' + varName });
+                    addLocal = (...arr) => arr.forEach(e => group.appendChild(e));
+                }
+                const rowH = h / 3;
+                const lblW = 55;
+                addLocal(rect(x, y, w, h));
+                addLocal(line(x, y + rowH, x + w, y + rowH));
+                addLocal(line(x, y + 2*rowH, x + w, y + 2*rowH));
+                addLocal(line(x + lblW, y, x + lblW, y + 2*rowH));
+                addLocal(txt(x + 4, y + rowH - 8, opts.row1Label, { size: 9 }));
+                addLocal(txt(x + lblW + 4, y + rowH - 8, opts.row1Val || '', { size: 10, mono: true, bold: true }));
+                addLocal(txt(x + 4, y + 2*rowH - 8, opts.row2Label, { size: 9 }));
+                addLocal(txt(x + lblW + 4, y + 2*rowH - 8, opts.row2Val || '', { size: 10, mono: true, bold: true }));
+                // Beschreibung (Variablenname) zentriert in Row 3
+                const d = String(opts.descr || '');
+                const maxChars = Math.floor(w / 6.2);
+                if (d.length <= maxChars) {
+                    addLocal(txt(x + w/2, y + 2*rowH + rowH/2 + 4, d, { size: 9, anchor: 'middle' }));
+                } else {
+                    const cut = d.lastIndexOf('_', maxChars);
+                    const split = cut > 0 ? cut + 1 : maxChars;
+                    addLocal(txt(x + w/2, y + 2*rowH + rowH/2 - 2, d.slice(0, split), { size: 9, anchor: 'middle' }));
+                    addLocal(txt(x + w/2, y + 2*rowH + rowH/2 + 10, d.slice(split), { size: 9, anchor: 'middle' }));
+                }
+                if (group) content.appendChild(group);
+            }
+
+            // Helfer für SVG-Texte mit beliebigem font-weight (txt() kennt nur bold).
+            function txtRaw(x, y, s, attrs) {
+                const t = el('text', Object.assign({ x, y }, attrs || {}));
+                t.textContent = s;
+                return t;
+            }
+
+            // ---------- IEC-Kontakt — exakt wie drawContact / _renderIecSymbol ----------
+            // Animations-kompatibel: der bewegliche Kontakt sitzt in einer Gruppe
+            // mit Klassen "circ-moving-contact is-no|is-nc [+open]" und trans-
+            // form-origin am unteren Pivot — die globale CSS-Animation greift
+            // damit sofort, NO öffnet -25°, NC steht in Ruhe bei +15°.
+            function drawIecContact(cx, cy, ctype, iec, varName) {
+                // Wrap in circ-colored-group so runSimulationTick erkennt das
+                // Symbol als animationsfähigen Kontakt mit Variable.
+                const g = el('g', {
+                    class: 'circ-colored-group circ-var-' + (varName || 'NONE'),
+                    'data-iec-id': varName || '',
+                    'data-iec-role': 'contact',
+                    'data-ctype': ctype || ''
+                });
+                if (varName) {
+                    const _c = _ansColor(varName);
+                    if (_c) g.style.setProperty('--logic-color', _c);
+                }
+                // Shadow outer `add` → alle Symbol-Teile landen in der Gruppe.
+                const add = (...arr) => arr.forEach(x => g.appendChild(x));
+                const isNC = (ctype === 'taster_nc' || ctype === 'schalter_nc'
+                              || ctype === 'nothalt' || ctype === 'light_curtain');
+                // Statische Terminals + Stubs (cy±15)
+                add(el('circle', { cx, cy: cy-15, r: 2.5, fill: '#000', class: 'circ-static' }));
+                add(el('circle', { cx, cy: cy+15, r: 2.5, fill: '#000', class: 'circ-static' }));
+                add(el('line',   { x1: cx, y1: cy-15, x2: cx, y2: cy-5, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                add(el('line',   { x1: cx, y1: cy+15, x2: cx, y2: cy+5, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                // Beweglicher Kontakt in eigener Gruppe — CSS-Klassen aktivieren Animation
+                const moving = el('g', { class: 'circ-moving-contact ' + (isNC ? 'is-nc' : 'is-no'), stroke: '#000' });
+                moving.style.transformOrigin = `${cx}px ${cy + 15}px`;
+                if (!isNC) moving.classList.add('open');
+                moving.appendChild(el('line', { x1: cx, y1: cy-6, x2: cx, y2: cy+15, 'stroke-width': 2 }));
+                add(moving);
+                if (isNC) {
+                    add(el('line', { x1: cx, y1: cy-5, x2: cx+8, y2: cy-5, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                }
+                // Betätigungs-Symbol links — identische Geometrie zu _renderIecSymbol
+                const hasReg = (typeof ComponentRegistry !== 'undefined'
+                              && ComponentRegistry[ctype]
+                              && typeof ComponentRegistry[ctype].iecSymbol === 'function');
+                const drawDriver = (ctype === 'taster' || ctype === 'taster_nc'
+                                 || ctype === 'schalter' || ctype === 'schalter_nc'
+                                 || ctype === 'nothalt' || hasReg);
+                if (drawDriver) {
+                    const dashEndX = isNC ? cx + 3 : cx - 5;
+                    add(el('line', { x1: dashEndX, y1: cy+2.5, x2: cx-18, y2: cy+2.5,
+                        stroke: '#000', 'stroke-width': 1.5, 'stroke-dasharray': '2,2' }));
+                    if (ctype === 'nothalt') {
+                        add(el('line', { x1: cx-18, y1: cy-2.5, x2: cx-18, y2: cy+7.5, stroke: '#000', 'stroke-width': 1.5 }));
+                        add(el('path', { d: `M ${cx-18} ${cy-2.5} A 5 5 0 0 0 ${cx-18} ${cy+7.5} Z`, fill: '#000' }));
+                        add(el('path', { d: `M ${cx-12} ${cy-0.5} L ${cx-9} ${cy+2.5} L ${cx-12} ${cy+5.5}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                    } else if (hasReg) {
+                        const wrapG = el('g', {});
+                        const wrapFn = (tag, attrs) => {
+                            const e = doc.createElementNS(NS, tag);
+                            if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+                            return e;
+                        };
+                        try { ComponentRegistry[ctype].iecSymbol(wrapG, cx, cy, isNC, wrapFn); } catch(_) {}
+                        add(wrapG);
+                    } else {
+                        add(el('line', { x1: cx-18, y1: cy-2.5, x2: cx-18, y2: cy+7.5, stroke: '#000', 'stroke-width': 1.5 }));
+                        add(el('line', { x1: cx-18, y1: cy-2.5, x2: cx-14, y2: cy-2.5, stroke: '#000', 'stroke-width': 1.5 }));
+                        add(el('line', { x1: cx-18, y1: cy+7.5, x2: cx-14, y2: cy+7.5, stroke: '#000', 'stroke-width': 1.5 }));
+                        if (ctype === 'schalter' || ctype === 'schalter_nc') {
+                            add(el('path', { d: `M ${cx-12} ${cy-0.5} L ${cx-9} ${cy+2.5} L ${cx-12} ${cy+5.5}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                        }
+                    }
+                }
+                // Pin-Nummern rechts (klein, grau)
+                add(txt(cx + 5, cy - 10, isNC ? '11' : '13', { size: 9, fill: '#666' }));
+                add(txt(cx + 5, cy + 18, isNC ? '12' : '14', { size: 9, fill: '#666' }));
+                // IEC-Label links
+                if (iec) add(txt(cx - 25, cy + 4, iec, { size: 11, anchor: 'end', bold: true }));
+                content.appendChild(g);
+                return g;
+            }
+
+            // ---------- Sensor-Symbol — exakt wie _renderIecSymbol Sensor-Branch ----------
+            // 30×30-Rahmen + Diamant + 2 Vertikallinien + typspezifisches Symbol
+            // unten (Spule/Kondensator/LED-Strahl/Hall-Welle). Pin-Positionen
+            // hier modifiziert für Anschluss-Plan: BN und BU BEIDE oben (gehen
+            // zu 24V/0V-Schienen), BK rechts (geht zum SPS-Eingang).
+            // (cx, cy) ist Box-Mittelpunkt; Box spannt cx-15..cx+15 / cy-15..cy+15.
+            function drawSensorBox(cx, cy, ctype, iec, varName) {
+                // Wrap analog zu drawIecContact — Sensoren animieren via .active
+                // (kein moving-contact, aber Glow auf der Component-Box).
+                const g = el('g', {
+                    class: 'circ-colored-group circ-var-' + (varName || 'NONE'),
+                    'data-iec-id': varName || '',
+                    'data-iec-role': 'contact',
+                    'data-ctype': ctype || ''
+                });
+                if (varName) {
+                    const _c = _ansColor(varName);
+                    if (_c) g.style.setProperty('--logic-color', _c);
+                }
+                const add = (...arr) => arr.forEach(x => g.appendChild(x));
+                const sBoxY = cy - 15;  // Box-Oberkante
+                // Hauptrahmen (animationsfähig über .circ-component, falls Sim greift)
+                add(el('rect', { x: cx-15, y: sBoxY, width: 30, height: 30, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                // Diamant-Marker (Sensor-Eingang)
+                add(el('polygon', { points: `${cx},${sBoxY+3} ${cx+7},${sBoxY+10} ${cx},${sBoxY+17} ${cx-7},${sBoxY+10}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                // Zwei Vertikallinien (Sensor-Aktive-Fläche)
+                add(el('line', { x1: cx-2.5, y1: sBoxY+5.5, x2: cx-2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5 }));
+                add(el('line', { x1: cx+2.5, y1: sBoxY+5.5, x2: cx+2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5 }));
+                // Typspezifisches Symbol unten in der Box
+                if (ctype === 'sensor_ind') {
+                    add(el('path', { d: `M ${cx-9} ${sBoxY+26} L ${cx-9} ${sBoxY+23} A 3 3 0 0 1 ${cx-3} ${sBoxY+23} A 3 3 0 0 1 ${cx+3} ${sBoxY+23} A 3 3 0 0 1 ${cx+9} ${sBoxY+23} L ${cx+9} ${sBoxY+26}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                } else if (ctype === 'sensor_kap') {
+                    add(el('line', { x1: cx, y1: sBoxY+18, x2: cx, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('line', { x1: cx-6, y1: sBoxY+22, x2: cx+6, y2: sBoxY+22, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('line', { x1: cx-6, y1: sBoxY+25, x2: cx+6, y2: sBoxY+25, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('line', { x1: cx, y1: sBoxY+25, x2: cx, y2: sBoxY+29, stroke: '#000', 'stroke-width': 1.5 }));
+                } else if (ctype === 'sensor_opt') {
+                    add(el('line', { x1: cx-7, y1: sBoxY+27, x2: cx-1, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('polyline', { points: `${cx-4},${sBoxY+21} ${cx-1},${sBoxY+21} ${cx-1},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('line', { x1: cx, y1: sBoxY+27, x2: cx+6, y2: sBoxY+21, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('polyline', { points: `${cx+3},${sBoxY+21} ${cx+6},${sBoxY+21} ${cx+6},${sBoxY+24}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                } else if (ctype === 'sensor_mag') {
+                    add(el('rect', { x: cx-6, y: sBoxY+22, width: 12, height: 6, fill: '#000' }));
+                    add(el('rect', { x: cx-3, y: sBoxY+22, width: 6, height: 3.5, fill: '#fff' }));
+                }
+                // Pin-Labels — Standard-Sensorkonvention nach _renderIecSymbol
+                // (BN = 24V oben, BU = 0V unten, BK = Signal rechts).
+                add(txt(cx-4, sBoxY-3, 'BN', { size: 8, fill: '#666', anchor: 'end' }));
+                add(txt(cx-4, sBoxY+38, 'BU', { size: 8, fill: '#666', anchor: 'end' }));
+                add(txt(cx+18, sBoxY+15, 'BK', { size: 8, fill: '#666' }));
+                // IEC-Label rechts oberhalb des Sensor-Bodys (wie im Schaltplan)
+                if (iec) add(txt(cx+18, sBoxY-3, iec, { size: 11, bold: true }));
+                content.appendChild(g);
+                return g;
+            }
+
+            // ---------- IEC-Spule/Ausgang — exakt wie _renderIecSymbol Coil-Branch ----------
+            // (cx, cy) ist Symbol-Mittelpunkt. Stub-Anschlüsse oben/unten:
+            //   LED/Motor:  cy-20 → cy-15, cy+15 → cy+20
+            //   Coil/Heater/Siren/Valve: cy-20 → cy-10, cy+10 → cy+20
+            function drawIecCoil(cx, cy, ctype, iec, varName) {
+                // Wrap in circ-colored-group + _checkPower → glüht bei Sim wenn
+                // Output-Variable true ist (analog drawCoil/drawLED).
+                const g = el('g', {
+                    class: 'circ-colored-group circ-var-' + (varName || 'NONE'),
+                    'data-iec-id': varName || '',
+                    'data-iec-role': 'coil',
+                    'data-ctype': ctype || ''
+                });
+                if (varName) {
+                    const _c = _ansColor(varName);
+                    if (_c) g.style.setProperty('--logic-color', _c);
+                    g._checkPower = function(state) { return !!state[varName]; };
+                }
+                const add = (...arr) => arr.forEach(x => g.appendChild(x));
+                if (ctype === 'led') {
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-15, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+15, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('circle', { cx, cy, r: 15, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                    add(el('line', { x1: cx-10.6, y1: cy-10.6, x2: cx+10.6, y2: cy+10.6, stroke: '#000', 'stroke-width': 2 }));
+                    add(el('line', { x1: cx-10.6, y1: cy+10.6, x2: cx+10.6, y2: cy-10.6, stroke: '#000', 'stroke-width': 2 }));
+                } else if (ctype === 'motor') {
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-15, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+15, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('circle', { cx, cy, r: 15, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                    add(txtRaw(cx, cy+5, 'M', { 'font-size': 14, 'font-weight': '900', 'text-anchor': 'middle', 'font-family': 'Arial' }));
+                } else if (ctype === 'siren') {
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-10, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+10, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('path', { d: `M ${cx-10} ${cy-10} A 10 10 0 0 0 ${cx-10} ${cy+10} L ${cx+10} ${cy+15} L ${cx+10} ${cy-15} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                } else if (ctype === 'heater') {
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-10, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+10, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('rect', { x: cx-15, y: cy-10, width: 30, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                    add(el('path', { d: `M ${cx-8} ${cy-4} Q ${cx-5} ${cy-8} ${cx-2} ${cy-4} T ${cx+4} ${cy-4} T ${cx+10} ${cy-4}`, fill: 'none', stroke: '#000', 'stroke-width': 1 }));
+                    add(el('path', { d: `M ${cx-8} ${cy+1} Q ${cx-5} ${cy-3} ${cx-2} ${cy+1} T ${cx+4} ${cy+1} T ${cx+10} ${cy+1}`, fill: 'none', stroke: '#000', 'stroke-width': 1 }));
+                    add(el('path', { d: `M ${cx-8} ${cy+6} Q ${cx-5} ${cy+2} ${cx-2} ${cy+6} T ${cx+4} ${cy+6} T ${cx+10} ${cy+6}`, fill: 'none', stroke: '#000', 'stroke-width': 1 }));
+                } else if (ctype === 'valve') {
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-10, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+10, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('rect', { x: cx-20, y: cy-10, width: 40, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                    add(el('line', { x1: cx-20, y1: cy+10, x2: cx+20, y2: cy-10, stroke: '#000', 'stroke-width': 2 }));
+                    // Mechanische Ventilandeutung rechts
+                    const vx = cx + 35;
+                    add(el('line', { x1: cx+20, y1: cy, x2: vx-5, y2: cy, stroke: '#000', 'stroke-width': 1.2, 'stroke-dasharray': '2,2' }));
+                    add(el('line', { x1: vx, y1: cy-14, x2: vx, y2: cy-8, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('line', { x1: vx, y1: cy+8,  x2: vx, y2: cy+14, stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('polygon', { points: `${vx-7},${cy-8} ${vx+7},${cy-8} ${vx},${cy}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                    add(el('polygon', { points: `${vx-7},${cy+8} ${vx+7},${cy+8} ${vx},${cy}`, fill: 'none', stroke: '#000', 'stroke-width': 1.5 }));
+                } else {
+                    // Relais (Default für coilTypen ohne Spezial-Symbol)
+                    add(el('line', { x1: cx, y1: cy-20, x2: cx, y2: cy-10, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('line', { x1: cx, y1: cy+10, x2: cx, y2: cy+20, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
+                    add(el('rect', { x: cx-20, y: cy-10, width: 40, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component' }));
+                }
+                // Pin-Beschriftungen (links, klein, grau — wie drawSmallText)
+                const _pins = (ctype === 'valve') ? { t: '1', b: '2' }
+                            : (ctype === 'motor') ? { t: 'U1', b: 'U2' }
+                            : (ctype === 'led' || ctype === 'siren' || ctype === 'heater') ? { t: 'X1', b: 'X2' }
+                            : { t: 'A1', b: 'A2' };
+                const _topY = (ctype === 'led' || ctype === 'motor') ? cy - 18 : cy - 15;
+                const _botY = (ctype === 'led' || ctype === 'motor') ? cy + 20 : cy + 18;
+                add(txt(cx - 4, _topY, _pins.t, { size: 9, anchor: 'end', fill: '#666' }));
+                add(txt(cx - 4, _botY, _pins.b, { size: 9, anchor: 'end', fill: '#666' }));
+                // IEC-Label rechts neben dem Symbol
+                if (iec) {
+                    const lblX = (ctype === 'led' || ctype === 'motor' || ctype === 'heater') ? cx + 25
+                               : (ctype === 'siren') ? cx + 20
+                               : (ctype === 'valve') ? cx + 50
+                               : cx + 25;
+                    add(txt(lblX, cy + 4, iec, { size: 11, bold: true }));
+                }
+                content.appendChild(g);
+                return g;
+            }
+
+            // ---------- Eingänge zeichnen ----------
+            const CONTACT_MID_Y = (IN_SYM_TOP + IN_SYM_BOT) / 2;
+            physIn.forEach((name, i) => {
+                const cx = PAD_X + i * COL_W + COL_W / 2;
+                const t = componentTypes[name] || 'taster';
+                const iec = iecLabels[name];
+                const addr = spsAddresses[name] || '?';
+                const isSensor = SENSOR_TYPES.has(t);
+
+                if (isSensor) {
+                    // 3-Leiter-Sensor: Box-Center 25 px links vom Spaltenmittel-
+                    // punkt — Box-Rechtskante endet 10 px vor cx, damit der BK-
+                    // Pin (Signal) klar nach rechts heraustritt. Pins folgen der
+                    // Standard-Sensor-Konvention: BN (24V) oben, BU (0V) unten,
+                    // BK (Signal) rechts.
+                    const sx = cx - 25;                  // Box-Center
+                    const sBoxTop = CONTACT_MID_Y - 15;  // Box-Oberkante (BN-Pin)
+                    const sBoxBot = CONTACT_MID_Y + 15;  // Box-Unterkante (BU-Pin)
+                    const bkX = sx + 15;                 // BK-Pin (Box rechts) = cx - 10
+                    const detourY = sBoxBot + 15;        // Y der waagerechten 0V-Umgehung
+                    const zvX     = sx - 30;             // X der senkrechten 0V-Leitung — links am Symbol vorbei
+
+                    // 24V-Wire: BN → senkrecht zur 24V-Schiene (animiert, weil
+                    // bei aktivem Sensor der ganze Strompfad mitglüht).
+                    add(dot(sx, TOP_24_Y));
+                    add(_ansWire(sx, TOP_24_Y, sx, sBoxTop, name));
+
+                    // 0V-Wire: BU → kurz runter → links am Symbol vorbei → hoch
+                    // zur 0V-Schiene. Auch animiert (Rückleitung).
+                    add(_ansWire(sx, sBoxBot, sx, detourY, name));      // Down
+                    add(_ansWire(sx, detourY, zvX, detourY, name));     // Left
+                    add(_ansWire(zvX, detourY, zvX, TOP_0_Y, name));    // Up
+                    add(dot(zvX, TOP_0_Y));
+
+                    // Sensor-Box selbst (zeichnet auch BN/BU/BK-Labels + IEC-Label)
+                    drawSensorBox(sx, CONTACT_MID_Y, t, iec, name);
+
+                    // Signal-Wire: BK → horizontal nach rechts → vertikal runter
+                    // in die Klemmen-Box. Animierter Wire (eigene Variable).
+                    add(_ansWire(bkX, CONTACT_MID_Y, cx, CONTACT_MID_Y, name));
+                    add(_ansWire(cx, CONTACT_MID_Y, cx, IN_BOX_TOP, name));
+                } else {
+                    // Standard-Kontakt: 24V-Versorgung + Signal-Leitung beide
+                    // animiert, damit der ganze geschlossene Strompfad glüht.
+                    add(dot(cx, TOP_24_Y));
+                    add(_ansWire(cx, TOP_24_Y, cx, CONTACT_MID_Y - 15, name));
+                    drawIecContact(cx, CONTACT_MID_Y, t, iec, name);
+                    add(_ansWire(cx, CONTACT_MID_Y + 15, cx, IN_BOX_TOP, name));
+                }
+
+                drawIoBox(cx - 55, IN_BOX_TOP, 110, IN_BOX_BOT - IN_BOX_TOP, {
+                    row1Label: 'Bauteil', row1Val: 'VALIS',
+                    row2Label: 'Adresse', row2Val: addr,
+                    descr: name,
+                    varName: name
+                });
+            });
+
+            // ---------- Ausgänge zeichnen ----------
+            const OUT_SYM_CY = OUT_SYM_TOP + 50;  // Symbol-Mittelpunkt
+            physOut.forEach((name, i) => {
+                const cx = PAD_X + i * COL_W + COL_W / 2;
+                const t = componentTypes[name] || 'led';
+                const iec = iecLabels[name];
+                const addr = spsAddresses[name] || '?';
+
+                drawIoBox(cx - 55, OUT_BOX_TOP, 110, OUT_BOX_BOT - OUT_BOX_TOP, {
+                    row1Label: 'Adresse', row1Val: addr,
+                    row2Label: 'Bauteil', row2Val: 'VALIS',
+                    descr: name,
+                    varName: name
+                });
+                // Wire von Klemmen-Box bis zum Top-Stub des Symbols (cy-20)
+                // → animiert mit Output-Variable
+                add(_ansWire(cx, OUT_BOX_BOT, cx, OUT_SYM_CY - 20, name));
+
+                drawIecCoil(cx, OUT_SYM_CY, t, iec, name);
+
+                // Wire vom Bottom-Stub (cy+20) → 0V-Schiene (auch animiert,
+                // weil Strom durch Spule fließt sobald Output aktiv).
+                add(_ansWire(cx, OUT_SYM_CY + 20, cx, BOT_0_Y, name));
+                add(dot(cx, BOT_0_Y));
+            });
+
+            // ---------- Titel-Hinweis unten rechts (unter den Schienen) ----------
+            add(txt(W - PAD_X, BOT_0_Y + 30, 'SPS-Anschlussplan · DIN EN 60204 (VDE 0113-1)',
+                { size: 10, anchor: 'end', fill: '#37474f', bold: true }));
+
+            // Pan-Zoom: Bei keepView=true (Re-Render mit identischem viewBox)
+            // nur updateBBox+resize wie der Programm-Sicht-Renderer — keine
+            // destroy/recreate, sonst flackert das Bild. Bei keepView=false
+            // (View-Wechsel, Erst-Render) komplett neu initialisieren, damit
+            // die Zoom-Controls am korrekten Rand sitzen.
+            setTimeout(() => {
+                const pCirc = svg.closest('.workspace-panel') || doc.getElementById('circuit-wrapper');
+                if (!pCirc || pCirc.offsetWidth <= 0 || pCirc.offsetHeight <= 0) return;
+                try {
+                    if (keepView && typeof panZoomCircuitInstance !== 'undefined' && panZoomCircuitInstance) {
+                        panZoomCircuitInstance.updateBBox();
+                        panZoomCircuitInstance.resize();
+                    } else {
+                        if (typeof panZoomCircuitInstance !== 'undefined' && panZoomCircuitInstance) {
+                            panZoomCircuitInstance.destroy();
+                            panZoomCircuitInstance = null;
+                        }
+                        panZoomCircuitInstance = svgPanZoom(svg, svgPanZoomOptions);
+                    }
+                } catch(_) {}
+            }, 15);
+        };
+
         function drawCircuitPlan(graph, inputsList, outputsList, keepView = false) {
+            // Branch in den Anschluss-/Klemmenplan, wenn der Toggle aktiv ist
+            // (nur im SPS-Modus erreichbar, siehe _toggleIecAnschlussView).
+            if (!window.epneuMode && window._iecAnschlussView && typeof window._renderAnschlussPlan === 'function') {
+                try { window._renderAnschlussPlan(graph, inputsList, outputsList, keepView); return; } catch(e) { console.warn('Anschlussplan-Renderer fehlgeschlagen, falle zurück auf Programm-Sicht:', e); }
+            }
             let isFirstRun = !panZoomCircuitInstance;
             circuitContent.innerHTML = '';
             // Titelzeile analog zum Pneumatik-/Hydraulik-Schaltplan. Wird (sofern
@@ -39749,7 +40677,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (typeof window._renderSchrittketten === 'function') window._renderSchrittketten();
             }
             if (panelId === 'festo-wrapper') {
-                if (typeof window._renderFestoPanel === 'function') window._renderFestoPanel();
+                if (typeof window._renderFestoPanel === 'function') {
+                    window._festoNeedsFit = true;
+                    window._renderFestoPanel();
+                }
             }
             if (panelId === 'circuit-editor-wrapper') {
                 // Editor neu rendern: SVG-Inhalt (24V/0V-Schienen, Komponenten,
@@ -39773,6 +40704,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { panZoomCircuitInstance.resize(); panZoomCircuitInstance.fit(); panZoomCircuitInstance.center(); } catch(_) {}
             }
             if (panelId === 'festo-wrapper' && typeof window._renderFestoPanel === 'function') {
+                window._festoNeedsFit = true;
                 window._renderFestoPanel();
             }
             if (panelId === 'sk-wrapper' && typeof window._renderSchrittketten === 'function') {
@@ -40892,6 +41824,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (window.epneuMode) {
                     let _eb = document.getElementById('btn-epneu-mode');
                     if (_eb) { _eb.textContent = '⚡ E-Pneu'; _eb.style.background = '#0288d1'; _eb.style.color = '#fff'; }
+                }
+                // Anschluss-Sicht-Toggle (nur SPS-Modus) initial sichtbar/un-
+                // sichtbar machen je nach epneuMode.
+                if (typeof window._syncIecAnschlussBtnVisibility === 'function') {
+                    try { window._syncIecAnschlussBtnVisibility(); } catch(_) {}
                 }
             })();
             // 🌟 NEU: Layout aus dem Speicher (F5) wiederherstellen
@@ -42987,6 +43924,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
         // Beim Seitenstart: Button-Beschriftung an den gespeicherten Zustand anpassen.
         window.addEventListener('DOMContentLoaded', () => {
+            // SPS/E-Pneu-Mode-Button: Beschriftung + Farbe an den persisten-
+            // ten Mode-State synchronisieren (HTML-Default ist „⚡ SPS",
+            // muss bei E-Pneu-Default umgeflippt werden).
+            const epneuBtn = document.getElementById('btn-epneu-mode');
+            if (epneuBtn) {
+                epneuBtn.textContent = window.epneuMode ? '⚡ E-Pneu' : '⚡ SPS';
+                epneuBtn.style.background = window.epneuMode ? '#0288d1' : '#455a64';
+                epneuBtn.style.color = window.epneuMode ? '#fff' : '#ccc';
+            }
+            // Sicht-Toggle (Programm ⇄ Anschluss): Sichtbarkeit + Label
+            // anhand des aktuellen Modus + persistierter Wahl setzen.
+            if (typeof window._syncIecAnschlussBtnVisibility === 'function') {
+                try { window._syncIecAnschlussBtnVisibility(); } catch(_) {}
+            }
             const btn = document.getElementById('btn-pneu-pressures');
             if (btn && window.configPneuShowPressures) {
                 btn.style.backgroundColor = '#0288d1';
@@ -45635,8 +46586,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     },
                     {
                         title: '⚡ SPS- / E-Pneumatik-Modus',
-                        text: 'Schaltet zwischen SPS-Interpretation und E-Pneumatik-Modus um. Im E-Pneumatik-Modus repräsentieren Variablen den PHYSISCHEN Press-Zustand (NOTAUS = 1 wenn gedrückt), Schließer/Öffner-Wahl wird in der UI ausgeblendet. Der Code bleibt unverändert — nur die Semantik der Eingänge wechselt.',
-                        target: '#btn-epneu-mode', pos: 'bottom'
+                        text: 'Zwei <b>Lese-Sichten desselben Codes</b> — der Code-Text bleibt identisch, nur seine Bedeutung wechselt.<br><br>⚡ <b>SPS-Modus:</b> Der Code ist das, was die <b>SPS tatsächlich ausführt</b>. Variablen halten das Signal an der SPS-Klemme. <code>NOTAUS==1</code> heißt <i>„nicht gedrückt"</i> (Failsafe).<br><br>⚡ <b>E-Pneu-Modus:</b> Der Code ist ein <b>direktes Abbild der Schaltplanlogik</b>. Variablen halten den physischen Press-Zustand. <code>NOTAUS==1</code> heißt <i>„gedrückt"</i>. Schließer → <code>X</code>, Öffner → <code>¬X</code>.<br><br>📌 Der Unterschied wird ausschließlich bei <b>NC-Kontakten</b> sichtbar (Notaus, Lichtgitter, Öffner). Schließer verhalten sich in beiden Modi gleich.<br><br><div style="text-align:center; margin-top:12px;"><button onclick="window._showEpneuVsSpsInfo()" style="background:#0288d1; color:#fff; border:none; border-radius:5px; padding:8px 16px; font-size:12px; font-weight:bold; cursor:pointer;">📖 Mehr erfahren · wann nutze ich welchen Modus?</button></div>',
+                        target: '#btn-epneu-mode', pos: 'right'
                     },
                     {
                         title: '📖 Erklärmodus',
@@ -45951,6 +46902,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     try { window.toggleWorkspaceView(id); } catch(_) {}
                 }
             };
+            // Stellt den gewünschten Workspace-Panel-Satz für eine Lektion her:
+            // erst alle benötigten Panels einblenden, dann alle nicht
+            // benötigten ausblenden. Reihenfolge ist wichtig — die
+            // toggleWorkspaceView-Logik blockiert das Ausblenden des letzten
+            // sichtbaren Panels; durch vorheriges Einblenden der gewünschten
+            // ist diese Sperre immer durch >= 1 Wunsch-Panel gedeckt.
+            // Detached Panels (in einem Pop-Out-Fenster) bleiben unangetastet
+            // — der User hat sie bewusst ausgelagert.
+            const _setLessonPanels = (neededIds) => {
+                const ALL = ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper',
+                             'factory-wrapper', 'sk-wrapper', 'festo-wrapper'];
+                const needed = new Set(neededIds || []);
+                const isDetached = (id) => !!(window.popOutWindows
+                    && window.popOutWindows[id] && !window.popOutWindows[id].closed);
+                needed.forEach(id => {
+                    if (!ALL.includes(id) || isDetached(id)) return;
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (el.style.display === 'none' && typeof window.toggleWorkspaceView === 'function') {
+                        try { window.toggleWorkspaceView(id); } catch(_) {}
+                    }
+                });
+                ALL.forEach(id => {
+                    if (needed.has(id) || isDetached(id)) return;
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (el.style.display !== 'none' && typeof window.toggleWorkspaceView === 'function') {
+                        try { window.toggleWorkspaceView(id); } catch(_) {}
+                    }
+                });
+            };
             const _setEditorCode = (code) => {
                 const ta = document.getElementById('code');
                 if (!ta) return;
@@ -45991,6 +46973,71 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     cb.parentElement.removeAttribute('data-lesson-locked');
                 });
             };
+            // Animation des Relais-Innenlebens (Spule erregt → Anker zieht an
+            // → Wechslerkontakt schließt). Wird in mehreren Lektionen
+            // wiederverwendet (Grundlagen G2, Aufbau W2).
+            const _relayMechanicSvg = () =>
+                  '<svg viewBox="0 0 360 180" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:10px auto 6px;background:#0a1520;border:1px solid #30363d;border-radius:6px;width:100%;height:auto;max-width:360px;">'
+                +   '<defs><style>'
+                +     '@keyframes vlc { 0%,22% { fill:#37474f; } 30%,72% { fill:#f9a825; } 80%,100% { fill:#37474f; } }'
+                +     '@keyframes vlo { 0%,22% { opacity:0; } 30%,72% { opacity:1; } 80%,100% { opacity:0; } }'
+                +     '@keyframes vla { 0%,22% { transform:rotate(10deg); } 30%,72% { transform:rotate(0deg); } 80%,100% { transform:rotate(10deg); } }'
+                +     '@keyframes vlf { to { stroke-dashoffset:-32; } }'
+                +     '.v-coil { animation: vlc 4s ease-in-out infinite; }'
+                +     '.v-on { animation: vlo 4s ease-in-out infinite; }'
+                +     '.v-arm { transform-origin: 260px 80px; transform-box: view-box; animation: vla 4s ease-in-out infinite; }'
+                +     '.v-flow { stroke-dasharray:5 4; animation: vlf 1.2s linear infinite; }'
+                +   '</style></defs>'
+                +   '<text x="180" y="14" font-family="sans-serif" font-size="10" fill="#80deea" text-anchor="middle">Spule erregt → Anker zieht an → Kontakt schließt</text>'
+                +   '<text x="55" y="32" font-size="9" font-weight="bold" fill="#90caf9" text-anchor="middle">Steuerkreis</text>'
+                +   '<text x="290" y="32" font-size="9" font-weight="bold" fill="#ce93d8" text-anchor="middle">Lastkreis</text>'
+                +   '<circle cx="35" cy="50" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
+                +   '<text x="35" y="53" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">A1</text>'
+                +   '<circle cx="35" cy="140" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
+                +   '<text x="35" y="143" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">A2</text>'
+                +   '<line x1="35" y1="56" x2="35" y2="134" stroke="#455a64" stroke-width="1.2"/>'
+                +   '<g class="v-on">'
+                +     '<line class="v-flow" x1="35" y1="56" x2="35" y2="70" stroke="#f9a825" stroke-width="2.5"/>'
+                +     '<line class="v-flow" x1="35" y1="120" x2="35" y2="134" stroke="#f9a825" stroke-width="2.5"/>'
+                +     '<line class="v-flow" x1="35" y1="70" x2="55" y2="70" stroke="#f9a825" stroke-width="2.5"/>'
+                +     '<line class="v-flow" x1="35" y1="120" x2="55" y2="120" stroke="#f9a825" stroke-width="2.5"/>'
+                +   '</g>'
+                +   '<rect x="93" y="65" width="14" height="60" fill="#546e7a" stroke="#263238" stroke-width="0.8"/>'
+                +   '<rect class="v-coil" x="55" y="70" width="40" height="50" rx="3" fill="#37474f" stroke="#90a4ae" stroke-width="1.5"/>'
+                +   '<rect class="v-coil" x="105" y="70" width="40" height="50" rx="3" fill="#37474f" stroke="#90a4ae" stroke-width="1.5"/>'
+                +   '<g stroke="#000" stroke-width="0.7" opacity="0.35">'
+                +     '<line x1="62" y1="70" x2="62" y2="120"/><line x1="70" y1="70" x2="70" y2="120"/>'
+                +     '<line x1="78" y1="70" x2="78" y2="120"/><line x1="86" y1="70" x2="86" y2="120"/>'
+                +     '<line x1="112" y1="70" x2="112" y2="120"/><line x1="120" y1="70" x2="120" y2="120"/>'
+                +     '<line x1="128" y1="70" x2="128" y2="120"/><line x1="136" y1="70" x2="136" y2="120"/>'
+                +   '</g>'
+                +   '<text x="100" y="135" font-size="9" fill="#cfd8dc" text-anchor="middle">Spule</text>'
+                +   '<path d="M 100 65 L 100 50 L 260 50 L 260 80" fill="none" stroke="#546e7a" stroke-width="5" stroke-linejoin="round"/>'
+                +   '<g class="v-on">'
+                +     '<line x1="100" y1="64" x2="100" y2="52" stroke="#f9a825" stroke-width="2.5"/>'
+                +     '<polygon points="96 56 100 48 104 56" fill="#f9a825"/>'
+                +     '<text x="115" y="50" font-size="9" fill="#f9a825">B</text>'
+                +   '</g>'
+                +   '<circle cx="260" cy="80" r="3.5" fill="#cfd8dc" stroke="#000" stroke-width="0.8"/>'
+                +   '<text x="260" y="44" font-size="8" fill="#80deea" text-anchor="middle">Drehpunkt</text>'
+                +   '<g class="v-arm">'
+                +     '<rect x="110" y="76" width="155" height="9" rx="2" fill="#b0bec5" stroke="#37474f" stroke-width="1"/>'
+                +     '<text x="187" y="83" font-size="8" font-weight="bold" fill="#212121" text-anchor="middle">ANKER</text>'
+                +     '<line x1="180" y1="85" x2="180" y2="130" stroke="#90a4ae" stroke-width="2.5"/>'
+                +     '<rect x="160" y="128" width="60" height="5" rx="1" fill="#f9a825" stroke="#ef6c00" stroke-width="0.7"/>'
+                +   '</g>'
+                +   '<rect x="160" y="136" width="14" height="4" fill="#cfd8dc"/>'
+                +   '<rect x="206" y="136" width="14" height="4" fill="#cfd8dc"/>'
+                +   '<line x1="167" y1="140" x2="167" y2="156" stroke="#607d8b" stroke-width="1.5"/>'
+                +   '<line x1="213" y1="140" x2="213" y2="156" stroke="#607d8b" stroke-width="1.5"/>'
+                +   '<circle cx="167" cy="162" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
+                +   '<text x="167" y="165" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">13</text>'
+                +   '<circle cx="213" cy="162" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
+                +   '<text x="213" y="165" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">14</text>'
+                +   '<g class="v-on">'
+                +     '<path class="v-flow" d="M 167 156 L 167 145 L 213 145 L 213 156" fill="none" stroke="#f9a825" stroke-width="2.5"/>'
+                +   '</g>'
+                + '</svg>';
             // Lektions-Cleanup für Aufbau-Lektionen: Locks lösen, Trainingsmodus
             // zurücksetzen, normale FESTO-Anzeige wiederherstellen. Wird vom
             // _startWalk-Engine über opts.onClose aufgerufen (sowohl bei
@@ -46003,6 +47050,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (t && t.checked && typeof window._setFestoTrainMode === 'function') {
                         t.checked = false;
                         window._setFestoTrainMode(false);
+                    }
+                } catch(_) {}
+                // Dual-Circuit-Toggle zurücksetzen: W2 schaltet ihn als
+                // Anschauungs-Schritt aktiv, beim Lektions-Ende soll der
+                // Standard-Aufbau (24V einheitlich) wieder anliegen.
+                try {
+                    if (window.configDualCircuit && typeof window.toggleDualCircuit === 'function') {
+                        window.toggleDualCircuit();
                     }
                 } catch(_) {}
             };
@@ -46115,7 +47170,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#circuit-wrapper', pos: 'left',
                             title: '⚡ Schaltplan: Relais & Reihenschaltung',
-                            text: 'Im Schaltplan ist UND eine <b>Reihenschaltung</b>: START-Kontakt und FREIGABE-Kontakt sitzen hintereinander im selben Strompfad. Strom fließt nur, wenn <b>beide</b> Kontakte gleichzeitig geschlossen sind — die elektrische Entsprechung des UND-Gatters.<br><br>🔌 <b>Was du zusätzlich siehst — ein Relais:</b> VALIS zeichnet den Schaltplan standardmäßig im Modus <b>Relais (Klassisch)</b>. Dabei wird jedes Gatter aus dem Logikplan mit einem <b>Hilfsrelais</b> (Bezeichnung <code>-KFn</code>) umgesetzt — so wie es in echten Industrie-Schaltschränken Standard ist.<br><br>Ein <b>Relais</b> ist ein elektromagnetischer Schalter. Es besteht aus zwei Teilen:<br>• eine <b>Spule</b> (das Rechteck oben) — wird sie bestromt, baut sie ein Magnetfeld auf,<br>• ein oder mehrere <b>Kontakte</b> in anderen Strompfaden — diese werden vom Magnetfeld der Spule angezogen und schalten dort z. B. einen Motor oder eine Lampe ein.<br><br>Hier siehst du also <b>zwei Strompfade</b>: Der erste enthält die Reihenschaltung START + FREIGABE und steuert die Spule des Relais. Der zweite enthält einen Kontakt desselben Relais, der erst dann durchschaltet und den Motor (LÜFTER, dargestellt als <code>-M</code>) einschaltet, wenn die Spule angezogen hat.<br><br>🔎 <b>Woran erkennst du, dass Spule und Kontakt zusammengehören?</b> An der <b>selben Bezeichnung</b> (z. B. <code>-KF1</code>): die Spule trägt sie, und jeder ihrer Kontakte trägt sie ebenfalls. Im Schaltplan stehen sie auf verschiedenen Seiten — <b>in der Realität sind sie aber ein und dasselbe Bauteil</b>. Spule und Kontakte sitzen mechanisch gekoppelt in einem einzigen Relais-Gehäuse; der Schaltplan zeichnet sie nur deshalb getrennt, weil sie in unterschiedlichen Strompfaden mitwirken.<br><br>🔧 <b>Alternative: Modus „Direkt"</b> — Über die Toolbar oben (<b>⚡ Elektro-Optionen</b>, dann auf den Button <b>💼 Modus: Relais (Klassisch)</b> klicken) lässt sich der Schaltplan auf <b>Direkt (Wirtschaftlich)</b> umstellen. Dann zeichnet VALIS dieselbe Logik ohne Zwischen-Relais — die Reihenschaltung steuert den Motor direkt. Kompakter, aber weniger nah an realer Industrie-Verdrahtung.',
+                            text: 'Im Schaltplan ist UND eine <b>Reihenschaltung</b>: START-Kontakt und FREIGABE-Kontakt sitzen hintereinander im selben Strompfad. Strom fließt nur, wenn <b>beide</b> Kontakte gleichzeitig geschlossen sind — die elektrische Entsprechung des UND-Gatters.<br><br>🔌 <b>Was du zusätzlich siehst — ein Relais:</b> VALIS zeichnet den Schaltplan standardmäßig im Modus <b>Relais (Klassisch)</b>. Dabei wird jedes Gatter aus dem Logikplan mit einem <b>Hilfsrelais</b> (Bezeichnung <code>-KFn</code>) umgesetzt — so wie es in echten Industrie-Schaltschränken Standard ist.<br><br>Ein <b>Relais</b> ist ein elektromagnetischer Schalter. Es besteht aus zwei Teilen:<br>• eine <b>Spule</b> (das Rechteck oben) — wird sie bestromt, baut sie ein Magnetfeld auf,<br>• ein oder mehrere <b>Kontakte</b> in anderen Strompfaden — diese werden vom Magnetfeld der Spule angezogen und schalten dort z. B. einen Motor oder eine Lampe ein.<br><br>👀 <b>So sieht das im Inneren aus</b> (vereinfachte Animation): links wird die Spule pulsierend erregt, der Anker rechts wird angezogen, und unten schließt der Wechslerkontakt 13/14 — derselbe, der gleich auch im Schaltplan-Symbol auftaucht.'
+                                + _relayMechanicSvg()
+                                + 'Hier siehst du also <b>zwei Strompfade</b>: Der erste enthält die Reihenschaltung START + FREIGABE und steuert die Spule des Relais. Der zweite enthält einen Kontakt desselben Relais, der erst dann durchschaltet und den Motor (LÜFTER, dargestellt als <code>-M</code>) einschaltet, wenn die Spule angezogen hat.<br><br>🔎 <b>Woran erkennst du, dass Spule und Kontakt zusammengehören?</b> An der <b>selben Bezeichnung</b> (z. B. <code>-KF1</code>): die Spule trägt sie, und jeder ihrer Kontakte trägt sie ebenfalls. Im Schaltplan stehen sie auf verschiedenen Seiten — <b>in der Realität sind sie aber ein und dasselbe Bauteil</b>. Spule und Kontakte sitzen mechanisch gekoppelt in einem einzigen Relais-Gehäuse; der Schaltplan zeichnet sie nur deshalb getrennt, weil sie in unterschiedlichen Strompfaden mitwirken.<br><br>🔧 <b>Alternative: Modus „Direkt"</b> — Über die Toolbar oben (<b>⚡ Elektro-Optionen</b>, dann auf den Button <b>💼 Modus: Relais (Klassisch)</b> klicken) lässt sich der Schaltplan auf <b>Direkt (Wirtschaftlich)</b> umstellen. Dann zeichnet VALIS dieselbe Logik ohne Zwischen-Relais — die Reihenschaltung steuert den Motor direkt. Kompakter, aber weniger nah an realer Industrie-Verdrahtung.',
                             before: () => _ensurePanel('circuit-wrapper')
                         },
                         {
@@ -46505,67 +47562,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             target: null, pos: 'center',
                             title: '🎓 Was ist ein Relais eigentlich?',
                             text: 'Ein <b>Relais</b> ist im Kern ein <b>elektrisch gesteuerter Schalter</b>:'
-                                + '<svg viewBox="0 0 360 180" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:10px auto 6px;background:#0a1520;border:1px solid #30363d;border-radius:6px;width:100%;height:auto;max-width:360px;">'
-                                +   '<defs><style>'
-                                +     '@keyframes vlc { 0%,22% { fill:#37474f; } 30%,72% { fill:#f9a825; } 80%,100% { fill:#37474f; } }'
-                                +     '@keyframes vlo { 0%,22% { opacity:0; } 30%,72% { opacity:1; } 80%,100% { opacity:0; } }'
-                                +     '@keyframes vla { 0%,22% { transform:rotate(10deg); } 30%,72% { transform:rotate(0deg); } 80%,100% { transform:rotate(10deg); } }'
-                                +     '@keyframes vlf { to { stroke-dashoffset:-32; } }'
-                                +     '.v-coil { animation: vlc 4s ease-in-out infinite; }'
-                                +     '.v-on { animation: vlo 4s ease-in-out infinite; }'
-                                +     '.v-arm { transform-origin: 260px 80px; transform-box: view-box; animation: vla 4s ease-in-out infinite; }'
-                                +     '.v-flow { stroke-dasharray:5 4; animation: vlf 1.2s linear infinite; }'
-                                +   '</style></defs>'
-                                +   '<text x="180" y="14" font-family="sans-serif" font-size="10" fill="#80deea" text-anchor="middle">Spule erregt → Anker zieht an → Kontakt schließt</text>'
-                                +   '<text x="55" y="32" font-size="9" font-weight="bold" fill="#90caf9" text-anchor="middle">Steuerkreis</text>'
-                                +   '<text x="290" y="32" font-size="9" font-weight="bold" fill="#ce93d8" text-anchor="middle">Lastkreis</text>'
-                                +   '<circle cx="35" cy="50" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
-                                +   '<text x="35" y="53" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">A1</text>'
-                                +   '<circle cx="35" cy="140" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
-                                +   '<text x="35" y="143" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">A2</text>'
-                                +   '<line x1="35" y1="56" x2="35" y2="134" stroke="#455a64" stroke-width="1.2"/>'
-                                +   '<g class="v-on">'
-                                +     '<line class="v-flow" x1="35" y1="56" x2="35" y2="70" stroke="#f9a825" stroke-width="2.5"/>'
-                                +     '<line class="v-flow" x1="35" y1="120" x2="35" y2="134" stroke="#f9a825" stroke-width="2.5"/>'
-                                +     '<line class="v-flow" x1="35" y1="70" x2="55" y2="70" stroke="#f9a825" stroke-width="2.5"/>'
-                                +     '<line class="v-flow" x1="35" y1="120" x2="55" y2="120" stroke="#f9a825" stroke-width="2.5"/>'
-                                +   '</g>'
-                                +   '<rect x="93" y="65" width="14" height="60" fill="#546e7a" stroke="#263238" stroke-width="0.8"/>'
-                                +   '<rect class="v-coil" x="55" y="70" width="40" height="50" rx="3" fill="#37474f" stroke="#90a4ae" stroke-width="1.5"/>'
-                                +   '<rect class="v-coil" x="105" y="70" width="40" height="50" rx="3" fill="#37474f" stroke="#90a4ae" stroke-width="1.5"/>'
-                                +   '<g stroke="#000" stroke-width="0.7" opacity="0.35">'
-                                +     '<line x1="62" y1="70" x2="62" y2="120"/><line x1="70" y1="70" x2="70" y2="120"/>'
-                                +     '<line x1="78" y1="70" x2="78" y2="120"/><line x1="86" y1="70" x2="86" y2="120"/>'
-                                +     '<line x1="112" y1="70" x2="112" y2="120"/><line x1="120" y1="70" x2="120" y2="120"/>'
-                                +     '<line x1="128" y1="70" x2="128" y2="120"/><line x1="136" y1="70" x2="136" y2="120"/>'
-                                +   '</g>'
-                                +   '<text x="100" y="135" font-size="9" fill="#cfd8dc" text-anchor="middle">Spule</text>'
-                                +   '<path d="M 100 65 L 100 50 L 260 50 L 260 80" fill="none" stroke="#546e7a" stroke-width="5" stroke-linejoin="round"/>'
-                                +   '<g class="v-on">'
-                                +     '<line x1="100" y1="64" x2="100" y2="52" stroke="#f9a825" stroke-width="2.5"/>'
-                                +     '<polygon points="96 56 100 48 104 56" fill="#f9a825"/>'
-                                +     '<text x="115" y="50" font-size="9" fill="#f9a825">B</text>'
-                                +   '</g>'
-                                +   '<circle cx="260" cy="80" r="3.5" fill="#cfd8dc" stroke="#000" stroke-width="0.8"/>'
-                                +   '<text x="260" y="44" font-size="8" fill="#80deea" text-anchor="middle">Drehpunkt</text>'
-                                +   '<g class="v-arm">'
-                                +     '<rect x="110" y="76" width="155" height="9" rx="2" fill="#b0bec5" stroke="#37474f" stroke-width="1"/>'
-                                +     '<text x="187" y="83" font-size="8" font-weight="bold" fill="#212121" text-anchor="middle">ANKER</text>'
-                                +     '<line x1="180" y1="85" x2="180" y2="130" stroke="#90a4ae" stroke-width="2.5"/>'
-                                +     '<rect x="160" y="128" width="60" height="5" rx="1" fill="#f9a825" stroke="#ef6c00" stroke-width="0.7"/>'
-                                +   '</g>'
-                                +   '<rect x="160" y="136" width="14" height="4" fill="#cfd8dc"/>'
-                                +   '<rect x="206" y="136" width="14" height="4" fill="#cfd8dc"/>'
-                                +   '<line x1="167" y1="140" x2="167" y2="156" stroke="#607d8b" stroke-width="1.5"/>'
-                                +   '<line x1="213" y1="140" x2="213" y2="156" stroke="#607d8b" stroke-width="1.5"/>'
-                                +   '<circle cx="167" cy="162" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
-                                +   '<text x="167" y="165" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">13</text>'
-                                +   '<circle cx="213" cy="162" r="6" fill="#212121" stroke="#90a4ae" stroke-width="1.4"/>'
-                                +   '<text x="213" y="165" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle">14</text>'
-                                +   '<g class="v-on">'
-                                +     '<path class="v-flow" d="M 167 156 L 167 145 L 213 145 L 213 156" fill="none" stroke="#f9a825" stroke-width="2.5"/>'
-                                +   '</g>'
-                                + '</svg>'
+                                + _relayMechanicSvg()
                                 + '🔩 <b>Mechanik:</b> Eine Spule (= Drahtwicklung) erzeugt ein Magnetfeld, wenn Strom durch sie fließt. Das Magnetfeld zieht einen Anker an, der mechanisch mit einem oder mehreren <b>Schaltkontakten</b> verbunden ist. Erregte Spule → Kontakte schalten um. Spannungslos → Federkraft zieht sie zurück.<br><br>🔌 <b>Elektrisch sind Spule und Kontakte <i>vollständig getrennt</i></b> — sie haben nichts miteinander zu tun außer der gemeinsamen Mechanik. Das ist der eigentliche Sinn: ein <b>kleines</b> Steuersignal (24V, wenige mA durch die Spule) schaltet einen <b>großen</b> Lastkreis (z. B. 400V Motor, 16A).<br><br>📋 <b>Vier wichtige Gründe, ein Relais einzusetzen:</b><br>1️⃣ <b>Trennung von Steuer- und Lastkreis</b> — du steuerst 400V/16A sicher mit 24V/Tasterstrom.<br>2️⃣ <b>Signal-Vervielfältigung</b> — ein Relais kann mehrere Kontakte gleichzeitig haben (Schließer + Öffner + …) und damit mehrere Strompfade parallel schalten.<br>3️⃣ <b>Logik-Verknüpfung</b> — mehrere Relais verschaltet ergeben UND/ODER/Selbsthaltung (siehe Lektion W3).<br>4️⃣ <b>Signal-Pegelumsetzung</b> — Steuerung in 24V DC, Last in 230V AC ist nur über galvanische Trennung sicher.<br><br>In dieser Lektion ist Grund 1 der wichtigste: <i>Wir simulieren die typische industrielle Architektur Steuerkreis ↔ Lastkreis</i>, auch wenn unser „Last" hier nur eine kleine LED ist.'
                         },
                         {
@@ -46629,16 +47626,38 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#festo-wrapper', pos: 'left',
                             title: '🟦 Strang 2 · Kabel 2 — Blau: Relais.11 → LED',
-                            text: '<b>Zweites und letztes Kabel</b> — von der Wechsler-Wurzel an die LED:<br><br>📍 <b>Von:</b> Relais <b>-KF1</b>, Sockel <b>11</b> (Wurzel/Common des Wechslers)<br>📍 <b>Zu:</b> LED-Panel, oberer schwarzer Sockel der LAMPE-Spalte<br>🟦 <b>Farbe:</b> Blau<br><br>📌 <b>Im Schaltplan steht „14" am Schließer-Ausgang</b> — auf der Wechsler-Hardware ist das die <b>11</b> (Wurzel). Wenn der Wechsler-Lever umklappt (Spule erregt), verbindet er <b>14 → 11</b>: die +24V wandern vom NO-Zweig zur Wurzel und dann weiter zur LED.<br><br>🔧 <b>LED intern auf 0V:</b> Wie in W1 ist die X2-Seite der LED schon mit der Panel-0V-Schiene verbunden — kein drittes Kabel nötig.<br><br>✅ <b>Sobald dieses Kabel sitzt, ist die Lektion durchgespielt.</b>',
+                            text: '<b>Zweites und letztes Kabel</b> — von der Wechsler-Wurzel an die LED:<br><br>📍 <b>Von:</b> Relais <b>-KF1</b>, Sockel <b>11</b> (Wurzel/Common des Wechslers)<br>📍 <b>Zu:</b> LED-Panel, oberer schwarzer Sockel der LAMPE-Spalte<br>🟦 <b>Farbe:</b> Blau<br><br>📌 <b>Im Schaltplan steht „14" am Schließer-Ausgang</b> — auf der Wechsler-Hardware ist das die <b>11</b> (Wurzel). Wenn der Wechsler-Lever umklappt (Spule erregt), verbindet er <b>14 → 11</b>: die +24V wandern vom NO-Zweig zur Wurzel und dann weiter zur LED.<br><br>🔧 <b>LED intern auf 0V:</b> Wie in W1 ist die X2-Seite der LED schon mit der Panel-0V-Schiene verbunden — kein drittes Kabel nötig.<br><br>✅ <b>Sobald dieses Kabel sitzt, ist die Verdrahtung fertig.</b><br><br>📣 <b>Vorab-Hinweis — nicht erschrecken:</b> Sobald du auf „Weiter" klickst, schalte ich für dich die Schaltplan-Option <b>⚡ Getrennte Stromkreise</b> ein, damit du den Industrie-Aufbau siehst. VALIS blendet dabei <b>eine bewusst plakative rote 230V-Sicherheitswarnung</b> ein — das ist <i>kein</i> Fehler und nichts ist kaputt. Lies sie durch, klick sie weg, und der nächste Lektions-Tipp erklärt dir, was sich verändert hat.',
                             before: () => _lockFestoTrainToggle(),
                             canAdvance: _cablePlaced(/R\d+_S\d+_11$/, /L\d+_S\d+_24V_a$/),
                             advanceBlockMsg: 'Kabel von -KF1.11 (Wurzel) → LED-Eingang ist noch nicht verlegt.'
                         },
                         {
+                            target: ['#btn-toggle-dual', '#circuit-wrapper', '#festo-wrapper'], pos: 'left',
+                            title: '🏭 Industrie-Variante: Getrennte Stromkreise',
+                            text: 'Erinnerst du dich an <b>Grund 1</b> aus der Relais-Erklärung? <i>Trennung von Steuer- und Lastkreis</i> — das Relais kann ein kleines Steuersignal (24V DC) auf einen großen Lastkreis (z. B. 230V AC) übersetzen. Die zwei Stränge, die du gerade gebaut hast, sind genau diese Architektur — nur dass unser „Lastkreis" zur Demo eine kleine 24V-LED ist.<br><br>🔧 <b>Was VALIS dir dafür anbietet:</b> Den Button <b>⚡ Getrennte Stromkreise</b> in der Auto-Schaltplan-Toolbar. Er wechselt die Darstellung in die <b>industrieübliche Form</b>: Steuerstrang bleibt 24V DC, Laststrang bekommt 230V AC. Ich habe ihn für dich gerade aktiviert — schau jetzt was sich verändert hat:<br><br>📐 <b>Im Auto-Schaltplan:</b><br>• Der <b>Steuerstrang (-KF1)</b> bleibt unverändert an +24V/0V — hier lebt unsere Logik.<br>• Der <b>Laststrang (LAMPE)</b> hängt jetzt zwischen den Schienen <b>L1</b> (Phase 230V) und <b>N</b> (Neutralleiter) statt +24V/0V. Genau dort, wo in der Realität ein Verbraucher (Motor, Lampe, Schütz-Spule für einen großen Antrieb) angeschlossen wäre.<br>• Der Schließer-Kontakt -KF1 in Strang 2 ist <i>derselbe</i> wie vorher — er sitzt nur jetzt im 230V-Pfad. <b>Genau das ist der Sinn des Relais:</b> die galvanische Trennung erlaubt es, mit 24V-Logik ein 230V-Gerät zu schalten.<br><br>🔌 <b>An der FESTO-Schaltwand:</b><br>• <b>Unterhalb</b> der vertrauten 24V-Sammelschiene (oben: rot = +24V, blau = 0V) taucht eine <b>zweite Sammelschienen-Etage</b> auf: <b>L1 / N</b> mit braunen/blauen Sockeln. Das entspricht der typischen Hardware-Anordnung im Schaltschrank — die Lastebene sitzt traditionell unter dem Steuer-Bus, damit die 230V-Verdrahtung baulich von der 24V-Steuerseite getrennt bleibt.<br>• Deine bestehenden Kabel zum LED-Panel werden jetzt vom Walker und vom Renderer auf L1/N umgeleitet — die zwei Kabel zum Laststrang gehen in der Darstellung zur 230V-Schiene.<br><br>⚠️ <b>Sicherheitsbanner & Hinweis:</b> Sobald die Option aktiv ist, blendet VALIS eine bewusst plakative <b>230V-Warnung</b> ein. Das soll dich daran erinnern: <i>Diese Darstellung dient dem Verständnis</i> — am realen FESTO-Lehrkasten arbeitet niemand mit 230V. Im Echtbetrieb wäre die Last ein Schütz oder ein Vor-Schaltrelais im echten Schaltschrank. Die Darstellung in VALIS ist die <b>didaktische Brücke</b> zwischen Lehrkasten-Welt (alles 24V) und Industrie-Schaltschrank (Steuer 24V / Last 230V/400V).<br><br>🎯 <b>Sobald du nach dem Klick auf „Weiter" wieder in den Sim-Schritt gehst</b>, kannst du den Toggle <i>oben in der Toolbar</i> jederzeit wieder ausschalten und beide Varianten vergleichen. Beim Lektions-Ende setzt VALIS ihn ohnehin auf AUS zurück.',
+                            before: () => {
+                                _ensurePanel('circuit-wrapper');
+                                _ensurePanel('festo-wrapper');
+                                _lockFestoTrainToggle();
+                                try {
+                                    if (!window.configDualCircuit && typeof window.toggleDualCircuit === 'function') {
+                                        window.toggleDualCircuit();
+                                    }
+                                } catch(_) {}
+                            }
+                        },
+                        {
                             target: '#btn-toggle-sim', pos: 'bottom',
                             title: '▶️ Beide Stränge im Stromfluss sehen',
-                            text: 'Geschafft — beide Stränge stehen. Jetzt prüfen wir das Werk:<br><br>📋 <b>So gehst du vor:</b><br>1️⃣ <b>🎓 Trainingsmodus aus</b> (Lock ist gelöst).<br>2️⃣ Optional <b>⚡ Stromfluss</b> aktivieren.<br>3️⃣ <b>Simulation starten</b> und <b>START</b> drücken.<br><br>📊 <b>Was du beobachtest:</b><br>• Stromfluss-Animation in <b>beiden Strängen gleichzeitig</b>.<br>• Im Schaltplan: Spule -KF1 zieht an, Schließer-Kontakt -KF1 (im Lastpfad) wechselt vom „offenen" ins „geschlossene" Symbol — du siehst es live.<br>• Im FESTO-Panel: der mechanische Hebel des Relais-Slots klappt um.<br>• Die LED leuchtet.<br><br>🔄 <b>Loslassen:</b> Steuerstrom weg → Spule fällt ab → Feder zieht 13/14 wieder auseinander → Laststrom weg → LED aus.<br><br>🎓 <b>Das hast du in W2 gelernt:</b><br>1️⃣ Ein <b>Relais</b> ist ein elektrisch gesteuerter Schalter mit getrennten Spulen- und Kontakt-Pins.<br>2️⃣ <b>A1/A2 = Spule</b>, <b>13/14 = Schließer (1. Kontakt)</b>, <b>11/12 = Öffner (1. Kontakt)</b>. Die erste Ziffer = Kontaktnummer, zweite = Kontaktart.<br>3️⃣ Jede Code-Zuweisung wird zu einem <b>eigenen Strang</b> — bei W2 also zwei nebeneinander, getrennt aufgebaut und einzeln testbar.<br>4️⃣ Auf <b>Wechsler-Hardware</b> ist das Schaltplan-„13/14" in Wahrheit „14/11" — der Plan zeigt die diskrete Sicht, die Hardware die Wechsler-Wirklichkeit.<br><br>Nächste Lektion (W3): wir verknüpfen zwei Taster mit <b>UND</b> — und sehen, wie VALIS automatisch ein <b>Hilfsrelais</b> einbaut.',
-                            before: () => _unlockFestoTrainToggle()
+                            text: 'Geschafft — beide Stränge stehen. Für den finalen Sim-Lauf habe ich die Schaltplan-Option <b>⚡ Getrennte Stromkreise</b> wieder <b>ausgeschaltet</b>: damit du das gewohnte einheitliche 24V-Bild siehst, und damit die Stromfluss-Animation am Lehrkasten-Aufbau ohne die 230V-Banner-Ablenkung sauber zu lesen ist.<br><br>📋 <b>So gehst du vor:</b><br>1️⃣ <b>🎓 Trainingsmodus aus</b> (Lock ist gelöst).<br>2️⃣ Optional <b>⚡ Stromfluss</b> aktivieren.<br>3️⃣ <b>Simulation starten</b> und <b>START</b> drücken.<br><br>📊 <b>Was du beobachtest:</b><br>• Stromfluss-Animation in <b>beiden Strängen gleichzeitig</b>.<br>• Im Schaltplan: Spule -KF1 zieht an, Schließer-Kontakt -KF1 (im Lastpfad) wechselt vom „offenen" ins „geschlossene" Symbol — du siehst es live.<br>• Im FESTO-Panel: der mechanische Hebel des Relais-Slots klappt um.<br>• Die LED leuchtet.<br><br>🔄 <b>Loslassen:</b> Steuerstrom weg → Spule fällt ab → Feder zieht 13/14 wieder auseinander → Laststrom weg → LED aus.<br><br>💡 <b>Lust auf mehr?</b> Sobald du die Sim einmal mit dem normalen Aufbau gefahren bist: schalte ruhig <b>⚡ Getrennte Stromkreise</b> in der Schaltplan-Toolbar wieder ein und starte die Simulation noch einmal. Du siehst dann live, wie der Steuer-Stromfluss bei 24V bleibt, während der Last-Stromfluss durch die L1/N-Schiene wandert — also dieselbe Logik, aber im industriellen Look. Beide Varianten erzeugen identisches Verhalten; nur die Darstellung unterscheidet sich.<br><br>🎓 <b>Das hast du in W2 gelernt:</b><br>1️⃣ Ein <b>Relais</b> ist ein elektrisch gesteuerter Schalter mit getrennten Spulen- und Kontakt-Pins.<br>2️⃣ <b>A1/A2 = Spule</b>, <b>13/14 = Schließer (1. Kontakt)</b>, <b>11/12 = Öffner (1. Kontakt)</b>. Die erste Ziffer = Kontaktnummer, zweite = Kontaktart.<br>3️⃣ Jede Code-Zuweisung wird zu einem <b>eigenen Strang</b> — bei W2 also zwei nebeneinander, getrennt aufgebaut und einzeln testbar.<br>4️⃣ Auf <b>Wechsler-Hardware</b> ist das Schaltplan-„13/14" in Wahrheit „14/11" — der Plan zeigt die diskrete Sicht, die Hardware die Wechsler-Wirklichkeit.<br>5️⃣ Die Option <b>⚡ Getrennte Stromkreise</b> zeigt denselben Aufbau in industrieüblicher Form — Steuerkreis 24V DC, Lastkreis 230V AC, vom Relais galvanisch getrennt.<br><br>Nächste Lektion (W3): wir verknüpfen zwei Taster mit <b>UND</b> — und sehen, wie VALIS automatisch ein <b>Hilfsrelais</b> einbaut.',
+                            before: () => {
+                                _unlockFestoTrainToggle();
+                                try {
+                                    if (window.configDualCircuit && typeof window.toggleDualCircuit === 'function') {
+                                        window.toggleDualCircuit();
+                                    }
+                                } catch(_) {}
+                            }
                         }
                     ]
                 },
@@ -46947,6 +47966,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     try { localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes)); } catch(_) {}
                 }
                 if (typeof _setEditorCode === 'function') _setEditorCode(lesson.code);
+                // Workspace-Panels auf den von der Lektion benötigten Satz
+                // reduzieren. Lektionen können einen eigenen `requiredPanels`-
+                // Eintrag mitbringen; ansonsten greift ein Kategorie-Default:
+                // - 'aufbau'  → Schaltplan + FESTO (keine 2D-Anlage,
+                //   kein Logikplan — wir bauen physisch an der Schaltwand).
+                // - sonst     → Logikplan + Schaltplan + 2D-Anlage (der
+                //   klassische Grundlagen-Drilldown vom Code zur Anlage).
+                const _defaultPanelsByCategory = {
+                    aufbau: ['circuit-wrapper', 'festo-wrapper'],
+                    grundlagen: ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'],
+                    fortgeschritten: ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper']
+                };
+                const _required = lesson.requiredPanels
+                    || _defaultPanelsByCategory[lesson.category || 'grundlagen']
+                    || ['fbs-wrapper', 'circuit-wrapper', 'factory-wrapper'];
+                try { _setLessonPanels(_required); } catch(_) {}
                 // Kurz warten, damit der Parser/Renderer das neue Code-Update
                 // verarbeitet hat, bevor wir Spotlights auf Plan-Panels werfen.
                 setTimeout(() => {
@@ -52874,6 +53909,65 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const ackBtn = overlay.querySelector('#festo-dual-warning-ack');
                 if (ackBtn) ackBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
             };
+            // ============ Hinweis-Modal für SPS-Modus beim FESTO-Aufbau ============
+            // Im SPS-Modus bildet VALIS den Schaltplan programmzentriert ab: NC-
+            // Inversionen passieren im Code, nicht in der Kontakt-Verschaltung.
+            // Beim Öffnen des FESTO-Panels in diesem Modus erscheint EINMAL ein
+            // orientierender Hinweis, was die gezeigte Verkabelung bedeutet und
+            // wann ggf. in den E-Pneu-Modus zu wechseln ist.
+            // Persistent in localStorage: einmal mit „Verstanden" weggeklickt
+            // soll der Hinweis nicht bei jedem Re-Render oder Page-Reload
+            // wieder aufploppen.
+            try {
+                window._festoSpsWarningShown = (localStorage.getItem('valisFestoSpsWarningAck') === '1');
+            } catch(_) {
+                window._festoSpsWarningShown = false;
+            }
+            window._showFestoSpsWarning = function(force) {
+                if (!force && window._festoSpsWarningShown) return;
+                window._festoSpsWarningShown = true;
+                let overlay = document.getElementById('festo-sps-warning-overlay');
+                if (overlay) { overlay.style.display = 'flex'; return; }
+                overlay = document.createElement('div');
+                overlay.id = 'festo-sps-warning-overlay';
+                overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.72); z-index:9400; display:flex; align-items:center; justify-content:center; padding:20px;';
+                overlay.innerHTML = ''
+                    + '<div style="background:#fff; border:2px solid #0288d1; border-radius:10px; max-width:640px; box-shadow:0 18px 60px rgba(0,0,0,0.6);">'
+                    +   '<div style="background:linear-gradient(135deg,#0288d1,#455a64); color:#fff; padding:16px 22px; border-radius:6px 6px 0 0; display:flex; align-items:center; gap:14px;">'
+                    +     '<div style="font-size:30px; line-height:1;">💡</div>'
+                    +     '<div>'
+                    +       '<div style="font-size:16px; font-weight:bold;">Hinweis · SPS-Modus aktiv beim FESTO-Aufbau</div>'
+                    +       '<div style="font-size:11px; opacity:0.85; margin-top:2px;">Was du gerade siehst — und wann du den Modus wechseln solltest.</div>'
+                    +     '</div>'
+                    +   '</div>'
+                    +   '<div style="padding:20px 24px; color:#212121; font-size:13px; line-height:1.6;">'
+                    +     '<p style="margin:0 0 12px;">Der FESTO-Aufbau zeigt die Verkabelung deines Schaltplans auf den realen Lehr-Boards. Im aktiven <b>⚡ SPS-Modus</b> bildet VALIS den Schaltplan so ab, wie eine SPS ihn „sieht": logische Inversionen (z. B. bei NC-Sensoren wie Not-Aus) passieren <i>im Programm</i>, nicht in der Kontakt-Verschaltung.</p>'
+                    +     '<div style="background:#e3f2fd; border-left:4px solid #0288d1; padding:10px 14px; margin:14px 0; font-size:12px; color:#0d3a5e;">'
+                    +       '<div style="font-weight:bold; margin-bottom:6px;">Für die Praxis am realen FESTO-Board:</div>'
+                    +       '<p style="margin:0 0 6px;"><b>Mit echter SPS</b> (LOGO!, S7, CPX, …): der SPS-Modus passt — die Verkabelung bleibt minimal, weil die SPS die Logik übernimmt.</p>'
+                    +       '<p style="margin:0;"><b>Reine Relais-/Pneumatik-Schaltung ohne SPS</b>: vorher in den <b>⚡ E-Pneumatik-Modus</b> wechseln. Dann zeichnet VALIS Schaltplan und FESTO-Aufbau elektromechanisch — NC-Symbole an passender Stelle, keine Programm-Inversion.</p>'
+                    +     '</div>'
+                    +     '<p style="margin:14px 0 0; font-size:11px; color:#757575; text-align:center;">Mit „Verstanden" wird der Hinweis dauerhaft ausgeblendet.</p>'
+                    +   '</div>'
+                    +   '<div style="padding:0 24px 22px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">'
+                    +     '<button id="festo-sps-warning-more" style="background:#fff; color:#0288d1; border:1px solid #0288d1; padding:9px 18px; font-size:12px; font-weight:bold; border-radius:5px; cursor:pointer;">📖 Mehr erfahren</button>'
+                    +     '<button id="festo-sps-warning-ack" style="background:#0288d1; color:#fff; border:none; padding:9px 26px; font-size:13px; font-weight:bold; border-radius:5px; cursor:pointer; box-shadow:0 3px 8px rgba(2,136,209,0.4);">Verstanden</button>'
+                    +   '</div>'
+                    + '</div>';
+                document.body.appendChild(overlay);
+                const ackBtn = overlay.querySelector('#festo-sps-warning-ack');
+                if (ackBtn) ackBtn.addEventListener('click', () => {
+                    overlay.style.display = 'none';
+                    // Persistente Bestätigung — Hinweis kommt nach Reload nicht wieder.
+                    try { localStorage.setItem('valisFestoSpsWarningAck', '1'); } catch(_) {}
+                });
+                const moreBtn = overlay.querySelector('#festo-sps-warning-more');
+                if (moreBtn) moreBtn.addEventListener('click', () => {
+                    if (typeof window._showEpneuVsSpsInfo === 'function') {
+                        try { window._showEpneuVsSpsInfo(); } catch(_) {}
+                    }
+                });
+            };
             // Persistenten Banner im FESTO-Wrapper synchronisieren — wird bei
             // jedem Render aktualisiert (siehe _renderFestoPanel) und auch
             // direkt aus toggleDualCircuit angefasst.
@@ -52883,12 +53977,689 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 banner.style.display = window.configDualCircuit ? 'block' : 'none';
             };
             // ============ Haupt-Renderer ============
+            // ===================================================================
+            // ANSCHLUSS-/SPS-PANEL-RENDERER (DIN EN 60204 — reale SPS-Module)
+            // ===================================================================
+            // Wird statt der Steuerstromkreis-Panels gerendert, wenn die Sicht
+            // "Anschluss" im Auto-Schaltplan aktiv ist. Zeigt vier reale
+            // FESTO-19"-Module nebeneinander: Netzteil (24V/0V + Hauptschalter),
+            // 16 Digital-Eingänge, 16 Digital-Ausgänge, 24V/0V-Verteilung.
+            // Sockel-Labels zeigen die SPS-Adresse (E0.0, A0.0, …) und die
+            // gebundene Variable, falls vorhanden.
+
+            const ANS_POWER  = { w: 90,  h: 320 };
+            const ANS_DIN16  = { w: 200, h: 320 };
+            const ANS_DOUT16 = { w: 200, h: 320 };
+            const ANS_24V0V  = { w: 110, h: 320 };
+
+            // --- Netzteil (Power Supply) ---
+            function drawAnschlussPowerPanel(parent, x, y) {
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'ans-power' }, parent);
+                el('rect', { x: 0, y: 0, width: ANS_POWER.w, height: ANS_POWER.h, rx: 6, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, ANS_POWER.w, ANS_POWER.h);
+                el('text', { x: ANS_POWER.w/2, y: 26, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': '1px' }, g).textContent = 'FESTO';
+                el('text', { x: ANS_POWER.w/2, y: 42, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText }, g).textContent = 'Netzteil';
+                // 24V (2 rote Sockel)
+                const cx = ANS_POWER.w/2;
+                drawSocket(g, cx - 14, 78, PALETTE.socketRed, 'ANS_PWR_24V_1', 'ANS_PWR');
+                drawSocket(g, cx + 14, 78, PALETTE.socketRed, 'ANS_PWR_24V_2', 'ANS_PWR');
+                el('text', { x: cx, y: 100, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.socketRed, 'font-family': 'monospace' }, g).textContent = '+24V';
+                // 0V (2 blaue Sockel)
+                drawSocket(g, cx - 14, 130, PALETTE.socketBlue, 'ANS_PWR_0V_1', 'ANS_PWR');
+                drawSocket(g, cx + 14, 130, PALETTE.socketBlue, 'ANS_PWR_0V_2', 'ANS_PWR');
+                el('text', { x: cx, y: 152, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.socketBlue, 'font-family': 'monospace' }, g).textContent = '0V';
+                // Kippschalter unten — Wippe wird dynamisch über
+                // _updateFestoAnschlussLive (data-festo-ans-switch-*) gespiegelt.
+                const swY = ANS_POWER.h - 90;
+                el('rect', { x: cx - 18, y: swY, width: 36, height: 60, rx: 3, fill: '#fafafa', stroke: '#212121', 'stroke-width': 1.5 }, g);
+                const swTop = el('rect', { x: cx - 14, y: swY + 4, width: 28, height: 24, rx: 2, fill: '#212121' }, g);
+                swTop.setAttribute('data-festo-ans-switch-top', '1');
+                const swBot = el('rect', { x: cx - 14, y: swY + 32, width: 28, height: 24, rx: 2, fill: '#fafafa', stroke: '#212121', 'stroke-width': 0.8 }, g);
+                swBot.setAttribute('data-festo-ans-switch-bot', '1');
+                const swTopTxt = el('text', { x: cx, y: swY + 22, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: '#fff' }, g);
+                swTopTxt.textContent = 'O';
+                swTopTxt.setAttribute('data-festo-ans-switch-text-top', '1');
+                const swBotTxt = el('text', { x: cx, y: swY + 50, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: '#212121' }, g);
+                swBotTxt.textContent = 'I';
+                swBotTxt.setAttribute('data-festo-ans-switch-text-bot', '1');
+                // Status-LED (grün wenn Sim läuft) rechts neben dem Schalter
+                const pwrLed = el('circle', { cx: cx + 28, cy: swY + 12, r: 4, fill: '#37474f', stroke: '#212121', 'stroke-width': 0.6 }, g);
+                pwrLed.setAttribute('data-festo-ans-power-led', '1');
+                el('text', { x: ANS_POWER.w/2, y: ANS_POWER.h - 14, 'text-anchor': 'middle', 'font-size': 9, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = '24 V / 0 V';
+                return g;
+            }
+
+            // --- 16 Digital-Eingänge (16DIN) ---
+            // Layout: 8 Kippschalter (Manual Override) oben, dann 4×4-Grid mit
+            // 16 schwarzen Sockeln. Adressen E0.0–E0.7 (oben) und E1.0–E1.7
+            // (unten), Reihenfolge spaltenweise wie auf realen FESTO-Modulen.
+            function drawAnschluss16DIN(parent, x, y, sockBindings) {
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'ans-16din' }, parent);
+                el('rect', { x: 0, y: 0, width: ANS_DIN16.w, height: ANS_DIN16.h, rx: 6, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, ANS_DIN16.w, ANS_DIN16.h);
+                el('text', { x: ANS_DIN16.w - 14, y: 26, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': '1px' }, g).textContent = 'FESTO';
+                // 8 Kippschalter (2 Reihen × 4)
+                const swStartX = 22, swStartY = 50, swDX = 38, swDY = 30;
+                for (let r = 0; r < 2; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const sx = swStartX + c * swDX, sy = swStartY + r * swDY;
+                        // Wippe (kleiner Hebel)
+                        el('rect', { x: sx - 4, y: sy - 9, width: 8, height: 16, rx: 1.5, fill: '#bdbdbd', stroke: '#37474f', 'stroke-width': 0.8 }, g);
+                        el('circle', { cx: sx, cy: sy + 4, r: 4, fill: '#9e9e9e', stroke: '#37474f', 'stroke-width': 0.8 }, g);
+                    }
+                }
+                // 4×4-Grid Sockel + Adress-Labels.
+                // Reale Belegung am 16DIN-Modul: spaltenweise gruppiert.
+                //   Spalte 0:  E0.0 / E0.1 / E0.2 / E0.3   ┐
+                //   Spalte 1:  E0.4 / E0.5 / E0.6 / E0.7   ┘ EB0
+                //   Spalte 2:  E1.0 / E1.1 / E1.2 / E1.3   ┐
+                //   Spalte 3:  E1.4 / E1.5 / E1.6 / E1.7   ┘ EB1
+                const grStartX = 22, grStartY = 130, grDX = 38, grDY = 38;
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const sx = grStartX + c * grDX, sy = grStartY + r * grDY;
+                        const byte = c < 2 ? 0 : 1;          // links 2 Spalten = EB0, rechts 2 = EB1
+                        const bit  = (c % 2) * 4 + r;        // c gerade: 0..3, c ungerade: 4..7
+                        const addr = `E${byte}.${bit}`;
+                        // Adress-Label oberhalb des Sockels — Format „byte.bit"
+                        el('text', { x: sx + 12, y: sy - 9, 'font-size': 8, fill: '#1565c0', 'font-family': 'monospace' }, g).textContent = `${byte}.${bit}`;
+                        drawSocket(g, sx, sy, PALETTE.socketBlack, 'ANS_DIN_' + addr, 'ANS_DIN16');
+                        const bound = sockBindings && sockBindings[addr];
+                        if (bound) {
+                            // Glow-Ring für Live-Animation (initial unsichtbar)
+                            const halo = el('circle', { cx: sx, cy: sy, r: 11, fill: 'none', stroke: '#ffeb3b', 'stroke-width': 2.5, opacity: 0 }, g);
+                            halo.setAttribute('data-festo-ans-in-var', bound);
+                            el('text', { x: sx, y: sy + 18, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold', fill: '#0d47a1', 'font-family': 'monospace' }, g).textContent =
+                                bound.length > 7 ? bound.slice(0,6) + '…' : bound;
+                        }
+                    }
+                }
+                // Byte-Gruppierungs-Labels unter dem Grid (EB0 / EB1)
+                const bgY = grStartY + 4 * grDY + 12;
+                const eb0Cx = grStartX + 0.5 * grDX + grDX / 2;   // Mitte Spalten 0..1
+                const eb1Cx = grStartX + 2.5 * grDX + grDX / 2;   // Mitte Spalten 2..3
+                el('text', { x: eb0Cx, y: bgY, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'monospace' }, g).textContent = 'EB0';
+                el('text', { x: eb1Cx, y: bgY, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'monospace' }, g).textContent = 'EB1';
+                el('text', { x: ANS_DIN16.w/2, y: ANS_DIN16.h - 14, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = '16 DIn';
+                return g;
+            }
+
+            // --- 16 Digital-Ausgänge (16DOUT) ---
+            function drawAnschluss16DOUT(parent, x, y, sockBindings, outputStates) {
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'ans-16dout' }, parent);
+                el('rect', { x: 0, y: 0, width: ANS_DOUT16.w, height: ANS_DOUT16.h, rx: 6, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, ANS_DOUT16.w, ANS_DOUT16.h);
+                el('text', { x: ANS_DOUT16.w - 14, y: 26, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': '1px' }, g).textContent = 'FESTO';
+                el('text', { x: ANS_DOUT16.w/2, y: 50, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText }, g).textContent = '16× Digitalausgang mit LED-Status';
+                // 4×4-Grid Sockel + LED + Adress-Labels — gleiches spalten-
+                // weises Schema wie beim 16DIN-Modul:
+                //   Spalte 0: A0.0..A0.3   ┐ AB0
+                //   Spalte 1: A0.4..A0.7   ┘
+                //   Spalte 2: A1.0..A1.3   ┐ AB1
+                //   Spalte 3: A1.4..A1.7   ┘
+                const grStartX = 22, grStartY = 90, grDX = 38, grDY = 50;
+                for (let r = 0; r < 4; r++) {
+                    for (let c = 0; c < 4; c++) {
+                        const sx = grStartX + c * grDX, sy = grStartY + r * grDY;
+                        const byte = c < 2 ? 0 : 1;
+                        const bit  = (c % 2) * 4 + r;
+                        const addr = `A${byte}.${bit}`;
+                        el('text', { x: sx + 12, y: sy - 9, 'font-size': 8, fill: '#1565c0', 'font-family': 'monospace' }, g).textContent = `${byte}.${bit}`;
+                        drawSocket(g, sx, sy, PALETTE.socketBlack, 'ANS_DOUT_' + addr, 'ANS_DOUT16');
+                        const bound = sockBindings && sockBindings[addr];
+                        const isOn = bound && outputStates && !!outputStates[bound];
+                        const ledFill = isOn ? '#ffeb3b' : '#37474f';
+                        const led = el('circle', { cx: sx + 13, cy: sy - 2, r: 2.5, fill: ledFill, stroke: '#212121', 'stroke-width': 0.6 }, g);
+                        if (bound) {
+                            led.setAttribute('data-festo-ans-led-var', bound);
+                            // Glow-Ring für Live-Animation am Sockel
+                            const halo = el('circle', { cx: sx, cy: sy, r: 11, fill: 'none', stroke: '#ffeb3b', 'stroke-width': 2.5, opacity: isOn ? 0.85 : 0 }, g);
+                            halo.setAttribute('data-festo-ans-out-var', bound);
+                            el('text', { x: sx, y: sy + 18, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold', fill: '#0d47a1', 'font-family': 'monospace' }, g).textContent =
+                                bound.length > 7 ? bound.slice(0,6) + '…' : bound;
+                        }
+                    }
+                }
+                // Byte-Gruppierungs-Labels (AB0 / AB1) unter dem Grid
+                const bgY = grStartY + 4 * grDY + 12;
+                const ab0Cx = grStartX + 0.5 * grDX + grDX / 2;
+                const ab1Cx = grStartX + 2.5 * grDX + grDX / 2;
+                el('text', { x: ab0Cx, y: bgY, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'monospace' }, g).textContent = 'AB0';
+                el('text', { x: ab1Cx, y: bgY, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'monospace' }, g).textContent = 'AB1';
+                el('text', { x: ANS_DOUT16.w/2, y: ANS_DOUT16.h - 14, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = '16 DOut';
+                return g;
+            }
+
+            // --- 24V/0V-Verteilung ---
+            function drawAnschluss24V0V(parent, x, y) {
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'ans-24v0v' }, parent);
+                el('rect', { x: 0, y: 0, width: ANS_24V0V.w, height: ANS_24V0V.h, rx: 6, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, ANS_24V0V.w, ANS_24V0V.h);
+                el('text', { x: ANS_24V0V.w - 14, y: 26, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 'bold', fill: '#1565c0', 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': '1px' }, g).textContent = 'FESTO';
+                el('text', { x: ANS_24V0V.w/2, y: 42, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText }, g).textContent = 'Verteilung';
+                // 7 Sockel-Paare (24V rechts, 0V links) — passt in die Höhe
+                const startY = 70, dy = 32;
+                const cxL = ANS_24V0V.w/2 - 18, cxR = ANS_24V0V.w/2 + 18;
+                for (let i = 0; i < 7; i++) {
+                    const sy = startY + i * dy;
+                    drawSocket(g, cxL, sy, PALETTE.socketRed,  'ANS_DIST_24V_' + i, 'ANS_24V0V');
+                    drawSocket(g, cxR, sy, PALETTE.socketBlue, 'ANS_DIST_0V_'  + i, 'ANS_24V0V');
+                }
+                el('text', { x: cxL, y: ANS_24V0V.h - 14, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.socketRed, 'font-family': 'monospace' }, g).textContent = '+24V';
+                el('text', { x: cxR, y: ANS_24V0V.h - 14, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.socketBlue, 'font-family': 'monospace' }, g).textContent = '0V';
+                return g;
+            }
+
+            // Cable-List-Builder für die Anschluss-Sicht. Anders als
+            // _buildCableList (das den Schaltplan walkt) basieren wir hier
+            // direkt auf den SPS-Adress-Bindings und den Slot-Zuweisungen
+            // aus buildAssignment(). Ergebnis: pro Eingang ein Versorgungs-
+            // Kabel zur 24V-Verteilung + ein Signal-Kabel zum 16DIN-Sockel
+            // (Sensoren zusätzlich 0V → Verteilung). Pro Ausgang Signal-
+            // Kabel vom 16DOUT-Sockel zur Spule + Rückleitung bei Magnet-
+            // ventilen. Dazu Power-Brücke Netzteil ↔ Verteilung.
+            function _buildAnschlussCableList(data, inBindings, outBindings) {
+                const cables = [];
+                if (!data) return cables;
+                const assignments = data.assignments || {};
+                const varToSlot = {};
+                Object.entries(assignments).forEach(([k, v]) => {
+                    const prev = varToSlot[v];
+                    if (!prev) { varToSlot[v] = k; return; }
+                    // Für Anschluss bevorzugen wir den physischen Slot des
+                    // Bauteils (T/L/M/N) vor dem implizit-angelegten Relais (R/Z),
+                    // weil die SPS die Logik übernimmt.
+                    const rank = (s) => s.startsWith('N') ? 5
+                                      : s.startsWith('T') ? 4
+                                      : s.startsWith('L') ? 3
+                                      : s.startsWith('M') ? 2 : 1;
+                    if (rank(k) > rank(prev)) varToSlot[v] = k;
+                });
+
+                // ── Power-Brücke: Netzteil ↔ Verteilung ──
+                cables.push({ fromKey: 'ANS_PWR_24V_1', toKey: 'ANS_DIST_24V_0', color: 'red',  strand: '__POWER__' });
+                cables.push({ fromKey: 'ANS_PWR_0V_1',  toKey: 'ANS_DIST_0V_0',  color: 'blue', strand: '__POWER__' });
+
+                // ── Eingänge: pro Adress-Binding zum Bauteil-Slot ──
+                Object.entries(inBindings || {}).forEach(([addr, varName]) => {
+                    const slot = varToSlot[varName];
+                    if (!slot) return;
+                    if (slot.startsWith('T')) {
+                        // Taster/Schalter: 24V-Versorgung + Signal zum 16DIN.
+                        // Das FESTO-Signaleingabe-Panel (162242) hat pro Slot
+                        // einen Wechslerkontakt:
+                        //   • Schließer NO: Pin 13 (oben) / 14 (unten)
+                        //   • Öffner   NC: Pin 21 (oben) / 22 (unten)
+                        // Die früher hier benutzten 11/12 existieren auf dem
+                        // Panel gar nicht — bei einem Öffner-Eingang (z. B.
+                        // STOP/NOTAUS) wurden daher die Kabel in „Luft"
+                        // gezeichnet und vom Renderer schweigend verworfen,
+                        // weil _findSocketPos keine Position fand. Resultat:
+                        // Der Strang fehlte komplett im FESTO-Aufbau.
+                        const ct = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || 'taster';
+                        const isNC = (ct === 'taster_nc' || ct === 'schalter_nc' || ct === 'nothalt' || ct === 'light_curtain');
+                        const supplyPin = isNC ? '21' : '13';
+                        const signalPin = isNC ? '22' : '14';
+                        cables.push({ fromKey: `${slot}_${supplyPin}`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
+                        cables.push({ fromKey: `${slot}_${signalPin}`, toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
+                    } else if (slot.startsWith('N')) {
+                        // 3-Leiter-Sensor: BN/BU zum Bus, Q-Signal zum 16DIN
+                        cables.push({ fromKey: `${slot}_24V`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
+                        cables.push({ fromKey: `${slot}_0V`,  toKey: '__ANS_BUS_0V__',  color: 'blue',  strand: varName });
+                        cables.push({ fromKey: `${slot}_Q`,   toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
+                    }
+                });
+
+                // ── Ausgänge: 16DOUT → Spule + ggf. Rückleitung ──
+                Object.entries(outBindings || {}).forEach(([addr, varName]) => {
+                    const slot = varToSlot[varName];
+                    if (!slot) return;
+                    if (/_HORN$/.test(slot)) {
+                        // Hörmelder/Sirene: eigener Sockel-Block auf dem
+                        // Meldeeinrichtungs-Panel. Anders als der LED-Slot ist
+                        // X2 NICHT intern auf der Panel-0V-Schiene — der
+                        // Bauteil-Kommentar weist explizit darauf hin, dass
+                        // beide Seiten extern verdrahtet werden müssen. Daher
+                        // braucht der Strang zwei Kabel: Signal an X1, 0V an X2.
+                        cables.push({ fromKey: 'ANS_DOUT_' + addr, toKey: `${slot}_X1`, color: 'black', strand: varName });
+                        cables.push({ fromKey: `${slot}_X2`,        toKey: '__ANS_BUS_0V__', color: 'blue', strand: varName });
+                    } else if (slot.startsWith('L')) {
+                        // LED/Lampe/Heater: Signal vom 16DOUT zum L-Slot 24V-Pin.
+                        // 0V der Last ist intern über die LED-Panel-Schiene verdrahtet.
+                        cables.push({ fromKey: 'ANS_DOUT_' + addr, toKey: `${slot}_24V_a`, color: 'black', strand: varName });
+                    } else if (slot.startsWith('M')) {
+                        // Magnetventil: Signal an 24V-Pin der Spule + X2 (0V) zur Verteilung
+                        cables.push({ fromKey: 'ANS_DOUT_' + addr, toKey: `${slot}_24V_a`, color: 'black', strand: varName });
+                        cables.push({ fromKey: `${slot}_X2`,        toKey: '__ANS_BUS_0V__', color: 'blue', strand: varName });
+                    }
+                });
+
+                // ── Strang-Liste für Dropdown/Trainingsmodus aufbauen ──
+                // Reihenfolge: Eingänge zuerst (nach Adress-Sortierung), dann
+                // Ausgänge — entspricht der natürlichen Lese-Reihenfolge im SPS-
+                // Anschlussplan. Power-Strang ist intern und gehört nicht ins
+                // Dropdown (keine sinnvolle „Schaltlogik" dahinter).
+                const strandList = [];
+                const seen = new Set();
+                const sortedIn  = Object.keys(inBindings  || {}).sort();
+                const sortedOut = Object.keys(outBindings || {}).sort();
+                const pushStrand = (addr, varName) => {
+                    if (!varName || seen.has(varName)) return;
+                    seen.add(varName);
+                    strandList.push({ id: varName, label: `${addr} (${varName})` });
+                };
+                sortedIn.forEach(addr => pushStrand(addr, inBindings[addr]));
+                sortedOut.forEach(addr => pushStrand(addr, outBindings[addr]));
+                // Kabel nach Strang sortieren (innerhalb stabil), damit der
+                // Schritt-Modus Strang für Strang abarbeitet.
+                const strandIdx = new Map();
+                strandList.forEach((s, i) => strandIdx.set(s.id, i));
+                cables.sort((a, b) => {
+                    // Power immer zuerst (Aufbaureihenfolge: erst Versorgung)
+                    if (a.strand === '__POWER__' && b.strand !== '__POWER__') return -1;
+                    if (b.strand === '__POWER__' && a.strand !== '__POWER__') return 1;
+                    const ai = strandIdx.has(a.strand) ? strandIdx.get(a.strand) : 1e9;
+                    const bi = strandIdx.has(b.strand) ? strandIdx.get(b.strand) : 1e9;
+                    return ai - bi;
+                });
+                window._festoStrandList = strandList;
+                return cables;
+            }
+
+            // Renderer für die Anschluss-Kabel. Verwendet dieselben Helfer
+            // (_findSocketPos, _cablePath) wie der normale Cable-Renderer und
+            // ist mit dem Schritt-Modus (window._festoStepModeActive +
+            // window._festoCableStep) kompatibel.
+            function _renderAnschlussCables(data, inBindings, outBindings) {
+                window._festoStrandColorCache = {};
+                const svg = _festoDoc().getElementById('festo-svg');
+                if (!svg) return;
+                const old = svg.querySelector('#festo-cable-layer');
+                if (old) old.remove();
+                const layer = document.createElementNS(SVGNS, 'g');
+                layer.id = 'festo-cable-layer';
+                layer.style.pointerEvents = 'none';
+                svg.appendChild(layer);
+
+                const cables = _buildAnschlussCableList(data, inBindings, outBindings);
+
+                // Bus-Pin-Pools aus den ANS_DIST_*-Sockeln aufbauen
+                const dist24V = [];
+                const dist0V  = [];
+                svg.querySelectorAll('[data-festo-socket]').forEach(elem => {
+                    const key = elem.getAttribute('data-festo-socket');
+                    let cx = parseFloat(elem.getAttribute('cx') || '0');
+                    let cy = parseFloat(elem.getAttribute('cy') || '0');
+                    let p = elem.parentNode;
+                    while (p && p !== svg) {
+                        const tf = p.getAttribute && p.getAttribute('transform');
+                        if (tf) {
+                            const m = tf.match(/translate\(\s*([\-\d.]+)\s*[,\s]\s*([\-\d.]+)\s*\)/);
+                            if (m) { cx += parseFloat(m[1]); cy += parseFloat(m[2]); }
+                        }
+                        p = p.parentNode;
+                    }
+                    if (/^ANS_DIST_24V_/.test(key)) dist24V.push({ key, pos: { x: cx, y: cy } });
+                    else if (/^ANS_DIST_0V_/.test(key)) dist0V.push({ key, pos: { x: cx, y: cy } });
+                });
+                const used24V = new Set();
+                const used0V  = new Set();
+                function nearestUnused(pins, used, target) {
+                    if (!target || pins.length === 0) return null;
+                    let bestU = null, bestUD = Infinity;
+                    let bestA = null, bestAD = Infinity;
+                    for (const p of pins) {
+                        const dx = p.pos.x - target.x, dy = p.pos.y - target.y;
+                        const d = dx*dx + dy*dy;
+                        if (d < bestAD) { bestA = p; bestAD = d; }
+                        if (!used.has(p.key) && d < bestUD) { bestU = p; bestUD = d; }
+                    }
+                    if (bestU) { used.add(bestU.key); return bestU; }
+                    return bestA;
+                }
+
+                // Schritt-Modus-Limit
+                const stepMode  = !!window._festoStepModeActive;
+                const stepLimit = stepMode
+                    ? Math.max(0, Math.min(cables.length, window._festoCableStep | 0))
+                    : cables.length;
+                // Strang-Filter (Dropdown): leer = alles sichtbar; sonst Strang-ID
+                const filter = window._festoStrandFilter || '';
+                let drawnCount = 0;
+
+                for (let cIdx = 0; cIdx < cables.length; cIdx++) {
+                    const cable = cables[cIdx];
+                    const skipDraw = stepMode && cIdx >= stepLimit;
+
+                    // Bus-Platzhalter auflösen — auch wenn gefiltert/skipDraw,
+                    // damit die Pin-Belegung deterministisch bleibt.
+                    if (cable.fromKey === '__ANS_BUS_24V__') {
+                        const toPos = _findSocketPos(cable.toKey);
+                        const p = nearestUnused(dist24V, used24V, toPos);
+                        if (p) cable.fromKey = p.key;
+                    } else if (cable.fromKey === '__ANS_BUS_0V__') {
+                        const toPos = _findSocketPos(cable.toKey);
+                        const p = nearestUnused(dist0V, used0V, toPos);
+                        if (p) cable.fromKey = p.key;
+                    }
+                    if (cable.toKey === '__ANS_BUS_24V__') {
+                        const fromPos = _findSocketPos(cable.fromKey);
+                        const p = nearestUnused(dist24V, used24V, fromPos);
+                        if (p) cable.toKey = p.key;
+                    } else if (cable.toKey === '__ANS_BUS_0V__') {
+                        const fromPos = _findSocketPos(cable.fromKey);
+                        const p = nearestUnused(dist0V, used0V, fromPos);
+                        if (p) cable.toKey = p.key;
+                    }
+
+                    const from = _findSocketPos(cable.fromKey);
+                    const to   = _findSocketPos(cable.toKey);
+                    if (!from || !to) continue;
+                    if (skipDraw) continue;
+
+                    // Strang-Filter: nicht-passende Kabel als schwach durch-
+                    // scheinende Andeutung zeichnen. Power-Strang bleibt sichtbar
+                    // (Versorgung gehört IMMER zum Bild), wird aber leicht gedimmt.
+                    const isFiltered = filter
+                        && cable.strand !== filter
+                        && cable.strand !== '__POWER__';
+
+                    // Farb-Wahl (bunte Kabel = Strang-Farbe; sonst rot/blau/schwarz)
+                    const colorful = !!window.configFestoColorfulCables;
+                    let color;
+                    if (colorful && cable.strand && cable.strand !== '__POWER__'
+                        && typeof _festoStrandColor === 'function') {
+                        color = _festoStrandColor(cable.strand);
+                    } else {
+                        color = cable.color === 'red'   ? '#d32f2f'
+                              : cable.color === 'blue'  ? '#1565c0'
+                              : cable.color === 'black' ? '#212121'
+                              : '#37474f';
+                    }
+                    const isJustPlaced = stepMode && cIdx === stepLimit - 1 && !isFiltered;
+
+                    const path = document.createElementNS(SVGNS, 'path');
+                    path.setAttribute('d', _cablePath(from, to));
+                    path.setAttribute('fill', 'none');
+                    path.setAttribute('stroke', color);
+                    path.setAttribute('stroke-width', isFiltered ? '1.5' : (isJustPlaced ? '3.4' : '2.6'));
+                    path.setAttribute('stroke-linecap', 'round');
+                    path.setAttribute('opacity', isFiltered ? '0.12' : '0.9');
+                    if (!isFiltered) {
+                        path.style.filter = isJustPlaced
+                            ? 'drop-shadow(0 0 6px #ffeb3b) drop-shadow(0 1px 1px rgba(0,0,0,0.25))'
+                            : 'drop-shadow(0 1px 1px rgba(0,0,0,0.25))';
+                    }
+                    if (cable.strand && cable.strand !== '__POWER__') {
+                        path.setAttribute('data-cable-strand', cable.strand);
+                    }
+                    layer.appendChild(path);
+                    if (!isFiltered) {
+                        // Steckerstifte an den Endpunkten
+                        [from, to].forEach(p => {
+                            const c = document.createElementNS(SVGNS, 'circle');
+                            c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+                            c.setAttribute('r', '2.5'); c.setAttribute('fill', color);
+                            layer.appendChild(c);
+                        });
+                        drawnCount++;
+                    }
+                }
+
+                // Schritt-Counter in der Toolbar aktualisieren
+                const stepCounter = _festoDoc().getElementById('festo-step-counter');
+                if (stepCounter) {
+                    stepCounter.textContent = `${stepMode ? stepLimit : cables.length} / ${cables.length}`;
+                }
+                window._festoCableTotalCount = cables.length;
+                window._festoCablesList = cables;
+                // Strang-Filter-Dropdown befüllen (window._festoStrandList wurde
+                // bereits von _buildAnschlussCableList gesetzt).
+                if (typeof _populateStrandFilter === 'function') _populateStrandFilter();
+                // Stromfluss-Animation initial appliziert (falls Toggle aktiv) —
+                // pro Sim-Tick zieht _updateFestoLevers ohnehin nach.
+                if (typeof _updateFestoCableFlow === 'function') _updateFestoCableFlow();
+                // Auto-Schaltplan-Strang-Dimming nach Re-Render erneut anwenden —
+                // ein Schaltplan-Re-Render zwischen FESTO-Updates kann die Klasse
+                // verlieren.
+                if (typeof _applyAutoSchemaStrandFilter === 'function') {
+                    _applyAutoSchemaStrandFilter(window._festoStrandFilter || '');
+                }
+            }
+            window._renderAnschlussCables = _renderAnschlussCables;
+
+            // Haupt-Renderer für die Anschluss-Sicht.
+            function _renderFestoAnschluss() {
+                const svg = _festoDoc().getElementById('festo-svg');
+                const wrap = _festoDoc().getElementById('festo-wrapper');
+                if (!svg || !wrap || wrap.style.display === 'none') return;
+
+                // Signatur-basierter Skip wie beim Anschlussplan-Renderer —
+                // verhindert Flicker, wenn factoryLoop bei fluidischen Bauteilen
+                // drawCircuitPlan(true) regelmäßig aufruft. Live-Updates der
+                // LEDs/Halos laufen weiterhin über _updateFestoAnschlussLive
+                // ohne SVG-Neubau.
+                let _sig = '';
+                try {
+                    const inSig  = (globalInputs  || []).map(n => [n, (componentTypes||{})[n] || '', (spsAddresses||{})[n] || '']);
+                    const outSig = (globalOutputs || []).map(n => [n, (componentTypes||{})[n] || '', (spsAddresses||{})[n] || '']);
+                    _sig = JSON.stringify({ in: inSig, out: outSig, dual: !!window.configDualCircuit });
+                    if (window._ansFestoLastSig === _sig && svg.firstChild) return;
+                } catch(_) {}
+                window._ansFestoLastSig = _sig;
+
+                while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+                // Adress→Variable-Bindings aus spsAddresses bauen, mit Filter
+                // gleich wie im Anschlussplan-Renderer (Q-Pins und Helper raus).
+                const inBindings  = {};
+                const outBindings = {};
+                try {
+                    const usedAsSource = new Set(
+                        (typeof currentGraph !== 'undefined' && currentGraph && currentGraph.edges)
+                            ? currentGraph.edges.map(e => e.sourceId) : []
+                    );
+                    (globalInputs || []).forEach(n => {
+                        const a = (typeof spsAddresses !== 'undefined' && spsAddresses[n]) || null;
+                        if (a) inBindings[a] = n;
+                    });
+                    (globalOutputs || []).forEach(n => {
+                        if (/^[QSR]\d+(_(?:SR|RS))?$/i.test(n)) return;
+                        if (usedAsSource.has(n)) return;
+                        const a = (typeof spsAddresses !== 'undefined' && spsAddresses[n]) || null;
+                        if (a) outBindings[a] = n;
+                    });
+                } catch(_) {}
+                // Output-States für LED-Anzeige
+                const outStates = (typeof spsState !== 'undefined') ? spsState : {};
+
+                // ===== Layout =====
+                const PAD = 14, GAP = 18;
+
+                // -------- Sektion 1: SPS-Module (oben) --------
+                let cursorX = PAD;
+                drawAnschlussPowerPanel(svg, cursorX, PAD);
+                cursorX += ANS_POWER.w + GAP;
+                drawAnschluss16DIN(svg, cursorX, PAD, inBindings);
+                cursorX += ANS_DIN16.w + GAP;
+                drawAnschluss16DOUT(svg, cursorX, PAD, outBindings, outStates);
+                cursorX += ANS_DOUT16.w + GAP;
+                drawAnschluss24V0V(svg, cursorX, PAD);
+                cursorX += ANS_24V0V.w;
+                const spsRowEndX = cursorX;
+                const spsRowBottomY = PAD + ANS_DIN16.h;
+
+                // -------- Sektions-Trenner --------
+                const sepY = spsRowBottomY + 24;
+                el('line', { x1: PAD, y1: sepY, x2: spsRowEndX, y2: sepY, stroke: '#90a4ae', 'stroke-width': 1.2, 'stroke-dasharray': '6 4' }, svg);
+                el('text', { x: PAD + 4, y: sepY - 6, 'font-size': 10, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'Segoe UI, sans-serif' }, svg).textContent = '▲ SPS-Steuerung (Klemmen)';
+                el('text', { x: PAD + 4, y: sepY + 14, 'font-size': 10, 'font-weight': 'bold', fill: '#37474f', 'font-family': 'Segoe UI, sans-serif' }, svg).textContent = '▼ Physische Bauteile (Eingabe · Sensoren · Meldeeinrichtung · Magnetventile)';
+
+                // -------- Sektion 2: Physische Panels (unten) --------
+                // Hilfsrelais-Panels und Zeitrelais-Panels werden in der
+                // Anschluss-Sicht weggelassen — die SPS übernimmt deren Logik.
+                // Wir nutzen die vorhandenen Drawer (drawTasterPanel,
+                // drawLedPanel, drawSensorPanel, drawMagnetventilPanel,
+                // drawMagnetventilDuoPanel) aus dem normalen FESTO-Aufbau.
+                const physTopY = sepY + 28;
+                const upperRowH = Math.max(TASTER.h, LED.h);
+                const lowerRowY = physTopY + upperRowH + 24;
+                let physMaxX = PAD;
+                let lowerRowH = 0;
+
+                let data = null;
+                try { data = buildAssignment(); } catch(e) { console.warn('buildAssignment im Anschluss fehlgeschlagen:', e); }
+                if (data) {
+                    // IEC-Label-Cache füttern (wie im normalen Render-Pfad)
+                    window._festoLastAssignments = data.assignments;
+                    window._festoIECLabels = data.iecLabels || {};
+                    window._festoIECLabelsByRole = data.iecLabelsByRole || {};
+
+                    // Obere Sub-Reihe: Taster (Signaleingabe) + LED (Meldeein-
+                    // richtung) nebeneinander.
+                    let phCursorX = PAD;
+                    for (let i = 1; i <= data.tCount; i++) {
+                        drawTasterPanel(svg, phCursorX, physTopY, i, data.assignments);
+                        phCursorX += TASTER.w + GAP;
+                    }
+                    for (let i = 1; i <= data.lCount; i++) {
+                        drawLedPanel(svg, phCursorX, physTopY, i, data.assignments);
+                        phCursorX += LED.w + GAP;
+                    }
+                    physMaxX = Math.max(physMaxX, phCursorX);
+
+                    // Untere Sub-Reihe: Sensoren + Magnetventile.
+                    let lowCursorX = PAD;
+                    if (data.sCount > 0 && data.sensorVars) {
+                        data.sensorVars.forEach((v, origIdx) => {
+                            const ct = (typeof componentTypes !== 'undefined' && componentTypes[v]) || 'sensor_ind';
+                            const variant = SENSOR_VARIANT[ct] || 'inductive';
+                            drawSensorPanel(svg, lowCursorX, lowerRowY, origIdx + 1, variant, data.assignments);
+                            lowCursorX += SENSOR.w + GAP;
+                            lowerRowH = Math.max(lowerRowH, SENSOR.h);
+                        });
+                    }
+                    if (data.mCount > 0 && data.magnetUnits) {
+                        data.magnetUnits.forEach((unit, panelIdxZeroBased) => {
+                            const panelIdx = panelIdxZeroBased + 1;
+                            const w = unit.kind === 'duo' ? MAGNET_DUO.w : MAGNET.w;
+                            const h = unit.kind === 'duo' ? MAGNET_DUO.h : MAGNET.h;
+                            if (unit.kind === 'duo') {
+                                drawMagnetventilDuoPanel(svg, lowCursorX, lowerRowY, panelIdx, data.assignments, { isTriple: unit.isTriple });
+                            } else {
+                                drawMagnetventilPanel(svg, lowCursorX, lowerRowY, panelIdx, data.assignments);
+                            }
+                            lowCursorX += w + GAP;
+                            lowerRowH = Math.max(lowerRowH, h);
+                        });
+                    }
+                    physMaxX = Math.max(physMaxX, lowCursorX);
+                }
+
+                // ===== ViewBox =====
+                const totalW = Math.max(spsRowEndX + PAD, physMaxX + PAD);
+                const totalH = lowerRowY + (lowerRowH || upperRowH) + PAD;
+                svg.setAttribute('viewBox', `0 0 ${totalW} ${totalH}`);
+                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                // Base-Größe cachen wie im normalen Renderer — damit
+                // _applyFestoZoom / _festoFitToViewport auch in der Anschluss-
+                // Sicht greifen und Panele ggf. eingepasst werden.
+                svg.dataset.baseW = totalW;
+                svg.dataset.baseH = totalH;
+                _applyFestoZoom();
+
+                // ===== Verkabelung =====
+                // Bindings + data weiterreichen, damit der Cable-Renderer das
+                // gleiche Mapping verwendet (Bauteil → SPS-Klemmenadresse).
+                try { _renderAnschlussCables(data, inBindings, outBindings); } catch(e) { console.warn('Anschluss-Kabel-Renderer fehlgeschlagen:', e); }
+                // Bindings für späteren Step-Modus-Aufruf (über _renderFestoCables)
+                // cachen, damit Reload ohne Re-Render der Panels weiterhin
+                // die richtigen Kabel erzeugt.
+                window._ansFestoLastData = data;
+                window._ansFestoLastIn   = inBindings;
+                window._ansFestoLastOut  = outBindings;
+                // Auto-Fit, falls beim Panel-Öffnen angefordert (siehe
+                // _festoNeedsFit-Flag).
+                if (typeof _festoMaybeFit === 'function') _festoMaybeFit();
+            }
+            // Globaler Hook für andere Pfade (z. B. Toggle-Funktion).
+            window._renderFestoAnschluss = _renderFestoAnschluss;
+
+            // Live-Animation der SPS-Panels — wird aus runSimulationTick gerufen.
+            // Updates pro Tick:
+            //   • Output-LED: gelb wenn spsState[var] true, sonst dunkel
+            //   • Output-Sockel-Halo: gelber Ring sichtbar wenn aktiv
+            //   • Input-Sockel-Halo: gelber Ring sichtbar wenn Variable HIGH
+            // Verwendet querySelectorAll auf festo-svg (auch detach-tauglich).
+            window._updateFestoAnschlussLive = function() {
+                try {
+                    const svg = _festoDoc().getElementById('festo-svg');
+                    if (!svg) return;
+                    const state = (typeof spsState !== 'undefined') ? spsState : {};
+                    const simOn = (typeof isSimulationActive !== 'undefined') && isSimulationActive;
+                    svg.querySelectorAll('[data-festo-ans-led-var]').forEach(led => {
+                        const v = led.getAttribute('data-festo-ans-led-var');
+                        const on = simOn && !!state[v];
+                        led.setAttribute('fill', on ? '#ffeb3b' : '#37474f');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-out-var]').forEach(halo => {
+                        const v = halo.getAttribute('data-festo-ans-out-var');
+                        const on = simOn && !!state[v];
+                        halo.setAttribute('opacity', on ? '0.85' : '0');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-in-var]').forEach(halo => {
+                        const v = halo.getAttribute('data-festo-ans-in-var');
+                        const on = simOn && !!state[v];
+                        halo.setAttribute('opacity', on ? '0.85' : '0');
+                    });
+                    // Power-Schalter dynamisch: bei Sim-Lauf kippt die Wippe
+                    // sinngemäß auf „I" (grüner unterer Halbteil), Status-LED an.
+                    svg.querySelectorAll('[data-festo-ans-switch-top]').forEach(e => {
+                        e.setAttribute('fill', simOn ? '#fafafa' : '#212121');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-switch-bot]').forEach(e => {
+                        e.setAttribute('fill', simOn ? '#4caf50' : '#fafafa');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-switch-text-top]').forEach(e => {
+                        e.setAttribute('fill', simOn ? '#212121' : '#fff');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-switch-text-bot]').forEach(e => {
+                        e.setAttribute('fill', simOn ? '#fff' : '#212121');
+                    });
+                    svg.querySelectorAll('[data-festo-ans-power-led]').forEach(e => {
+                        e.setAttribute('fill', simOn ? '#76ff03' : '#37474f');
+                    });
+                } catch(_) {}
+            };
+
             window._renderFestoPanel = function() {
                 // Banner synchronisieren + ggf. Warnmodal anzeigen, sobald das
                 // FESTO-Panel mit aktivem Dual-Modus gerendert wird.
                 try { window._syncFestoDualBanner(); } catch(_) {}
                 if (window.configDualCircuit) {
                     try { window._showFestoDualWarning(false); } catch(_) {}
+                }
+                // SPS-Modus: einmaliger Orientierungs-Hinweis. Drei Bedingungen
+                // müssen GLEICHZEITIG erfüllt sein, sonst ist der Hinweis nicht
+                // relevant:
+                //   1) SPS-Modus aktiv (sonst gilt die NC-Programm-Inversion-
+                //      Erklärung gar nicht).
+                //   2) Auto-Schaltplan-Panel sichtbar (sonst sieht der User die
+                //      Schaltplan-Darstellung gar nicht, auf die sich der
+                //      Hinweis bezieht).
+                //   3) Programm-Sicht aktiv (Anschluss-Sicht zeigt ohnehin die
+                //      reale SPS-Verkabelung — Hinweis wäre dort verwirrend).
+                try {
+                    const circWrap = document.getElementById('circuit-wrapper');
+                    const circVisible = !!(circWrap && circWrap.style.display !== 'none');
+                    if (!window.epneuMode && circVisible && !window._iecAnschlussView) {
+                        window._showFestoSpsWarning(false);
+                    }
+                } catch(_) {}
+                // Anschluss-Sicht aktiv → komplett anderer Panel-Stil (reale
+                // SPS-Module statt Taster/Relais/Sensoren).
+                if (!window.epneuMode && window._iecAnschlussView) {
+                    try { _renderFestoAnschluss(); return; } catch(e) { console.warn('FESTO-Anschluss-Renderer fehlgeschlagen:', e); }
                 }
                 const svg = _festoDoc().getElementById('festo-svg');
                 const wrap = _festoDoc().getElementById('festo-wrapper');
@@ -53143,6 +54914,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 // Zoom nach Render reapplien (vermeidet Reset bei Re-Render)
                 _applyFestoZoom();
+                // Auto-Fit on Open: wenn das Panel gerade frisch geöffnet wurde,
+                // einmalig die Zoomstufe so wählen dass alles in den Body passt.
+                if (typeof _festoMaybeFit === 'function') _festoMaybeFit();
                 // Lever-Zustände sofort nach Render an aktuelles spsState anpassen
                 _updateFestoLevers();
                 // Phase 2: Kabel-Routing — nach jedem Panel-Render neu generieren
@@ -53383,7 +55157,58 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window.festoZoomReset = function() {
                 _festoZoom = 1.0;
                 _applyFestoZoom();
+                // Reset bedeutet auch: zurück an den linken oberen Rand
+                // scrollen, sonst klebt der Viewport auf der alten Position
+                // und zeigt evtl. nur leeren Bereich rechts vom Aufbau.
+                const body = _festoDoc().getElementById('festo-body');
+                if (body) { body.scrollLeft = 0; body.scrollTop = 0; }
             };
+            // ============ Auto-Fit on Open ============
+            // Beim ersten Render NACH dem Panel-Öffnen den Zoom so wählen,
+            // dass der gesamte Aufbau in den sichtbaren Body passt. Sonst
+            // können bei vielen Panels die rechten/unteren Panele jenseits
+            // des Viewports landen und der User sieht nur leere Fläche.
+            // Verkleinert nur (Faktor ≤ 1), damit kleine Aufbauten nicht
+            // unnötig vergrößert werden.
+            window._festoNeedsFit = true;
+            function _festoFitToViewport() {
+                const svg  = _festoDoc().getElementById('festo-svg');
+                const body = _festoDoc().getElementById('festo-body');
+                if (!svg || !body) return;
+                const bw = parseFloat(svg.dataset.baseW || '0');
+                const bh = parseFloat(svg.dataset.baseH || '0');
+                if (!bw || !bh) return;
+                // clientWidth/Height berücksichtigen Padding/Scrollbars nicht
+                // perfekt — ein kleiner Sicherheitsabstand vermeidet Mini-
+                // Scrollbars direkt nach dem Fit.
+                const margin = 12;
+                const aw = Math.max(0, body.clientWidth  - margin);
+                const ah = Math.max(0, body.clientHeight - margin);
+                if (aw <= 0 || ah <= 0) return;
+                const fit = Math.min(aw / bw, ah / bh);
+                // Nur verkleinern (Aufbauten kleiner als der Body bleiben
+                // bei 1:1). Untergrenze 0.25 wie bei manuellem Zoom-Out.
+                _festoZoom = Math.max(0.25, Math.min(1.0, fit));
+                _applyFestoZoom();
+                body.scrollLeft = 0;
+                body.scrollTop = 0;
+            }
+            window._festoFitToViewport = _festoFitToViewport;
+            // Aufruf-Wrapper: nur fitten wenn ein Open-Event darum gebeten hat.
+            // Beide Renderer (_renderFestoPanel + _renderFestoAnschluss) rufen
+            // das am Ende auf — das Flag entscheidet, ob es etwas tut.
+            function _festoMaybeFit() {
+                if (!window._festoNeedsFit) return;
+                // Body-Layout kann beim ersten Render direkt nach dem
+                // display:flex noch 0 sein. requestAnimationFrame wartet bis
+                // der Browser das Layout aktualisiert hat.
+                requestAnimationFrame(() => {
+                    if (!window._festoNeedsFit) return;
+                    _festoFitToViewport();
+                    window._festoNeedsFit = false;
+                });
+            }
+            window._festoMaybeFit = _festoMaybeFit;
             // ============ Drag-to-Pan ============
             // Linker Mausknopf drücken & ziehen verschiebt die Viewport-Scroll-
             // position. Cursor wechselt grab → grabbing. Drag-Pan wird auf
@@ -54073,10 +55898,91 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window._festoStrandList = strandList;
                 return cables;
             }
+            // Strang-Farbe für den „Bunte Kabel"-Modus. Vorrangig wird die
+            // Farbe aus dem Auto-Schaltplan übernommen — der Schaltplan
+            // hält in seinen Coil-/Contact-Gruppen pro Strang die CSS-
+            // Variable --logic-color (gesetzt in drawCoil/drawContact via
+            // `g.style.setProperty('--logic-color', color)`). Diese ist
+            // identisch mit der Farbe, die die „Bunte Pfade"-Option im
+            // Schaltplan visualisiert. Damit ist die Farbgebung in beiden
+            // Sichten kohärent — derselbe Strang trägt überall denselben
+            // Ton.
+            //
+            // Lookup-Reihenfolge:
+            //   1. Coil-Element mit data-iec-id == strandId (häufigster Fall:
+            //      strand ist der Coil-Variablen-Name);
+            //   2. Contact-Element mit data-iec-id == strandId (Fallback,
+            //      falls der Strang sensorgetrieben ist und der Sensor-Coil
+            //      anders gerendert wurde);
+            //   3. fbsNodeColors[strandId] (vom FBS für jede Node gepflegte
+            //      Stable-Color-Tabelle — Fallback wenn Schaltplan nicht
+            //      gerendert ist, z. B. wenn nur das FESTO-Panel offen ist);
+            //   4. Deterministischer Hash (FNV-1a + goldener Schnitt) —
+            //      letzter Notnagel, damit auch ohne jedweden Schaltplan-
+            //      State eine stabile Farbe entsteht.
+            // Pro _renderFestoCables-Aufruf wird ein Cache geführt
+            // (window._festoStrandColorCache), damit wir nicht für jedes
+            // Kabel desselben Strangs neu im DOM suchen.
+            function _festoStrandColor(strandId) {
+                if (!strandId) return '#1565c0';
+                const cache = window._festoStrandColorCache;
+                if (cache && cache[strandId]) return cache[strandId];
+                const found = _lookupStrandColor(strandId);
+                if (cache) cache[strandId] = found;
+                return found;
+            }
+            function _lookupStrandColor(strandId) {
+                // (1) + (2): aus dem gerenderten Auto-Schaltplan ziehen
+                try {
+                    const cc = _iecDoc().getElementById('circuit-content');
+                    if (cc) {
+                        const sel = `[data-iec-id="${CSS.escape(strandId)}"]`;
+                        const coil = cc.querySelector(`[data-iec-role="coil"]${sel}`)
+                                  || cc.querySelector(`[data-iec-role="contact"]${sel}`);
+                        if (coil) {
+                            const v = coil.style && coil.style.getPropertyValue('--logic-color');
+                            if (v && v.trim()) return v.trim();
+                        }
+                    }
+                } catch(_) {}
+                // (3): die globale FBS-Color-Tabelle
+                try {
+                    if (window.fbsNodeColors && window.fbsNodeColors[strandId]) {
+                        return window.fbsNodeColors[strandId];
+                    }
+                } catch(_) {}
+                // (4): Hash-Fallback (FNV-1a + goldener Schnitt)
+                let h = 2166136261;
+                for (let i = 0; i < strandId.length; i++) {
+                    h ^= strandId.charCodeAt(i);
+                    h = (h * 16777619) >>> 0;
+                }
+                const hue = (h * 0.61803398875) % 1;
+                const hDeg = Math.floor(hue * 360);
+                const sat  = 65 + ((h >>> 16) & 0x0F);
+                const lig  = 42 + ((h >>> 8)  & 0x07);
+                return `hsl(${hDeg}, ${sat}%, ${lig}%)`;
+            }
             // ── Cable-Renderer ──
             // Eigene <g>-Layer, pointer-events:none, immer LETZTES Kind der SVG
             // damit Kabel über Panels sichtbar sind ohne Sockel-Clicks zu blocken.
             function _renderFestoCables() {
+                // Anschluss-Sicht: komplett anderer Cable-Pfad (SPS-Adressen
+                // statt Schaltplan-Walker). Wenn der Schritt-Modus-Button
+                // _festoStep() den Standard-Renderer aufruft, leiten wir hier
+                // auf den Anschluss-Renderer um.
+                if (!window.epneuMode && window._iecAnschlussView
+                    && typeof _renderAnschlussCables === 'function'
+                    && window._ansFestoLastData) {
+                    try {
+                        _renderAnschlussCables(window._ansFestoLastData, window._ansFestoLastIn, window._ansFestoLastOut);
+                        return;
+                    } catch(e) { console.warn('Anschluss-Kabel-Delegation fehlgeschlagen:', e); }
+                }
+                // Frischer Strang→Farbe-Cache pro Render-Aufruf. So spart der
+                // bunte Modus DOM-Querys, wenn mehrere Kabel zum selben Strang
+                // gehören, und reagiert dennoch auf Re-Render des Schaltplans.
+                window._festoStrandColorCache = {};
                 const svg = _festoDoc().getElementById('festo-svg');
                 if (!svg) return;
                 // Alten Layer entfernen
@@ -54199,7 +56105,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Letztes neu gezeichnetes Kabel im Step-Modus hervorheben:
                     // gelbes Glühen, kurz, damit das "just placed"-Gefühl entsteht.
                     const isJustPlaced = stepMode && cIdx === stepLimit - 1 && !isFiltered;
-                    const color = cable.color === 'red' ? '#d32f2f' : '#1565c0';
+                    // „Bunte Kabel"-Modus: pro Strang eine eigene Farbe, statt
+                    // der Standard-Farbgebung (rot = +24V-Versorgung, blau =
+                    // alles andere). Kabel ohne Strang-Tag fallen auf die
+                    // Standard-Farben zurück.
+                    const colorful = !!window.configFestoColorfulCables;
+                    const color = (colorful && cable.strand)
+                        ? _festoStrandColor(cable.strand)
+                        : (cable.color === 'red' ? '#d32f2f' : '#1565c0');
                     const path = document.createElementNS(SVGNS, 'path');
                     path.setAttribute('d', _cablePath(from, to));
                     path.setAttribute('fill', 'none');
@@ -54336,6 +56249,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     cc.querySelectorAll('.festo-strand-dimmed').forEach(e => e.classList.remove('festo-strand-dimmed'));
                     return;
                 }
+                // ── Anschluss-Sicht: eigene Filter-Logik ──
+                // Im Anschlussplan liegt jede Variable als getrennte Säule (kein
+                // zusammenhängender Strang-DOM-Block wie im Auto-Schaltplan).
+                // Eingangs-„Stränge" haben gar kein Coil-Element. Deshalb hier
+                // klassenbasiert filtern: alles mit `circ-var-X` wo X≠filterVar
+                // wird gedimmt; Schienen/Header/Verbindungspunkte ohne Klasse
+                // bleiben sichtbar (gehören ohnehin allen Strängen).
+                if (window._iecAnschlussView) {
+                    const filterCls = 'circ-var-' + filterVar;
+                    cc.querySelectorAll('[class*="circ-var-"]').forEach(elem => {
+                        const cls = Array.from(elem.classList || []).find(c => c.startsWith('circ-var-'));
+                        elem.classList.toggle('festo-strand-dimmed', cls !== filterCls);
+                    });
+                    return;
+                }
                 // 1) Filter-Coils finden. Kann mehrere geben: bei RS/SR
                 //    werden manchmal mehrere Coil-Elemente mit gleichem
                 //    data-iec-id gerendert, alle sind Mitglieder des Strangs.
@@ -54412,6 +56340,52 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _renderFestoCables();
             };
             window._renderFestoCables = _renderFestoCables;
+            // Default-State des „Bunte Kabel"-Modus: aus, kompatibel zur
+            // bestehenden Standard-Anzeige (Rot/Blau). Persistenz im
+            // localStorage damit Lehrkräfte/Lernende ihre Präferenz behalten.
+            try {
+                if (window.configFestoColorfulCables === undefined) {
+                    window.configFestoColorfulCables = localStorage.getItem('valisFestoColorful') === '1';
+                }
+            } catch(_) { window.configFestoColorfulCables = false; }
+            // Toggle für den „Bunte Kabel"-Modus. Wird vom Settings-Dropdown
+            // aufgerufen. Triggert ein vollständiges Cable-Layer-Re-Render —
+            // _renderFestoCables baut den Layer ohnehin von Grund auf neu, also
+            // genügt ein direkter Aufruf.
+            window._toggleFestoColorfulCables = function(checked) {
+                window.configFestoColorfulCables = !!checked;
+                try { localStorage.setItem('valisFestoColorful', checked ? '1' : '0'); } catch(_) {}
+                _renderFestoCables();
+            };
+            // Settings-Dropdown öffnen/schließen. Der Click-Outside-Handler
+            // wird beim Öffnen registriert und beim Schließen wieder entfernt,
+            // damit Klicks innerhalb des Menüs (Checkbox-Toggle) nicht
+            // doppelt aufgegriffen werden.
+            window._toggleFestoSettingsMenu = function(e) {
+                if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+                const fdoc = _festoDoc();
+                const menu = fdoc.getElementById('festo-settings-menu');
+                if (!menu) return;
+                const willOpen = menu.style.display === 'none' || !menu.style.display;
+                if (willOpen) {
+                    // Checkbox-State mit Flag synchronisieren — falls der Modus
+                    // anderswo (z. B. Lektion) gekippt wurde, soll das Dropdown
+                    // beim Öffnen den korrekten Zustand zeigen.
+                    const cb = fdoc.getElementById('festo-colorful-cables');
+                    if (cb) cb.checked = !!window.configFestoColorfulCables;
+                    menu.style.display = 'block';
+                    const outside = (ev) => {
+                        if (menu.contains(ev.target)) return;
+                        const btn = fdoc.getElementById('festo-settings-btn');
+                        if (btn && btn.contains(ev.target)) return;
+                        menu.style.display = 'none';
+                        fdoc.removeEventListener('mousedown', outside, true);
+                    };
+                    setTimeout(() => fdoc.addEventListener('mousedown', outside, true), 0);
+                } else {
+                    menu.style.display = 'none';
+                }
+            };
             // ============ Kabel-Beschreibung ============
             // Generiert aus from/to/color/strand eines Kabels einen lesbaren
             // Lehrtext: WAS wird verbunden, WARUM. Wird im Schritt-Modus pro
@@ -54419,6 +56393,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // verwendet.
             function _describeFestoSocket(key) {
                 if (!key) return '–';
+                // ── Anschluss-Sicht: SPS-Module ──
+                let mAns;
+                if (key === '__ANS_BUS_24V__') return '+24V-Verteilung (FESTO Distribution)';
+                if (key === '__ANS_BUS_0V__')  return '0V-Verteilung (FESTO Distribution)';
+                if ((mAns = key.match(/^ANS_PWR_(24V|0V)_(\d+)$/))) {
+                    return `Netzteil · ${mAns[1]}-Ausgang ${mAns[2]}`;
+                }
+                if ((mAns = key.match(/^ANS_DIST_(24V|0V)_(\d+)$/))) {
+                    return `Verteilung · ${mAns[1]}-Pin ${parseInt(mAns[2],10)+1}`;
+                }
+                if ((mAns = key.match(/^ANS_DIN_([EA]\d+\.\d+)$/))) {
+                    return `16DIN · Digitaleingang ${mAns[1]}`;
+                }
+                if ((mAns = key.match(/^ANS_DOUT_([EA]\d+\.\d+)$/))) {
+                    return `16DOUT · Digitalausgang ${mAns[1]}`;
+                }
                 if (key === '__BUS_L1__' || (/_24V_\d+$/.test(key) && /^[LM]\d+_/.test(key) && !!window.configDualCircuit)) return 'L1-Sammelschiene (230V AC)';
                 if (key === '__BUS_N__'  || (/_0V_\d+$/.test(key)  && /^[LM]\d+_/.test(key) && !!window.configDualCircuit)) return 'N-Sammelschiene (230V AC)';
                 if (key === '__BUS_24V__' || /_24V_\d+$/.test(key)) return '+24V-Sammelschiene';
@@ -54477,6 +56467,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _whyFestoCable(cable) {
                 const from = cable.fromKey || '';
                 const to = cable.toKey || '';
+                // ── Anschluss-Sicht: SPS-spezifische Begründungen ──
+                if (cable.strand === '__POWER__') {
+                    if (/^ANS_PWR_24V/.test(from) || /^ANS_PWR_24V/.test(to))
+                        return 'Versorgt die +24V-Verteilung vom Netzteil.';
+                    if (/^ANS_PWR_0V/.test(from) || /^ANS_PWR_0V/.test(to))
+                        return 'Schließt den 0V-Bezug der Verteilung an das Netzteil an.';
+                }
+                if (/^ANS_DIN_/.test(to))  return 'Führt das Bauteilsignal auf den SPS-Eingang (16DIN).';
+                if (/^ANS_DIN_/.test(from)) return 'Eingangssignal vom 16DIN ins Bauteil.';
+                if (/^ANS_DOUT_/.test(from)) return 'Steuert den Verbraucher vom SPS-Ausgang (16DOUT).';
+                if (/^ANS_DIST_24V/.test(to) || /^ANS_DIST_24V/.test(from))
+                    return 'Versorgt das Bauteil mit +24V aus der Verteilung.';
+                if (/^ANS_DIST_0V/.test(to) || /^ANS_DIST_0V/.test(from))
+                    return 'Schließt den Stromkreis über 0V der Verteilung.';
                 if (cable.color === 'red') return 'Versorgt den Strang mit +24V von der Sammelschiene.';
                 if (/_A1$/.test(to))        return 'Speist Strom in die Relais-Spule — der Strang wird wirksam.';
                 if (/_A2$/.test(from))      return 'Spulenrücklauf auf 0V — schließt den Stromkreis.';

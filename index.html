@@ -18784,6 +18784,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (keepView && window._ansLastSig === _sig && content.firstChild) {
                 return;
             }
+            // Signature-Wechsel merken — selbst wenn der Aufrufer keepView=true
+            // setzt (z. B. updateEditor nach loadExample / Snapshot-Restore /
+            // Projekt-Import / URL-Link-Load), bedeutet ein anderer Signature-
+            // Wert: die viewBox wechselt drastisch. Dann muss der pan-zoom
+            // destroyed+recreated werden, sonst „schweben" die Zoom-Controls
+            // über der alten Bild-Geometrie.
+            const _contentChanged = (window._ansLastSig !== _sig);
             window._ansLastSig = _sig;
 
             while (content.firstChild) content.removeChild(content.firstChild);
@@ -19292,16 +19299,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             add(txt(W - PAD_X, BOT_0_Y + 30, 'SPS-Anschlussplan · DIN EN 60204 (VDE 0113-1)',
                 { size: 10, anchor: 'end', fill: '#37474f', bold: true }));
 
-            // Pan-Zoom: Bei keepView=true (Re-Render mit identischem viewBox)
-            // nur updateBBox+resize wie der Programm-Sicht-Renderer — keine
-            // destroy/recreate, sonst flackert das Bild. Bei keepView=false
-            // (View-Wechsel, Erst-Render) komplett neu initialisieren, damit
-            // die Zoom-Controls am korrekten Rand sitzen.
+            // Pan-Zoom-Strategie:
+            //  • keepView=true UND Content unverändert → reiner Update-Tick
+            //    (z. B. Sim-Toggle, factoryLoop): updateBBox + resize, kein
+            //    destroy/recreate — sonst flackert das Bild und der User
+            //    verliert Zoom/Pan-Position.
+            //  • keepView=false (View-Wechsel, Erst-Render) ODER Content
+            //    geändert (loadExample, Snapshot-Restore, Projekt-Import,
+            //    Code-Edit, der I/Os hinzufügt/entfernt) → komplett neu
+            //    initialisieren. Sonst behält pan-zoom den alten viewBox
+            //    im Kopf und die Zoom-Controls hängen irgendwo neben dem
+            //    neuen Plan in der Luft.
+            const _recreateNeeded = !keepView || _contentChanged;
             setTimeout(() => {
                 const pCirc = svg.closest('.workspace-panel') || doc.getElementById('circuit-wrapper');
                 if (!pCirc || pCirc.offsetWidth <= 0 || pCirc.offsetHeight <= 0) return;
                 try {
-                    if (keepView && typeof panZoomCircuitInstance !== 'undefined' && panZoomCircuitInstance) {
+                    if (!_recreateNeeded && typeof panZoomCircuitInstance !== 'undefined' && panZoomCircuitInstance) {
                         panZoomCircuitInstance.updateBBox();
                         panZoomCircuitInstance.resize();
                     } else {

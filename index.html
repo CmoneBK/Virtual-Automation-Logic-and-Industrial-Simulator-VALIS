@@ -126,21 +126,21 @@
 		/* ===================================================================== */
         /* 🌟 NEU: ANIMATIONEN FÜR BEIDE EINKLAPPBAREN LEISTEN (LOGIK & IEC) 🌟 */
         /* ===================================================================== */
-        #fbs-button-group, #fbs-options-group, #iec-button-group, #pneu-options-group, #sk-options-group {
+        #fbs-button-group, #fbs-options-group, #fbs-networks-group, #iec-button-group, #pneu-options-group, #sk-options-group {
             display: flex; gap: 5px; overflow: hidden;
             max-width: 0; max-height: 38px; opacity: 0;
             flex-wrap: wrap; /* 🌟 DER FIX: Erlaubt den Umbruch in die nächste Zeile! */
             transition: max-width 0.4s ease, max-height 0.4s ease, opacity 0.3s ease;
             pointer-events: auto; /* Buttons bleiben klickbar */
         }
-        #fbs-button-group.expanded, #fbs-options-group.expanded, #iec-button-group.expanded, #pneu-options-group.expanded, #sk-options-group.expanded {
+        #fbs-button-group.expanded, #fbs-options-group.expanded, #fbs-networks-group.expanded, #iec-button-group.expanded, #pneu-options-group.expanded, #sk-options-group.expanded {
             max-width: 800px;
             max-height: 300px; /* Gibt der Box Raum, nach unten zu wachsen */
             opacity: 1;
             overflow: visible; /* Keine Scrollbalken mehr! */
         }
         /* 🌟 DER FIX: Buttons haben exakt dieselbe Höhe und zentrieren ihren Text */
-        #fbs-button-group .tool-btn, #fbs-options-group button, #iec-button-group button, #pneu-options-group button, #sk-options-group button {
+        #fbs-button-group .tool-btn, #fbs-options-group button, #fbs-networks-group button, #iec-button-group button, #pneu-options-group button, #sk-options-group button {
             flex: 0 0 auto !important;
             width: max-content;
             white-space: nowrap;
@@ -255,6 +255,24 @@
         #btn-fbs-options.expanded {
             background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
         }
+        /* --- Spezifisch: Netzwerk-Button Logikplan (analog Optionen) --- */
+        #btn-fbs-networks-panel {
+            flex: 0 0 auto !important;
+            height: 30px !important;
+            padding: 0 12px !important;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s, color 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+            pointer-events: auto;
+            margin-top: 2px;
+        }
+        #btn-fbs-networks-panel.expanded {
+            background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
+        }
         /* --- Spezifisch: Optionen-Button Schrittketten-Panel (analog Logikplan) --- */
         #btn-sk-options {
             flex: 0 0 auto !important;
@@ -272,6 +290,17 @@
         }
         #btn-sk-options.expanded {
             background-color: #f44336 !important; color: #fff !important; border-color: #b71c1c !important;
+        }
+        /* --- Norm- und Control-Button Schrittketten-Panel: gleiches Shrink-
+              Verhalten wie die anderen SK-Header-Buttons, damit sie beim
+              Verkleinern des Panels nicht zerquetscht werden (kein Flex-
+              Schrumpfen, kein Zeilenumbruch). --- */
+        #btn-sk-norm,
+        #btn-sk-control {
+            flex: 0 0 auto !important;
+            white-space: nowrap;
+            box-sizing: border-box;
+            display: flex; align-items: center; justify-content: center;
         }
         /* Tool-Buttons während aktiver Sim ausblenden — Klasse `sk-hide-tools` setzt
            der JS-Toggle aufs Wrapper, sobald die Option AN ist UND `isSimulationActive`.
@@ -909,6 +938,18 @@
         .fbs-pin-text { font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 10px; fill: #555555; }
         .fbs-line-halo { fill: none; stroke: #ffffff; stroke-width: calc(var(--fbs-stroke-w, 2px) + 4.5px); stroke-linejoin: round; stroke-linecap: round; }
         .fbs-line { fill: none; stroke-width: var(--fbs-stroke-w, 2px); stroke-linejoin: round; stroke-linecap: round; }
+        /* Netzwerkmodus-Bänder im Logikplan: dezente Tönung +
+           Trennlinien + Header-Badges. Sitzen in svg-halos (hinten),
+           werden also weder von Linien noch von Knoten überlagert. */
+        #custom-svg .fbs-net-band { pointer-events: none; }
+        #custom-svg .fbs-net-sep  { pointer-events: none; }
+        #custom-svg .fbs-net-badge { pointer-events: none; }
+        /* Geister-Eingänge (duplizierte Inputs pro Netzwerk): leichter
+           gestrichelter Rand als „Achtung, das ist ein Klon"-Hinweis. */
+        #custom-svg g[data-ghost="1"] .fbs-io-box {
+            stroke-dasharray: 4 3;
+            stroke-opacity: 0.85;
+        }
         /* Fokus-Modus-Aktiv-Cursor: zeigt dem User, dass Klicks Knoten fokussieren. */
         #custom-svg.fbs-focus-armed g[data-node-id] { cursor: pointer; }
         #custom-svg.fbs-focus-armed g[data-node-id]:hover .fbs-block,
@@ -928,6 +969,20 @@
            dorthin um. */
         #circuit-svg .iec-faded { opacity: 0.12; }
         #circuit-svg.iec-focus-armed .iec-faded:hover { opacity: 0.45; }
+        /* Während der Simulation: Eingabe-Bauteile (Taster/Schalter/Sensoren)
+           werden klickbar — Pointer-Cursor + Hover-Highlight als visuelles
+           „Hier kannst du drücken/auslösen". Greift NICHT im Fokus-Modus
+           (dort hat das Fokus-Click-Feedback Vorrang). */
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="contact"][data-iec-id],
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="sensor-box"][data-iec-id] {
+            cursor: pointer;
+        }
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="contact"][data-iec-id]:hover .circ-component,
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="contact"][data-iec-id]:hover .circ-static,
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="contact"][data-iec-id]:hover .circ-moving-contact,
+        #circuit-wrapper.iec-sim-active:not(.iec-focus-armed) #circuit-svg [data-iec-role="sensor-box"][data-iec-id]:hover .circ-component {
+            stroke: #4caf50 !important; stroke-width: 2.5 !important;
+        }
         /* FESTO-Strang-Filter Spiegelung im Schaltplan: ausgewählter Strang
            im FESTO-Dropdown → alle anderen Stränge im Auto-Schaltplan
            gedämpft. Anker ist data-line-prefix (Coil-varName). */
@@ -2403,6 +2458,11 @@
                         <button id="btn-fbs-glowsegtrunks" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsGlowSegmentedTrunks()" title="Trunks (horizontale Hauptkanäle) edge-weise zeichnen statt als einen Bus pro Quelle — der Glow-Hover zeigt dann punktgenau nur die Trunk-Anteile, die wirklich zum getracten Edge gehören (kein Überschuss bei mehrfach-verzweigten Quellen wie STOP). Kostet ein paar zusätzliche SVG-Pfade pro Net.">🪓 Trunk segmentiert: AUS<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
                         <button id="btn-fbs-errorglow" class="btn-export" style="background-color: #d50000; border: 1px solid #333;" onclick="toggleFbsErrorHighlight()" title="Code-Fehler im Logikplan durch rotes Leuchten an den betroffenen Variablen und Linien sichtbar machen.">🚨 Fehler-Glow: AN</button>
                     </div>
+                    <button id="btn-fbs-networks-panel" class="btn-export" title="Netzwerke-Panel ein-/ausklappen — SPS-typische Aufteilung des Logikplans in nummerierte Netzwerke (Standard: pro Output ein Netzwerk; optional: explizite `// NETZWERK n: Titel`-Marker im Code)." style="background-color: #607d8b; border: 1px solid #455a64;" onclick="toggleFbsNetworksPanel()">🗂 Netzwerke<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
+                    <div id="fbs-networks-group">
+                        <button id="btn-fbs-networks" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsNetworkMode()" title="Netzwerkmodus — teilt den Logikplan SPS-typisch in nummerierte Netzwerke (pro Output-Zuweisung ein Netzwerk). Optional: ein Kommentar `// NETZWERK 1: Sicherheitskreis` im Code überschreibt die Aufteilung und gruppiert mehrere Outputs unter einem Titel.">🗂 Netzwerke: AUS</button>
+                        <button id="btn-fbs-netdup" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsNetworkDuplicateInputs()" title="Inputs pro Netzwerk duplizieren — jedes Netzwerk bekommt eigene Kopien aller Eingangs-Knoten, die es verwendet. Vermeidet Cross-Netzwerk-Verdrahtung und macht jedes Netzwerk in sich abgeschlossen lesbar (TIA-Portal-Style). Nur wirksam, wenn Netzwerkmodus AN ist.">📋 Inputs pro Netzwerk: AUS</button>
+                    </div>
                 </div>
                 <svg id="custom-svg" xmlns="http://www.w3.org/2000/svg">
                     <g id="svg-halos"></g>
@@ -2449,7 +2509,7 @@
                                     <option value="sensor_kap" data-i18n="type_sensor_kap">Sensor (Kap.)</option>
                                     <option value="sensor_opt" data-i18n="type_sensor_opt">Sensor (Opt.)</option>
                                     <option value="sensor_mag" data-i18n="type_sensor_mag">Sensor (Mag.)</option>
-                                    <option value="sensor_reed" data-i18n="type_sensor_reed">Reed (2-pol.)</option>
+                                    <option value="sensor_reed" data-i18n="type_sensor_reed">Reed-Kontakt</option>
                                     <option value="mech_sensor" data-i18n="type_mech_sensor">Pos.-Schalter</option>
                                     <option value="light_curtain" data-i18n="type_light_curtain">Lichtgitter (NC)</option>
                                 </select>
@@ -2578,7 +2638,7 @@
                         <div class="ced-pal-item" draggable="true" data-ctype="sensor_kap">  <span class="ced-pal-mini" data-mini="sensor_kap"></span><span>Sensor (Kap.)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="sensor_opt">  <span class="ced-pal-mini" data-mini="sensor_opt"></span><span>Sensor (Opt.)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="sensor_mag">  <span class="ced-pal-mini" data-mini="sensor_mag"></span><span>Sensor (Mag.)</span></div>
-                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_reed"> <span class="ced-pal-mini" data-mini="sensor_reed"></span><span>Reed-Kontakt (2-pol.)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="sensor_reed"> <span class="ced-pal-mini" data-mini="sensor_reed"></span><span>Reed-Kontakt</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="mech_sensor"> <span class="ced-pal-mini" data-mini="mech_sensor"></span><span>Pos.-Schalter</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="light_curtain"><span class="ced-pal-mini" data-mini="light_curtain"></span><span>Lichtgitter (NC)</span></div>
                         <div class="ced-pal-cat">Hilfskontakte</div>
@@ -2620,6 +2680,7 @@
                         <button class="sk-mode-btn active" data-mode="grafcet" type="button" title="Schrittketten in Grafcet-Notation darstellen (IEC 60848) — Schritte als Rechtecke, Transitionen als Striche dazwischen. Klassische theoretische Notation, hochschultauglich.">Grafcet</button>
                         <button class="sk-mode-btn" data-mode="s7graph" type="button" title="Schrittketten in S7-GRAPH-Notation darstellen (Siemens TIA Portal Stil) — Industrie-Standard für SPS-Programmierung. Wechseln zwischen den Notationen verändert nur die Darstellung, nicht die Logik.">S7-GRAPH</button>
                     </div>
+                    <button id="btn-sk-norm" class="btn-export" style="background-color:#1b5e20;border:1px solid #2e7d32;color:#e8f5e9;font-size:11px;padding:2px 8px;cursor:pointer;border-radius:3px;" onclick="window._toggleSkGrafcetNorm()" title="Norm-Notation umschalten — AN: Betriebsmittelart (SF1, BG1, MB1, …) als Hauptreferenz mit Variable in Klammern, Logik in Grafcet-Symbolen (+ = ODER, * = UND, Querstrich = Negation, IEC 60848). AUS: Variablen-Namen mit &amp;&amp; / || / ¬ wie im Code.">📐 Norm: AN</button>
                     <button id="btn-sk-options" class="btn-export" title="Schrittketten-Optionen ein-/ausklappen — CONTROL-Editor für HMI-Bindungen, DSL ↔ RS-Glied-Toggle, SK-Dokumentation, Tools-bei-Sim-ausblenden, Beispiel-Bibliothek." style="background-color:#607d8b;border:1px solid #455a64;" onclick="window._toggleSkOptions()">⚙️ Optionen</button>
                     <button id="btn-sk-control" class="btn-export" style="background-color:#455a64;border:1px solid #263238;display:none;" onclick="window._toggleSkControlEditor()" title="CONTROL-Block der ausgewählten Schrittkette als Editor öffnen (HMI-Bindungen für MODE_AUTO/TAP/MAN, S_ON/S_OFF/S_SEL, OUT_*).">🎛 CONTROL</button>
                     <div id="sk-options-group">
@@ -2692,14 +2753,14 @@
                         </div>
                     </div>
                     <div class="tb-dropdown">
-                        <button class="tb-drop-btn" title="Sensoren — berührungslose (Induktiv für Metall, Kapazitiv für alles, Optisch als Lichtschranke, Magnetisch 3-pol., Reed 2-pol. für Zylinder), mechanische Endschalter und Sicherheits-Lichtgitter." data-i18n="fac_menu_sensors">📡 Sensoren ▼</button>
+                        <button class="tb-drop-btn" title="Sensoren — berührungslose (Induktiv für Metall, Kapazitiv für alles, Optisch als Lichtschranke, Magnetisch / Hall für freistehende Magnete, Reed-Kontakt für Zylinder-Endlagen), mechanische Endschalter und Sicherheits-Lichtgitter." data-i18n="fac_menu_sensors">📡 Sensoren ▼</button>
                         <div class="tb-dropdown-content" id="menu-sensoren">
                             <div class="tb-menu-cat">Berührungslos</div>
                             <div onclick="addFactoryDevice('sensor_ind')" data-i18n="fac_sens_ind">🧲 Induktiv (Metall)</div>
                             <div onclick="addFactoryDevice('sensor_kap')" data-i18n="fac_sens_kap">🔋 Kapazitiv (Alles)</div>
                             <div onclick="addFactoryDevice('sensor_opt')" data-i18n="fac_sens_opt">🔦 Optisch (Licht)</div>
                             <div onclick="addFactoryDevice('sensor_mag')" data-i18n="fac_sens_mag">🧲 Magnetisch (3-pol.)</div>
-                            <div onclick="addFactoryDevice('sensor_reed')" data-i18n="fac_sens_reed">🧲 Reed-Kontakt (2-pol., für Zylinder)</div>
+                            <div onclick="addFactoryDevice('sensor_reed')" data-i18n="fac_sens_reed">🧲 Reed-Kontakt (für Zylinder-Endlagen)</div>
                             <div id="menu-sens-cat-mech" class="tb-menu-cat">Mechanisch</div>
                             <div id="menu-sens-cat-safety" class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-sens-safety-content');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'🚨 Sicherheit';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ 🚨 Sicherheit</div>
                             <div id="menu-sens-safety-content" class="tb-inline-group" style="display:none;">
@@ -4793,7 +4854,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "type_sensor_kap": "Sensor (Kap.)",
                 "type_sensor_opt": "Sensor (Opt.)",
                 "type_sensor_mag": "Sensor (Mag.)",
-                "type_sensor_reed": "Reed (2-pol.)",
+                "type_sensor_reed": "Reed-Kontakt",
                 "type_mech_sensor": "Pos.-Schalter (Mech.)",
                 "type_light_curtain": "Lichtgitter (NC)",
                 "type_led": "LED (-P)",
@@ -4852,7 +4913,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "fac_sens_kap": "🔋 Kapazitiv (Alles)",
                 "fac_sens_opt": "🔦 Optisch (Licht)",
                 "fac_sens_mag": "🧲 Magnetisch (3-pol.)",
-                "fac_sens_reed": "🧲 Reed-Kontakt (2-pol., für Zylinder)",
+                "fac_sens_reed": "🧲 Reed-Kontakt (für Zylinder-Endlagen)",
                 "fac_menu_actuators": "⚙️ Aktoren ▼",
                 "fac_act_belt": "🛤️ Förderband",
                 "fac_act_cyl1": "🦾 Zylinder (Einfach)",
@@ -5151,7 +5212,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "type_sensor_kap": "Sensor (Cap.)",
                 "type_sensor_opt": "Sensor (Opt.)",
                 "type_sensor_mag": "Sensor (Mag.)",
-                "type_sensor_reed": "Reed (2-pin)",
+                "type_sensor_reed": "Reed contact",
                 "type_mech_sensor": "Limit Switch (Mech.)",
                 "type_light_curtain": "Light Curtain (NC)",
                 "type_led": "LED (-P)",
@@ -5531,6 +5592,8 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.fbsPinSnap       = true;   // Inputs/Outputs nach Relaxation hart auf Ziel-/Quell-Pin-Y schnappen
         window.fbsGlowHover     = false;  // [BETA] Hover über Knoten im Sim-Modus → aktiv treibende Vor-Kette gold-glüht — Default AUS (Opt-In)
         window.fbsGlowSegmentedTrunks = false; // [BETA] Trunks segmentweise zeichnen (1 pro Edge statt 1 pro Net) → Glow-Hover präzise ohne Überschuss. Mehr DOM-Pfade!
+        window.fbsNetworkMode   = false;  // Logikplan in nummerierte Netzwerke (SPS-Style) splitten — auto pro Output, optional via `// NETZWERK n: …`-Marker
+        window.fbsNetworkDuplicateInputs = false; // Inputs pro Netzwerk klonen (jedes Netzwerk in sich abgeschlossen, TIA-Portal-Style). Nur wirksam wenn fbsNetworkMode AN.
         (function _initFbsSettings() {
             try {
                 const _ls = (k) => localStorage.getItem(k);
@@ -5556,6 +5619,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 else if (_ls('valisFbsGlowHover') === '1') window.fbsGlowHover = true;
                 if (_ls('valisFbsGlowSegTrunks') === '0') window.fbsGlowSegmentedTrunks = false;
                 else if (_ls('valisFbsGlowSegTrunks') === '1') window.fbsGlowSegmentedTrunks = true;
+                if (_ls('valisFbsNetworkMode') === '1') window.fbsNetworkMode = true;
+                else if (_ls('valisFbsNetworkMode') === '0') window.fbsNetworkMode = false;
+                if (_ls('valisFbsNetworkDup') === '1') window.fbsNetworkDuplicateInputs = true;
+                else if (_ls('valisFbsNetworkDup') === '0') window.fbsNetworkDuplicateInputs = false;
                 const si = parseInt(_ls('valisFbsStrokeIdx'), 10);
                 if (Number.isFinite(si) && si >= 0 && si < 3) window.fbsStrokeIndex = si;
             } catch(_e) {}
@@ -6549,7 +6616,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ['sensor_kap',    'Item-Detector'],
                     ['sensor_opt',    'Daylight Sensor (binär)'],
                     ['sensor_mag',    'Iron-Trapdoor Sensor'],
-                    ['sensor_reed',   'Reed-Switch (2-pin, for pistons)'],
+                    ['sensor_reed',   'Reed contact (for cylinders)'],
                     ['mech_sensor',   'Pressure Plate'],
                     ['light_curtain', 'Tripwire Hook (Öffner / NC)']
                 ];
@@ -6564,7 +6631,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                     ['sensor_kap',    'Sensor (Kapazitiv)'],
                     ['sensor_opt',    'Sensor (Optisch)'],
                     ['sensor_mag',    'Sensor (Magnetisch)'],
-                    ['sensor_reed',   'Reed-Kontakt (2-polig, für Zylinder)'],
+                    ['sensor_reed',   'Reed-Kontakt (für Zylinder-Endlagen)'],
                     ['mech_sensor',   'Sensor (Mechanisch)'],
                     ['light_curtain', 'Lichtgitter (Öffner — Sicherheits-Konvention)']
                 ];
@@ -6585,7 +6652,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 ['sensor_kap',    window.t ? window.t('type_sensor_kap')    : 'Sensor (Kapazitiv)'],
                 ['sensor_opt',    window.t ? window.t('type_sensor_opt')    : 'Sensor (Optisch)'],
                 ['sensor_mag',    window.t ? window.t('type_sensor_mag')    : 'Sensor (Magnetisch)'],
-                ['sensor_reed',   window.t ? window.t('type_sensor_reed')   : 'Reed-Kontakt (2-polig)'],
+                ['sensor_reed',   window.t ? window.t('type_sensor_reed')   : 'Reed-Kontakt'],
                 ['mech_sensor',   window.t ? window.t('type_mech_sensor')   : 'Sensor (Mechanisch)'],
                 ['light_curtain', window.t ? window.t('type_light_curtain') : 'Lichtgitter']
             ];
@@ -7786,11 +7853,16 @@ You must output exactly this JSON format. The logic code goes as a single string
                         _tWriteTarget = `state['${_tTargetId}_${_tPin}']`;
                     } else {
                         graph.addNode(outputStr, 'OUTPUT', outputStr);
+                        const _on = graph.nodes.get(outputStr); if (_on && _on.sourceLine == null) _on.sourceLine = lineIdx;
                         graph.addEdge(blockId, outputStr, 'Q', false);
                         if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
                         definedOutputs.add(outputStr);
                         _tWriteTarget = `state['${outputStr}']`;
                     }
+                    // Timer-Block selbst auch mit Source-Line markieren (für
+                    // Netzwerkmodus: bekommt sonst keinen Anker und landet
+                    // beim ersten Netzwerk).
+                    const _tb = graph.nodes.get(blockId); if (_tb && _tb.sourceLine == null) _tb.sourceLine = lineIdx;
                     let sourceIsTimer = sourceObj.id.startsWith('TON_') || sourceObj.id.startsWith('TOF_') || sourceObj.id.startsWith('TP_') || sourceObj.id.startsWith('CTU_');
                     let inVarQuery = sourceIsTimer ? `(timers['${sourceObj.id}'] ? timers['${sourceObj.id}'].q : false)` : `state['${sourceObj.id}']`;
                     jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { et: 0, q: false, active: false, lastIn: false };\n`;
@@ -7833,11 +7905,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                         _cWriteTarget = `state['${_cTargetId}_${_cPin}']`;
                     } else {
                         graph.addNode(outputStr, 'OUTPUT', outputStr);
+                        const _cn = graph.nodes.get(outputStr); if (_cn && _cn.sourceLine == null) _cn.sourceLine = lineIdx;
                         graph.addEdge(blockId, outputStr, 'Q', false);
                         if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
                         definedOutputs.add(outputStr);
                         _cWriteTarget = `state['${outputStr}']`;
                     }
+                    const _cb = graph.nodes.get(blockId); if (_cb && _cb.sourceLine == null) _cb.sourceLine = lineIdx;
                     jsCompiledCode += `    if (!timers['${blockId}']) timers['${blockId}'] = { cv: 0, q: false, lastCu: false };\n`;
                     jsCompiledCode += `    let cu_${blockId} = ${cuObj.inverted ? '!' : ''}state['${cuObj.id}']; let r_${blockId} = ${rObj.inverted ? '!' : ''}state['${rObj.id}'];\n`;
                     jsCompiledCode += `    if (r_${blockId}) { timers['${blockId}'].cv = 0; timers['${blockId}'].q = false; } else {\n`;
@@ -8048,9 +8122,13 @@ You must output exactly this JSON format. The logic code goes as a single string
                     targetPin = pin;
                     rsBlocks.set(`${num}${suffix}`, blockType);
                     graph.addNode(targetId, blockType, `${blockType}-Glied ${num}`);
+                    // RS/SR-Block der frühesten S/R-Definitionszeile zuordnen.
+                    const _rb = graph.nodes.get(targetId);
+                    if (_rb && _rb.sourceLine == null) _rb.sourceLine = lineIdx;
                     definedOutputs.add(`Q${num}${suffix}`);
                 } else {
                     graph.addNode(targetId, 'OUTPUT', outputStr);
+                    const _on = graph.nodes.get(targetId); if (_on && _on.sourceLine == null) _on.sourceLine = lineIdx;
                     if (definedOutputs.has(targetId)) duplicateOutputs.add(targetId);
                     definedOutputs.add(targetId);
                 }
@@ -8127,6 +8205,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                 let src = graph.nodes.get(edge.sourceId);
                 if (src) edge.color = src.color;
             });
+            // Quelltext am Graph dranheften — wird vom Netzwerkmodus für die
+            // Marker-Erkennung (// NETZWERK n: Titel) gebraucht.
+            graph._sourceText = text;
             // FIX: Filtere die neuen GATE_ Variablen aus der UI-Liste heraus!
             return { graph, jsCompiledCode, inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
         }
@@ -8319,6 +8400,172 @@ You must output exactly this JSON format. The logic code goes as a single string
                 setTimeout(_hookSimToggle, 0);
             }
         })();
+
+        // ==========================================================
+        // === Grafcet-Norm-Notation im SK-Panel (IEC 60848)
+        // ==========================================================
+        // Toggle im SK-Panel-Header schaltet zwischen
+        //   AN  (Default): „SF1 (NOT_AUS)" als Hauptreferenz mit Variable
+        //                  in Klammern, Logik in Grafcet-Symbolen
+        //                  (+ = ODER, * = UND, Querstrich = Negation)
+        //   AUS: Original-Code-Notation (Variable mit && / || / ¬)
+        // State in localStorage persistiert. Bei Toggle-Klick wird das
+        // SK-Panel komplett neu gerendert.
+        (function _initSkGrafcetNorm() {
+            const KEY = 'valis.sk.grafcetNorm';
+            function readOn() {
+                try { const v = localStorage.getItem(KEY); return v === null ? true : v === '1'; }
+                catch(_e) { return true; }
+            }
+            function writeOn(v) {
+                try { localStorage.setItem(KEY, v ? '1' : '0'); } catch(_e) {}
+            }
+            function updateButtonLabel() {
+                const btn = window._skResolveDoc().getElementById('btn-sk-norm');
+                if (!btn) return;
+                const on = readOn();
+                btn.textContent = '📐 Norm: ' + (on ? 'AN' : 'AUS');
+                btn.style.backgroundColor = on ? '#1b5e20' : '#37474f';
+                btn.style.borderColor     = on ? '#2e7d32' : '#263238';
+            }
+            window._skGrafcetNormOn = readOn;
+            window._toggleSkGrafcetNorm = function() {
+                writeOn(!readOn());
+                updateButtonLabel();
+                if (typeof window._skTriggerRerender === 'function') window._skTriggerRerender();
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', updateButtonLabel);
+            } else {
+                updateButtonLabel();
+            }
+        })();
+        // Betriebsmittelart-Labels für ALLE bekannten Eingangs-/Ausgangs-
+        // Variablen — gleiche Konvention wie drawCircuitPlan (IEC 60617-9
+        // Klassen: SF = Bedienelemente, BG = Sensoren/Messung, P = Lampen,
+        // M = Motoren, MB = Magnetventile, H = Hupen/Sirenen, E = Heater,
+        // KF = Hilfsrelais). Wird vom Grafcet-Norm-Renderer benutzt, um
+        // Variablen wie NOT_AUS als „SF1" anzuzeigen.
+        // Berechnung nimmt globalInputs/globalOutputs als Reihenfolge-Basis,
+        // sodass die Nummerierung deterministisch mit dem Schaltplan
+        // übereinstimmt.
+        window._getSkBetriebsmittelLabels = function() {
+            const _SENSOR = new Set(['sensor_ind','sensor_kap','sensor_mag','sensor_opt','sensor_reed']);
+            const _MECH   = new Set(['mech_sensor','light_curtain']);
+            const map = {};
+            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0 };
+            const ins  = Array.isArray(globalInputs)  ? globalInputs  : [];
+            const outs = Array.isArray(globalOutputs) ? globalOutputs : [];
+            ins.forEach(n => {
+                const t = (typeof componentTypes !== 'undefined' && componentTypes[n]) || 'taster';
+                if (_SENSOR.has(t) || _MECH.has(t)) { NORM.bg++; map[n] = 'BG' + NORM.bg; }
+                else                                { NORM.sf++; map[n] = 'SF' + NORM.sf; }
+            });
+            outs.forEach(n => {
+                const t = (typeof componentTypes !== 'undefined' && componentTypes[n]) || 'led';
+                if      (t === 'led')    { NORM.p++;  map[n] = 'P'  + NORM.p; }
+                else if (t === 'motor')  { NORM.m++;  map[n] = 'M'  + NORM.m; }
+                else if (t === 'valve')  { NORM.mb++; map[n] = 'MB' + NORM.mb; }
+                else if (t === 'siren')  { NORM.h++;  map[n] = 'H'  + NORM.h; }
+                else if (t === 'heater') { NORM.e++;  map[n] = 'E'  + NORM.e; }
+                else                     { NORM.kf++; map[n] = 'KF' + NORM.kf; }
+            });
+            return map;
+        };
+        // Tokenizer: zerlegt einen Logik-Ausdruck wie "START && ¬NOT_AUS"
+        // in Token-Liste [{type, val}, ...]. Token-Typen: 'var', 'num',
+        // 'and', 'or', 'not', 'paren', 'raw'.
+        window._skTokenizeExpr = function(expr) {
+            const s = String(expr || '');
+            const out = [];
+            let i = 0;
+            while (i < s.length) {
+                const c = s[i];
+                if (/\s/.test(c)) { i++; continue; }
+                if (c === '(' || c === ')') { out.push({type:'paren', val:c}); i++; continue; }
+                if (c === '&' && s[i+1] === '&') { out.push({type:'and'}); i += 2; continue; }
+                if (c === '|' && s[i+1] === '|') { out.push({type:'or'});  i += 2; continue; }
+                if (c === '!' || c === '¬' || c === '~') { out.push({type:'not'}); i++; continue; }
+                if (/[A-Za-z_]/.test(c)) {
+                    let j = i + 1;
+                    while (j < s.length && /[A-Za-z0-9_]/.test(s[j])) j++;
+                    out.push({type:'var', val: s.slice(i, j)});
+                    i = j; continue;
+                }
+                if (/[0-9.]/.test(c)) {
+                    let j = i + 1;
+                    while (j < s.length && /[0-9.]/.test(s[j])) j++;
+                    out.push({type:'num', val: s.slice(i, j)});
+                    i = j; continue;
+                }
+                out.push({type:'raw', val: c});
+                i++;
+            }
+            return out;
+        };
+        // Formatiert einen Ausdruck in Grafcet-Norm-Segmente. Rückgabe:
+        // Array von {text, overline} — Negation `!X`/`¬X` setzt overline
+        // auf das nächste Var-/Num-/(…)-Token. Operatoren werden in
+        // Grafcet-Symbole übersetzt: && → " * ", || → " + ". Variablen
+        // werden — wenn in bsmMap vorhanden — als "BSM" gerendert, sonst
+        // bleibt der Code-Name stehen.
+        window._skFormatExprNorm = function(expr, bsmMap) {
+            const tokens = window._skTokenizeExpr(expr);
+            const segs = [];
+            let pendingNot = false;
+            for (let i = 0; i < tokens.length; i++) {
+                const t = tokens[i];
+                if (t.type === 'not') { pendingNot = !pendingNot; continue; }
+                if (t.type === 'var') {
+                    const up = String(t.val).toUpperCase();
+                    if (up === 'TRUE')  { segs.push({text: '1', overline: pendingNot}); pendingNot = false; continue; }
+                    if (up === 'FALSE') { segs.push({text: '0', overline: pendingNot}); pendingNot = false; continue; }
+                    const lbl = (bsmMap && bsmMap[t.val]) || t.val;
+                    segs.push({text: lbl, overline: pendingNot});
+                    pendingNot = false;
+                    continue;
+                }
+                if (t.type === 'num') {
+                    segs.push({text: t.val, overline: pendingNot});
+                    pendingNot = false;
+                    continue;
+                }
+                if (t.type === 'paren') {
+                    // Negation vor `(` wird als „¬"-Glyphe vor die Klammer
+                    // gezeichnet (kein gesamtgruppiger Überstrich — der
+                    // bräuchte ein Subgroup-Layout, das die Norm zwar kennt,
+                    // aber wir hier pragmatisch weglassen).
+                    if (pendingNot && t.val === '(') {
+                        segs.push({text: '¬', overline: false});
+                        pendingNot = false;
+                    }
+                    segs.push({text: t.val, overline: false});
+                    continue;
+                }
+                if (t.type === 'and') { segs.push({text: ' * ',  overline: false}); continue; }
+                if (t.type === 'or')  { segs.push({text: ' + ',  overline: false}); continue; }
+                if (t.type === 'raw') { segs.push({text: t.val,  overline: false}); continue; }
+            }
+            // Hängende Negation am Ende → als „¬" anhängen (Fehlerfall,
+            // aber dann verliert nichts).
+            if (pendingNot) segs.push({text: '¬', overline: false});
+            return segs;
+        };
+        // Zeichnet die Segmente in ein bestehendes SVG-<text>: alle
+        // Kinder vorher entfernen, dann pro Segment ein <tspan> mit
+        // optionalem text-decoration:overline. Vorhandene Attribute
+        // (x/y/class/data-*) am <text> bleiben unangetastet.
+        window._skApplyExprSegments = function(svgTextEl, segs) {
+            if (!svgTextEl) return;
+            while (svgTextEl.firstChild) svgTextEl.removeChild(svgTextEl.firstChild);
+            const NS = 'http://www.w3.org/2000/svg';
+            segs.forEach(s => {
+                const ts = document.createElementNS(NS, 'tspan');
+                if (s.overline) ts.setAttribute('text-decoration', 'overline');
+                ts.textContent = s.text;
+                svgTextEl.appendChild(ts);
+            });
+        };
 
         // ==========================================================
         // === Schrittketten-Doku-Modal (Tabs, nur bei PRO erreichbar)
@@ -10582,12 +10829,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-step-name': step.name,
                                     'data-action-idx': ai
                                 }, aBox);
-                                t.textContent = _bodyTxt;
+                                // Grafcet-Norm: „BSM (LHS) := <rhs-in-Norm>"
+                                // — Betriebsmittel-Kurzbezeichnung als Hauptreferenz,
+                                // Variablenname in Klammern, RHS-Operatoren übersetzt.
+                                // Bei Norm AUS bleibt es beim Code-Text.
+                                const _normOn = (typeof window._skGrafcetNormOn === 'function') && window._skGrafcetNormOn();
+                                if (_normOn) {
+                                    const bsmMap = window._getSkBetriebsmittelLabels();
+                                    const lhsBsm = bsmMap[a.lhs] || a.lhs;
+                                    const segs = [];
+                                    if (lhsBsm !== a.lhs) {
+                                        segs.push({ text: lhsBsm + ' (' + a.lhs + ') := ', overline: false });
+                                    } else {
+                                        segs.push({ text: a.lhs + ' := ', overline: false });
+                                    }
+                                    // RHS auch in Norm rendern (Variablen → BSM,
+                                    // Operatoren übersetzt, TRUE → 1 / FALSE → 0).
+                                    const rhsSegs = window._skFormatExprNorm(a.rhs, bsmMap);
+                                    window._skApplyExprSegments(t, segs.concat(rhsSegs));
+                                } else {
+                                    t.textContent = _bodyTxt;
+                                }
                                 if (_q.kind === 'D' || _q.kind === 'L') {
                                     t.setAttribute('data-qual-kind', _q.kind);
                                     t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
                                     t.setAttribute('data-qual-time', String(_q.time != null ? _q.time : 1.0));
-                                    t.setAttribute('data-qual-base', _bodyTxt);
+                                    // base = tatsächlich gerenderter Text — bei
+                                    // Norm-Mode also die Norm-Form. Sonst würde der
+                                    // D/L-Countdown unten textContent auf Raw-Text
+                                    // setzen und die Norm-Rendering zerstören.
+                                    t.setAttribute('data-qual-base', t.textContent);
                                 }
                                 if (isEditable) {
                                     // ×-Action-Del als Kind der aBox, damit CSS-
@@ -10774,7 +11045,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-to-step':    t.to
                                 }, tg);
                                 const baseTxt = (t.cond || 'TRUE') + ' → ' + t.to;
-                                cond.textContent = baseTxt;
+                                // Grafcet-Norm: Bedingung in Norm-Symbolen +
+                                // Betriebsmittel-Refs rendern. data-after-base
+                                // wird auf den tatsächlich gerenderten Text
+                                // gesetzt, sodass der AFTER-Countdown unten
+                                // norm-Text + Suffix anzeigt (statt Raw-Text).
+                                const _normOn = (typeof window._skGrafcetNormOn === 'function') && window._skGrafcetNormOn();
+                                if (_normOn) {
+                                    const bsmMap = window._getSkBetriebsmittelLabels();
+                                    const condSegs = window._skFormatExprNorm(t.cond || 'TRUE', bsmMap);
+                                    condSegs.push({ text: ' → ' + t.to, overline: false });
+                                    window._skApplyExprSegments(cond, condSegs);
+                                } else {
+                                    cond.textContent = baseTxt;
+                                }
                                 // AFTER-Countdown auch für Transition-Conds —
                                 // gleiches `_TMR_<chain>_<from>_<time>`-Schema.
                                 const _am = String(t.cond || '').match(/\bAFTER\s+([\d.]+)\b/i);
@@ -10783,7 +11067,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     const _safe = String(_tt).replace('.', '_');
                                     cond.setAttribute('data-after-helper', 'TON__TMR_' + chain.name + '_' + t.from + '_' + _safe);
                                     cond.setAttribute('data-after-time',   String(_tt));
-                                    cond.setAttribute('data-after-base',   baseTxt);
+                                    cond.setAttribute('data-after-base',   cond.textContent);
                                 }
                             });
                             el('line', { class: 'sk-trans-line', x1: colX, y1: barY, x2: colX, y2: barY + VSP/2 }, tg);
@@ -10926,12 +11210,29 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 }
                                 const _bodyTxt = a.lhs + ' := ' + a.rhs;
                                 const t = el('text', { x: ax + 6 + QUAL_W_S7, y: y + 14 + ai * 14 }, aBox);
-                                t.textContent = _bodyTxt;
+                                const _normOn_s7 = (typeof window._skGrafcetNormOn === 'function') && window._skGrafcetNormOn();
+                                if (_normOn_s7) {
+                                    const bsmMap = window._getSkBetriebsmittelLabels();
+                                    const lhsBsm = bsmMap[a.lhs] || a.lhs;
+                                    const segs = [];
+                                    if (lhsBsm !== a.lhs) {
+                                        segs.push({ text: lhsBsm + ' (' + a.lhs + ') := ', overline: false });
+                                    } else {
+                                        segs.push({ text: a.lhs + ' := ', overline: false });
+                                    }
+                                    const rhsSegs = window._skFormatExprNorm(a.rhs, bsmMap);
+                                    window._skApplyExprSegments(t, segs.concat(rhsSegs));
+                                } else {
+                                    t.textContent = _bodyTxt;
+                                }
                                 if (q.kind === 'D' || q.kind === 'L') {
                                     t.setAttribute('data-qual-kind', q.kind);
                                     t.setAttribute('data-qual-var',  String(a.lhs).toUpperCase());
                                     t.setAttribute('data-qual-time', String(q.time != null ? q.time : 1.0));
-                                    t.setAttribute('data-qual-base', _bodyTxt);
+                                    // base = tatsächlich gerenderter Text (Norm
+                                    // oder Raw), damit der Countdown unten nicht
+                                    // textContent gegen Raw-Form clobbert.
+                                    t.setAttribute('data-qual-base', t.textContent);
                                 }
                             });
                             maxX = Math.max(maxX, ax + 230);
@@ -11052,14 +11353,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     'data-to-step':    t.to
                                 }, tg);
                                 const baseTxt = (t.cond || 'TRUE') + ' → ' + t.to;
-                                cond.textContent = baseTxt;
+                                // Grafcet-Norm: Variablen → BSM, Operatoren übersetzt.
+                                const _normOn = (typeof window._skGrafcetNormOn === 'function') && window._skGrafcetNormOn();
+                                if (_normOn) {
+                                    const bsmMap = window._getSkBetriebsmittelLabels();
+                                    const condSegs = window._skFormatExprNorm(t.cond || 'TRUE', bsmMap);
+                                    condSegs.push({ text: ' → ' + t.to, overline: false });
+                                    window._skApplyExprSegments(cond, condSegs);
+                                } else {
+                                    cond.textContent = baseTxt;
+                                }
                                 const _am = String(t.cond || '').match(/\bAFTER\s+([\d.]+)\b/i);
                                 if (_am) {
                                     const _tt = parseFloat(_am[1]);
                                     const _safe = String(_tt).replace('.', '_');
                                     cond.setAttribute('data-after-helper', 'TON__TMR_' + chain.name + '_' + t.from + '_' + _safe);
                                     cond.setAttribute('data-after-time',   String(_tt));
-                                    cond.setAttribute('data-after-base',   baseTxt);
+                                    cond.setAttribute('data-after-base',   cond.textContent);
                                 }
                             });
                             el('line', { class: 'sk-trans-line', x1: colX, y1: barY, x2: colX, y2: barY + VSP/2 }, tg);
@@ -11375,6 +11685,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // sitzen — wir binden bei jedem render() vorsichtshalber neu, das
             // _skModeBound-Flag verhindert Doppel-Listener.
             window._reBindSkPanelHandlers = () => _bindSkModeToggle($panel());
+            // Globaler Re-Render-Hook für externe Trigger (z. B. Norm-Toggle).
+            window._skTriggerRerender = () => { try { render(); } catch(_) {} };
 
             // === Phase 5: Grafcet-Interaktivität ===
             // Inline-Edit für editierbare Step-Labels und Transition-Bedingungen.
@@ -12440,6 +12752,125 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 setTimeout(tryBind, 0);
             }
         })();
+        // ===== Interaktive Eingabe-Bauteile im Auto-Schaltplan =====
+        // Während der Simulation lassen sich Taster, Schalter und Sensoren
+        // direkt im Schaltplan auslösen — analog zum Sim-Panel. Mousedown /
+        // mouseup setzt Taster (Edge-aktiv), Click toggelt Schalter und
+        // Sensoren. Klassifizierung über componentTypes, nicht über DOM,
+        // damit auch verspätet umgehängte Typen korrekt greifen.
+        (function _initIecSimInputClick() {
+            const TASTER_TYPES = new Set(['taster','taster_nc','nothalt']);
+            const TOGGLE_TYPES = new Set([
+                'schalter','schalter_nc','key_switch','light_curtain',
+                'sensor_ind','sensor_kap','sensor_opt','sensor_mag','sensor_reed','mech_sensor'
+            ]);
+            const _simActive = () => (!!window.isSimulationActive)
+                || (typeof isSimulationActive !== 'undefined' && isSimulationActive);
+            const _findContactGroup = (target, svg) => {
+                let el = target;
+                while (el && el !== svg) {
+                    if (el.getAttribute) {
+                        const role = el.getAttribute('data-iec-role');
+                        const iid  = el.getAttribute('data-iec-id');
+                        if (iid && (role === 'contact' || role === 'sensor-box')) {
+                            return { varName: iid, role };
+                        }
+                    }
+                    el = el.parentNode;
+                }
+                return null;
+            };
+            const _classifyVar = (varName) => {
+                // OHNE Default-Fallback: Hilfsrelais-Kontakte (z. B. -KF1) haben
+                // dieselbe data-iec-role="contact" wie Eingangs-Kontakte, sind
+                // aber keine User-Inputs (spsState wird von der Simulation aus
+                // der Coil gespeist). componentTypes hat nur Einträge für echte
+                // Eingangs-Variablen → undefined heißt: nicht klickbar.
+                const ct = (typeof componentTypes !== 'undefined') ? componentTypes[varName] : undefined;
+                if (!ct) return null;
+                if (TASTER_TYPES.has(ct)) return 'taster';
+                if (TOGGLE_TYPES.has(ct)) return 'toggle';
+                return null;
+            };
+            const _setVar = (varName, isPressed) => {
+                if (typeof spsState === 'undefined') return;
+                const ct = (typeof componentTypes !== 'undefined') ? componentTypes[varName] : null;
+                if (!ct) return; // Sicherheitsnetz — wird i. d. R. schon von _classifyVar gefangen
+                const isNC = (typeof window._variableIsNCInverted === 'function')
+                    ? window._variableIsNCInverted(ct) : false;
+                spsState[varName] = isNC ? !isPressed : !!isPressed;
+                // Sim-Panel-Status synchronisieren (Taster-Button-Highlight + Checkbox).
+                try {
+                    const btn = document.getElementById(`sim_taster_${varName}`);
+                    if (btn) { if (isPressed) btn.classList.add('pressed'); else btn.classList.remove('pressed'); }
+                    const cb = document.getElementById(`sim_in_${varName}`);
+                    if (cb && cb.type === 'checkbox') cb.checked = !!isPressed;
+                } catch(_) {}
+                if (typeof runSimulationTick === 'function') runSimulationTick();
+            };
+            const _isPressed = (varName) => {
+                const ct = (typeof componentTypes !== 'undefined') ? componentTypes[varName] : null;
+                if (!ct) return false;
+                const isNC = (typeof window._variableIsNCInverted === 'function')
+                    ? window._variableIsNCInverted(ct) : false;
+                const raw = (typeof spsState !== 'undefined') ? !!spsState[varName] : false;
+                return isNC ? !raw : raw;
+            };
+            const _bindOnSvg = (svg) => {
+                if (!svg || svg._iecSimInputBound) return;
+                svg._iecSimInputBound = true;
+                // Mousedown: Taster drücken + im Set vermerken für späteres
+                // Loslassen (auch wenn die Maus aus dem SVG herauswandert).
+                svg.addEventListener('mousedown', (e) => {
+                    if (!_simActive()) return;
+                    if (window.iecFocusModeOn) return;          // Focus-Modus hat Vorrang
+                    if (e.button !== 0) return;                  // Nur Linksklick
+                    const hit = _findContactGroup(e.target, svg);
+                    if (!hit) return;
+                    if (_classifyVar(hit.varName) !== 'taster') return; // Toggle-Typen → click()
+                    e.preventDefault();
+                    e.stopPropagation();
+                    _setVar(hit.varName, true);
+                    if (!svg._iecSimDownVars) svg._iecSimDownVars = new Set();
+                    svg._iecSimDownVars.add(hit.varName);
+                    if (typeof SoundEngine !== 'undefined' && SoundEngine.click) SoundEngine.click();
+                });
+                // Mouseup auf window: Taster wieder loslassen, auch wenn die Maus
+                // beim Loslassen außerhalb des SVG steht.
+                window.addEventListener('mouseup', (e) => {
+                    if (e.button !== undefined && e.button !== 0) return;
+                    if (svg._iecSimDownVars && svg._iecSimDownVars.size > 0) {
+                        svg._iecSimDownVars.forEach(v => _setVar(v, false));
+                        svg._iecSimDownVars.clear();
+                    }
+                });
+                // Click: Schalter und Sensoren toggeln
+                svg.addEventListener('click', (e) => {
+                    if (!_simActive()) return;
+                    if (window.iecFocusModeOn) return;
+                    if (e.shiftKey || e.ctrlKey || e.metaKey) return;
+                    const hit = _findContactGroup(e.target, svg);
+                    if (!hit) return;
+                    if (_classifyVar(hit.varName) !== 'toggle') return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    _setVar(hit.varName, !_isPressed(hit.varName));
+                    if (typeof SoundEngine !== 'undefined' && SoundEngine.click) SoundEngine.click();
+                });
+            };
+            const tryBind = () => {
+                _bindOnSvg(document.getElementById('circuit-svg'));
+                const pop = window.popOutWindows && window.popOutWindows['circuit-wrapper'];
+                if (pop && !pop.closed && pop.document) {
+                    _bindOnSvg(pop.document.getElementById('circuit-svg'));
+                }
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryBind);
+            } else {
+                setTimeout(tryBind, 0);
+            }
+        })();
         window._iecApplyFocusFilter = function() {
             const svg = _iecDoc().getElementById('circuit-svg');
             if (!svg) return;
@@ -12662,12 +13093,230 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 node._fbsHidden = hidden;
             });
         };
+        // ===== Netzwerkmodus für den Logikplan (SPS-Style FBD-Networks) =====
+        // Teilt den Logikplan in horizontal getrennte Netzwerke, jedes mit
+        // Header (Nummer + Titel) und Trennlinie. Auto-Modus: jede Output-
+        // Zuweisung wird ein eigenes Netzwerk. Explizite Marker im Code
+        // überschreiben die Aufteilung:
+        //
+        //   // NETZWERK 1: Sicherheitskette
+        //   NOTHALT_OK := START && ¬NOTAUS
+        //
+        //   // NETZWERK 2: Hauptmotor
+        //   MOTOR := NOTHALT_OK && BUTTON
+        //
+        // Zwischen zwei Markern landen ALLE Outputs im selben Netzwerk.
+        // Markersyntax: `// NETZWERK <n>: <Titel>`, `// NETWORK <n>: <Titel>`
+        // oder `// NW <n>: <Titel>`. Nummer optional — wird sonst sequenziell
+        // vergeben. Titel optional.
+        window._fbsNetworkMarkerRe = /^\s*\/\/\s*(?:NETZWERK|NETWORK|NW)\s*(\d+)?\s*[:\-]?\s*(.*?)\s*$/i;
+        window._computeFbsNetworks = function(graph) {
+            const text = (graph && graph._sourceText) || '';
+            const lines = text.split('\n');
+            const markers = [];
+            lines.forEach((ln, i) => {
+                const m = ln.match(window._fbsNetworkMarkerRe);
+                if (m) markers.push({ lineIdx: i, num: m[1] ? parseInt(m[1]) : null, title: (m[2] || '').trim() });
+            });
+            const networks = [];        // {id, title, startLine, endLine, outputIds}
+            const outIdToNet = new Map();
+            if (markers.length > 0) {
+                // Marker-Modus: jedes Marker-Intervall wird ein Netzwerk.
+                markers.forEach((mk, idx) => {
+                    const startLine = mk.lineIdx;
+                    const endLine   = (idx + 1 < markers.length) ? markers[idx + 1].lineIdx - 1 : (lines.length - 1);
+                    const id        = mk.num != null ? mk.num : (idx + 1);
+                    const title     = mk.title || ('Netzwerk ' + id);
+                    networks.push({ id, title, startLine, endLine, outputIds: [] });
+                });
+                // Outputs anhand ihrer sourceLine in das umschließende Netzwerk
+                // einsortieren. Outputs OBERHALB des ersten Markers bekommen
+                // ein vorgelagertes „Netzwerk 0" damit nichts verloren geht.
+                let pre = null;
+                graph.nodes.forEach(n => {
+                    if (n.type !== 'OUTPUT') return;
+                    const ln = n.sourceLine != null ? n.sourceLine : 0;
+                    let assigned = null;
+                    for (let i = 0; i < networks.length; i++) {
+                        if (ln >= networks[i].startLine && ln <= networks[i].endLine) { assigned = networks[i]; break; }
+                    }
+                    if (!assigned) {
+                        if (!pre) { pre = { id: 0, title: '(vor erstem Marker)', startLine: 0, endLine: markers[0].lineIdx - 1, outputIds: [] }; }
+                        assigned = pre;
+                    }
+                    assigned.outputIds.push(n.id);
+                    outIdToNet.set(n.id, assigned.id);
+                });
+                if (pre) networks.unshift(pre);
+            } else {
+                // Auto-Modus: jeder Output wird sein eigenes Netzwerk, Reihenfolge
+                // nach Code-Zeile, Titel = LHS-Variable. Stabil sortiert, damit
+                // sich die Nummern bei Mausbewegungen / Sim-Ticks nicht ändern.
+                const outs = [];
+                graph.nodes.forEach(n => {
+                    if (n.type !== 'OUTPUT') return;
+                    outs.push({ id: n.id, line: n.sourceLine != null ? n.sourceLine : 1e9 });
+                });
+                outs.sort((a, b) => (a.line - b.line) || a.id.localeCompare(b.id));
+                outs.forEach((o, i) => {
+                    networks.push({ id: i + 1, title: o.id, startLine: o.line, endLine: o.line, outputIds: [o.id] });
+                    outIdToNet.set(o.id, i + 1);
+                });
+            }
+            return { networks, outIdToNet, hasMarkers: markers.length > 0 };
+        };
+        // Markiert jeden Node mit `_networkId` — Outputs aus ihrer sourceLine,
+        // alle anderen per Rückwärts-Propagation vom Output her: ein Gate
+        // gehört zum FRÜHESTEN Netzwerk, dessen Output es speist (kleinste
+        // Netzwerk-ID gewinnt). Knoten ohne Verbraucher (= unbenutzt) bleiben
+        // ohne Netzwerk und werden in einem „Sonstiges"-Band gesammelt.
+        window._assignFbsNodeNetworks = function(graph, netInfo) {
+            const outIdToNet = netInfo.outIdToNet;
+            graph.nodes.forEach(n => {
+                if (n.type === 'OUTPUT' && outIdToNet.has(n.id)) {
+                    n._networkId = outIdToNet.get(n.id);
+                } else {
+                    n._networkId = null;
+                }
+            });
+            const outEdgesBySrc = new Map();
+            graph.edges.forEach(e => {
+                if (!outEdgesBySrc.has(e.sourceId)) outEdgesBySrc.set(e.sourceId, []);
+                outEdgesBySrc.get(e.sourceId).push(e);
+            });
+            let changed = true; let guard = 200;
+            while (changed && guard-- > 0) {
+                changed = false;
+                graph.nodes.forEach(n => {
+                    if (n._networkId != null) return;
+                    const outs = outEdgesBySrc.get(n.id) || [];
+                    let minNet = null;
+                    outs.forEach(e => {
+                        const tgt = graph.nodes.get(e.targetId);
+                        if (tgt && tgt._networkId != null) {
+                            if (minNet == null || tgt._networkId < minNet) minNet = tgt._networkId;
+                        }
+                    });
+                    if (minNet != null) { n._networkId = minNet; changed = true; }
+                });
+            }
+        };
         function calculateLayout(graph) {
             // Sichtbarkeit pro Knoten markieren (Helper-Hide / Const-Hide /
             // Fokus-Modus). Unsichtbare Knoten fließen NICHT in die Spalten-
             // Bildung mit ein → der Plan rückt entsprechend zusammen.
             if (typeof window._fbsVisibilityMark === 'function') {
                 try { window._fbsVisibilityMark(graph); } catch(_e) {}
+            }
+            // === Netzwerkmodus: Inputs pro Netzwerk duplizieren (Option) ===
+            // Vor dem eigentlichen Spalten-Layout: wenn der User die Option
+            // „Inputs pro Netzwerk" aktiv hat, klonen wir geteilte Eingangs-
+            // Knoten als Geister-Knoten in jedem Netzwerk, das sie verwendet.
+            // Edges werden auf die jeweiligen Geister umgehängt — dadurch
+            // werden alle Wires netzwerkintern, keine Cross-Netzwerk-Sprünge
+            // mehr. Vorherige Geister werden idempotent entfernt, damit ein
+            // erneuter Aufruf nicht stapelt.
+            // Aufräumen alter Geister-Knoten (idempotent): Geister-Edges sind
+            // ECHTE Edges, deren sourceId vorübergehend auf den Geister-Knoten
+            // zeigte. Wir LÖSCHEN nichts an der Edge-Liste, sondern stellen
+            // nur die Original-Source wieder her — sonst geht beim erneuten
+            // Aufruf die Wiring-Topologie verloren.
+            const _oldGhosts = [];
+            graph.nodes.forEach((n, id) => { if (n._isGhost) _oldGhosts.push(id); });
+            _oldGhosts.forEach(gid => graph.nodes.delete(gid));
+            graph.edges.forEach(e => {
+                if (e._origSourceId) { e.sourceId = e._origSourceId; delete e._origSourceId; }
+                delete e._isGhostEdge;
+            });
+            if (window.fbsNetworkMode && window.fbsNetworkDuplicateInputs) {
+                try {
+                    const _ni = window._computeFbsNetworks(graph);
+                    window._assignFbsNodeNetworks(graph, _ni);
+                    // TIA-Portal-Style: JEDE Cross-Netzwerk-Edge bekommt im
+                    // Ziel-Netzwerk eine Geister-Eingangs-Box als Referenz auf
+                    // den im anderen Netzwerk berechneten Wert. Das gilt nicht
+                    // nur für echte Inputs (Sensoren, Taster), sondern auch für
+                    // Outputs (SYS_ON, STAMP_PULSE) und für Speicher-/Timer-/
+                    // Counter-Blöcke, deren Q an anderer Stelle gebraucht wird
+                    // (Q1, Q2_SR usw.). GATEs werden bewusst NICHT dupliziert —
+                    // sie haben keine sprechenden Namen und sind reine Zwischen-
+                    // ergebnisse; ein als Cross-Netzwerk benutztes Gate-Ergebnis
+                    // wäre ohnehin schon mit einer benannten Variable im Code
+                    // belegt worden.
+                    const _DUP_TYPES = new Set(['INPUT', 'PURE_INPUT', 'OUTPUT',
+                                                'RS', 'SR', 'TON', 'TOF', 'TP', 'CTU']);
+                    // Liefert das menschen-freundliche Label für die Referenz-
+                    // Box in TIA-Manier. Für RS/SR-Blöcke der vom Code benutzte
+                    // Q-Name (Q1, Q2_SR), für Timer/Counter-Blöcke der LHS-
+                    // Variablen-Name (z. B. STAMP_PULSE aus TP_STAMP_PULSE),
+                    // sonst das Standard-Label.
+                    const _friendlyLabel = (node) => {
+                        if (node.type === 'RS' || node.type === 'SR') {
+                            const m = String(node.id).match(/^(RS|SR)_(\d+)$/);
+                            if (m) return 'Q' + m[2] + (m[1] === 'SR' ? '_SR' : '');
+                        }
+                        if (node.type === 'TON' || node.type === 'TOF'
+                            || node.type === 'TP' || node.type === 'CTU') {
+                            const m = String(node.id).match(/^(?:TON|TOF|TP|CTU)_(.+)$/);
+                            if (m) return m[1];
+                        }
+                        return node.label || node.id;
+                    };
+                    const _ghostCache = new Map(); // key=`<origId>__N<netId>` → ghostId
+                    const _getGhost = (origNode, netId) => {
+                        const key = `${origNode.id}__N${netId}`;
+                        if (_ghostCache.has(key)) return _ghostCache.get(key);
+                        const ghostId = `__GHOST__${origNode.id}__N${netId}`;
+                        // Geist rendert IMMER als kleine Eingangs-Box, egal
+                        // welchen Typ das Original hat — TIA-Portal zeigt
+                        // Cross-Netzwerk-Referenzen ebenfalls als „Operand"-
+                        // Boxen auf der linken Seite des Netzwerks.
+                        const ghost = {
+                            id: ghostId, type: 'INPUT', label: _friendlyLabel(origNode),
+                            inputs: [], x: 0, y: 0, level: 0,
+                            color: origNode.color || '#333',
+                            _isGhost: true, _ghostSourceId: origNode.id,
+                            _networkId: netId
+                        };
+                        graph.nodes.set(ghostId, ghost);
+                        _ghostCache.set(key, ghostId);
+                        return ghostId;
+                    };
+                    graph.edges.forEach(e => {
+                        const src = graph.nodes.get(e.sourceId);
+                        const tgt = graph.nodes.get(e.targetId);
+                        if (!src || !tgt) return;
+                        if (!_DUP_TYPES.has(src.type)) return;
+                        // Hidden-Edges (durch Helper-/Const-/Fokus-Filter) nicht
+                        // mit duplizieren — sie würden sonst neue Geister erzeugen,
+                        // die ihrerseits versteckt werden müssten.
+                        if (src._fbsHidden || tgt._fbsHidden) return;
+                        const srcNet = src._networkId;
+                        const tgtNet = tgt._networkId;
+                        if (srcNet == null || tgtNet == null) return;
+                        if (srcNet === tgtNet) return;
+                        // Geister-Klon des Sources im Ziel-Netzwerk anlegen
+                        const ghostId = _getGhost(src, tgtNet);
+                        // Edge umhängen: original sourceId in `_origSourceId`
+                        // sichern, damit beim nächsten Re-Layout wieder
+                        // sauber aufgeräumt werden kann.
+                        e._origSourceId = e.sourceId;
+                        e.sourceId = ghostId;
+                        e._isGhostEdge = true; // Markierung NUR zur Buchhaltung —
+                                              // die Edge selbst bleibt eine echte
+                                              // Layout-/Render-Edge.
+                        // ACHTUNG: tgt.inputs[] NICHT mutieren — der Renderer
+                        // sucht den Pin-Index via `edge.originalSourceId`
+                        // (siehe drawGraph), nicht via aktueller sourceId.
+                        // Die Liste behält also korrekt die Originalnamen.
+                    });
+                    // Geister bekommen `_networkId` direkt bei der Erstellung;
+                    // alle anderen Knoten haben ihn bereits von _assignFbsNodeNetworks.
+                    // Reset, damit die nachgelagerte Layout-/Band-Logik nicht
+                    // mit der jetzt veränderten Edge-Liste auf alten Network-
+                    // Annahmen aufsetzt — wir berechnen die Zuordnung am Ende
+                    // noch einmal frisch.
+                } catch(_e) { /* defensiv: bei Fehler bleibt der Plan unverändert */ }
             }
             graph.nodes.forEach(node => { if (node.type === 'PURE_INPUT') node.level = 0; });
             let changed = true;
@@ -13077,6 +13726,58 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     );
                 }
             }
+            // === Netzwerkmodus-Post-Layout ===
+            // Wenn `window.fbsNetworkMode` aktiv ist, gruppieren wir nach
+            // `_networkId` und stapeln die Netzwerke vertikal. Innerhalb
+            // jedes Netzwerks bleibt das normale Spalten-Layout (X-Achse +
+            // Y-Relaxation) erhalten — wir verschieben nur Y. Cross-Netzwerk-
+            // Kanten werden dadurch zwangsläufig zu langen Vertikal-Pfaden,
+            // analog zur SPS-Konvention „Netzwerk-Referenz".
+            graph._networkBands = null;
+            if (window.fbsNetworkMode) {
+                try {
+                    const _ni = window._computeFbsNetworks(graph);
+                    window._assignFbsNodeNetworks(graph, _ni);
+                    const _byNet = new Map();
+                    graph.nodes.forEach(n => {
+                        if (n._fbsHidden) return;
+                        const nid = (n._networkId != null) ? n._networkId : '__orphan__';
+                        if (!_byNet.has(nid)) _byNet.set(nid, []);
+                        _byNet.get(nid).push(n);
+                    });
+                    const _orderedIds = _ni.networks
+                        .filter(net => _byNet.has(net.id))
+                        .map(net => net.id);
+                    if (_byNet.has('__orphan__')) _orderedIds.push('__orphan__');
+                    const HEADER_H   = 36;        // Platz für Netzwerk-Header über jedem Block
+                    const NET_GAP    = 24;        // Lücke zwischen zwei Netzwerken
+                    const TOP_MARGIN = 20;        // Abstand zur SVG-Oberkante
+                    let curTop = TOP_MARGIN;
+                    const bands = [];
+                    _orderedIds.forEach(nid => {
+                        const list = _byNet.get(nid);
+                        if (!list || !list.length) return;
+                        let minY = Infinity, maxY = -Infinity;
+                        list.forEach(n => {
+                            if (n.y < minY) minY = n.y;
+                            if (n.y + n.height > maxY) maxY = n.y + n.height;
+                        });
+                        if (!isFinite(minY)) return;
+                        const delta = (curTop + HEADER_H) - minY;
+                        list.forEach(n => { n.y += delta; });
+                        const newTop = curTop;
+                        const newBot = maxY + delta + 12;
+                        const meta = _ni.networks.find(net => net.id === nid);
+                        const title = (nid === '__orphan__')
+                            ? 'Sonstige / unverbundene Knoten'
+                            : (meta && meta.title) || ('Netzwerk ' + nid);
+                        const numLabel = (nid === '__orphan__') ? '—' : String(nid);
+                        bands.push({ id: nid, num: numLabel, title, yTop: newTop, yBottom: newBot });
+                        curTop = newBot + NET_GAP;
+                    });
+                    if (bands.length) graph._networkBands = bands;
+                } catch(_e) { /* defensiv: bei Fehler bleibt das normale Layout */ }
+            }
         }
         function findFreeY(startY, x1, x2, nodes, horizontalUsage, validEndYs = []) {
             let blocked = [];
@@ -13158,6 +13859,78 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             svgHalos.innerHTML = '';
             svgLines.innerHTML = '';
             svgNodes.innerHTML = '';
+            // Netzwerk-Bänder (im Netzwerkmodus): Hintergrund-Streifen +
+            // Trennlinien + Header werden VOR allen anderen Elementen
+            // gerendert, damit sie hinter den Bauteilen liegen.
+            if (graph._networkBands && window.fbsNetworkMode) {
+                const NS = 'http://www.w3.org/2000/svg';
+                let _minX = Infinity, _maxX = -Infinity;
+                graph.nodes.forEach(n => {
+                    if (n._fbsHidden) return;
+                    if (n.x < _minX) _minX = n.x;
+                    if (n.x + n.width > _maxX) _maxX = n.x + n.width;
+                });
+                if (!isFinite(_minX)) { _minX = 20; _maxX = 800; }
+                const bandLeft  = Math.max(8, _minX - 24);
+                const bandRight = _maxX + 24;
+                graph._networkBands.forEach((b, idx) => {
+                    const isAlt = (idx % 2 === 1);
+                    // Hintergrund-Streifen (alternierende Tönung)
+                    const rect = document.createElementNS(NS, 'rect');
+                    rect.setAttribute('x', bandLeft);
+                    rect.setAttribute('y', b.yTop);
+                    rect.setAttribute('width',  Math.max(40, bandRight - bandLeft));
+                    rect.setAttribute('height', Math.max(20, b.yBottom - b.yTop));
+                    rect.setAttribute('fill', isAlt ? 'rgba(33, 150, 243, 0.04)' : 'rgba(0, 0, 0, 0)');
+                    rect.setAttribute('class', 'fbs-net-band');
+                    rect.setAttribute('data-net-id', String(b.id));
+                    svgHalos.appendChild(rect);
+                    // Top-Trennlinie (außer beim ersten Netzwerk)
+                    if (idx > 0) {
+                        const sep = document.createElementNS(NS, 'line');
+                        sep.setAttribute('x1', bandLeft);
+                        sep.setAttribute('x2', bandRight);
+                        sep.setAttribute('y1', b.yTop);
+                        sep.setAttribute('y2', b.yTop);
+                        sep.setAttribute('stroke', '#90a4ae');
+                        sep.setAttribute('stroke-width', '1.5');
+                        sep.setAttribute('stroke-dasharray', '4,4');
+                        sep.setAttribute('class', 'fbs-net-sep');
+                        svgHalos.appendChild(sep);
+                    }
+                    // Header: Nummer-Badge links + Titel rechts daneben
+                    const headerY = b.yTop + 18;
+                    const badge = document.createElementNS(NS, 'rect');
+                    badge.setAttribute('x', bandLeft + 6);
+                    badge.setAttribute('y', headerY - 12);
+                    badge.setAttribute('width',  28);
+                    badge.setAttribute('height', 18);
+                    badge.setAttribute('rx', 3);
+                    badge.setAttribute('fill', '#1976d2');
+                    badge.setAttribute('stroke', '#0d47a1');
+                    badge.setAttribute('class', 'fbs-net-badge');
+                    svgHalos.appendChild(badge);
+                    const num = document.createElementNS(NS, 'text');
+                    num.setAttribute('x', bandLeft + 20);
+                    num.setAttribute('y', headerY + 2);
+                    num.setAttribute('text-anchor', 'middle');
+                    num.setAttribute('font-family', 'Consolas, monospace');
+                    num.setAttribute('font-size', '11');
+                    num.setAttribute('font-weight', 'bold');
+                    num.setAttribute('fill', '#fff');
+                    num.textContent = b.num;
+                    svgHalos.appendChild(num);
+                    const title = document.createElementNS(NS, 'text');
+                    title.setAttribute('x', bandLeft + 42);
+                    title.setAttribute('y', headerY + 2);
+                    title.setAttribute('font-family', "'Segoe UI', Tahoma, sans-serif");
+                    title.setAttribute('font-size', '12');
+                    title.setAttribute('font-weight', '600');
+                    title.setAttribute('fill', '#37474f');
+                    title.textContent = b.title;
+                    svgHalos.appendChild(title);
+                });
+            }
             const channelUsage = {};
             const horizontalUsage = [];
             // =========================================================
@@ -13399,6 +14172,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${safe(node.x)}, ${safe(node.y)})`);
                 g.setAttribute("data-node-id", node.id);
+                // Geister-Eingänge (Netzwerkmodus mit Input-Duplikation) markieren —
+                // CSS-Hook für dezente visuelle Andeutung (gestrichelter Rand).
+                if (node._isGhost) {
+                    g.setAttribute("data-ghost", "1");
+                    g.setAttribute("data-ghost-source", node._ghostSourceId || '');
+                }
 				// NEU: Visual Editor - Rechtsklick auf den Knoten!
                 g.style.cursor = 'context-menu';
                 g.addEventListener('contextmenu', (e) => {
@@ -13712,6 +14491,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window.loadExample = function(type) {
             if (!type) return;
             const selectEl = document.querySelector('.btn-reset');
+            // Beispiele, die NC-Hardware in negierungs-loser Schreibweise nutzen
+            // (z. B. `START && NOT_AUS` statt `START && ¬NOT_AUS`), funktionieren
+            // semantisch nur im SPS-Modus. Beim Laden zwingen wir den Modus und
+            // weisen per Toast darauf hin.
+            const _SPS_REQUIRED_EXAMPLES = new Set(['schrittkette_bohrer']);
+            if (_SPS_REQUIRED_EXAMPLES.has(type) && window.epneuMode === true) {
+                window.epneuMode = false;
+                try { localStorage.setItem('valisEpneuMode', '0'); } catch(_) {}
+                const _epBtn = document.getElementById('btn-epneu-mode');
+                if (_epBtn) {
+                    _epBtn.textContent = '⚡ SPS';
+                    _epBtn.style.background = '#455a64';
+                    _epBtn.style.color = '#ccc';
+                }
+                // Strang-Filter zurücksetzen + Anschluss-Sicht-Button-Sichtbarkeit
+                // wie im normalen Mode-Switch — sonst kleben alte E-Pneu-Reste an.
+                window._festoStrandFilter = '';
+                try {
+                    const _fsel = (window._festoDoc ? window._festoDoc() : document).getElementById('festo-strand-filter');
+                    if (_fsel) _fsel.value = '';
+                } catch(_) {}
+                if (typeof window._applyAutoSchemaStrandFilter === 'function') {
+                    try { window._applyAutoSchemaStrandFilter(''); } catch(_) {}
+                }
+                if (typeof window._syncIecAnschlussBtnVisibility === 'function') {
+                    try { window._syncIecAnschlussBtnVisibility(); } catch(_) {}
+                }
+                if (typeof _showToast === 'function') {
+                    _showToast('⚡ SPS-Modus aktiviert — Beispiel nutzt NOT-AUS als Öffner.', '#0288d1');
+                }
+            }
             // Minimales Timeout, damit das Dropdown visuell sauber schließt
             setTimeout(() => {
                 try {
@@ -13730,7 +14540,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Missing-Badge, offene Error-Popups) — sonst kleben Reste aus
                     // dem vorherigen Code visuell am neuen Beispiel.
                     if (typeof window._resetCodeErrorUI === 'function') window._resetCodeErrorUI();
-                    textarea.value = newCode;
+                    // Über _setCodeUndoable, damit der Beispiel-Load per Strg+Z
+                    // im Editor rückgängig gemacht werden kann.
+                    if (typeof window._setCodeUndoable === 'function') {
+                        window._setCodeUndoable(newCode);
+                    } else {
+                        textarea.value = newCode;
+                    }
                     if (newTypes) {
                         componentTypes = { ...newTypes };
                         localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
@@ -14600,10 +15416,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (textarea.readOnly) return;
             const startPos = textarea.selectionStart;
             const endPos = textarea.selectionEnd;
-            const textBefore = textarea.value.substring(0, startPos);
-            const textAfter = textarea.value.substring(endPos, textarea.value.length);
-            // Text einfügen
-            textarea.value = textBefore + symbol + textAfter;
+            // execCommand('insertText') schreibt direkt in den nativen Undo-
+            // Stack — damit ist der Symbol-Insert per Strg+Z im Editor
+            // rückgängig machbar. Fallback auf manuelles value-Set, falls
+            // execCommand abgelehnt wird.
+            textarea.focus();
+            let ok = false;
+            try { ok = document.execCommand('insertText', false, symbol); } catch(_) {}
+            if (!ok) {
+                const textBefore = textarea.value.substring(0, startPos);
+                const textAfter = textarea.value.substring(endPos, textarea.value.length);
+                textarea.value = textBefore + symbol + textAfter;
+            }
             // Cursor direkt hinter das eingefügte Symbol setzen
             textarea.selectionStart = textarea.selectionEnd = startPos + symbol.length;
             textarea.focus();
@@ -16489,6 +17313,41 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { document.execCommand('redo'); } catch(_e) {}
             ta.dispatchEvent(new Event('input'));
         };
+        // Setzt den Code in der Textarea so, dass die Änderung im NATIVEN
+        // Undo-Stack landet (per execCommand selectAll + insertText). Damit
+        // sind Operationen wie „Beispiel laden", „Lektion lädt Code an",
+        // „Schrittketten-Codegen", „Snapshot-Restore" usw. per Strg+Z im
+        // Editor rückgängig machbar. Fokus wird nach dem Set wieder
+        // hergestellt, damit kein offener Dialog seine Anker-Position
+        // verliert. Wenn execCommand fehlschlägt (Textarea readOnly /
+        // Browser blockt), fällt der Helper auf direkten Wert-Set zurück —
+        // diese Änderung ist dann allerdings nicht undoable.
+        // Returns true if execCommand worked, false on fallback.
+        window._setCodeUndoable = function(code) {
+            const ta = document.getElementById('code');
+            if (!ta) return false;
+            let usedExec = false;
+            const prevFocus = document.activeElement;
+            try {
+                if (!ta.readOnly && document.execCommand) {
+                    ta.focus();
+                    document.execCommand('selectAll', false, null);
+                    if (document.execCommand('insertText', false, code)) {
+                        usedExec = true;
+                    }
+                }
+            } catch(_) {}
+            if (!usedExec) {
+                ta.value = code;
+            }
+            try {
+                if (prevFocus && prevFocus !== ta && typeof prevFocus.focus === 'function') {
+                    prevFocus.focus({ preventScroll: true });
+                }
+            } catch(_) {}
+            ta.dispatchEvent(new Event('input'));
+            return usedExec;
+        };
         // === Code-Editor-Einstellungen: Popup + Optionen ===
         // Persistiert in localStorage. Alle Defaults entsprechen dem alten Verhalten,
         // d.h. neue Optionen sind anfangs aus.
@@ -17566,14 +18425,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const _fwWin = (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)
                 ? window.popOutWindows['factory-wrapper'] : window;
             const fw = _fwWin.document.getElementById('factory-wrapper');
+            // Circuit-wrapper kann ebenfalls im Pop-out-Fenster liegen.
+            const _cwWin = (window.popOutWindows?.['circuit-wrapper'] && !window.popOutWindows['circuit-wrapper'].closed)
+                ? window.popOutWindows['circuit-wrapper'] : window;
+            const cw = _cwWin.document.getElementById('circuit-wrapper');
             if (isSimulationActive) {
                 // FIX 1: Verhindert, dass alte Zeitdifferenzen den Timer beim Start sofort beenden
-                lastSimulationTime = performance.now(); 
+                lastSimulationTime = performance.now();
                 // 1. Alle SVGs auf "Simulation läuft" setzen (startet das CSS)
                 customSvg.classList.add('sim-running');
                 circuitSvg.classList.add('sim-running');
                 // 2. 2D-Anlage in den Simulationsmodus versetzen (versteckt die Editor-Anfasser)
-                fw.classList.add('sim-active'); 
+                fw.classList.add('sim-active');
+                // 3. Auto-Schaltplan: Eingabe-Bauteile (Taster/Schalter/Sensoren)
+                //    klickbar machen (CSS-Cursor + Hover-Highlight).
+                if (cw) cw.classList.add('iec-sim-active');
                 if (typeof window.clearSelection === 'function') window.clearSelection(); // Auswahl aufheben
                 btn.setAttribute('data-i18n', 'btn_sim_stop'); // Namensschild aktualisieren
                 btn.textContent = t('btn_sim_stop');           // Neuen Text aus dem Wörterbuch holen
@@ -17584,6 +18450,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 circuitSvg.classList.remove('sim-running');
                 // 2. 2D-Anlage wieder bearbeitbar machen
                 fw.classList.remove('sim-active');
+                if (cw) cw.classList.remove('iec-sim-active');
                 btn.setAttribute('data-i18n', 'btn_sim_start'); // Namensschild aktualisieren
                 btn.textContent = t('btn_sim_start');           // Neuen Text aus dem Wörterbuch holen
                 btn.style.backgroundColor = '#e6194B';
@@ -18641,7 +19508,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // 3. Logikplan (FBS) Kästen und Linien aktualisieren
             currentGraph.nodes.forEach(node => {
-                const val = !!spsState[node.id];
+                // Geister-Eingänge (Netzwerkmodus mit „Inputs pro Netzwerk")
+                // lesen ihren Live-Wert von der ECHTEN Quelle ab — die Sim-
+                // Engine kennt sie nicht, sie sind nur visuell.
+                const stateKey = node._isGhost ? node._ghostSourceId : node.id;
+                const val = !!spsState[stateKey];
                 // 🌟 MULTI-WINDOW FIX: Wir MÜSSEN im 'customSvg' suchen, nicht im globalen 'document'!
                 const block = customSvg.querySelector(`#node-block-${CSS.escape(node.id)}`);
                 if (block) {
@@ -19057,15 +19928,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (isNC) {
                     add(el('line', { x1: cx, y1: cy-5, x2: cx+8, y2: cy-5, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }));
                 }
-                // Reed-Sensor (sensor_reed): kleiner Magnet-Andeutung links —
-                // zeigt, dass das ein magnetisch betätigter 2-pol. Kontakt ist
-                // (typ. Zylinder-Endlage). Wird VOR dem allgemeinen Driver-Block
-                // gezeichnet, damit der ctype dort nicht weiter behandelt wird.
-                if (ctype === 'sensor_reed') {
-                    // Schwarz-weiß-Rechteck (analog sensor_mag-Stripe) links neben dem Kontakt
-                    add(el('rect', { x: cx-18, y: cy-3, width: 12, height: 6, fill: '#000' }));
-                    add(el('rect', { x: cx-15, y: cy-3, width: 6,  height: 3.5, fill: '#fff' }));
-                }
                 // Betätigungs-Symbol links — identische Geometrie zu _renderIecSymbol
                 const hasReg = (typeof ComponentRegistry !== 'undefined'
                               && ComponentRegistry[ctype]
@@ -19253,11 +20115,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const t = componentTypes[name] || 'taster';
                 const iec = iecLabels[name];
                 const addr = spsAddresses[name] || '?';
-                // sensor_reed ist zwar in SENSOR_TYPES, wird hier aber NICHT
-                // wie ein 3-Leiter-Sensor mit BN/BU/BK gezeichnet — sondern als
-                // 2-pol. passiver Kontakt direkt in Serie zur SPS-Klemme. Im
-                // Klemmenplan ist der Reed nur ein Schalter im Eingangs-Pfad.
-                const isSensor = SENSOR_TYPES.has(t) && t !== 'sensor_reed';
+                // Reed-Kontakte sind als FESTO-Industrie-Bauteil ebenfalls 3-Leiter
+                // (BN/BU/BK) — Glasröhrchen sitzt intern zwischen BN und BK, BU/BN
+                // versorgen den Sensorkopf. Wird daher hier wie jeder andere
+                // 3-Leiter-Sensor gezeichnet.
+                const isSensor = SENSOR_TYPES.has(t);
 
                 if (isSensor) {
                     // 3-Leiter-Sensor: Box-Center 25 px links vom Spaltenmittel-
@@ -20026,48 +20888,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     setPower(drawCoil(currX, coilY, item.kfName, item.id, 'relais', col, p1), pCond);
                     setPower(drawLine(currX, coilExitY, currX, yBot, 2, item.id, col), pCond);
                     currX += 100; 
-                } else if (item.cType === 'sensor_reed') {
-                    // ────────────────────────────────────────────────────────
-                    // REED-KONTAKT (sensor_reed): 2-pol. passiver Schalter
-                    // ────────────────────────────────────────────────────────
-                    // Im Gegensatz zum 3-Leiter-Sensor (eigene Versorgung,
-                    // Signal-Output) ist der Reed ein einfacher 2-pol. Schalter.
-                    // Er sitzt direkt in Reihe mit der Hilfsrelais-Spule —
-                    // EIN Strang, der bei geschlossenem Reed durchgeschaltet
-                    // ist. Visuell behält er die Sensor-Box mit Magnet-Symbol
-                    // (Wiedererkennung), aber ohne BN/BU/BK und ohne separaten
-                    // Signal-out-Pfad.
-                    symMap[item.id] = item.kfName;
-                    let p1 = pathCounter++;
-                    drawText(currX, yTop - 25, p1.toString(), true);
-                    let sBoxY = 150;
-                    let gSens = createSvgElement('g', {
-                        class: `circ-contact-group circ-colored-group circ-var-${item.id}`,
-                        'data-ctype': item.cType,
-                        'data-iec-id': item.id,
-                        'data-iec-role': 'sensor-box',
-                        'data-line-prefix': item.id
-                    });
-                    gSens.style.cursor = 'context-menu';
-                    if (col) gSens.style.setProperty('--logic-color', col);
-                    // Sensor-Box (Wiedererkennung)
-                    gSens.appendChild(createSvgElement('rect', {x: currX - 15, y: sBoxY, width: 30, height: 30, fill: '#fff', stroke: '#000', 'stroke-width': 2, class: 'circ-component'}));
-                    // Diamant-Marker
-                    let diamondPts = `${currX},${sBoxY+3} ${currX+7},${sBoxY+10} ${currX},${sBoxY+17} ${currX-7},${sBoxY+10}`;
-                    gSens.appendChild(createSvgElement('polygon', {points: diamondPts, fill: 'none', stroke: '#000', 'stroke-width': 1.5}));
-                    gSens.appendChild(createSvgElement('line', {x1: currX - 2.5, y1: sBoxY+5.5, x2: currX - 2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5}));
-                    gSens.appendChild(createSvgElement('line', {x1: currX + 2.5, y1: sBoxY+5.5, x2: currX + 2.5, y2: sBoxY+14.5, stroke: '#000', 'stroke-width': 1.5}));
-                    // Magnet-Reed-Symbol (gleiche Andeutung wie sensor_mag)
-                    gSens.appendChild(createSvgElement('rect', {x: currX-6, y: sBoxY+22, width: 12, height: 6, fill: '#000'}));
-                    gSens.appendChild(createSvgElement('rect', {x: currX-3, y: sBoxY+22, width: 6,  height: 3.5, fill: '#fff'}));
-                    addLabelText(gSens, currX + 20, sBoxY - 5, `${item.deviceName} (${item.id})`, false);
-                    circuitContent.appendChild(gSens);
-                    // EIN Strang — alle Linien conditional pCond (Reed offen → kein Strom).
-                    setPower(drawLine(currX, yTop,        currX, sBoxY,          2, item.id, col), pCond);
-                    setPower(drawLine(currX, sBoxY + 30,  currX, coilApproachY,  2, item.id, col), pCond);
-                    setPower(drawCoil(currX, coilY, item.kfName, item.id, 'relais', col, p1), pCond);
-                    setPower(drawLine(currX, coilExitY,   currX, yBot,            2, item.id, col), pCond);
-                    currX += 80; // Reed + Spule sind in einer Spalte, schmaler als 3-Leiter
                 } else {
                     symMap[item.id] = item.kfName; // KF-Name in iecSymMap eintragen
                     let p1 = pathCounter++; let p2 = pathCounter++;
@@ -23795,7 +24615,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             'sensor_ind':         'Sensor (Induktiv)',
             'sensor_kap':         'Sensor (Kapazitiv)',
             'sensor_mag':         'Sensor (Magnetisch)',
-            'sensor_reed':        'Reed-Kontakt (2-polig)',
+            'sensor_reed':        'Reed-Kontakt',
             'sensor_opt':         'Sensor (Optisch)',
             'spawner_kunststoff': 'Werkstück-Quelle (Kunststoff)',
             'spawner_metall':     'Werkstück-Quelle (Metall)',
@@ -33584,7 +34404,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
                 if (additions.length > 0) {
-                    textarea.value = code.trimEnd() + '\n' + additions.join('\n');
+                    const _newCode = code.trimEnd() + '\n' + additions.join('\n');
+                    if (typeof window._setCodeUndoable === 'function') {
+                        window._setCodeUndoable(_newCode);
+                    } else {
+                        textarea.value = _newCode;
+                    }
                     updateHighlighting(); updateEditor(); saveToStorage();
                 }
             }
@@ -33621,11 +34446,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 el.innerHTML = `<span></span>`; obj.width = 40; obj.height = 40;
                 if(type === 'nothalt') { obj.width = 45; obj.height = 45; }
                 el.style.backgroundColor = hexColor; obj.hexColor = hexColor;
-                let lbl = document.createElement('div'); lbl.className = 'f2d-label f2d-label-below'; lbl.textContent = var1 || '---'; el.appendChild(lbl);
+                // Bedienelemente: Label standardmäßig angepinnt — bleibt auch in
+                // der laufenden Simulation sichtbar, weil der User sonst nicht
+                // mehr erkennen kann, welcher Taster welcher Variable entspricht.
+                let lbl = document.createElement('div'); lbl.className = 'f2d-label f2d-label-below f2d-label-pinned'; lbl.textContent = var1 || '---'; el.appendChild(lbl);
+                obj.labelEl = lbl; obj.labelPinned = true;
             } else if (type === 'led') {
                 obj.linkedVar = var1; el.className = `f2d-obj f2d-led`;
                 el.innerHTML = `<span></span>`; obj.width = 30; obj.height = 30; obj.hexColor = hexColor;
-                let lbl = document.createElement('div'); lbl.className = 'f2d-label f2d-label-below'; lbl.textContent = var1 || '---'; el.appendChild(lbl);
+                // Meldeleuchten: Label standardmäßig angepinnt (siehe Taster oben).
+                let lbl = document.createElement('div'); lbl.className = 'f2d-label f2d-label-below f2d-label-pinned'; lbl.textContent = var1 || '---'; el.appendChild(lbl);
+                obj.labelEl = lbl; obj.labelPinned = true;
             } else if (type.startsWith('sensor_')) {
                 obj.linkedVar = var1; el.className = 'f2d-obj f2d-sensor';
                 let styles = { 'sensor_ind': { bg: '#ffc107', bd: '#b38600', txt: 'IND' }, 'sensor_kap': { bg: '#4caf50', bd: '#2e7d32', txt: 'KAP' }, 'sensor_opt': { bg: '#f44336', bd: '#c62828', txt: 'OPT' }, 'sensor_mag': { bg: '#2196f3', bd: '#1565c0', txt: 'MAG' }, 'sensor_reed': { bg: '#2196f3', bd: '#1565c0', txt: 'REED' } };
@@ -34735,8 +35566,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 if (obj.type.startsWith('zylinder')) {
                 // Reed/Magnet-Sensoren am Zylinder: das Untermenü zeigt beide
-                // Typen (sensor_reed = neuer 2-pol. Standard, sensor_mag =
-                // alte 3-pol. Variante — für Bestand aus älteren Save-Files).
+                // Typen (sensor_reed = klassischer Reed-Kontakt am Zylinder,
+                // sensor_mag = freistehender Hall-Sensor — für Bestand aus
+                // älteren Save-Files, in denen Reed noch als Magnet-Sensor
+                // angelegt wurde).
                 let attachedSensors = obj.children ? obj.children.filter(c => c.type === 'sensor_mag' || c.type === 'sensor_reed') : [];
                 if (attachedSensors.length > 0) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -34754,9 +35587,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     });
                 }
                 // Reed-Kontakt-Anbringen: nur sensor_reed-Variablen anbieten
-                // (sensor_mag bleibt für freistehende 3-pol. Magnetsensoren
-                // reserviert). User-Wunsch: Pneumatik-Zylinder nutzen den
-                // dedizierten 2-pol. Reed-Typ.
+                // (sensor_mag bleibt für freistehende Hall-Magnetsensoren
+                // reserviert). Pneumatik-Zylinder-Endlagen nutzen den
+                // dedizierten Reed-Typ — als Industrie-Bauteil ebenfalls 3-Leiter.
                 let availableMags = globalInputs.filter(inp => componentTypes[inp] === 'sensor_reed' && !factoryObjects.find(o => o.linkedVar === inp));
                 if (availableMags.length > 0) {
                     let sep = document.createElement('div'); sep.style.borderTop = '1px solid #555'; sep.style.margin = '5px 0'; ctxMenu.appendChild(sep);
@@ -35261,8 +36094,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         }
         function attachReed(cylObj, varName, position) {
-            // Reed-Kontakt am Zylinder ist explizit der 2-pol. sensor_reed-Typ.
-            // (sensor_mag bleibt für freistehende 3-pol. Magnetsensoren reserviert.)
+            // Reed-Kontakt am Zylinder ist explizit der sensor_reed-Typ.
+            // (sensor_mag bleibt für freistehende Hall-Magnetsensoren reserviert —
+            // unterschiedlicher Anwendungs-Charakter, gleicher 3-Leiter-Anschluss.)
             let newSensor = createFactoryObject('sensor_reed', varName);
             newSensor.parent = cylObj; newSensor.el.classList.add('is-child'); 
             if (!cylObj.children) cylObj.children = []; cylObj.children.push(newSensor);
@@ -37301,9 +38135,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                         if (obj.type === 'sensor_mag' || obj.type === 'sensor_reed') {
                             // Zylinder-Endlagen-Erfassung: gilt für beide
-                            // Magnet-Sensor-Typen — Reed (2-pol., neuer
-                            // Standard für Endlagen) und Magnet (3-pol.,
-                            // Bestand aus älteren Save-Files).
+                            // Magnet-Sensor-Typen — Reed (Standard für
+                            // Endlagen) und Hall (freistehend oder Bestand
+                            // aus älteren Save-Files am Zylinder).
                             factoryObjects.forEach(cyl => {
                                 if (cyl.type && cyl.type.startsWith('zylinder')) {
                                     if (cyl.magnetX === undefined) return; // noch nicht initialisiert
@@ -37393,8 +38227,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window.isAssigningKey = null;
                 return;
             }
-            // 2. WICHTIG: Wenn der User im Code-Editor oder einem Textfeld tippt, alles ignorieren!
+            // 2. WICHTIG: Wenn der User im Code-Editor, einem Textfeld ODER einem
+            // contentEditable-Bereich (z. B. Notiz-Inhalt in der 2D-Anlage) tippt,
+            // alle Shortcuts ignorieren — sonst frisst Strg+Z die Notiz-Bearbeitung
+            // und triggert stattdessen Factory-Undo.
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+            if (e.target && e.target.isContentEditable) return;
             // 2b. Undo / Redo
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undoFactory(); return; }
             if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redoFactory(); return; }
@@ -37422,8 +38260,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     runSimulationTick();
                 }
             }
-            // WICHTIG: Wenn der User gerade im Code-Editor oder einem Dropdown tippt, Shortcuts ignorieren!
+            // WICHTIG: Wenn der User gerade im Code-Editor, einem Dropdown ODER einem
+            // contentEditable-Bereich tippt, Shortcuts ignorieren — sonst löscht
+            // Backspace im Notiz-Inhalt versehentlich Factory-Objekte.
             if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+            if (e.target && e.target.isContentEditable) return;
             // ESC: Fluid placement mode beenden
             if (e.key === 'Escape' && fluidPlacementMode) { exitFluidPlacementMode(); return; }
             // ENTF / BACKSPACE: Löschen
@@ -39108,7 +39949,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { key: 'sensor_kap',        label: 'Sensor Kapazitiv',       icon: '🔋' },
                 { key: 'sensor_opt',        label: 'Sensor Optisch',         icon: '🔦' },
                 { key: 'sensor_mag',        label: 'Sensor Magnetisch',      icon: '🧲' },
-                { key: 'sensor_reed',       label: 'Reed-Kontakt (2-pol.)',  icon: '🧲' },
+                { key: 'sensor_reed',       label: 'Reed-Kontakt',          icon: '🧲' },
                 { key: 'spawner_metall',    label: 'Spawner (Metall)',       icon: '⏳' },
                 { key: 'spawner_kunststoff',label: 'Spawner (Kunststoff)',   icon: '⏳' },
                 { key: 'despawner',         label: 'Despawner',              icon: '🗑️' },
@@ -39929,7 +40770,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                               schalter:'Schalter (NO)', schalter_nc:'Schalter (NC)',
                               nothalt:'Not-Halt (NC)', key_switch:'Schlüsselschalter',
                               sensor_ind:'Induktiv-Sensor', sensor_opt:'Optischer Sensor',
-                              sensor_mag:'Magnetischer Sensor', sensor_reed:'Reed-Kontakt (2-pol.)', sensor_kap:'Kapazitiver Sensor',
+                              sensor_mag:'Magnetischer Sensor', sensor_reed:'Reed-Kontakt', sensor_kap:'Kapazitiver Sensor',
                               led:'Lampe/LED', motor:'Motor', valve:'Magnetventil',
                               valve_pneu:'Pneumatik-Magnetventil', siren:'Hupe/Sirene',
                               relais:'Relais', stacklight:'Säulenleuchte',
@@ -40379,7 +41220,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const snap = arr.find(s => s.id === id);
             if (!snap) return;
             if (!confirm('Aktuellen Stand durch den Snapshot ersetzen?\n(Nicht gespeicherte Änderungen gehen verloren)')) return;
-            textarea.value = snap.code;
+            // Über _setCodeUndoable, damit der Snapshot-Restore per Strg+Z
+            // im Editor rückgängig gemacht werden kann.
+            if (typeof window._setCodeUndoable === 'function') {
+                window._setCodeUndoable(snap.code);
+            } else {
+                textarea.value = snap.code;
+            }
             try { componentTypes = JSON.parse(snap.types); } catch(e) {}
             if (snap.layout) {
                 const layoutIcons = { 'flex-row': '◫', 'flex-col': '⬒', 'grid-sim-bottom': '🗗', 'grid-sim-top': '🗒', 'grid-sim-right': '◧', 'grid-sim-left': '◨' };
@@ -41070,6 +41917,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
             _bindWindowRelay(extWin);
+            // Strg+Z / Strg+Y / Strg+Shift+Z im abgekoppelten Fenster ans
+            // Haupt-Hauptfenster-Undo weiterreichen. Sonst „verschluckt" der
+            // Browser die Tastenkombi, weil der globale keydown-Listener nur
+            // im Hauptdokument lebt und im Pop-out-Fenster nicht greift.
+            extWin.document.addEventListener('keydown', (e) => {
+                // Im Editor / Dropdown / contentEditable nicht eingreifen —
+                // der Browser macht dort sein eigenes Undo (Textarea-Stack).
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+                if (e.target && e.target.isContentEditable) return;
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    try { undoFactory(); } catch(_) {}
+                } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                    e.preventDefault();
+                    try { redoFactory(); } catch(_) {}
+                }
+            });
             // Beim Schließen: ALLE Cells → Panels zurück ins Hauptfenster.
             extWin.addEventListener('beforeunload', () => {
                 const cont = extWin.document.getElementById('detached-container');
@@ -44118,6 +44982,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (typeof SoundEngine !== 'undefined') SoundEngine.click();
         };
+        window.toggleFbsNetworksPanel = function() {
+            let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
+                      ? window.popOutWindows['fbs-wrapper'].document : document;
+            const group = doc.getElementById('fbs-networks-group');
+            const btn = doc.getElementById('btn-fbs-networks-panel');
+            if (!group || !btn) return;
+            group.classList.toggle('expanded');
+            btn.classList.toggle('expanded');
+            // innerHTML statt textContent, damit das BETA-Tag beim Wechsel
+            // zwischen „Netzwerk" und „Schließen" erhalten bleibt.
+            const _label = btn.classList.contains('expanded') ? '❌ Schließen' : '🗂 Netzwerke';
+            btn.innerHTML = _label + (typeof _FBS_BETA_TAG !== 'undefined' ? _FBS_BETA_TAG : '');
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
         // Helper: aktuelles FBS-Document (Hauptfenster oder Pop-out).
         function _fbsDoc() {
             return (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
@@ -44435,6 +45313,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             set('btn-fbs-rscol',    window.fbsRSColumn,      '⚏ RS-Spalte: AN',    '⚏ RS-Spalte: AUS',     '#388e3c', '#555');
             set('btn-fbs-smartorder', window.fbsSmartOrder,  '🧲 Pin-Sortierung: AN','🧲 Pin-Sortierung: AUS','#00838f', '#555');
             set('btn-fbs-pinsnap',  window.fbsPinSnap,       '📏 Pin-Snap: AN',     '📏 Pin-Snap: AUS',     '#5d4037', '#555');
+            set('btn-fbs-networks', window.fbsNetworkMode,   '🗂 Netzwerke: AN',    '🗂 Netzwerke: AUS',    '#1976d2', '#455a64');
+            set('btn-fbs-netdup',   window.fbsNetworkDuplicateInputs, '📋 Inputs pro Netzwerk: AN', '📋 Inputs pro Netzwerk: AUS', '#1976d2', '#455a64');
             // Glow-Hover behält seinen BETA-Tag → eigenes innerHTML-Setup.
             const _gh = d.getElementById('btn-fbs-glowhover');
             if (_gh) {
@@ -44476,6 +45356,39 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             setTimeout(_applyFbsSettingsToButtons, 0);
             setTimeout(_applyIecFocusToButton, 0);
         }
+        window._toggleFbsNetworkMode = function() {
+            window.fbsNetworkMode = !window.fbsNetworkMode;
+            _fbsSave('valisFbsNetworkMode', window.fbsNetworkMode ? '1' : '0');
+            const d = _fbsDoc();
+            const btn = d.getElementById('btn-fbs-networks');
+            if (btn) {
+                btn.style.backgroundColor = window.fbsNetworkMode ? '#1976d2' : '#455a64';
+                btn.textContent = window.fbsNetworkMode ? '🗂 Netzwerke: AN' : '🗂 Netzwerke: AUS';
+            }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                try { calculateLayout(currentGraph); drawGraph(currentGraph); } catch(_e) {}
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
+        window._toggleFbsNetworkDuplicateInputs = function() {
+            window.fbsNetworkDuplicateInputs = !window.fbsNetworkDuplicateInputs;
+            _fbsSave('valisFbsNetworkDup', window.fbsNetworkDuplicateInputs ? '1' : '0');
+            const d = _fbsDoc();
+            const btn = d.getElementById('btn-fbs-netdup');
+            if (btn) {
+                btn.style.backgroundColor = window.fbsNetworkDuplicateInputs ? '#1976d2' : '#455a64';
+                btn.textContent = window.fbsNetworkDuplicateInputs ? '📋 Inputs pro Netzwerk: AN' : '📋 Inputs pro Netzwerk: AUS';
+            }
+            // Hinweis falls Netzwerkmodus nicht an: greift erst kombiniert.
+            if (!window.fbsNetworkMode && window.fbsNetworkDuplicateInputs
+                && typeof _showToast === 'function') {
+                _showToast('Greift erst, wenn auch „🗂 Netzwerke" AN ist.', '#0288d1');
+            }
+            if (typeof currentGraph !== 'undefined' && currentGraph) {
+                try { calculateLayout(currentGraph); drawGraph(currentGraph); } catch(_e) {}
+            }
+            if (typeof SoundEngine !== 'undefined') SoundEngine.click();
+        };
         window.toggleFbsErrorHighlight = function() {
             window.fbsErrorHighlight = (window.fbsErrorHighlight === false);
             _fbsSave('valisFbsErrorHi', window.fbsErrorHighlight ? '1' : '0');
@@ -46494,7 +47407,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // 2. FBS nodes and connection lines
             currentGraph.nodes.forEach(node => {
-                const val = !!state[node.id];
+                const stateKey = node._isGhost ? node._ghostSourceId : node.id;
+                const val = !!state[stateKey];
                 const block = customSvg.querySelector(`#node-block-${CSS.escape(node.id)}`);
                 if (block) { block.classList.toggle('active', val); block.classList.toggle('inactive', !val); }
                 customSvg.querySelectorAll(`.net-source-${CSS.escape(node.id)}`).forEach(el => {
@@ -47082,12 +47996,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
             };
             const _setEditorCode = (code) => {
-                const ta = document.getElementById('code');
-                if (!ta) return;
-                ta.value = code;
-                // input-Event auslösen, damit Highlighter + Parser + alle
-                // Panels neu rendern.
-                ta.dispatchEvent(new Event('input'));
+                // Delegieren an den globalen Undo-fähigen Helper. Dispatcht
+                // bereits das input-Event; updateEditor anschließend zur
+                // sicheren Panels-Synchronisation.
+                if (typeof window._setCodeUndoable === 'function') {
+                    window._setCodeUndoable(code);
+                } else {
+                    const ta = document.getElementById('code');
+                    if (!ta) return;
+                    ta.value = code;
+                    ta.dispatchEvent(new Event('input'));
+                }
                 if (typeof updateEditor === 'function') {
                     try { updateEditor(); } catch(_) {}
                 }
@@ -47526,7 +48445,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: null,
                             title: '🎓 Geschafft!',
-                            text: 'Du hast die <b>fünf Logik-Grundbausteine</b> durchgearbeitet:<br><br>• Lektion G1 — <b>Eingang & Ausgang</b> + die Begriffe an/aus, 1/0, WAHR/TRUE<br>• Lektion G2 — <b>UND (&&)</b> + Gatter-Konventionen + Hilfsrelais im Schaltplan + Bauteil-Typ-Auswahl<br>• Lektion G3 — <b>ODER (||)</b> + Parallelschaltung + Vergleich zum UND<br>• Lektion G4 — <b>Negation (¬)</b> + Öffner-Kontakt + Failsafe-Prinzip am Beispiel Not-Halt<br>• Lektion G5 — <b>Selbsthaltung</b> + Rück-Schleife im Logikplan + RS-Glied im Schaltplan + RS-/SR-Umwandlung<br><br>Mit diesen Bausteinen lassen sich beliebig viele reale Steuerungen aufbauen — Eingänge sind dabei bis jetzt aber immer <i>Taster und Schalter</i> gewesen, die ein Mensch betätigt.<br><br>🌿 <b>Direkt weiter:</b> In Lektion <b>G6 — Berührungslose Sensoren</b> bekommen deine Steuerungen Augen: vier Sensor-Typen (induktiv, kapazitiv, optisch, magnetisch) plus der Vergleich Hall (3-pol., aktiv) vs. Reed (2-pol., passiv) am Zylinder — die Brücke von Bedien-Logik zu echter Anlagen-Automatisierung.<br><br>📚 <b>Auch sehenswert:</b> in der Kategorie <b>🚀 Fortgeschritten</b> wartet u. a. die Lektion <b>F1. RS vs SR im Detail</b> — sie vergleicht beide Selbsthalt-Glieder live nebeneinander und zeigt, wann du welches nimmst.'
+                            text: 'Du hast die <b>fünf Logik-Grundbausteine</b> durchgearbeitet:<br><br>• Lektion G1 — <b>Eingang & Ausgang</b> + die Begriffe an/aus, 1/0, WAHR/TRUE<br>• Lektion G2 — <b>UND (&&)</b> + Gatter-Konventionen + Hilfsrelais im Schaltplan + Bauteil-Typ-Auswahl<br>• Lektion G3 — <b>ODER (||)</b> + Parallelschaltung + Vergleich zum UND<br>• Lektion G4 — <b>Negation (¬)</b> + Öffner-Kontakt + Failsafe-Prinzip am Beispiel Not-Halt<br>• Lektion G5 — <b>Selbsthaltung</b> + Rück-Schleife im Logikplan + RS-Glied im Schaltplan + RS-/SR-Umwandlung<br><br>Mit diesen Bausteinen lassen sich beliebig viele reale Steuerungen aufbauen — Eingänge sind dabei bis jetzt aber immer <i>Taster und Schalter</i> gewesen, die ein Mensch betätigt.<br><br>🌿 <b>Direkt weiter:</b> In Lektion <b>G6 — Berührungslose Sensoren</b> bekommen deine Steuerungen Augen: vier Sensor-Typen (induktiv, kapazitiv, optisch, magnetisch) plus der Vergleich Hall (Halbleiter-Sensor) vs. Reed (Glasröhrchen-Kontakt) am Zylinder — die Brücke von Bedien-Logik zu echter Anlagen-Automatisierung.<br><br>📚 <b>Auch sehenswert:</b> in der Kategorie <b>🚀 Fortgeschritten</b> wartet u. a. die Lektion <b>F1. RS vs SR im Detail</b> — sie vergleicht beide Selbsthalt-Glieder live nebeneinander und zeigt, wann du welches nimmst.'
                         }
                     ]
                 },
@@ -47534,7 +48453,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     id: 'sensors',
                     icon: '📡',
                     title: 'G6. Berührungslose Sensoren',
-                    desc: 'Vier Sensor-Typen — induktiv, kapazitiv, optisch, magnetisch — jeder mit eigenem Erkennungs-Prinzip. Direkt nebeneinander platziert, der Unterschied wird live an einem vorbeifahrenden Werkstück sichtbar. Zusätzlich der Vergleich Hall (3-pol., aktiv) vs. Reed (2-pol., passiv) am Zylinder.',
+                    desc: 'Vier Sensor-Typen — induktiv, kapazitiv, optisch, magnetisch — jeder mit eigenem Erkennungs-Prinzip. Direkt nebeneinander platziert, der Unterschied wird live an einem vorbeifahrenden Werkstück sichtbar. Zusätzlich der Vergleich der zwei Magnet-Bauformen Hall (elektronisch, analog-fähig) vs. Reed (mechanischer Glasröhrchen-Kontakt) am Zylinder — beide als 3-Leiter-Industriebauteil.',
                     forceTypes: {
                         'S_INDUKTIV':   'sensor_ind',
                         'S_KAPAZITIV':  'sensor_kap',
@@ -47572,7 +48491,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#simulator-container', pos: 'right',
                             title: '🎛 Sim-Panel: vier Sensor-Inputs',
-                            text: 'Im Sim-Panel siehst du jetzt eine neue Sorte Eingänge: <b>vier Sensoren</b> statt der gewohnten Taster.<br><br>🔧 <b>Bauteil-Typen sind diesmal vorgegeben</b> (anders als bei Taster-Lektionen, wo der Default „taster" passte): die Lektion erzwingt die vier Sensor-Typen, damit die Symbole und das Verhalten in Schaltplan und 2D-Anlage gleich richtig sind.<br><br>📋 <b>Die vier Typen:</b><br>• <b>S_INDUKTIV</b> (Sensor Ind.) — reagiert auf <b>Metall</b>. Erzeugt ein elektromagnetisches Wechselfeld; Metall in der Nähe ändert das Feld → SPS-Eingang TRUE.<br>• <b>S_KAPAZITIV</b> (Sensor Kap.) — reagiert auf <b>alle Materialien</b> (Metall, Kunststoff, sogar Flüssigkeiten). Misst Kapazitäts-Änderungen im elektrischen Feld.<br>• <b>S_OPTISCH</b> (Sensor Opt.) — eine Lichtschranke. Reagiert auf <b>jeden lichtundurchlässigen Körper</b>, der einen Lichtstrahl unterbricht.<br>• <b>S_MAGNETISCH</b> (Sensor Mag.) — ein <b>Hall-Sensor</b> (3-Leiter, aktiv). Reagiert <b>ausschließlich auf Permanentmagnete</b> — typischer Einsatz: Drehzahl-Messung an Magnet-Zahnscheiben, freistehende Magnet-Detektion. (Der verwandte <b>Reed-Kontakt</b> als 2-Leiter-Variante kommt in Schritt 8 dazu — typische Anwendung dort: Zylinder-Endlagen.)<br><br>📌 <b>Manuell schaltbar:</b> Klick im Sim-Panel auf einen der Sensoren — er rastet ein (Sensoren rasten, anders als Taster). Die zugehörige Lampe rechts geht an. So kannst du auch <b>ohne 2D-Anlage</b> die Verdrahtung testen.',
+                            text: 'Im Sim-Panel siehst du jetzt eine neue Sorte Eingänge: <b>vier Sensoren</b> statt der gewohnten Taster.<br><br>🔧 <b>Bauteil-Typen sind diesmal vorgegeben</b> (anders als bei Taster-Lektionen, wo der Default „taster" passte): die Lektion erzwingt die vier Sensor-Typen, damit die Symbole und das Verhalten in Schaltplan und 2D-Anlage gleich richtig sind.<br><br>📋 <b>Die vier Typen:</b><br>• <b>S_INDUKTIV</b> (Sensor Ind.) — reagiert auf <b>Metall</b>. Erzeugt ein elektromagnetisches Wechselfeld; Metall in der Nähe ändert das Feld → SPS-Eingang TRUE.<br>• <b>S_KAPAZITIV</b> (Sensor Kap.) — reagiert auf <b>alle Materialien</b> (Metall, Kunststoff, sogar Flüssigkeiten). Misst Kapazitäts-Änderungen im elektrischen Feld.<br>• <b>S_OPTISCH</b> (Sensor Opt.) — eine Lichtschranke. Reagiert auf <b>jeden lichtundurchlässigen Körper</b>, der einen Lichtstrahl unterbricht.<br>• <b>S_MAGNETISCH</b> (Sensor Mag.) — ein <b>Hall-Sensor</b> (3-Leiter). Reagiert <b>ausschließlich auf Permanentmagnete</b> — Hall-IC im Sensorkopf misst die Feldstärke. Typischer Einsatz: Drehzahl-Messung an Magnet-Zahnscheiben, freistehende Magnet-Detektion. (Der verwandte <b>Reed-Kontakt</b> — mechanisches Glasröhrchen statt Hall-IC, ebenfalls 3-Leiter — kommt in Schritt 8 dazu, typische Anwendung dort: Zylinder-Endlagen.)<br><br>📌 <b>Manuell schaltbar:</b> Klick im Sim-Panel auf einen der Sensoren — er rastet ein (Sensoren rasten, anders als Taster). Die zugehörige Lampe rechts geht an. So kannst du auch <b>ohne 2D-Anlage</b> die Verdrahtung testen.',
                             before: () => _ensurePanel('fbs-wrapper')
                         },
                         {
@@ -47584,13 +48503,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#circuit-wrapper', pos: 'left',
                             title: '⚡ Schaltplan: hier zeigen die Sensoren ihre Bauart',
-                            text: 'Der Auto-Schaltplan wechselt von der abstrakten Logik-Ebene auf die <b>elektrotechnische Bauteil-Ebene</b> — und <i>hier</i> bekommen die vier Sensoren <b>jeweils ein eigenes IEC-Symbol</b>, an dem du das physikalische Prinzip sofort erkennst.<br><br>🔍 <b>Die vier typ-spezifischen Symbole nach IEC 60617:</b><br>• 🧲 <b>Induktiv</b>: drei Halbkreis-Bögen — Andeutung der Spulen-Wicklung, die das elektromagnetische Wechselfeld erzeugt.<br>• 🔋 <b>Kapazitiv</b>: zwei parallele Striche — die Kondensator-Platten.<br>• 🔦 <b>Optisch</b>: zwei schräge Linien-Paare — der gerichtete Lichtstrahl mit Andeutung der Empfänger-Optik.<br>• 🧲 <b>Magnetisch (Hall, 3-Leiter aktiv)</b>: ein schwarzer Balken mit weißer Mittelstrich-Andeutung — der Hall-IC im Sensorkopf, der die Magnetfeld-Stärke misst. (Die alternative Bauform <b>Reed-Kontakt</b> — passiv, 2-Leiter — siehst du in Schritt 8.)<br><br>🔌 <b>Sensor-Bauteile sind 3-Leiter-Bauteile</b> mit drei Pin-Labels direkt am Symbol:<br>• <b>BN</b> (braun) → +24V Versorgung — der Sensor braucht Strom, um sein Feld aufzubauen.<br>• <b>BU</b> (blau) → 0V Rückleitung.<br>• <b>BK</b> (schwarz) → Signal-Ausgang.<br><br>🧩 <b>Stromlauf — pro Sensor entstehen automatisch zwei Stränge nebeneinander:</b><br><br><b>Strang 1 — Sensor-Versorgung + Hilfsrelais</b>:<br>&nbsp;&nbsp;+24V → Sensor (BN ↦ Versorgung ↦ BU) → 0V<br>&nbsp;&nbsp;Sensor-Signal (BK rechts) → Spule eines <b>impliziten Hilfsrelais</b> <code>-KFn</code> → 0V<br>&nbsp;&nbsp;Das Hilfsrelais entsteht automatisch — du hast es nicht im Code stehen, VALIS legt es an, weil das Sensor-Signal irgendwo in der Schaltung weiterverwendet werden soll.<br><br><b>Strang 2 — Verbraucher mit Hilfskontakt geschaltet</b>:<br>&nbsp;&nbsp;+24V → <b>Schließer-Kontakt</b> des Hilfsrelais <code>-KFn</code> → LED (Pin X1 oben, X2 unten) → 0V<br>&nbsp;&nbsp;Sobald der Sensor anspricht, zieht die Spule -KFn an, ihr Kontakt im zweiten Strang schließt, und die LED leuchtet.<br><br>📌 <b>Warum dieser Zwischenschritt über ein Hilfsrelais?</b> Der direkte Signal-Ausgang BK eines industriellen Sensors kann den Strom eines Verbrauchers gar nicht direkt schalten (zu schwach). In der echten Hardware speist er <i>immer</i> eine SPS-Eingangsklemme oder eine Relais-Spule — und das schaltet dann erst die Last. VALIS bildet das Schritt-für-Schritt nach — auch hier in der trivialen <code>LAMPE_IND := S_INDUKTIV</code>-Zeile schiebt VALIS automatisch ein Hilfsrelais dazwischen, damit der Schaltplan elektrotechnisch korrekt bleibt.<br><br>📌 <b>Vergleich Taster vs. Sensor:</b> Ein Taster ist <b>passiv</b> (zwei Anschlüsse, mechanischer Kontakt — sitzt direkt im Lastrang). Ein Sensor ist <b>aktiv</b> (Versorgungsspannung + interne Elektronik + Signal-Ausgang — braucht eigenen Versorgungs-Strang plus Hilfsrelais zum Schalten). Der Schaltplan zeigt diesen Unterschied unmittelbar — der Logikplan dagegen behandelt beide gleich, weil sie auf Logik-Ebene exakt dasselbe liefern: einen Booleschen Wert.<br><br>🔧 <b>Im FESTO-Aufbau</b> (Lektion W3 später) wirst du diese drei Drähte (BN/BU/BK) real verkabeln — und siehst dort auch das physische Hilfsrelais auf dem Relais-Panel.',
+                            text: 'Der Auto-Schaltplan wechselt von der abstrakten Logik-Ebene auf die <b>elektrotechnische Bauteil-Ebene</b> — und <i>hier</i> bekommen die vier Sensoren <b>jeweils ein eigenes IEC-Symbol</b>, an dem du das physikalische Prinzip sofort erkennst.<br><br>🔍 <b>Die vier typ-spezifischen Symbole nach IEC 60617:</b><br>• 🧲 <b>Induktiv</b>: drei Halbkreis-Bögen — Andeutung der Spulen-Wicklung, die das elektromagnetische Wechselfeld erzeugt.<br>• 🔋 <b>Kapazitiv</b>: zwei parallele Striche — die Kondensator-Platten.<br>• 🔦 <b>Optisch</b>: zwei schräge Linien-Paare — der gerichtete Lichtstrahl mit Andeutung der Empfänger-Optik.<br>• 🧲 <b>Magnetisch (Hall)</b>: ein schwarzer Balken mit weißer Mittelstrich-Andeutung — der Hall-IC im Sensorkopf, der die Magnetfeld-Stärke misst. (Die alternative Bauform <b>Reed-Kontakt</b> — mechanisches Glasröhrchen — siehst du in Schritt 8. Beide sind als FESTO-Industriebauteil 3-Leiter mit BN/BU/BK.)<br><br>🔌 <b>Sensor-Bauteile sind 3-Leiter-Bauteile</b> mit drei Pin-Labels direkt am Symbol:<br>• <b>BN</b> (braun) → +24V Versorgung — der Sensor braucht Strom, um sein Feld aufzubauen.<br>• <b>BU</b> (blau) → 0V Rückleitung.<br>• <b>BK</b> (schwarz) → Signal-Ausgang.<br><br>🧩 <b>Stromlauf — pro Sensor entstehen automatisch zwei Stränge nebeneinander:</b><br><br><b>Strang 1 — Sensor-Versorgung + Hilfsrelais</b>:<br>&nbsp;&nbsp;+24V → Sensor (BN ↦ Versorgung ↦ BU) → 0V<br>&nbsp;&nbsp;Sensor-Signal (BK rechts) → Spule eines <b>impliziten Hilfsrelais</b> <code>-KFn</code> → 0V<br>&nbsp;&nbsp;Das Hilfsrelais entsteht automatisch — du hast es nicht im Code stehen, VALIS legt es an, weil das Sensor-Signal irgendwo in der Schaltung weiterverwendet werden soll.<br><br><b>Strang 2 — Verbraucher mit Hilfskontakt geschaltet</b>:<br>&nbsp;&nbsp;+24V → <b>Schließer-Kontakt</b> des Hilfsrelais <code>-KFn</code> → LED (Pin X1 oben, X2 unten) → 0V<br>&nbsp;&nbsp;Sobald der Sensor anspricht, zieht die Spule -KFn an, ihr Kontakt im zweiten Strang schließt, und die LED leuchtet.<br><br>📌 <b>Warum dieser Zwischenschritt über ein Hilfsrelais?</b> Der direkte Signal-Ausgang BK eines industriellen Sensors kann den Strom eines Verbrauchers gar nicht direkt schalten (zu schwach). In der echten Hardware speist er <i>immer</i> eine SPS-Eingangsklemme oder eine Relais-Spule — und das schaltet dann erst die Last. VALIS bildet das Schritt-für-Schritt nach — auch hier in der trivialen <code>LAMPE_IND := S_INDUKTIV</code>-Zeile schiebt VALIS automatisch ein Hilfsrelais dazwischen, damit der Schaltplan elektrotechnisch korrekt bleibt.<br><br>📌 <b>Vergleich Taster vs. Sensor:</b> Ein Taster ist <b>passiv</b> (zwei Anschlüsse, mechanischer Kontakt — sitzt direkt im Lastrang). Ein Sensor ist <b>aktiv</b> (Versorgungsspannung + interne Elektronik + Signal-Ausgang — braucht eigenen Versorgungs-Strang plus Hilfsrelais zum Schalten). Der Schaltplan zeigt diesen Unterschied unmittelbar — der Logikplan dagegen behandelt beide gleich, weil sie auf Logik-Ebene exakt dasselbe liefern: einen Booleschen Wert.<br><br>🔧 <b>Im FESTO-Aufbau</b> (Lektion W3 später) wirst du diese drei Drähte (BN/BU/BK) real verkabeln — und siehst dort auch das physische Hilfsrelais auf dem Relais-Panel.',
                             before: () => _ensurePanel('circuit-wrapper')
                         },
                         {
                             target: '#factory-wrapper', pos: 'left',
                             title: '🏭 2D-Anlage: Test-Aufbau bauen',
-                            text: 'Jetzt wird es greifbar. Wir bauen ein kleines Förderband-Setup mit den vier Sensoren nebeneinander, damit wir gleich ein einziges Werkstück an allen vorbeischicken können.<br><br>📍 <b>Schritt-für-Schritt-Aufbau (Menüs in der Toolbar oben):</b><br><br>1️⃣ <b>📡 Sensoren ▼ →</b> alle vier nacheinander einfügen und horizontal nebeneinander platzieren (z. B. auf einer Linie auf ~ 200 px Höhe):<br>&nbsp;&nbsp;• 🧲 <b>Induktiv (Metall)</b> → Variable: <code>S_INDUKTIV</code><br>&nbsp;&nbsp;• 🔋 <b>Kapazitiv (Alles)</b> → Variable: <code>S_KAPAZITIV</code><br>&nbsp;&nbsp;• 🔦 <b>Optisch (Licht)</b> → Variable: <code>S_OPTISCH</code><br>&nbsp;&nbsp;• 🧲 <b>Magnetisch (3-pol.)</b> → Variable: <code>S_MAGNETISCH</code> (Hall-Sensor — Reed-Kontakt kommt erst in Schritt 8 dazu)<br><br>2️⃣ <b>🎛️ Bedienpult ▼ → 💡 Meldeleuchte (LED)</b> — vier Stück, jeweils oberhalb des zugehörigen Sensors anordnen (LAMPE_IND, LAMPE_KAP, LAMPE_OPT, LAMPE_MAG).<br><br>3️⃣ <b>⚙️ Aktoren ▼ → ▶ Fördertechnik → 🛤 Förderband</b> — ein langes Band <i>unter</i> den vier Sensoren, das ein Werkstück von links nach rechts an allen vier vorbeitransportiert. Im Platzieren-Dialog ist im obersten Dropdown die Option <b>„— Immer AN (keine Variable) —"</b> wählen — dann läuft das Band permanent, ohne dass du eine Steuer-Variable im Code brauchst. (Alternativ kannst du eine eigene Variable wie <code>BAND</code> wählen und im Code aktivieren, aber für diese Demo reicht „Immer AN".)<br><br>4️⃣ <b>📦 Materialien ▼</b> — am linken Ende des Bandes platzierst du gleich Werkstücke. <b>Wichtig: nutze die „Block Massiv"-Varianten</b> (🧱-Symbol), nicht „Block Normal":<br>&nbsp;&nbsp;• 🧱 <b>Block Massiv (Metall)</b> — für Test 1.<br>&nbsp;&nbsp;• 🧱 <b>Block Massiv (Kunststoff)</b> — für Test 2.<br><br>📌 <b>Warum „Massiv" statt „Normal"?</b> VALIS unterscheidet zwischen <b>„Normal"</b> (leichtgewichtige Werkstücke ohne Vollkörper-Physik — typisch für Schüttgut-artige Effekte) und <b>„Massiv"</b> (vollwertige Werkstücke mit echtem Körper). Die optische Lichtschranke registriert nur „massive" Werkstücke — analog zur realen Hardware, wo eine Lichtschranke nur Objekte mit echter Substanz „sieht", keine Nebel- oder Partikel-Effekte. Mit „Normal"-Blöcken würde LAMPE_OPT im Test stumm bleiben, obwohl der Block visuell vorbeifährt.<br><br>💡 <b>Tipp:</b> Nutze <b>Rechtsklick auf einen Sensor → Erfassungsbereich</b>, um die Reichweite jedes Sensors so einzustellen, dass nur Objekte direkt darunter erkannt werden — sonst überlappen sich die Detektionszonen.',
+                            text: 'Jetzt wird es greifbar. Wir bauen ein kleines Förderband-Setup mit den vier Sensoren nebeneinander, damit wir gleich ein einziges Werkstück an allen vorbeischicken können.<br><br>📍 <b>Schritt-für-Schritt-Aufbau (Menüs in der Toolbar oben):</b><br><br>1️⃣ <b>📡 Sensoren ▼ →</b> alle vier nacheinander einfügen und horizontal nebeneinander platzieren (z. B. auf einer Linie auf ~ 200 px Höhe):<br>&nbsp;&nbsp;• 🧲 <b>Induktiv (Metall)</b> → Variable: <code>S_INDUKTIV</code><br>&nbsp;&nbsp;• 🔋 <b>Kapazitiv (Alles)</b> → Variable: <code>S_KAPAZITIV</code><br>&nbsp;&nbsp;• 🔦 <b>Optisch (Licht)</b> → Variable: <code>S_OPTISCH</code><br>&nbsp;&nbsp;• 🧲 <b>Magnetisch</b> → Variable: <code>S_MAGNETISCH</code> (Hall-Sensor, freistehend — Reed-Kontakt kommt erst in Schritt 8 am Zylinder dazu)<br><br>2️⃣ <b>🎛️ Bedienpult ▼ → 💡 Meldeleuchte (LED)</b> — vier Stück, jeweils oberhalb des zugehörigen Sensors anordnen (LAMPE_IND, LAMPE_KAP, LAMPE_OPT, LAMPE_MAG).<br><br>3️⃣ <b>⚙️ Aktoren ▼ → ▶ Fördertechnik → 🛤 Förderband</b> — ein langes Band <i>unter</i> den vier Sensoren, das ein Werkstück von links nach rechts an allen vier vorbeitransportiert. Im Platzieren-Dialog ist im obersten Dropdown die Option <b>„— Immer AN (keine Variable) —"</b> wählen — dann läuft das Band permanent, ohne dass du eine Steuer-Variable im Code brauchst. (Alternativ kannst du eine eigene Variable wie <code>BAND</code> wählen und im Code aktivieren, aber für diese Demo reicht „Immer AN".)<br><br>4️⃣ <b>📦 Materialien ▼</b> — am linken Ende des Bandes platzierst du gleich Werkstücke. <b>Wichtig: nutze die „Block Massiv"-Varianten</b> (🧱-Symbol), nicht „Block Normal":<br>&nbsp;&nbsp;• 🧱 <b>Block Massiv (Metall)</b> — für Test 1.<br>&nbsp;&nbsp;• 🧱 <b>Block Massiv (Kunststoff)</b> — für Test 2.<br><br>📌 <b>Warum „Massiv" statt „Normal"?</b> VALIS unterscheidet zwischen <b>„Normal"</b> (leichtgewichtige Werkstücke ohne Vollkörper-Physik — typisch für Schüttgut-artige Effekte) und <b>„Massiv"</b> (vollwertige Werkstücke mit echtem Körper). Die optische Lichtschranke registriert nur „massive" Werkstücke — analog zur realen Hardware, wo eine Lichtschranke nur Objekte mit echter Substanz „sieht", keine Nebel- oder Partikel-Effekte. Mit „Normal"-Blöcken würde LAMPE_OPT im Test stumm bleiben, obwohl der Block visuell vorbeifährt.<br><br>💡 <b>Tipp:</b> Nutze <b>Rechtsklick auf einen Sensor → Erfassungsbereich</b>, um die Reichweite jedes Sensors so einzustellen, dass nur Objekte direkt darunter erkannt werden — sonst überlappen sich die Detektionszonen.',
                             before: () => _ensurePanel('factory-wrapper')
                         },
                         {
@@ -47606,7 +48525,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#factory-wrapper', pos: 'left',
                             title: '🧲 Hall vs. Reed — zwei Bauformen für Magnetfeld-Erkennung',
-                            text: 'Beim Magnet-Sensor gibt es <b>zwei verschiedene technische Bauformen</b> — und VALIS unterscheidet sie auch klar in zwei eigene Bauteil-Typen. Den Hall-Typ kennst du bereits aus den Schritten 1–7 (S_MAGNETISCH). Jetzt kommt der <b>zweite Typ — Reed-Kontakt</b> — am klassischsten Einsatzort dazu: an einem Pneumatik-Zylinder.<br><br>📋 <b>Der direkte Vergleich:</b><br><table style="width:100%;border-collapse:collapse;font-size:11px;margin:6px 0;"><tr style="background:#1a2740;"><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">Eigenschaft</th><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">🧲 Magnetisch / Hall <code>(sensor_mag)</code></th><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">🧲 Reed-Kontakt <code>(sensor_reed)</code></th></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Anschlüsse</td><td style="padding:4px 6px;border:1px solid #2a3a52;">3-Leiter (BN/BU/BK)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">2-Leiter (Pin 1 / Pin 2)</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Aktiv/Passiv</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Aktiv — braucht +24V/0V-Versorgung, eigene Elektronik (Hall-IC)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Passiv — reiner Glasröhrchen-Schalter, keine eigene Versorgung</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Schaltplan</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Eigener Versorgungs-Strang + Hilfsrelais am Q-Signal</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Direkt in Reihe mit Hilfsrelais-Spule (wie ein einfacher Kontakt)</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">FESTO-Panel</td><td style="padding:4px 6px;border:1px solid #2a3a52;">3 Sockel: 24V (rot), Q (schwarz), 0V (blau)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">2 Sockel: Pin 1 + Pin 2 (beide schwarz)</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Typischer Einsatz</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Drehzahl-Messung, freistehende Magnet-Detektion, analoge Feldstärken-Auswertung</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Zylinder-Endlagen, Tür-/Klappen-Schalter, einfache schaltende Magnet-Anwendungen</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Verschleiß</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Keiner (vollelektronisch)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Mechanischer Kontakt → begrenzte Schaltspiele (typ. ~10⁹)</td></tr></table>🎯 <b>Klassischer Reed-Anwendungsfall: Pneumatik-Zylinder-Endlagen.</b><br>Jeder pneumatische Zylinder hat in seinem Kolben einen kleinen <b>Permanentmagnet</b> eingebaut. Außen am Zylinderrohr sitzen ein oder zwei Reed-Kontakte — einer pro Endlage. Steht der Kolben in der Endlage, sitzt der Magnet direkt unter dem Sensor → Reed-Glasröhrchen schließt → SPS weiß: „Zylinder ist ausgefahren / eingefahren." Reed reicht hier völlig: Es geht nur um <i>schließt / schließt nicht</i>, nicht um analoge Feldstärken — und der 2-Leiter-Anschluss spart Verdrahtung am beweglichen Zylinder.<br><br>🤖 <b>VALIS hat dir den Demo-Code automatisch angehängt!</b> Im Editor stehen jetzt vier neue Variablen mit korrektem Bauteil-Typ:<br>&nbsp;&nbsp;• <b>S_ZYL_EIN</b>, <b>S_ZYL_AUS</b> — Reed-Endlagen-Sensoren (Typ <code>sensor_reed</code> — 2-pol., nicht zu verwechseln mit der Standalone-Variable <code>S_MAGNETISCH</code>, die Hall ist).<br>&nbsp;&nbsp;• <b>ZYL_AUS</b>, <b>ZYL_EIN</b> — Magnetventile zum Ausfahren/Einfahren (valve).<br><br>Plus eine kleine <b>RS-Glied-basierte Pendel-Logik</b>:<br><pre style="background:#1a1a2e;padding:6px 8px;border-radius:3px;margin:4px 0;font-size:11px;">S3 := S_ZYL_EIN&#10;R3 := S_ZYL_AUS&#10;ZYL_AUS := Q3&#10;ZYL_EIN := ¬Q3</pre>→ Erreicht der Kolben die Eingefahren-Endlage, setzt der Reed den Ausfahr-Befehl. Erreicht er die Ausgefahren-Endlage, kommt der Einfahr-Befehl zurück. Der Zylinder <b>pendelt automatisch</b> zwischen beiden Endlagen — sobald die Reeds am Zylinder hängen.<br><br>🔧 <b>Was du jetzt noch in der 2D-Anlage tun musst:</b><br><br>1️⃣ <b>Zylinder platzieren:</b> <b>⚙️ Aktoren ▼ → ▶ Pneumatik → 🦾 Zylinder (Doppel)</b>. Im Platzieren-Dialog werden im Dropdown jetzt <code>ZYL_AUS</code> (Ausfahren) und <code>ZYL_EIN</code> (Einfahren) als passende Variablen angeboten — wähle beide.<br><br>2️⃣ <b>Reed-Kontakte anbringen:</b> <b>Rechtsklick auf den Zylinder</b>. Im Kontextmenü erscheint der Abschnitt <b>„Reed-Kontakt anbringen:"</b> mit Optionen pro freier <code>sensor_reed</code>-Variable:<br>&nbsp;&nbsp;• <b>➕ S_ZYL_EIN (Eingefahren)</b> → linke Endlage.<br>&nbsp;&nbsp;• <b>➕ S_ZYL_AUS (Ausgefahren)</b> → rechte Endlage.<br>Beide nacheinander anklicken — die Reeds sitzen mechanisch <i>am</i> Zylinder und folgen ihm bei Bewegung.<br><br>3️⃣ <b>Pneumatik-Versorgung (falls noch keine vorhanden):</b> der Zylinder braucht im Hintergrund einen Kompressor + ein Ventil. VALIS bietet beim ersten Mal an, diese automatisch zu erzeugen — bestätige.<br><br>4️⃣ <b>Test:</b> Starte die Simulation → der Zylinder fährt sofort los und pendelt zwischen den Endlagen. <b>LAMPE_MAG</b> aus dem standalone-Hall-Sensor (S_MAGNETISCH) bleibt davon unberührt — sie hängt an einer komplett anderen Variable und einem anderen Sensor-Typ.<br><br>🔍 <b>Vergleich im Schaltplan (jetzt sichtbar):</b> S_MAGNETISCH (Hall) bekommt im Auto-Schaltplan einen <b>eigenen Versorgungs-Strang</b> mit drei Leitern. S_ZYL_EIN/AUS (Reed) sitzen dagegen <b>direkt als Kontakt im Lastrang</b> — kein Versorgungs-Strang, kein BN/BU/BK. Genau das ist der 3-Leiter-vs-2-Leiter-Unterschied in Aktion.<br><br>📌 <b>Merke — Reed-Attach-Logik in VALIS:</b> Der Menüpunkt „Reed-Kontakt anbringen" erscheint <i>nur</i>, wenn (a) eine Eingangs-Variable den Typ <code>sensor_reed</code> hat <b>und</b> (b) diese Variable noch <i>nicht</i> mit einem Bauteil verknüpft ist. Eine <code>sensor_mag</code>-Variable würde dort nicht auftauchen — Hall-Sensoren sind freistehende Bauteile, keine Zylinder-Endlagen.',
+                            text: 'Beim Magnet-Sensor gibt es <b>zwei verschiedene technische Bauformen</b> — und VALIS unterscheidet sie in zwei eigene Bauteil-Typen. Den Hall-Typ kennst du bereits aus den Schritten 1–7 (S_MAGNETISCH). Jetzt kommt der <b>zweite Typ — Reed-Kontakt</b> — am klassischsten Einsatzort dazu: an einem Pneumatik-Zylinder.<br><br>📌 <b>Wichtig vorab:</b> Beide sind als FESTO-Industriebauteil <b>3-Leiter-Sensoren mit BN/BU/BK</b>. Der Unterschied liegt nicht in den Anschlüssen, sondern <b>im inneren Schalt-Mechanismus</b> und damit im Anwendungsprofil.<br><br>📋 <b>Der direkte Vergleich:</b><br><table style="width:100%;border-collapse:collapse;font-size:11px;margin:6px 0;"><tr style="background:#1a2740;"><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">Eigenschaft</th><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">🧲 Magnetisch / Hall <code>(sensor_mag)</code></th><th style="padding:4px 6px;border:1px solid #2a3a52;text-align:left;">🧲 Reed-Kontakt <code>(sensor_reed)</code></th></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Innerer Mechanismus</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Hall-IC (Halbleiter-Chip), misst die Magnetfeld-Stärke vollelektronisch</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Glasröhrchen mit zwei ferromagnetischen Kontaktzungen, die sich im Magnetfeld berühren</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Anschlüsse (FESTO)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">3-Leiter (BN/BU/BK) — identisch zu Ind/Kap/Opt</td><td style="padding:4px 6px;border:1px solid #2a3a52;">3-Leiter (BN/BU/BK) — auch der Reed wird industriell als 3-pol. Sensor gepackagt (Versorgung treibt eine kleine Auswerte-Elektronik im Sensorkopf)</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Signalverhalten</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Analog-fähig, schaltet ab definierter Feldstärke; sehr schnell, prellfrei</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Rein binär (schließt / schließt nicht); Schalt-Hysterese kommt vom mechanischen Glasröhrchen</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Typischer Einsatz</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Drehzahl-Messung, freistehende Magnet-Detektion, analoge Feldstärken-Auswertung</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Zylinder-Endlagen, Tür-/Klappen-Schalter, einfache schaltende Magnet-Anwendungen</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Verschleiß / Lebensdauer</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Praktisch keiner — vollelektronisch, viele Mio. Schaltspiele unproblematisch</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Mechanischer Kontakt → begrenzte Schaltspiele (typ. ~10⁹), aber sehr robust gegen elektromagn. Störungen</td></tr><tr><td style="padding:4px 6px;border:1px solid #2a3a52;">Preis</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Höher (Halbleiter-Sensor)</td><td style="padding:4px 6px;border:1px solid #2a3a52;">Sehr günstig (Massenartikel) → klassischer Endlagensensor</td></tr></table>🎯 <b>Klassischer Reed-Anwendungsfall: Pneumatik-Zylinder-Endlagen.</b><br>Jeder pneumatische Zylinder hat in seinem Kolben einen kleinen <b>Permanentmagnet</b> eingebaut. Außen am Zylinderrohr sitzen ein oder zwei Reed-Kontakte — einer pro Endlage. Steht der Kolben in der Endlage, sitzt der Magnet direkt unter dem Sensor → Reed-Glasröhrchen schließt → die kleine Auswerte-Elektronik im Sensorkopf legt BK auf 24V → SPS weiß: „Zylinder ist ausgefahren / eingefahren." Reed reicht hier völlig: Es geht nur um <i>schließt / schließt nicht</i>, nicht um analoge Feldstärken — und der Sensor ist erheblich billiger als ein Hall-Sensor.<br><br>🤖 <b>VALIS hat dir den Demo-Code automatisch angehängt!</b> Im Editor stehen jetzt vier neue Variablen mit korrektem Bauteil-Typ:<br>&nbsp;&nbsp;• <b>S_ZYL_EIN</b>, <b>S_ZYL_AUS</b> — Reed-Endlagen-Sensoren (Typ <code>sensor_reed</code> — nicht zu verwechseln mit der Standalone-Variable <code>S_MAGNETISCH</code>, die Hall ist).<br>&nbsp;&nbsp;• <b>ZYL_AUS</b>, <b>ZYL_EIN</b> — Magnetventile zum Ausfahren/Einfahren (valve).<br><br>Plus eine kleine <b>RS-Glied-basierte Pendel-Logik</b>:<br><pre style="background:#1a1a2e;padding:6px 8px;border-radius:3px;margin:4px 0;font-size:11px;">S3 := S_ZYL_EIN&#10;R3 := S_ZYL_AUS&#10;ZYL_AUS := Q3&#10;ZYL_EIN := ¬Q3</pre>→ Erreicht der Kolben die Eingefahren-Endlage, setzt der Reed den Ausfahr-Befehl. Erreicht er die Ausgefahren-Endlage, kommt der Einfahr-Befehl zurück. Der Zylinder <b>pendelt automatisch</b> zwischen beiden Endlagen — sobald die Reeds am Zylinder hängen.<br><br>🔧 <b>Was du jetzt noch in der 2D-Anlage tun musst:</b><br><br>1️⃣ <b>Zylinder platzieren:</b> <b>⚙️ Aktoren ▼ → ▶ Pneumatik → 🦾 Zylinder (Doppel)</b>. Im Platzieren-Dialog werden im Dropdown jetzt <code>ZYL_AUS</code> (Ausfahren) und <code>ZYL_EIN</code> (Einfahren) als passende Variablen angeboten — wähle beide.<br><br>2️⃣ <b>Reed-Kontakte anbringen:</b> <b>Rechtsklick auf den Zylinder</b>. Im Kontextmenü erscheint der Abschnitt <b>„Reed-Kontakt anbringen:"</b> mit Optionen pro freier <code>sensor_reed</code>-Variable:<br>&nbsp;&nbsp;• <b>➕ S_ZYL_EIN (Eingefahren)</b> → linke Endlage.<br>&nbsp;&nbsp;• <b>➕ S_ZYL_AUS (Ausgefahren)</b> → rechte Endlage.<br>Beide nacheinander anklicken — die Reeds sitzen mechanisch <i>am</i> Zylinder und folgen ihm bei Bewegung.<br><br>3️⃣ <b>Pneumatik-Versorgung (falls noch keine vorhanden):</b> der Zylinder braucht im Hintergrund einen Kompressor + ein Ventil. VALIS bietet beim ersten Mal an, diese automatisch zu erzeugen — bestätige.<br><br>4️⃣ <b>Test:</b> Starte die Simulation → der Zylinder fährt sofort los und pendelt zwischen den Endlagen. <b>LAMPE_MAG</b> aus dem standalone-Hall-Sensor (S_MAGNETISCH) bleibt davon unberührt — sie hängt an einer komplett anderen Variable.<br><br>🔍 <b>Vergleich im Schaltplan und FESTO-Aufbau:</b> Beide Magnet-Typen werden gleich verdrahtet — eigener Versorgungs-Strang (+24V/0V) plus Signal-Output zum Hilfsrelais, drei Sockel am FESTO-N-Slot (24V/Q/0V). Im Schaltplan unterscheiden sie sich nur durch das innere Bauteil-Symbol. Was im echten Einsatz zwischen ihnen entscheidet, ist das Anwendungsprofil — analog vs. binär, Drehzahl vs. Endlage, Hall-Preis vs. Reed-Preis.<br><br>📌 <b>Merke — Reed-Attach-Logik in VALIS:</b> Der Menüpunkt „Reed-Kontakt anbringen" erscheint <i>nur</i>, wenn (a) eine Eingangs-Variable den Typ <code>sensor_reed</code> hat <b>und</b> (b) diese Variable noch <i>nicht</i> mit einem Bauteil verknüpft ist. Eine <code>sensor_mag</code>-Variable würde dort nicht auftauchen — Hall-Sensoren sind freistehende Bauteile, keine Zylinder-Endlagen.',
                             before: () => {
                                 _ensurePanel('factory-wrapper');
                                 // Demo-Code nur einmal anhängen (Idempotenz bei Schritt-
@@ -47636,12 +48555,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#editor-container', pos: 'right',
                             title: '🛠 Wann nimmst du welchen Sensor?',
-                            text: 'Die Wahl folgt der <b>physikalischen Aufgabe</b>. Diese Faustregel bewahrt dich vor 90 % aller Sensor-Fehlentscheidungen:<br><br>🧲 <b>Induktiv → wenn du Metall sicher von Nicht-Metall trennen willst.</b><br>• Sortier-Anlagen (Metall raus, Rest durch).<br>• Werkstück-Anwesenheits-Detektion auf Metall-Werkstückträgern.<br>• Drehzahl-/Geschwindigkeits-Messung über Metall-Zahnscheibe.<br>• <b>Nicht geeignet</b>, wenn dein Werkstück Kunststoff, Glas, Holz, Flüssigkeit ist.<br><br>🔋 <b>Kapazitiv → wenn du „irgendetwas" erkennen willst, egal welches Material.</b><br>• Füllstands-Erkennung in Behältern (Flüssigkeiten, Granulat).<br>• Werkstück-Anwesenheit unabhängig vom Material.<br>• <b>Vorsicht:</b> Empfindlich auf Feuchtigkeit, Staub, Temperaturschwankungen — in „schmutzigen" Umgebungen oft unzuverlässig.<br><br>🔦 <b>Optisch (Lichtschranke) → wenn du große Reichweite brauchst oder hohe Geschwindigkeiten messen willst.</b><br>• Stückgut-Zählung am Förderband.<br>• Personenschutz-Lichtschranken an Maschinen-Öffnungen.<br>• Über mehrere Meter Distanz arbeitsfähig.<br>• <b>Vorsicht:</b> Verschmutzte Linse → Fehlauslösungen. Transparente Werkstücke (Glas, klares Plastik) → werden manchmal nicht erkannt.<br><br>🧲 <b>Magnetisch (Hall, 3-pol. aktiv) → wenn ein Permanentmagnet freistehend erkannt werden soll.</b><br>• Drehzahl-/Geschwindigkeits-Messung über Magnet-Zahnscheibe.<br>• Position-Sensing entlang einer Magnet-Skala.<br>• Anwendungen, in denen die <b>Feldstärke</b> oder eine <b>hohe Schalt-Häufigkeit</b> (kein Verschleiß) wichtig ist.<br>• Braucht eigenen +24V/0V-Strang im Schaltplan.<br><br>🧲 <b>Reed-Kontakt (2-pol. passiv) → wenn ein Permanentmagnet einfach „ja/nein" geschaltet werden soll.</b><br>• <b>Default-Anwendung:</b> Zylinder-Endlagen-Abfrage (im Kolben sitzt ein Magnet).<br>• Türen-/Klappen-Überwachung mit angeklebten Magneten.<br>• Sitzt <b>direkt im Lastrang</b> wie ein Kontakt — kein Versorgungs-Strang nötig.<br>• <b>Niemals für Material-Erkennung</b> — dafür gibt es Induktiv / Kapazitiv / Optisch.<br><br>📌 <b>Die Entscheidungs-Frage in einem Satz:</b><br><i>„Was hat das, was ich erkennen will, was die Umgebung nicht hat?"</i> Metall → induktiv. Irgendwas Festes / Flüssiges → kapazitiv. Etwas, das den Lichtstrahl bricht → optisch. Magnet → Hall (frei stehend, analog-fähig) oder Reed (am Zylinder, einfach schaltend).<br><br>⚠️ <b>Eine Anlage hat oft mehrere Sensor-Typen gemischt:</b> z. B. ein optischer Sensor zählt Werkstücke am Förderband-Anfang, ein induktiver entscheidet danach „Metall ja/nein", und Reed-Sensoren melden die Endlagen des Sortier-Zylinders. Jeder Sensor-Typ macht das, was er am besten kann.'
+                            text: 'Die Wahl folgt der <b>physikalischen Aufgabe</b>. Diese Faustregel bewahrt dich vor 90 % aller Sensor-Fehlentscheidungen:<br><br>🧲 <b>Induktiv → wenn du Metall sicher von Nicht-Metall trennen willst.</b><br>• Sortier-Anlagen (Metall raus, Rest durch).<br>• Werkstück-Anwesenheits-Detektion auf Metall-Werkstückträgern.<br>• Drehzahl-/Geschwindigkeits-Messung über Metall-Zahnscheibe.<br>• <b>Nicht geeignet</b>, wenn dein Werkstück Kunststoff, Glas, Holz, Flüssigkeit ist.<br><br>🔋 <b>Kapazitiv → wenn du „irgendetwas" erkennen willst, egal welches Material.</b><br>• Füllstands-Erkennung in Behältern (Flüssigkeiten, Granulat).<br>• Werkstück-Anwesenheit unabhängig vom Material.<br>• <b>Vorsicht:</b> Empfindlich auf Feuchtigkeit, Staub, Temperaturschwankungen — in „schmutzigen" Umgebungen oft unzuverlässig.<br><br>🔦 <b>Optisch (Lichtschranke) → wenn du große Reichweite brauchst oder hohe Geschwindigkeiten messen willst.</b><br>• Stückgut-Zählung am Förderband.<br>• Personenschutz-Lichtschranken an Maschinen-Öffnungen.<br>• Über mehrere Meter Distanz arbeitsfähig.<br>• <b>Vorsicht:</b> Verschmutzte Linse → Fehlauslösungen. Transparente Werkstücke (Glas, klares Plastik) → werden manchmal nicht erkannt.<br><br>🧲 <b>Magnetisch (Hall) → wenn ein Permanentmagnet freistehend erkannt werden soll und es auf Schnelligkeit, Verschleißfreiheit oder analoge Feldstärke ankommt.</b><br>• Drehzahl-/Geschwindigkeits-Messung über Magnet-Zahnscheibe.<br>• Position-Sensing entlang einer Magnet-Skala.<br>• Anwendungen mit <b>sehr hoher Schalt-Häufigkeit</b> (kein mechanischer Verschleiß).<br>• Höherer Stückpreis als Reed.<br><br>🧲 <b>Reed-Kontakt → wenn ein Permanentmagnet einfach „ja/nein" geschaltet werden soll und es günstig sein darf.</b><br>• <b>Default-Anwendung:</b> Zylinder-Endlagen-Abfrage (im Kolben sitzt ein Magnet).<br>• Türen-/Klappen-Überwachung mit angeklebten Magneten.<br>• <b>Niemals für Material-Erkennung</b> — dafür gibt es Induktiv / Kapazitiv / Optisch.<br>• Mechanisches Glasröhrchen → robuster gegen elektromagn. Störungen, aber begrenzte Schaltspiele.<br><br>📌 <b>Verdrahtung identisch:</b> Beide sind als FESTO-Industriebauteil 3-Leiter (BN/BU/BK) und bekommen im Schaltplan denselben Versorgungs-Strang. Die Wahl entscheidet sich nicht an der Verdrahtung, sondern am Einsatzprofil.<br><br>📌 <b>Die Entscheidungs-Frage in einem Satz:</b><br><i>„Was hat das, was ich erkennen will, was die Umgebung nicht hat?"</i> Metall → induktiv. Irgendwas Festes / Flüssiges → kapazitiv. Etwas, das den Lichtstrahl bricht → optisch. Magnet → Hall (frei stehend, analog-fähig, schnell) oder Reed (am Zylinder, einfach schaltend, günstig).<br><br>⚠️ <b>Eine Anlage hat oft mehrere Sensor-Typen gemischt:</b> z. B. ein optischer Sensor zählt Werkstücke am Förderband-Anfang, ein induktiver entscheidet danach „Metall ja/nein", und Reed-Sensoren melden die Endlagen des Sortier-Zylinders. Jeder Sensor-Typ macht das, was er am besten kann.'
                         },
                         {
                             target: null,
                             title: '🎓 Glückwunsch — alle Grundlagen durch!',
-                            text: 'Du hast jetzt alle <b>sechs Grundlagen-Lektionen</b> abgeschlossen — und damit <b>das Werkzeug-Set für realistische SPS-Steuerungen</b>:<br><br>• Lektionen <b>G1–G5</b> — die fünf Logik-Bausteine (Eingang/Ausgang, UND, ODER, Negation, Selbsthaltung) + die Idee von Hilfsrelais und Speichern.<br>• Lektion <b>G6</b> — die vier berührungslosen Sensor-Typen (induktiv / kapazitiv / optisch / magnetisch) + die zwei Magnet-Bauformen (Hall 3-pol. aktiv vs. Reed 2-pol. passiv) + die Faustregel, wann du welchen einsetzt.<br><br>🏭 <b>Was du damit jetzt bauen kannst:</b> Eine vollständige Sortier-Anlage. Ein Werkstück wird vom <b>optischen</b> Sensor gezählt, vom <b>induktiven</b> als Metall erkannt, von der <b>Selbsthaltung</b> (G5) als Auftrag im Speicher gehalten, und am Ende von einem Pneumatik-Zylinder ausgeworfen, dessen <b>Reed-Sensoren</b> die Endlagen melden — alles in 5–10 Code-Zeilen.<br><br>📚 <b>Wohin von hier?</b><br>• <b>🚀 Fortgeschritten → F1 RS vs SR</b>: vertieft die Speicherbausteine aus G5.<br>• <b>🚀 Fortgeschritten → F2 TON vs TOF</b>: zeitliche Verzögerungen, ergänzt deine Sensor-Auswertung um den Zeit-Aspekt.<br>• <b>🔌 Aufbau an Schaltwänden → W1 ff.</b>: setze deine Schaltpläne auf realen FESTO-Lehrboards in echte Verkabelung um.<br>• <b>📋 Beispiel laden → Sortieranlage (Minimal)</b>: eine fertige Mini-Anlage mit genau dem Wissen aus G1–G6 — perfektes Vorlagen-Projekt zum Eigenstudium.'
+                            text: 'Du hast jetzt alle <b>sechs Grundlagen-Lektionen</b> abgeschlossen — und damit <b>das Werkzeug-Set für realistische SPS-Steuerungen</b>:<br><br>• Lektionen <b>G1–G5</b> — die fünf Logik-Bausteine (Eingang/Ausgang, UND, ODER, Negation, Selbsthaltung) + die Idee von Hilfsrelais und Speichern.<br>• Lektion <b>G6</b> — die vier berührungslosen Sensor-Typen (induktiv / kapazitiv / optisch / magnetisch) + die zwei Magnet-Bauformen (Hall = Halbleiter-Sensor, Reed = Glasröhrchen, beide 3-Leiter als FESTO-Industriebauteil) + die Faustregel, wann du welchen einsetzt.<br><br>🏭 <b>Was du damit jetzt bauen kannst:</b> Eine vollständige Sortier-Anlage. Ein Werkstück wird vom <b>optischen</b> Sensor gezählt, vom <b>induktiven</b> als Metall erkannt, von der <b>Selbsthaltung</b> (G5) als Auftrag im Speicher gehalten, und am Ende von einem Pneumatik-Zylinder ausgeworfen, dessen <b>Reed-Sensoren</b> die Endlagen melden — alles in 5–10 Code-Zeilen.<br><br>📚 <b>Wohin von hier?</b><br>• <b>🚀 Fortgeschritten → F1 RS vs SR</b>: vertieft die Speicherbausteine aus G5.<br>• <b>🚀 Fortgeschritten → F2 TON vs TOF</b>: zeitliche Verzögerungen, ergänzt deine Sensor-Auswertung um den Zeit-Aspekt.<br>• <b>🔌 Aufbau an Schaltwänden → W1 ff.</b>: setze deine Schaltpläne auf realen FESTO-Lehrboards in echte Verkabelung um.<br>• <b>📋 Beispiel laden → Sortieranlage (Minimal)</b>: eine fertige Mini-Anlage mit genau dem Wissen aus G1–G6 — perfektes Vorlagen-Projekt zum Eigenstudium.'
                         }
                     ]
                 },
@@ -48947,6 +49866,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 setTimeout(updateInfoPanel, 10);
             };
 
+            // Patch FBS networks panel toggle (analog Optionen)
+            const _origFbsNetPanel = window.toggleFbsNetworksPanel;
+            window.toggleFbsNetworksPanel = function () {
+                if (_origFbsNetPanel) _origFbsNetPanel();
+                setTimeout(updateInfoPanel, 10);
+            };
+
             // Patch FBS add modal
             const _origFbsModal = window.openFbsAddModal;
             window.openFbsAddModal = function (type) {
@@ -49096,7 +50022,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 sensor_kap:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Kap.)' },
                 sensor_opt:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Opt.)' },
                 sensor_mag:    { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Sensor (Mag.)' },
-                sensor_reed:   { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Reed (2-pol.)' },
+                sensor_reed:   { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Reed-Kontakt' },
                 mech_sensor:   { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'S_',  label:'Pos.-Schalter' },
                 light_curtain: { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'L_',  label:'Lichtgitter (NC)' },
                 // Hilfskontakte (referenzieren eine Spule)
@@ -53690,8 +54616,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 sensor_ind: 'inductive',   // Induktiv (Spule)
                 sensor_kap: 'capacitive',  // Kapazitiv (Kondensator)
                 sensor_opt: 'optical',     // Optisch (Lichttaster)
-                sensor_mag: 'magnetic',    // Magnetisch 3-pol. (Standalone)
-                sensor_reed: 'reed'        // Reed 2-pol. (Zylinder-Endlagen) — passiver Kontakt
+                sensor_mag: 'magnetic',    // Magnetisch / Hall (freistehend) — analog-fähig
+                sensor_reed: 'reed'        // Reed-Kontakt — Glasröhrchen, typ. Zylinder-Endlagen
             };
             const SENSOR_META = {
                 inductive:  { title: 'Induktiver Sensor',  code: 'FESTO 548643' },
@@ -53752,8 +54678,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Rechteck-Welle (Hall-Sensor)
                     el('path', { d: `M ${cx-18} ${cy+10} L ${cx-18} ${cy+2} L ${cx-9} ${cy+2} L ${cx-9} ${cy+10} L ${cx-1} ${cy+10} L ${cx-1} ${cy+2} L ${cx+8} ${cy+2}`, fill: 'none', stroke: PALETTE.trace, 'stroke-width': 1.4 }, g);
                 } else if (type === 'reed') {
-                    // Reed-Kontakt: kleiner Magnet + Glaskörper-Kontakt (2-pol., passiv).
-                    // Magnet links (schwarz mit Polkennung), Kontakt-Glas rechts mit offenem Schalter.
+                    // Reed-Kontakt (FESTO-Industrie-Bauteil: 3-Leiter mit BN/BU/BK).
+                    // Symbol zeigt den internen Mechanismus: kleiner Magnet links +
+                    // Glasröhrchen-Kontakt rechts — die Kapselung im Sensorkopf
+                    // versorgt sich aus BN/BU; der Glasröhrchen-Kontakt schaltet BK.
                     el('rect', { x: cx-14, y: cy+3, width: 8, height: 7, fill: '#000' }, g);
                     el('rect', { x: cx-12, y: cy+4.5, width: 4, height: 2, fill: '#fff' }, g);
                     // Glasröhrchen (Reed) — offener Kontakt
@@ -53779,16 +54707,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const led = el('circle', { cx: SENSOR.w/2 + 38, cy: 78, r: 4, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
                 led.setAttribute('data-festo-sensor-led', '1');
                 led.setAttribute('data-festo-slot', `N${panelIdx}_S1`);
-                // Sockel: 3-Leiter-Sensor → 24V (rot) / Q (schwarz) / 0V (blau).
-                // Reed-Kontakt (2-pol., passiv) → nur Pin 1 + Pin 2 (beide schwarz),
-                // intern bleiben die Sockel-Keys _24V (= Pin 1, Eingang vom +24V-Bus)
-                // und _Q (= Pin 2, Signal-Ausgang zum Hilfsrelais) für die Wiring-Logik.
+                // 3 Sockel: 24V (rot) — Q (schwarz) — 0V (blau)
+                // Auch Reed-Kontakte sind als FESTO-Industrie-Bauteil 3-Leiter
+                // (BN/BU/BK). Der mechanische Glasröhrchen-Kontakt sitzt intern
+                // zwischen BN und BK — die Versorgung BU/BN ist trotzdem nötig.
                 const slotKey = `N${panelIdx}_S1`;
                 const sockY = 175;
-                const positions = (sensorType === 'reed') ? [
-                    { dx: -21, key: `${slotKey}_24V`, color: PALETTE.socketBlack, label: '1', lc: PALETTE.labelText },
-                    { dx: +21, key: `${slotKey}_Q`,   color: PALETTE.socketBlack, label: '2', lc: PALETTE.labelText }
-                ] : [
+                const positions = [
                     { dx: -42, key: `${slotKey}_24V`, color: PALETTE.socketRed,   label: '24V', lc: PALETTE.socketRed },
                     { dx:   0, key: `${slotKey}_Q`,   color: PALETTE.socketBlack, label: 'Q',   lc: PALETTE.labelText  },
                     { dx: +42, key: `${slotKey}_0V`,  color: PALETTE.socketBlue,  label: '0V',  lc: PALETTE.socketBlue }
@@ -54950,24 +55875,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         cables.push({ fromKey: `${slot}_${supplyPin}`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
                         cables.push({ fromKey: `${slot}_${signalPin}`, toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
                     } else if (slot.startsWith('N')) {
-                        const ct = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || 'sensor_ind';
-                        if (ct === 'sensor_reed') {
-                            // 2-Leiter Reed-Kontakt: passives Bauteil, schaltet
-                            // 24V direkt zum SPS-Eingang durch. Keine eigene
-                            // Versorgungs-Spannung am Bauteil — der Reed ist
-                            // nur ein Schalter, keine aktive Elektronik.
-                            // (Hinweis: auf der FESTO-N-Slot wird die 0V-Buchse
-                            // hier nicht belegt — keine Rückleitung nötig.)
-                            cables.push({ fromKey: `${slot}_24V`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
-                            cables.push({ fromKey: `${slot}_Q`,   toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
-                        } else {
-                            // 3-Leiter-Sensor (ind/kap/opt/mag): BN/BU zum Bus,
-                            // Q-Signal zum 16DIN. Bauteil hat eigene Elektronik
-                            // und braucht die 0V-Rückleitung für die Versorgung.
-                            cables.push({ fromKey: `${slot}_24V`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
-                            cables.push({ fromKey: `${slot}_0V`,  toKey: '__ANS_BUS_0V__',  color: 'blue',  strand: varName });
-                            cables.push({ fromKey: `${slot}_Q`,   toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
-                        }
+                        // 3-Leiter-Sensor (ind/kap/opt/mag/reed): BN/BU zum Bus,
+                        // Q-Signal zum 16DIN. Auch der Reed-Kontakt ist als
+                        // FESTO-Industrie-Bauteil ein 3-Leiter-Sensor.
+                        cables.push({ fromKey: `${slot}_24V`, toKey: '__ANS_BUS_24V__', color: 'red',   strand: varName });
+                        cables.push({ fromKey: `${slot}_0V`,  toKey: '__ANS_BUS_0V__',  color: 'blue',  strand: varName });
+                        cables.push({ fromKey: `${slot}_Q`,   toKey: 'ANS_DIN_' + addr,  color: 'black', strand: varName });
                     }
                 });
 
@@ -56505,28 +57418,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const cSock = coilSockOf(coil.varName);
                         const ct = (typeof componentTypes !== 'undefined' && componentTypes[coil.varName]) || '';
                         if (cSock) {
-                            if (ct === 'sensor_reed') {
-                                // 2-pol. Reed-Kontakt — passives Bauteil, keine
-                                // separate Versorgung. Der Reed sitzt direkt in
-                                // Serie zwischen +24V-Bus und Hilfsrelais-Spule.
-                                // Verdrahtung:
-                                //   Rot:  +24V-Bus    → Reed.24V-Pin  (in-Pin)
-                                //   Blau: Reed.Q-Pin  → impl. Rel. A1 (out-Pin)
-                                //   Blau: impl. Rel. A2 → 0V-Bus
-                                // KEIN separates Reed.0V → 0V — Reed hat das nicht.
-                                cables.push({ fromKey: '__BUS_24V__',    toKey: `${senPanel}_24V`, color: 'red' });
-                                cables.push({ fromKey: `${senPanel}_Q`,   toKey: cSock.inputKey,    color: 'blue' });
-                                if (cSock.returnKey) cables.push({ fromKey: cSock.returnKey, toKey: '__BUS_0V__', color: 'blue' });
-                            } else {
-                                // 3-Leiter aktiver Sensor (ind/kap/opt/mag):
-                                // eigene Versorgung + Signal-Output zum Hilfsrelais.
-                                cables.push({ fromKey: '__BUS_24V__', toKey: `${senPanel}_24V`, color: 'red' });
-                                cables.push({ fromKey: `${senPanel}_Q`, toKey: cSock.inputKey, color: 'blue' });
-                                if (cSock.returnKey) cables.push({ fromKey: cSock.returnKey, toKey: '__BUS_0V__', color: 'blue' });
-                                // Die 0V-Rückleitung des Sensors selbst wird
-                                // weiter unten im allgemeinen N-Slot-Loop ergänzt
-                                // (für sensor_reed bewusst ausgelassen).
-                            }
+                            // 3-Leiter Sensor (ind/kap/opt/mag/reed) — auch der
+                            // Reed-Kontakt ist als FESTO-Industrie-Bauteil ein
+                            // 3-Leiter-Sensor: eigene +24V/0V-Versorgung plus
+                            // Signal-Output zum Hilfsrelais.
+                            cables.push({ fromKey: '__BUS_24V__', toKey: `${senPanel}_24V`, color: 'red' });
+                            cables.push({ fromKey: `${senPanel}_Q`, toKey: cSock.inputKey, color: 'blue' });
+                            if (cSock.returnKey) cables.push({ fromKey: cSock.returnKey, toKey: '__BUS_0V__', color: 'blue' });
+                            // Die 0V-Rückleitung des Sensors selbst wird weiter
+                            // unten im allgemeinen N-Slot-Loop ergänzt.
                         }
                         // Strang-Tag (Coil-Label, also -KFn) — direkt vom
                         // Coil-Element gelesen, damit das Relais-Label (-KF1)
@@ -56640,12 +57540,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 // ─── Sensor-Rückleitung (Q-unabhängig): 0V von jedem
                 // belegten Sensor-Slot zum 0V-Bus. Das ist der dritte
-                // Anschluss des 3-Pin-Sensors (BU=blau=0V).
-                // Ausnahme: sensor_reed ist 2-pol. und hat keine 0V-Leitung.
+                // Anschluss des 3-Pin-Sensors (BU=blau=0V) — gilt auch
+                // für Reed-Kontakte, die als FESTO-Industrie-Bauteil
+                // ebenfalls 3-Leiter sind.
                 Object.entries(assignments).forEach(([slotKey, varName]) => {
                     if (!slotKey.startsWith('N')) return;
-                    const ct = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || '';
-                    if (ct === 'sensor_reed') return; // Reed hat keine 0V-Rückleitung
                     cables.push({
                         fromKey: `${slotKey}_0V`,
                         toKey: '__BUS_0V__',

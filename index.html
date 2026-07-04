@@ -2223,6 +2223,12 @@
         .sz-ai-body label { display:block; font-size:11.5px; color:#90a4ae; font-weight:600; margin-bottom:5px; }
         .sz-ai-body textarea { width:100%; box-sizing:border-box; background:#0e0e18; border:1px solid #3a3a4a; border-radius:6px; color:#d4d4d4; font-family:Consolas,monospace; font-size:11.5px; line-height:1.55; padding:10px; resize:vertical; }
         .sz-ai-body textarea:focus { outline:none; border-color:#42a5f5; }
+        .sz-ai-modeswitch { display:flex; gap:7px; margin:0 0 12px; flex-wrap:wrap; }
+        .sz-ai-mode { font-size:12px; font-weight:600; color:#90a4ae; background:#12121e; border:1px solid #2a2a3a; padding:5px 14px; border-radius:20px; cursor:pointer; transition:background .15s, border-color .15s, color .15s; }
+        .sz-ai-mode:hover { border-color:#42a5f5; color:#fff; }
+        .sz-ai-mode.active { color:#fff; background:#1565c0; border-color:#1565c0; }
+        .sz-ed-rubrik { margin:6px 0 10px; padding:8px 11px; background:#12121e; border:1px solid #2a2a3a; border-left:3px solid #1565c0; border-radius:7px; color:#b0bec5; font-size:11.5px; line-height:1.5; }
+        .sz-ed-rubrik b { color:#cfd8dc; }
         .sz-pick-btn { background:#12121e; border:1px solid #2a2a3a; color:#b0bec5; font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; transition:border-color .15s, background .15s, color .15s; }
         .sz-pick-btn:hover { border-color:#42a5f5; color:#fff; }
         .sz-pick-btn.active { background:#1e2a44; border-color:#42a5f5; color:#fff; }
@@ -2273,6 +2279,14 @@
         .sz-step.active { color:#fff; background:#1565c0; border-color:#1565c0; }
         .sz-step.locked { opacity:.5; }
         .sz-phase { display:flex; flex-direction:column; }
+        .sz-denk-task h4 { margin:0 0 10px; color:#e0e0e0; }
+        .sz-denk-lead { color:#cfd8dc; font-size:13px; line-height:1.55; margin:0 0 12px; }
+        .sz-denk-empty { color:#a5d6a7; background:#12261a; border:1px solid #2e5b3a; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.55; }
+        .sz-denk-list { display:flex; flex-direction:column; gap:10px; }
+        .sz-denk-card { background:#161622; border:1px solid #2a2a3a; border-left:3px solid #ffb74d; border-radius:8px; padding:10px 13px; }
+        .sz-denk-card-h { font-weight:700; color:#ffcc80; font-size:13px; margin-bottom:5px; }
+        .sz-denk-card-b { color:#cfd8dc; font-size:12.5px; line-height:1.55; }
+        .sz-denk-card-b code { background:#0d0d16; padding:1px 5px; border-radius:4px; color:#90caf9; font-size:12px; }
         /* Gegebene Variablen */
         .sz-vars { background:#0e0e18; border:1px solid #2a2a3a; border-radius:9px; padding:12px 14px; margin:6px 0 14px; }
         .sz-vars h4 { margin:0 0 8px; font-size:12.5px; color:#b0bec5; font-weight:700; }
@@ -2338,6 +2352,9 @@
         /* Custom-Tooltip: Operator-Typ (Hilfe) */
         #sz-op-tip { position:fixed; display:none; z-index:4200; max-width:280px; background:#0e2733; border:1px solid #17a2b8; color:#b2ebf2; font-size:12px; font-weight:600; padding:7px 11px; border-radius:7px; box-shadow:0 6px 20px rgba(0,0,0,.55); pointer-events:none; font-family:sans-serif; line-height:1.5; }
         #sz-op-tip b { color:#e0f7fa; }
+        #sz-info-tip { position:fixed; display:none; z-index:4300; max-width:340px; background:#161622; border:1px solid #3a3a4a; border-left:3px solid #42a5f5; color:#cfd8dc; font-size:12px; padding:9px 12px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.6); pointer-events:none; font-family:sans-serif; line-height:1.55; }
+        #sz-info-tip b { color:#fff; }
+        .sz-tier-tag[data-sztip], .sz-lvl-tag[data-sztip] { cursor:help; }
         .sz-tm-vars { display:flex; flex-wrap:wrap; gap:6px; }
         #sz-task-body .sz-var { cursor:pointer; transition:filter .12s, transform .08s; }
         #sz-task-body .sz-var:hover { filter:brightness(1.28); }
@@ -3853,7 +3870,8 @@
                             <div class="sz-steps" id="sz-steps">
                                 <span class="sz-step active" data-step="1" onclick="_szGoto(1)">1 · Markieren</span>
                                 <span class="sz-step locked" data-step="2" onclick="_szGoto(2)">2 · Operatoren</span>
-                                <span class="sz-step locked" data-step="3" onclick="_szGoto(3)">3 · Code schreiben</span>
+                                <span class="sz-step locked" data-step="3" onclick="_szGoto(3)">3 · Sprache → Logik</span>
+                                <span class="sz-step locked" data-step="4" onclick="_szGoto(4)">4 · Code schreiben</span>
                             </div>
                             <div class="sz-intro" id="sz-intro"></div>
 
@@ -3886,12 +3904,17 @@
                                 <div class="sz-result" id="sz-result-2"></div>
                             </div>
 
-                            <!-- Phase 3: Code schreiben -->
+                            <!-- Phase 3: Von der Sprache zur Logik (implizite Denk-Sprünge) -->
                             <div class="sz-phase" id="sz-phase-3" style="display:none;">
+                                <div class="sz-denk-task" id="sz-denk-task"></div>
+                            </div>
+
+                            <!-- Phase 4: Code schreiben -->
+                            <div class="sz-phase" id="sz-phase-4" style="display:none;">
                                 <div class="sz-code-task" id="sz-code-task"></div>
                                 <div class="sz-actions">
                                     <button class="sz-btn sz-btn-primary" onclick="_szCheckCode()">✓ Code prüfen</button>
-                                    <button class="sz-btn" onclick="_szGoto(2)">← Zurück</button>
+                                    <button class="sz-btn" onclick="_szGoto(3)">← Zurück</button>
                                     <button class="sz-btn" onclick="_szShowCodeSolution()">💡 Musterlösung</button>
                                 </div>
                                 <div class="sz-result" id="sz-result-3"></div>
@@ -3914,6 +3937,7 @@
             <div id="sz-task-body"></div>
         </div>
         <div id="sz-op-tip"></div>
+        <div id="sz-info-tip"></div>
         <!-- Szenario-Editor: eigene Mini-Szenarien erstellen / verwalten / teilen -->
         <div id="sz-editor-modal">
             <div class="sz-ed-box">
@@ -3938,9 +3962,11 @@
                             <div class="sz-ed-row"><label>Titel</label><input id="sz-ed-title" type="text" placeholder="z. B. Behälter-Überwachung"></div>
                             <div class="sz-ed-row2">
                                 <div style="flex:2;"><label>Kategorie</label><input id="sz-ed-cat" type="text" list="sz-ed-cats" placeholder="z. B. Meldung &amp; Anzeige"><datalist id="sz-ed-cats"></datalist></div>
+                                <div><label>Tier</label><select id="sz-ed-tier" onchange="_szEdSyncRubrik()"><option value="basics">🟢 Basics</option><option value="fortgeschritten">🔵 Fortgeschritten</option></select></div>
                                 <div><label>Größe</label><select id="sz-ed-size"><option value="mini">📄 Mini (1–2 Sätze)</option><option value="maxi">📚 Maxi (komplex)</option></select></div>
-                                <div><label>Schwierigkeit</label><select id="sz-ed-level"></select></div>
+                                <div><label>Schwierigkeit</label><select id="sz-ed-level" onchange="_szEdSyncRubrik()"></select></div>
                             </div>
+                            <div class="sz-ed-rubrik" id="sz-ed-rubrik"></div>
                             <div class="sz-ed-row"><label>Intro (optional)</label><input id="sz-ed-intro" type="text" placeholder="kurzer Hinweis für den Lernenden"></div>
                             <div class="sz-ed-row"><label title="Eigene PIN, die zum späteren Bearbeiten dieses Szenarios nötig ist. Leer lassen = allgemeine Standard-PIN.">🔒 Bearbeiten-PIN (optional)</label><input id="sz-ed-pin" type="text" placeholder="eigene PIN (optional)" maxlength="16" style="max-width:220px;"></div>
                             <div class="sz-ed-row">
@@ -3962,6 +3988,10 @@
                             <div class="sz-ed-row">
                                 <label>Musterlösung <span style="font-weight:400;color:#78909c;">(je Zeile eine Zuweisung)</span></label>
                                 <textarea id="sz-ed-sol" rows="3" placeholder="LAMPE := SCHALTER_A && SCHALTER_B"></textarea>
+                            </div>
+                            <div class="sz-ed-row">
+                                <label>🧩 Implizite Logik <span style="font-weight:400;color:#78909c;">(optional; je Zeile <code>Titel :: Erklärung</code> — Denk-Sprünge, die <b>nicht wörtlich</b> im Text stehen, z. B. Klammern, „weder…noch", Sammelbedingungen)</span></label>
+                                <textarea id="sz-ed-implicit" rows="3" placeholder="Klammern stehen nicht im Text :: Der Hauptschalter muss immer an sein, darum HAUPT && (SENSOR_A || SENSOR_B)."></textarea>
                             </div>
                             <div class="sz-ed-actions">
                                 <button class="sz-btn" onclick="_szEdPreview()">👁 Vorschau &amp; Prüfen</button>
@@ -3985,6 +4015,12 @@
                 </div>
                 <div class="sz-ai-body">
                     <p class="sz-ai-desc"><b>1.</b> Prompt kopieren, ganz unten dein Szenario (frei formuliert) einsetzen und einer KI (ChatGPT, Claude, Gemini …) geben. <b>2.</b> Die JSON-Antwort unten einfügen und „In den Editor übernehmen".</p>
+                    <div class="sz-ai-modeswitch">
+                        <span style="color:#90a4ae;font-size:12px;align-self:center;">Prompt-Variante:</span>
+                        <button type="button" class="sz-ai-mode active" data-aimode="mini-basics" onclick="_szEdSetAiMode('mini-basics')" title="Kurz, nur UND/ODER/NICHT">📄 Mini · Basics</button>
+                        <button type="button" class="sz-ai-mode" data-aimode="mini-fort" onclick="_szEdSetAiMode('mini-fort')" title="Kurz, aber mit einem fortgeschrittenen Baustein: RS/SR, Timer oder Zähler">📄 Mini · Fortgeschritten</button>
+                        <button type="button" class="sz-ai-mode" data-aimode="maxi" onclick="_szEdSetAiMode('maxi')" title="Lang & komplex: RS/SR, Timer, Zähler, Verriegelung">📚 Maxi</button>
+                    </div>
                     <label>Prompt (enthält Format &amp; Logiksprache):</label>
                     <textarea id="sz-ai-prompt" readonly rows="11" spellcheck="false"></textarea>
                     <div class="sz-ed-actions">
@@ -51713,6 +51749,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         '„<b>auch nur einen los</b>" = NICHT(beide) → <code>STEMPEL_ZURUECK := ¬(HT_L &amp;&amp; HT_R)</code>',
                         '„<b>es sei denn</b> … offen" = UND NICHT → <code>PRESSE_START := WERKSTUECK &amp;&amp; ¬KLAPPE</code>',
                         '„sofort" ist zeitlich (kein Boolescher Operator) — nicht markieren.'
+                    ],
+                    implicit: [
+                        { icon: '🔗', t: 'Ein Wort, zwei Signale', d: '„beide Handtaster" ist <b>ein</b> markiertes Wort, steht aber für <b>zwei</b> getrennte Eingänge <code>HANDTASTER_L</code> und <code>HANDTASTER_R</code>. „beide" heißt also <code>HANDTASTER_L &amp;&amp; HANDTASTER_R</code> — dass es zwei Taster sind, verrät nur der Sinn.' },
+                        { icon: '🔁', t: 'Negation der ganzen Bedingung', d: '„Lässt er auch nur einen los" ist <b>nicht</b> „ein Taster ist NICHT gedrückt", sondern <b>NICHT(beide gedrückt)</b>: <code>¬(HANDTASTER_L &amp;&amp; HANDTASTER_R)</code>. Das ¬ bezieht sich auf die <b>komplette</b> UND-Verknüpfung.' }
                     ]
                 },
                 {
@@ -51800,11 +51840,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         '„<b>und zugleich</b>" = UND — verbindet den Hauptschalter mit der Freigabe-Bedingung.',
                         '„<b>beziehungsweise</b>" (bzw.) = ODER — Handfreigabe oder Automatik genügt.',
                         'Reihenfolge: erst das ODER klammern, dann per UND anhängen → <code>HAUPTSCHALTER &amp;&amp; (HANDFREIGABE || AUTOMATIKBETRIEB)</code>.'
+                    ],
+                    implicit: [
+                        { icon: '( )', t: 'Klammern stehen nicht im Text', d: 'Der Hauptschalter muss <b>immer</b> an sein, egal ob Hand- oder Automatikbetrieb. Das ergibt <code>HAUPTSCHALTER &amp;&amp; (HANDFREIGABE || AUTOMATIKBETRIEB)</code> — die <b>Klammer</b> um das ODER musst du selbst setzen, im Satz steht sie nicht. Ohne Klammer liefe das Band schon im Automatikbetrieb allein.' }
                     ]
                 },
                 {
-                    id: 'presse-sicherheit', title: 'Pressen-Sicherheit', category: 'Sicherheit & Verriegelung', level: 4, size: 'mini', tier: 'basics',
-                    intro: 'Mehrere UND-Bedingungen plus eine versteckte Verriegelung (UND NICHT).',
+                    id: 'presse-sicherheit', title: 'Pressen-Sicherheit', category: 'Sicherheit & Verriegelung', level: 3, size: 'mini', tier: 'basics',
+                    intro: 'Mehrere UND-Bedingungen plus eine klar benannte Verriegelung (UND NICHT).',
                     seg: [
                         { t: 'Die ' },
                         { t: 'Presse fährt herab', sol: 'out' },
@@ -51847,6 +51890,63 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 4: { label: 'Anspruchsvoll',   bg: '#3a2a12', fg: '#ffcc80' },
                 5: { label: 'Schwer',          bg: '#3a1618', fg: '#ef9a9a' }
             };
+            // Schwierigkeits-Rubrik je Tier — weiche Leitlinien (keine harten Regeln), eine gemeinsame
+            // Quelle für Editor-Hilfetext und KI-Prompt. Innerhalb eines Tiers steigt die Stufe mit der
+            // logischen Komplexität. Die Größe (Mini/Maxi) ist eine eigene Achse: Maxi-Szenarien liegen
+            // durch Länge + mehrere Anforderungen am oberen Rand ihres Tiers (typisch Stufe 4–5).
+            const _SZ_RUBRIK = {
+                basics: {
+                    1: 'Eine einzige UND-/ODER-Verknüpfung — auch mehrere Ausgänge, solange jeder für sich sehr klar ablesbar ist. Keine Negation, keine Mischung, keine Klammern.',
+                    2: 'Eine einfache Negation (A UND NICHT B), ODER weniger geläufige Indikatorwörter, ODER zwei Ausgänge mit unterschiedlichen Operatoren.',
+                    3: 'UND und ODER in einer Formel gemischt (Vorrang/Klammer nötig) — ODER mehrere Bedingungen mit einer klar benannten Verneinung.',
+                    4: 'Zwei Hürden zugleich: Gruppierung UND Negation kombiniert, mehrfache Klammerung, oder leichte implizite Logik.',
+                    5: 'Nicht-offensichtliche Sprache: De Morgan („weder … noch"), ein Wort → mehrere Signale, stark implizite Denk-Sprünge.'
+                },
+                fortgeschritten: {
+                    1: 'Genau ein Speicher (RS/SR) als reine Selbsthaltung; Setzen und Rücksetzen je eine einfache Bedingung. Kein Zeitglied, kein Zähler.',
+                    2: 'Ein Speicher mit einer Zusatz-Verknüpfung (Freigabe-UND am Ausgang) ODER die SR-Variante (Setz-Vorrang verstehen).',
+                    3: 'Ein Speicher kombiniert mit genau einem Zeitglied (TON/TOF) — zweistufige Signalkette.',
+                    4: 'Zwei fortgeschrittene Bausteine verkettet (Zähler + Speicher, oder Speicher + Impuls) über ein Hilfssignal.',
+                    5: 'Drei Bausteine bzw. Sicherheitsverriegelung: Speicher + Zeit + Verriegelung, oder Zähler + SR; mehrere Hilfssignale, deutliche implizite Sprünge.'
+                }
+            };
+            function _szRubrik(tier, level) {
+                const t = (tier === 'fortgeschritten') ? 'fortgeschritten' : 'basics';
+                return (_SZ_RUBRIK[t] && _SZ_RUBRIK[t][level]) || '';
+            }
+            // Kurzdefinition der Tiers (für Custom-Tooltips an Filtern und Tags).
+            const _SZ_TIER_DEF = {
+                basics: 'Grundverknüpfungen: nur UND (&&), ODER (||) und NICHT (¬). Keine Speicher, Zeitglieder oder Zähler.',
+                fortgeschritten: 'Enthält immer mindestens einen Speicher (RS/SR); je nach Stufe zusätzlich Zeitglieder (TON/TOF/TP), Zähler (CTU) oder Sicherheitsverriegelungen.'
+            };
+            function _szTierLine(t, full) {
+                const isF = (t === 'fortgeschritten');
+                const name = isF ? '🟣 Fortgeschritten' : '🟢 Basics';
+                const def = _SZ_TIER_DEF[isF ? 'fortgeschritten' : 'basics'];
+                return (full ? '<b>' + name + '</b><br>' : '<b>' + name + ':</b> ') + _szEsc(def);
+            }
+            // Baut den HTML-Inhalt eines Custom-Tooltips aus einem kompakten Token
+            // (tier:<t> | lvl:<n> | tasklvl:<t>:<n>). Eine Quelle: _SZ_TIER_DEF + _SZ_RUBRIK.
+            function _szTipHtml(token) {
+                const p = String(token || '').split(':');
+                const kind = p[0];
+                if (kind === 'tier') {
+                    if (p[1] === 'all') return '<b>Kategorie (Tier)</b><br>Filtert nach dem Konzept-Umfang eines Szenarios:<br>' + _szTierLine('basics') + '<br>' + _szTierLine('fortgeschritten');
+                    return _szTierLine(p[1], true);
+                }
+                if (kind === 'lvl') {
+                    if (p[1] === 'all') return '<b>Schwierigkeit</b><br>Die Stufe steigt mit der logischen Komplexität — jeweils <i>innerhalb</i> eines Tiers. Basics-Stufe&nbsp;3 und Fortgeschritten-Stufe&nbsp;3 bedeuten Unterschiedliches.';
+                    const n = parseInt(p[1], 10);
+                    return '<b>Stufe ' + n + ' – ' + _szEsc((_SZ_LEVELS[n] || {}).label || '') + '</b><br>'
+                        + '🟢 <b>Basics:</b> ' + _szEsc(_szRubrik('basics', n)) + '<br>'
+                        + '🟣 <b>Fortgeschritten:</b> ' + _szEsc(_szRubrik('fortgeschritten', n));
+                }
+                if (kind === 'tasklvl') {
+                    const t = p[1], n = parseInt(p[2], 10);
+                    return '<b>Stufe ' + n + ' – ' + _szEsc((_SZ_LEVELS[n] || {}).label || '') + '</b> · ' + (t === 'fortgeschritten' ? 'Fortgeschritten' : 'Basics') + '<br>' + _szEsc(_szRubrik(t, n));
+                }
+                return '';
+            }
             const _SZ_SIZELABEL = { mini: '📄 Mini', maxi: '📚 Maxi' };
             const _SZ_CATNAME = { in: 'Eingang', out: 'Ausgang', logic: 'Logik-Indikator' };
             // Operator-Vokabular für die Identifikation (Schritt 2). Reihenfolge = Dropdown.
@@ -51892,7 +51992,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     + '[L:und|AND] es ein Metallteil ist [L:und|AND] der Zylinder in Grundstellung steht. '
                     + '[L:Ein kurzer Druck genügt — die Klemmung bleibt gehalten, bis sie wieder gelöst wird|RS]. '
                     + 'Gelöst wird die Klemmung, [L:sobald|COND] der Lösetaster gedrückt wird, [L:jedoch nicht bei Not-Halt|ANDNOT]. '
-                    + 'Damit ein Teil nicht ewig eingespannt bleibt, öffnet die Klemmung außerdem [L:spätestens nach 5 Sekunden|TON] von selbst. '
+                    + 'Damit ein Teil nicht ewig eingespannt bleibt, öffnet die Klemmung [L:außerdem|OR] [L:spätestens nach 5 Sekunden|TON] von selbst. '
                     + 'Wird der Not-Halt betätigt, ist [L:sofort alles aus|ANDNOT] — die Station läuft danach [N:nicht] von selbst wieder an.';
                 SZENARIEN.push({
                     id: 'maxi-klemmstation', title: 'Klemmstation am Prüfplatz', category: 'Spann- & Prüftechnik', level: 5, size: 'maxi', tier: 'fortgeschritten',
@@ -51922,7 +52022,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         'Setzen nur mit gültigem Metallteil in Grundstellung (die vier UND-Bedingungen).',
                         'Rücksetzen dominant: <code>R1 := RT || NH || KLEMM_ZEIT</code> — Lösen, Not-Halt oder Zeitablauf.',
                         'Not-Halt verriegelt die Ausgänge zusätzlich: <code>PZ_KLEMMEN := Q1 &amp;&amp; ¬NH</code>.',
-                        '„spätestens nach 5 s" = Einschaltverzögerung auf den Speicher: <code>KLEMM_ZEIT := TON(Q1, 5)</code> — setzt die Klemmung über <code>R1</code> zurück.'
+                        '„spätestens nach 5 s" = Einschaltverzögerung auf den Speicher: <code>KLEMM_ZEIT := TON(Q1, 5)</code> — setzt die Klemmung über <code>R1</code> zurück.',
+                        '„außerdem" = ODER: Gelöst wird über den Lösetaster <b>oder</b> bei Zeitablauf → <code>PZ_LOESEN := (RT || KLEMM_ZEIT) &amp;&amp; ¬NH</code>.'
+                    ],
+                    implicit: [
+                        { icon: '∑', t: 'Rücksetzen sammelt mehrere Sätze', d: 'Der Speicher wird aus <b>drei verschiedenen Sätzen</b> zurückgesetzt: Lösetaster, Not-Halt und Zeitablauf. Zwischen ihnen steht im Text kein „oder" — trotzdem gehört alles in <b>eine</b> Rücksetz-Bedingung: <code>R1 := RT || NH || KLEMM_ZEIT</code>.' },
+                        { icon: '🛑', t: 'Not-Halt wirkt überall', d: '„Bei Not-Halt sofort alles aus" steht nur in <b>einem</b> Satz, betrifft aber <b>jeden</b> Ausgang. Deshalb bekommt auch <code>PZ_KLEMMEN</code> ein <code>&amp;&amp; ¬NH</code>, obwohl das dort nicht noch einmal erwähnt wird.' }
                     ]
                 });
             })();
@@ -51931,13 +52036,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Schwierigkeit gleichmäßig verteilt (je 2× Level 1–5 → mit den 5 bestehenden
             // Minis 3× je Level). Operator-Indikatoren bewusst nicht wiederverwendet.
             (function () {
-                const _mk = function (id, title, cat, level, intro, text, vars, sol, hints) {
+                const _mk = function (id, title, cat, level, intro, text, vars, sol, hints, implicit) {
                     return {
                         id: id, title: title, category: cat, level: level, tier: 'basics', size: 'mini',
                         intro: intro, seg: _szParseMarkup(text),
                         vars: vars.map(function (v) { const p = v.split('|'); return { name: p[0], kind: p[1], desc: p[2] || '' }; }),
                         solution: sol.map(function (s) { const m = s.match(/^([A-Za-z_ÄÖÜäöüß][\w]*)\s*:?=\s*(.+)$/); return { lhs: m[1], rhs: m[2].trim() }; }),
-                        logic: sol.join('\n'), hints: hints || []
+                        logic: sol.join('\n'), hints: hints || [], implicit: implicit || []
                     };
                 };
                 [
@@ -51970,48 +52075,52 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         'Das [A:Band läuft an|BAND], [L:vorausgesetzt|COND], der [E:Hauptschalter|HAUPT] ist [L:in Verbindung mit|AND] dem [E:Sensor A|SENSOR_A] [L:oder wahlweise|OR] dem [E:Sensor B|SENSOR_B] eingeschaltet.',
                         ['HAUPT|in|Hauptschalter', 'SENSOR_A|in|Sensor A', 'SENSOR_B|in|Sensor B', 'BAND|out|Förderband'],
                         ['BAND := HAUPT && (SENSOR_A || SENSOR_B)'],
-                        ['Erst das ODER klammern, dann per UND anhängen: <code>HAUPT &amp;&amp; (SENSOR_A || SENSOR_B)</code>.']),
-                    _mk('mini-absaugung', 'Absaugung', 'Werkzeug & Bearbeitung', 3,
+                        ['Erst das ODER klammern, dann per UND anhängen: <code>HAUPT &amp;&amp; (SENSOR_A || SENSOR_B)</code>.'],
+                        [{ icon: '( )', t: 'Klammern stehen nicht im Text', d: 'Der Hauptschalter muss <b>immer</b> an sein, egal welcher Sensor meldet. Darum gehört das ODER in eine <b>Klammer</b>: <code>HAUPT &amp;&amp; (SENSOR_A || SENSOR_B)</code>. Ohne Klammer würde das Band schon bei Sensor&nbsp;B allein loslaufen — diese Klammer steht aber in keinem Wort.' }]),
+                    _mk('mini-absaugung', 'Absaugung', 'Werkzeug & Bearbeitung', 4,
                         'ODER-Gruppe, die zusätzlich gesperrt werden kann.',
                         'Die [A:Absaugung springt an|ABSAUGUNG], [L:sei es|OR], dass die [E:Fräse|FRAESE], [L:sei es|OR], dass der [E:Schleifer|SCHLEIFER] läuft — [L:aber nicht|ANDNOT], solange die [E:Wartung|WARTUNG] aktiv ist.',
                         ['FRAESE|in|Fräse läuft', 'SCHLEIFER|in|Schleifer läuft', 'WARTUNG|in|Wartung aktiv', 'ABSAUGUNG|out|Absaugung'],
                         ['ABSAUGUNG := (FRAESE || SCHLEIFER) && ¬WARTUNG'],
-                        ['„sei es … sei es" = ODER.', '„aber nicht, solange Wartung" = UND NICHT: <code>&amp;&amp; ¬WARTUNG</code>.']),
-                    _mk('mini-werkzeugvorschub', 'Werkzeugvorschub', 'Werkzeug & Bearbeitung', 4,
-                        'Mehrere UND-Bedingungen und eine versteckte Verneinung.',
+                        ['„sei es … sei es" = ODER.', '„aber nicht, solange Wartung" = UND NICHT: <code>&amp;&amp; ¬WARTUNG</code>.'],
+                        [{ icon: '( )', t: 'Sperre gilt für die ganze Gruppe', d: 'Die Wartungs-Sperre betrifft <b>beide</b> Maschinen. Deshalb wird erst das ODER geklammert und dann gesperrt: <code>(FRAESE || SCHLEIFER) &amp;&amp; ¬WARTUNG</code>. Diese Gruppierung steht nicht als Klammer im Text — du musst sie aus dem Sinn erschließen.' }]),
+                    _mk('mini-werkzeugvorschub', 'Werkzeugvorschub', 'Werkzeug & Bearbeitung', 3,
+                        'Mehrere UND-Bedingungen und eine klar benannte Verneinung.',
                         'Das [A:Werkzeug fährt|WERKZEUG] [L:unter der Voraussetzung|COND] vor, dass die [E:Freigabe|FREIGABE] anliegt [L:und ebenfalls|AND] [E:Material erkannt|MATERIAL] wird, [L:während zugleich|AND] [L:keine|NOT] [E:Störung|STOERUNG] gemeldet ist.',
                         ['FREIGABE|in|Freigabe', 'MATERIAL|in|Material erkannt', 'STOERUNG|in|Störung gemeldet', 'WERKZEUG|out|Werkzeugvorschub'],
                         ['WERKZEUG := FREIGABE && MATERIAL && ¬STOERUNG'],
                         ['„und ebenfalls" / „während zugleich" = UND.', '„keine Störung" = <code>¬STOERUNG</code>.']),
-                    _mk('mini-anlagenfreigabe', 'Anlagenfreigabe', 'Sicherheit & Verriegelung', 4,
+                    _mk('mini-anlagenfreigabe', 'Anlagenfreigabe', 'Sicherheit & Verriegelung', 5,
                         'Knifflig: „weder … noch" ist eine verneinte ODER-Verknüpfung.',
                         'Die [A:Anlagenfreigabe steht an|FREIGABE], [L:solange|COND] [L:weder|NOT] der [E:Not-Halt|NOTHALT] anliegt [L:noch|OR] die [E:Schutztür offen|SCHUTZ_OFFEN] ist [L:und obendrein|AND] zuvor [E:quittiert|QUITTIERT] wurde.',
                         ['NOTHALT|in|Not-Halt', 'SCHUTZ_OFFEN|in|Schutztür offen', 'QUITTIERT|in|quittiert', 'FREIGABE|out|Anlagenfreigabe'],
                         ['FREIGABE := ¬(NOTHALT || SCHUTZ_OFFEN) && QUITTIERT'],
-                        ['„weder A noch B" = NICHT(A ODER B) → <code>¬(NOTHALT || SCHUTZ_OFFEN)</code>.', '„und obendrein quittiert" = <code>&amp;&amp; QUITTIERT</code>.']),
-                    _mk('mini-ruehrwerk', 'Rührwerk', 'Prozess & Dosierung', 5,
+                        ['„weder A noch B" = NICHT(A ODER B) → <code>¬(NOTHALT || SCHUTZ_OFFEN)</code>.', '„und obendrein quittiert" = <code>&amp;&amp; QUITTIERT</code>.'],
+                        [{ icon: '🔁', t: '„weder … noch" = ¬(A || B)', d: '„weder Not-Halt noch offene Schutztür" heißt: <b>keines von beiden</b> darf aktiv sein → <code>¬(NOTHALT || SCHUTZ_OFFEN)</code>. Das <b>eine</b> NICHT bezieht sich auf die ganze ODER-Gruppe (Regel von De&nbsp;Morgan), nicht nur auf ein einzelnes Signal.' }]),
+                    _mk('mini-ruehrwerk', 'Rührwerk', 'Prozess & Dosierung', 3,
                         'Natürliche, weniger offensichtliche Formulierungen — genau hinschauen.',
                         'Das [A:Rührwerk arbeitet|RUEHRER], [L:einzig dann, wenn|COND] die [E:Zutat A|ZUTAT_A] [L:im Zusammenspiel mit|AND] der [E:Zutat B|ZUTAT_B] dosiert ist — [L:außer wenn|ANDNOT] der [E:Deckel offen|DECKEL_OFFEN] steht.',
                         ['ZUTAT_A|in|Zutat A dosiert', 'ZUTAT_B|in|Zutat B dosiert', 'DECKEL_OFFEN|in|Deckel offen', 'RUEHRER|out|Rührwerk'],
                         ['RUEHRER := ZUTAT_A && ZUTAT_B && ¬DECKEL_OFFEN'],
                         ['„im Zusammenspiel mit" = UND.', '„außer wenn Deckel offen" = UND NICHT: <code>&amp;&amp; ¬DECKEL_OFFEN</code>.']),
-                    _mk('mini-sortierweiche', 'Sortierweiche', 'Transport & Sortierung', 5,
+                    _mk('mini-sortierweiche', 'Sortierweiche', 'Transport & Sortierung', 4,
                         'Gegenpol: UND, NICHT und ODER in einem Satz — auf die Reihenfolge achten.',
                         'Die [A:Weiche stellt|WEICHE_L] [L:in dem Augenblick|COND] nach links, in dem ein [E:Metallteil|METALL] erkannt wird, [L:ohne dass|ANDNOT] es zu [E:groß|GROSS] ist — [L:oder aber|OR] der [E:Notauswurf|NOTAUSWURF] auslöst.',
                         ['METALL|in|Metallteil erkannt', 'GROSS|in|Teil zu groß', 'NOTAUSWURF|in|Notauswurf', 'WEICHE_L|out|Weiche nach links'],
                         ['WEICHE_L := (METALL && ¬GROSS) || NOTAUSWURF'],
-                        ['„Metallteil, ohne dass es zu groß ist" = <code>METALL &amp;&amp; ¬GROSS</code>.', '„oder aber Notauswurf" = <code>|| NOTAUSWURF</code>.'])
+                        ['„Metallteil, ohne dass es zu groß ist" = <code>METALL &amp;&amp; ¬GROSS</code>.', '„oder aber Notauswurf" = <code>|| NOTAUSWURF</code>.'],
+                        [{ icon: '( )', t: 'Gruppierung entscheidet über den Sinn', d: 'Der Notauswurf steht <b>allein</b> hinter dem ODER; die Größen-Prüfung gilt nur fürs Metallteil: <code>(METALL &amp;&amp; ¬GROSS) || NOTAUSWURF</code>. Ohne die (gedachte) Klammer ergäbe sich eine völlig andere Logik — im Text ist die Gruppierung nur durch den Sinn angedeutet.' }])
                 ].forEach(function (s) { SZENARIEN.push(s); });
             })();
             // ── 10 „Fortgeschritten"-Mini-Szenarien (RS/SR in jedem, plus TON/TOF/TP/CTU) ──
             (function () {
-                const _mkF = function (id, title, cat, level, intro, text, vars, sol, hints) {
+                const _mkF = function (id, title, cat, level, intro, text, vars, sol, hints, implicit) {
                     return {
                         id: id, title: title, category: cat, level: level, tier: 'fortgeschritten', size: 'mini',
                         intro: intro, seg: _szParseMarkup(text),
                         vars: vars.map(function (v) { const p = v.split('|'); return { name: p[0], kind: p[1], desc: p[2] || '' }; }),
                         solution: sol.map(function (s) { const m = s.match(/^([A-Za-z_ÄÖÜäöüß][\w]*)\s*:?=\s*(.+)$/); return { lhs: m[1], rhs: m[2].trim() }; }),
-                        logic: sol.join('\n'), hints: hints || []
+                        logic: sol.join('\n'), hints: hints || [], implicit: implicit || []
                     };
                 };
                 [
@@ -52069,7 +52178,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         ['START|in|Start-Taster', 'NOTAUS|in|Not-Aus', 'FLAMMFEHLER|in|Flammwächter ausgelöst', 'FREI|out|Freigabe (RS-Speicher)', 'ZUEND_FREI|out|Hilfssignal: Freigabe 3 s stabil (TON)', 'BRENNER|out|Brenner'],
                         ['S1 := START', 'R1 := NOTAUS', 'FREI := Q1', 'ZUEND_FREI := TON(FREI, 3)', 'BRENNER := ZUEND_FREI && ¬FLAMMFEHLER'],
                         ['Freigabe als RS-Speicher: Setzen <code>S1 := START</code>, Rücksetzen <code>R1 := NOTAUS</code>, Speicherausgang <code>Q1</code> → <code>FREI := Q1</code>.', 'Zündverzögerung: <code>ZUEND_FREI := TON(FREI, 3)</code>.', 'Sicherheit: <code>BRENNER := ZUEND_FREI &amp;&amp; ¬FLAMMFEHLER</code>.']),
-                    _mkF('fort-charge', 'Chargenmeldung', 'Prozess & Dosierung', 5,
+                    _mkF('fort-charge', 'Chargenmeldung', 'Prozess & Dosierung', 4,
                         'Zähler mit vorrangiger Speichermeldung (SR).',
                         'Die [A:Charge-voll-Meldung|CHARGE_VOLL] wird gesetzt, [L:sobald 12 Teile am Auswurf gezählt sind|CTU]; sie [L:hat Vorrang und bleibt bestehen, bis|SR] der [E:Kartonwechsel|KARTONWECHSEL] bestätigt wird. Gezählt wird am [E:Auswurf|AUSWURF], zurückgesetzt beim Kartonwechsel.',
                         ['AUSWURF|in|Auswurf-Zählsignal', 'KARTONWECHSEL|in|Kartonwechsel bestätigt', 'ZAHL|out|Hilfssignal: 12 gezählt (CTU)', 'CHARGE_VOLL|out|Charge-voll-Meldung'],
@@ -52226,12 +52335,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _szShowPhase(_szStep);
                 _szSyncSteps();
                 if (_szStep === 2) _szRenderOps();
-                else if (_szStep === 3) _szRenderCode();
+                else if (_szStep === 3) _szRenderDenk();
+                else if (_szStep === 4) _szRenderCode();
             }
 
             // ── Phasen-Navigation ───────────────────────────────────────────
             function _szShowPhase(step) {
-                for (let n = 1; n <= 3; n++) {
+                for (let n = 1; n <= 4; n++) {
                     const ph = document.getElementById('sz-phase-' + n);
                     if (ph) ph.style.display = (n === step) ? 'flex' : 'none';
                 }
@@ -52252,7 +52362,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _szShowPhase(step);
                 _szSyncSteps();
                 if (step === 2) _szRenderOps();
-                else if (step === 3) _szRenderCode();
+                else if (step === 3) _szRenderDenk();
+                else if (step === 4) _szRenderCode();
             };
 
             function _szLogicHtml(sz) {
@@ -52348,6 +52459,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 tip.style.left = left + 'px'; tip.style.top = top + 'px';
             };
             window._szHideOpTip = function () { const tip = document.getElementById('sz-op-tip'); if (tip) tip.style.display = 'none'; };
+            // Generischer Custom-Tooltip (Tier-/Schwierigkeits-Definitionen an Filtern & Tags).
+            window._szShowInfoTip = function (el) {
+                const token = el.getAttribute('data-sztip'); if (!token) return;
+                const tip = document.getElementById('sz-info-tip'); if (!tip) return;
+                const html = _szTipHtml(token); if (!html) return;
+                tip.innerHTML = html;
+                tip.style.display = 'block';
+                const r = el.getBoundingClientRect();
+                const tw = tip.offsetWidth, th = tip.offsetHeight;
+                const left = Math.max(8, Math.min(r.left + r.width / 2 - tw / 2, window.innerWidth - tw - 8));
+                let top = r.top - th - 8;
+                if (top < 8) top = r.bottom + 8;
+                tip.style.left = left + 'px'; tip.style.top = top + 'px';
+            };
+            window._szHideInfoTip = function () { const tip = document.getElementById('sz-info-tip'); if (tip) tip.style.display = 'none'; };
             // ── Schritt 2: Variablen anzeigen + Operatoren identifizieren ────
             function _szRenderOps() {
                 const sz = _szGet();
@@ -52417,14 +52543,60 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     _szMaxStep = Math.max(_szMaxStep, 3);
                     _szSyncSteps();
                     r.innerHTML = '<div class="sz-score ok">🎯 Alle Operatoren richtig zugeordnet (' + correct + '/' + total + ').</div>'
-                        + '<div class="sz-actions"><button class="sz-btn sz-btn-primary" onclick="_szGoto(3)">Weiter zu Schritt 3 · Code schreiben →</button></div>';
+                        + '<p style="color:#78909c;font-size:12px;margin:8px 0 0;">Vorsicht: Die fertige Logik enthält oft <b>mehr</b>, als du wörtlich markieren konntest. Im nächsten Schritt siehst du, was sich „zwischen den Zeilen" versteckt.</p>'
+                        + '<div class="sz-actions"><button class="sz-btn sz-btn-primary" onclick="_szGoto(3)">Weiter zu Schritt 3 · Sprache → Logik →</button></div>';
                 } else {
                     r.innerHTML = '<div class="sz-score part">' + correct + '/' + total + ' richtig. '
                         + '<span style="font-weight:400;font-size:12px;">Rot markierte Zeilen korrigieren. Tipp: „und/beide/gleichzeitig" = UND, „oder" = ODER, „…los/nicht" = NICHT, „wenn/sobald/solange" = Zuweisung/Bedingung, „es sei denn" = UND NICHT.</span></div>';
                 }
             };
 
-            // ── Schritt 3: Formeln in den Code-Editor schreiben & prüfen ─────
+            // ── Schritt 3: Von der Sprache zur Logik (implizite Denk-Sprünge) ─
+            // Sammelt die Logik-Anteile, die NICHT 1:1 aus einem markierten Wort
+            // ablesbar sind: pro Szenario handgepflegt in sz.implicit [{icon,t,d}],
+            // plus eine automatische Notiz für Speicher (RS/SR) → Ausgang (Q…).
+            // Bewusst als {t,d}-Karten (wie das Lexikon), damit sie später auch als
+            // Tooltip o. Ä. wiederverwendet werden können.
+            function _szImplicitNotes(sz) {
+                const out = [];
+                (sz.implicit || []).forEach(function (n) { out.push({ icon: n.icon || '🧩', t: n.t, d: n.d }); });
+                if (sz.seg.some(function (s) { return s.op === 'RS' || s.op === 'SR'; })) {
+                    const outVar = (sz.vars.filter(function (v) { return v.kind === 'out'; })[0] || {}).name || 'AUSGANG';
+                    out.push({
+                        icon: '🔒', t: 'Speicher → Ausgang',
+                        d: 'Das „Halten" (RS/SR) schreibst du mit den Pins <code>S…</code> (setzen) und <code>R…</code> (rücksetzen); '
+                         + 'der Ausgang folgt danach dem Speicher-Signal <code>Q…</code> — z.&nbsp;B. <code>' + _szEsc(outVar) + ' := Q1</code>. '
+                         + 'Dieses <code>Q…</code> steht als <b>kein Wort</b> im Text; es ist die Folge davon, dass du ein Speicherglied benutzt.'
+                    });
+                }
+                return out;
+            }
+            function _szRenderDenk() {
+                const sz = _szGet();
+                const host = document.getElementById('sz-denk-task');
+                if (!host) return;
+                const notes = _szImplicitNotes(sz);
+                let body;
+                if (!notes.length) {
+                    body = '<div class="sz-denk-empty">✅ In diesem Szenario lässt sich die Logik <b>direkt</b> aus dem Text ableiten: '
+                         + 'Jede Formel entspricht genau den Wörtern, die du markiert und als Operatoren bestimmt hast. '
+                         + 'Das ist aber <b>nicht immer</b> so — bei kniffligeren Szenarien steckt ein Teil der Logik „zwischen den Zeilen". Merke dir das Prinzip.</div>';
+                } else {
+                    body = '<p class="sz-denk-lead">Bevor du Code schreibst: Ein Teil der Logik steht <b>nicht wörtlich</b> im Text — '
+                         + 'er ergibt sich erst aus dem Zusammenhang. Genau diese Denk-Sprünge kannst du <b>nicht</b> einfach markieren, du musst sie selbst machen:</p>'
+                         + '<div class="sz-denk-list">' + notes.map(function (n) {
+                             return '<div class="sz-denk-card"><div class="sz-denk-card-h">' + n.icon + ' ' + _szEsc(n.t) + '</div>'
+                                  + '<div class="sz-denk-card-b">' + n.d + '</div></div>';
+                           }).join('') + '</div>';
+                }
+                host.innerHTML = '<h4>🧩 Von der Sprache zur Logik</h4>' + body
+                    + '<div class="sz-actions" style="margin-top:14px;">'
+                    + '<button class="sz-btn sz-btn-primary" onclick="_szDenkDone()">Verstanden → weiter zu Schritt 4 · Code →</button>'
+                    + '<button class="sz-btn" onclick="_szGoto(2)">← Zurück</button></div>';
+            }
+            window._szDenkDone = function () { _szMaxStep = Math.max(_szMaxStep, 4); _szSyncSteps(); _szGoto(4); };
+
+            // ── Schritt 4: Formeln in den Code-Editor schreiben & prüfen ─────
             function _szEsc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
             // Zuweisungen aus dem Code-Editor lesen (Kommentare/Leerzeilen ignorieren).
             function _szCollectUserAssignments() {
@@ -52544,7 +52716,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ta.dispatchEvent(new Event('input', { bubbles: true }));
                     // Arbeitsfläche für die Code-Aufgabe einrichten (Panels, 2D-Anlage, Sim).
                     _szApplyWorkspace(sz.workspace || _SZ_DEFAULT_WS);
-                    _szStep = 3; _szMaxStep = Math.max(_szMaxStep, 3);
+                    _szStep = 4; _szMaxStep = Math.max(_szMaxStep, 4);
                     if (typeof window.closeHub === 'function') window.closeHub();
                     _szShowTaskModal(sz);
                     try { ta.focus(); ta.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
@@ -52681,17 +52853,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 document.addEventListener('mouseover', function (e) {
                     const s = e.target.closest && e.target.closest('.sz-op-hover');
                     if (s) window._szShowOpTip(s);
+                    const t = e.target.closest && e.target.closest('[data-sztip]');
+                    if (t) window._szShowInfoTip(t);
                 });
                 document.addEventListener('mouseout', function (e) {
                     const s = e.target.closest && e.target.closest('.sz-op-hover');
                     if (s) window._szHideOpTip();
+                    const t = e.target.closest && e.target.closest('[data-sztip]');
+                    if (t) window._szHideInfoTip();
                 });
             })();
             // Aus dem Code-Editor zurück in die Übung wechseln und direkt auswerten.
             // Das Aufgaben-Modal bleibt bestehen (liegt hinter dem Hub-Overlay) und ist
             // wieder da, sobald der Hub geschlossen wird.
             window._szBackToExercise = function () {
-                _szStep = 3; _szMaxStep = Math.max(_szMaxStep, 3);
+                _szStep = 4; _szMaxStep = Math.max(_szMaxStep, 4);
                 if (typeof window.openHub === 'function') window.openHub('szenario');
                 // Zurück INS Training (nicht in die Übersicht) — openHub öffnet die Übersicht.
                 const ov = document.getElementById('sz-overview'), tr = document.getElementById('sz-training');
@@ -52871,6 +53047,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 return sol;
             }
+            // Textarea „Titel :: Erklärung" je Zeile → [{t,d}] (Icon default in _szImplicitNotes).
+            function _szParseImplicit(str) {
+                return String(str || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+                    const idx = l.indexOf('::');
+                    if (idx === -1) return { t: 'Denk-Sprung', d: l };
+                    return { t: l.slice(0, idx).trim() || 'Denk-Sprung', d: l.slice(idx + 2).trim() };
+                }).filter(function (n) { return n.d; });
+            }
+            function _szImplicitToText(arr) {
+                return (arr || []).map(function (n) { return (n.t && n.t !== 'Denk-Sprung' ? n.t + ' :: ' : '') + n.d; }).join('\n');
+            }
             // Formular → validiertes Szenario-Objekt (wirft String-Fehlermeldung bei Problemen).
             function _szEdReadForm() {
                 const g = function (id) { const e = document.getElementById(id); return e ? e.value : ''; };
@@ -52896,8 +53083,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 const logic = solution.map(function (s) { return s.lhs + ' := ' + s.rhs; }).join('\n');
                 const size = (g('sz-ed-size') === 'maxi') ? 'maxi' : 'mini';
+                const tier = (g('sz-ed-tier') === 'fortgeschritten') ? 'fortgeschritten' : 'basics';
                 const pin = g('sz-ed-pin').trim();
-                return { id: _szEdId || _szUid(), title: title, category: category, level: level, size: size, intro: intro, pin: pin, seg: seg, vars: vars, solution: solution, logic: logic, hints: [], builtin: false };
+                const implicit = _szParseImplicit(g('sz-ed-implicit'));
+                return { id: _szEdId || _szUid(), title: title, category: category, level: level, size: size, tier: tier, intro: intro, pin: pin, seg: seg, vars: vars, solution: solution, logic: logic, hints: [], implicit: implicit, builtin: false };
             }
             function _szEdInitSelects() {
                 const lv = document.getElementById('sz-ed-level');
@@ -52905,6 +53094,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const op = document.getElementById('sz-ed-op');
                 if (op && !op.options.length) op.innerHTML = _SZ_OPS.map(function (o) { return '<option value="' + o.v + '">' + _szEsc(o.l) + '</option>'; }).join('');
             }
+            // Tier automatisch aus dem Inhalt erkennen (fortgeschritten, sobald RS/SR/Timer/Zähler vorkommt).
+            function _szDetectTier(scn) {
+                const adv = /\b(RS|SR|TON|TOF|TP|CTU|CTD)\b/i;
+                const segAdv = ((scn && scn.seg) || []).some(function (s) { return s.op && adv.test(String(s.op)); });
+                const solAdv = ((scn && scn.solution) || []).some(function (x) { return adv.test(String(x.rhs || '')); });
+                return (segAdv || solAdv) ? 'fortgeschritten' : 'basics';
+            }
+            // Rubrik-Hilfetext unter der Schwierigkeitswahl an Tier+Stufe angleichen.
+            window._szEdSyncRubrik = function () {
+                const el = document.getElementById('sz-ed-rubrik'); if (!el) return;
+                const tierEl = document.getElementById('sz-ed-tier');
+                const lvlEl = document.getElementById('sz-ed-level');
+                const tier = (tierEl && tierEl.value === 'fortgeschritten') ? 'fortgeschritten' : 'basics';
+                const lvl = parseInt(lvlEl && lvlEl.value, 10) || 1;
+                const label = (_SZ_LEVELS[lvl] || _SZ_LEVELS[1]).label;
+                el.innerHTML = '<b>Stufe ' + lvl + ' – ' + _szEsc(label) + '</b> · ' + (tier === 'fortgeschritten' ? 'Fortgeschritten' : 'Basics') + ': ' + _szEsc(_szRubrik(tier, lvl));
+            };
             function _szEdShowForm(show) {
                 const f = document.getElementById('sz-ed-form-inner'), e = document.getElementById('sz-ed-empty');
                 if (f) f.style.display = show ? 'block' : 'none';
@@ -52947,9 +53153,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._szCloseEditor = function () { const m = document.getElementById('sz-editor-modal'); if (m) m.style.display = 'none'; if (typeof window._szOvRender === 'function') window._szOvRender(); };
             window._szEdNew = function () {
                 _szEdId = null;
-                ['sz-ed-title', 'sz-ed-cat', 'sz-ed-intro', 'sz-ed-pin', 'sz-ed-text', 'sz-ed-vars', 'sz-ed-sol'].forEach(function (id) { const e = document.getElementById(id); if (e) e.value = ''; });
+                ['sz-ed-title', 'sz-ed-cat', 'sz-ed-intro', 'sz-ed-pin', 'sz-ed-text', 'sz-ed-vars', 'sz-ed-sol', 'sz-ed-implicit'].forEach(function (id) { const e = document.getElementById(id); if (e) e.value = ''; });
                 const lv = document.getElementById('sz-ed-level'); if (lv) lv.value = '2';
                 const sz = document.getElementById('sz-ed-size'); if (sz) sz.value = 'mini';
+                const tr = document.getElementById('sz-ed-tier'); if (tr) tr.value = 'basics';
+                window._szEdSyncRubrik();
                 const ex = document.getElementById('sz-ed-export-one'); if (ex) ex.style.display = 'none';
                 const pv = document.getElementById('sz-ed-preview'); if (pv) pv.innerHTML = '';
                 _szEdStatus('');
@@ -52966,12 +53174,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 set('sz-ed-title', s.title || '');
                 set('sz-ed-cat', s.category || '');
                 set('sz-ed-size', s.size === 'maxi' ? 'maxi' : 'mini');
+                set('sz-ed-tier', s.tier === 'fortgeschritten' ? 'fortgeschritten' : (s.tier === 'basics' ? 'basics' : _szDetectTier(s)));
                 set('sz-ed-level', String(s.level || 1));
+                window._szEdSyncRubrik();
                 set('sz-ed-intro', s.intro || '');
                 set('sz-ed-pin', s.pin || '');
                 set('sz-ed-text', _szSegToMarkup(s.seg || []));
                 set('sz-ed-vars', (s.vars || []).map(function (v) { return v.name + ' : ' + v.kind + ' : ' + (v.desc || ''); }).join('\n'));
                 set('sz-ed-sol', (s.solution || []).map(function (x) { return x.lhs + ' := ' + x.rhs; }).join('\n'));
+                set('sz-ed-implicit', _szImplicitToText(s.implicit));
                 const ex = document.getElementById('sz-ed-export-one'); if (ex) ex.style.display = '';
                 _szEdStatus('');
                 _szEdShowForm(true);
@@ -53097,23 +53308,124 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
 
             // ── KI-Prompt: beliebiges Szenario per KI ins Editor-Format wandeln ──
-            function _szEdBuildPrompt() {
+            // mode: 'mini-basics' (kurz, UND/ODER/NICHT) | 'mini-fort' (kurz, EIN fortgeschrittener
+            // Baustein RS/SR/Timer/Zähler) | 'maxi' (lang, komplex, Verkettung + Verriegelung)
+            let _szAiMode = 'mini-basics';
+            function _szEdBuildPrompt(mode) {
+                const maxi = (mode === 'maxi');
+                const fortMini = (mode === 'mini-fort');
+                const advanced = maxi || fortMini;
+                const tier = advanced ? 'fortgeschritten' : 'basics';
                 const levels = Object.keys(_SZ_LEVELS).map(function (k) { return k + '=' + _SZ_LEVELS[k].label; }).join(', ');
-                return [
-                    'Du wandelst ein Automatisierungs-Szenario in das VALIS-„Mini-Szenario"-Format um.',
+                const head = maxi ? [
+                    'Du erstellst ein VALIS-„Maxi-Szenario" — ein vollwertiges, komplexes Automatisierungs-Szenario.',
+                    'Ein Maxi-Szenario ist ein längerer Text (mehrere Sätze, mehrere Anforderungen) in Alltagssprache,',
+                    'in dem Lernende Eingänge, Ausgänge und Logik markieren und daraus eine komplette Steuerungslogik',
+                    'ableiten — typischerweise MIT Selbsthaltung (RS/SR), Zeitgliedern (TON/TOF/TP), Zähler (CTU)',
+                    'und/oder Not-Halt-Verriegelung. Baue mindestens einen Speicher (RS/SR) ODER ein Zeit-/Zählglied ein.'
+                ] : fortMini ? [
+                    'Du erstellst ein VALIS-„Mini-Szenario" der Stufe FORTGESCHRITTEN.',
+                    'Es ist kurz (2–4 Sätze), enthält aber IMMER mindestens einen Speicher (RS oder SR) — das ist das',
+                    'Kennzeichen dieses Tiers. Je nach Schwierigkeitsgrad kommen weitere Bausteine dazu (Zeitglied',
+                    'TON/TOF/TP, Zähler CTU, Sicherheitsverriegelung) — richte dich nach der Rubrik unten. Trotzdem kurz',
+                    'halten: nur so viele Bausteine wie die Zielstufe verlangt, keine langen Maxi-Verkettungen.'
+                ] : [
+                    'Du wandelst ein Automatisierungs-Szenario in das VALIS-„Mini-Szenario"-Format (Stufe BASICS) um.',
                     'Ein Mini-Szenario ist ein kurzer Text (1–3 Sätze), in dem Lernende Eingänge, Ausgänge und',
-                    'Logik-Formulierungen markieren und daraus eine Steuerungslogik ableiten.',
+                    'Logik-Formulierungen markieren und daraus eine Steuerungslogik ableiten. Nutze nur reine',
+                    'Verknüpfungen (UND/ODER/NICHT) — keine Speicher, Timer oder Zähler.'
+                ];
+                const sizeField = maxi
+                    ? '  "size": "maxi",                   // komplexes Szenario (mehrere Sätze/Anforderungen)'
+                    : '  "size": "mini",                   // kurzes Szenario (1–3 Sätze)';
+                const example = maxi ? [
+                    'BEISPIEL-AUSGABE (maxi):',
+                    '{',
+                    '  "title": "Klemmstation am Prüfplatz",',
+                    '  "category": "Spann- & Prüftechnik",',
+                    '  "size": "maxi",',
+                    '  "level": 5,',
+                    '  "intro": "Selbsthaltung, Not-Halt-Verriegelung und ein Zeitglied — nicht jede Formulierung ist Logik.",',
+                    '  "text": "An einem Prüfplatz steht eine Klemmstation. Zum Spannen drückt der Bediener [E:Start|ST], zum Entnehmen [E:Lösen|RT]. Ein [E:optischer Sensor|S_OPT] meldet ein Teil, ein [E:induktiver Sensor|S_IND] ein Metallteil, ein [E:Zylindersensor|S_MAG_EIN] die Grundstellung. Über allem liegt der [E:Not-Halt|NH]. Angesteuert werden [A:Klemmen|PZ_KLEMMEN] und [A:Lösen|PZ_LOESEN]. Die Klemmung fährt zu, [L:wenn|COND] Start gedrückt wird [L:und|AND] ein Teil vorhanden ist [L:und|AND] es ein Metallteil ist [L:und|AND] der Zylinder in Grundstellung steht. [L:Ein kurzer Druck genügt — die Klemmung bleibt gehalten, bis sie gelöst wird|RS]. Gelöst wird, [L:sobald|COND] der Lösetaster gedrückt wird, [L:jedoch nicht bei Not-Halt|ANDNOT]. Sie öffnet [L:außerdem|OR] [L:spätestens nach 5 Sekunden|TON] von selbst.",',
+                    '  "vars": ["ST : in : Starttaster", "RT : in : Lösetaster", "S_OPT : in : Teil vorhanden", "S_IND : in : Metallteil", "S_MAG_EIN : in : Grundstellung", "NH : in : Not-Halt", "PZ_KLEMMEN : out : Klemmen", "PZ_LOESEN : out : Lösen", "KLEMM_ZEIT : out : Hilfssignal Klemmzeit (TON)"],',
+                    '  "solution": ["S1 := ST && S_OPT && S_IND && S_MAG_EIN", "R1 := RT || NH || KLEMM_ZEIT", "KLEMM_ZEIT := TON(Q1, 5)", "PZ_KLEMMEN := Q1 && ¬NH", "PZ_LOESEN := (RT || KLEMM_ZEIT) && ¬NH"],',
+                    '  "implicit": ["Rücksetzen sammelt mehrere Sätze :: Lösetaster, Not-Halt und Zeitablauf setzen denselben Speicher zurück: R1 := RT || NH || KLEMM_ZEIT — im Text steht dazwischen kein oder.", "Not-Halt wirkt überall :: Bei Not-Halt ist alles aus, das betrifft jeden Ausgang: PZ_KLEMMEN := Q1 && ¬NH.", "Speicher zu Ausgang :: Der Ausgang folgt dem RS-Signal Q1; dieses Q1 steht als kein Wort im Text."]',
+                    '}'
+                ] : fortMini ? [
+                    'BEISPIEL-AUSGABE (Mini · Fortgeschritten):',
+                    '{',
+                    '  "title": "Bandmotor",',
+                    '  "category": "Antrieb & Freigabe",',
+                    '  "size": "mini",',
+                    '  "level": 1,',
+                    '  "intro": "Einfachste Selbsthaltung (RS): einmal ein, bleibt an bis Stopp.",',
+                    '  "text": "Der [A:Bandmotor läuft|MOTOR] — einmal mit [E:Start|START] eingeschaltet, [L:bleibt er in Betrieb, bis|RS] der [E:Stopp-Taster|STOP] ihn abschaltet.",',
+                    '  "vars": ["START : in : Start-Taster", "STOP : in : Stopp-Taster", "MOTOR : out : Bandmotor"],',
+                    '  "solution": ["S1 := START", "R1 := STOP", "MOTOR := Q1"],',
+                    '  "implicit": ["Speicher zu Ausgang :: Der Ausgang folgt dem RS-Signal Q1 (MOTOR := Q1); dieses Q1 steht als kein Wort im Text."]',
+                    '}'
+                ] : [
+                    'BEISPIEL-AUSGABE (Mini · Basics):',
+                    '{',
+                    '  "title": "Warnlampe & Hupe",',
+                    '  "category": "Meldung & Anzeige",',
+                    '  "size": "mini",',
+                    '  "level": 1,',
+                    '  "intro": "Achte auf wenn, und, oder.",',
+                    '  "text": "Die [A:Lampe leuchtet|LAMPE], [L:wenn|COND] [E:Schalter A|SCHALTER_A] [L:und|AND] [E:Schalter B|SCHALTER_B] [N:eingeschaltet] sind. Die [A:Hupe ertönt|HUPE], [L:wenn|COND] [E:Sensor 1|SENSOR_1] [L:oder|OR] [E:Sensor 2|SENSOR_2] auslöst.",',
+                    '  "vars": ["SCHALTER_A : in : Schalter A", "SCHALTER_B : in : Schalter B", "SENSOR_1 : in : Sensor 1", "SENSOR_2 : in : Sensor 2", "LAMPE : out : Lampe", "HUPE : out : Hupe"],',
+                    '  "solution": ["LAMPE := SCHALTER_A && SCHALTER_B", "HUPE := SENSOR_1 || SENSOR_2"],',
+                    '  "implicit": []                    // hier 1:1 aus dem Text ableitbar → leer',
+                    '}',
+                    '',
+                    'BEISPIEL mit implizit (Auszug): text „… läuft, wenn Hauptschalter mit Sensor A oder B …",',
+                    'solution ["BAND := HAUPT && (SENSOR_A || SENSOR_B)"],',
+                    'implicit ["Klammern stehen nicht im Text :: Der Hauptschalter muss immer an sein; darum das ODER klammern: HAUPT && (SENSOR_A || SENSOR_B)."]'
+                ];
+                const regeln = maxi ? [
+                    'REGELN (Maxi):',
+                    '  • Mehrere Anforderungen; mindestens ein Speicher (RS/SR) ODER ein Zeit-/Zählglied (TON/TOF/TP/CTU).',
+                    '  • Hilfs-/Zwischensignale (Timer-, Zähler-, Speicher-Signale) als "out" in "vars" aufnehmen UND je eine solution-Zeile geben.',
+                    '  • Not-Halt/Sicherheit als Verriegelung && ¬NH auf die betroffenen Ausgänge legen.',
+                    '  • Jede in "vars" als "out" deklarierte Variable braucht genau eine "solution"-Zeile.',
+                    '  • Nicht jede Formulierung ist Logik — baue bewusst 1–2 Ablenker [N:…] ein.'
+                ] : fortMini ? [
+                    'REGELN (Mini · Fortgeschritten):',
+                    '  • IMMER mindestens ein Speicher (RS oder SR) — das definiert diesen Tier.',
+                    '  • Weitere Bausteine (Zeitglied, Zähler, Sicherheitsverriegelung) nur nach Schwierigkeitsgrad ergänzen (Rubrik unten): Stufe 1 = nur Speicher, höhere Stufen = Speicher + Zeit/Zähler/Verriegelung.',
+                    '  • Kurz halten (2–4 Sätze) — nur so viele Bausteine wie die Zielstufe verlangt, keine Maxi-Verkettung.',
+                    '  • RS/SR in VALIS-Schreibweise: Setzen S1, Rücksetzen R1 → Ausgang folgt Q1 (SR: S1_SR/R1_SR → Q1_SR).',
+                    '  • Hilfssignale (Timer/Zähler) als "out" in "vars" aufnehmen und je eine solution-Zeile geben.',
+                    '  • Jede in "vars" als "out" deklarierte Variable braucht genau eine "solution"-Zeile.'
+                ] : [
+                    'REGELN (Mini · Basics):',
+                    '  • Kurz halten (1–3 Sätze), nur UND/ODER/NICHT — keine Speicher/Timer/Zähler.',
+                    '  • Jede in "vars" als "out" deklarierte Variable braucht genau eine "solution"-Zeile (AUSGANG := …).',
+                    '  • Für UND/ODER möglichst abwechslungsreiche natürliche Formulierungen wählen.',
+                    '  • Ablenker als [N:…] markieren, nicht als Logik.'
+                ];
+                const finalInstr = maxi
+                    ? 'Erstelle nun ein MAXI-Szenario aus dieser Beschreibung (nur das JSON, "size":"maxi", ausgeben):'
+                    : fortMini
+                        ? 'Erstelle nun ein MINI-Szenario (Fortgeschritten) aus dieser Beschreibung (nur das JSON, "size":"mini", ausgeben):'
+                        : 'Wandle nun DIESES Szenario in das MINI-Format (Basics) um (nur das JSON, "size":"mini", ausgeben):';
+                const rubrik = ['SCHWIERIGKEITSGRADE (' + (advanced ? 'Fortgeschritten' : 'Basics') + ') — setze "level" (1–5) passend zum Inhalt:']
+                    .concat([1, 2, 3, 4, 5].map(function (n) { return '  ' + n + ' ' + _SZ_LEVELS[n].label + ': ' + _SZ_RUBRIK[tier][n]; }))
+                    .concat(maxi ? ['  (Maxi liegt durch Länge + mehrere Anforderungen üblich bei Stufe 4–5.)'] : [])
+                    .concat(['']);
+                return [].concat(head, [
                     '',
                     'Gib AUSSCHLIESSLICH ein JSON-Objekt in genau diesem Format zurück (keine Erklärung, keine Code-Fences):',
                     '{',
                     '  "title": "Kurzer Titel",',
                     '  "category": "Thema, z. B. Meldung & Anzeige",',
-                    '  "size": "mini",                   // "mini" = 1–3 Sätze; "maxi" = komplexes Szenario (siehe unten)',
-                    '  "level": 2,                       // Schwierigkeit (' + levels + ')',
+                    sizeField,
+                    '  "level": ' + (maxi ? '5' : (fortMini ? '1' : '2')) + ',                       // Schwierigkeit (' + levels + ') — Rubrik unten',
                     '  "intro": "Ein-Satz-Hinweis (optional)",',
                     '  "text": "Aufgabentext mit Inline-Markierungen (siehe unten)",',
                     '  "vars": ["NAME : in|out : Beschreibung", "..."],',
-                    '  "solution": ["AUSGANG := Ausdruck", "..."]',
+                    '  "solution": ["AUSGANG := Ausdruck", "..."],',
+                    '  "implicit": ["Titel :: Erklärung", "..."]   // optional — Denk-Sprünge, siehe unten',
                     '}',
                     '',
                     'MARKIERUNGEN im "text" (Inline-Tags; alles Übrige bleibt normaler Text):',
@@ -53123,67 +53435,78 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     '  [N:Wort]         Ablenker: klingt logisch, ist aber KEINE Logik (z. B. „sofort", „eingeschaltet").',
                     '',
                     'WICHTIG zu OP: Der markierte TEXT (das „Wort") ist völlig frei — beliebige natürliche',
-                    'Formulierung. FEST ist nur der Code rechts vom |: genau EINER der folgenden 11 Codes',
-                    '(mehr gibt es nicht). Die Wörter hinter „—" sind nur Beispiele, keine Einschränkung.',
+                    'Formulierung. FEST ist nur der Code rechts vom |: genau EINER der folgenden Codes.',
+                    'Die Wörter hinter „—" sind nur Beispiele, keine Einschränkung.',
                     '',
                     'OPERATOR-CODES für [L:Wort|OP] — benutze die WORTFORM, nicht die Symbole:',
                     '  COND    Zuweisung/Bedingung — „wenn", „sobald", „solange", „zeigt an, dass"',
                     '  AND     UND — „und", „sowohl … als auch", „zugleich", „zusammen mit", „beide … gleichzeitig"',
                     '  OR      ODER — „oder", „entweder … oder", „beziehungsweise", „wahlweise"',
                     '  NOT     NICHT — „nicht", „kein", „fällt ab"',
-                    '  ANDNOT  UND NICHT — „es sei denn", „außer wenn", „jedoch nicht"',
-                    '  RS      Speicher, Rücksetzen dominant (Selbsthaltung Setzen/Rücksetzen)',
-                    '  SR      Speicher, Setzen dominant',
+                    '  ANDNOT  UND NICHT — „es sei denn", „außer wenn", „jedoch nicht"'
+                ], advanced ? [
+                    '  RS      Speicher, Rücksetzen dominant — „bleibt … bis", „einmal ein, hält sich"',
+                    '  SR      Speicher, Setzen dominant — „hat Vorrang und bleibt bestehen, bis"',
                     '  TON     Einschaltverzögerung — „erst nach X s", „für X s anliegt"',
                     '  TOF     Ausschaltverzögerung — „noch X s Nachlauf"',
                     '  TP      Impuls — „fester Puls von X s"',
-                    '  CTU     Zähler — „nach X Teilen/Impulsen"',
+                    '  CTU     Zähler — „nach X Teilen/Impulsen"'
+                ] : [
+                    '  (RS/SR/TON/TOF/TP/CTU gibt es auch, gehören aber ins Fortgeschritten-/Maxi-Format — hier NICHT verwenden.)'
+                ], [
                     '',
                     'LOGIKSPRACHE für die "solution"-Ausdrücke (rechte Seite von :=):',
-                    '  UND = &&    ODER = ||    NICHT = ¬    Klammern ( ) für Vorrang.',
+                    '  UND = &&    ODER = ||    NICHT = ¬    Klammern ( ) für Vorrang.'
+                ], advanced ? [
                     '  Speicher:  S1, R1 → Ausgang Q1 (RS, rücksetzdominant). SR-Variante: S1_SR, R1_SR → Q1_SR.',
-                    '  Zeitglied: AUSGANG := TON(EINGANG, 2.5)   bzw. TOF(…), TP(…)   — Zeit in Sekunden.',
-                    '  Zähler:    AUSGANG := CTU(ZAEHL_SIGNAL, RESET, 5)',
-                    '  Variablennamen: GROSSBUCHSTABEN, Unterstriche statt Leerzeichen, keine Umlaute (ä→ae, ß→ss).',
+                    '             Der Nutz-Ausgang folgt dem Speicher: z. B. MOTOR := Q1 (bzw. Q1 && weitere Freigaben).',
+                    '  Zeitglied: HILFSSIGNAL := TON(EINGANG, 2.5)   bzw. TOF(…), TP(…)   — Zeit in Sekunden.',
+                    '  Zähler:    HILFSSIGNAL := CTU(ZAEHL_SIGNAL, RESET, 5)',
+                    '  Variablennamen: GROSSBUCHSTABEN, Unterstriche statt Leerzeichen, keine Umlaute (ä→ae, ß→ss).'
+                ] : [
+                    '  Variablennamen: GROSSBUCHSTABEN, Unterstriche statt Leerzeichen, keine Umlaute (ä→ae, ß→ss).'
+                ], [
                     '',
-                    'MINI vs. MAXI:',
-                    '  • "mini" = kurzes Szenario (1–3 Sätze), meist reine Verknüpfungen (&&, ||, ¬).',
-                    '  • "maxi" = vollwertiges, komplexes Szenario: längerer Text mit mehreren Anforderungen,',
-                    '    typischerweise mit Selbsthaltung (RS/SR), Zeitgliedern (TON/TOF/TP), Zähler (CTU),',
-                    '    Not-Halt-Verriegelung usw. Anforderungen dürfen in Alltagssprache stehen.',
-                    '    Bei Maxi sind Hilfs-/Zwischensignale in der solution erlaubt (z. B. ein Timer-Signal',
-                    '    KLEMM_ZEIT := TON(...) oder ein Selbsthalte-Ausgang), auch wenn sie nicht in "vars" stehen.',
+                    'IMPLIZITE LOGIK ("implicit") — zentrales Lernziel, bitte sorgfältig ausfüllen:',
+                    '  Ein Teil der Lösung steht oft NICHT wörtlich im Text, sondern ergibt sich erst aus dem Sinn.',
+                    '  Solche Denk-Sprünge kann der Lernende nicht einfach markieren — benenne sie als kurze',
+                    '  Karten "Titel :: Erklärung" (eine je Eintrag). Prüfe deine "solution" auf diese typischen Fälle:',
+                    '  • Klammern/Vorrang, die im Text fehlen: HAUPT && (SENSOR_A || SENSOR_B).',
+                    '  • „weder … noch" = ¬(A || B) (Regel von De Morgan).',
+                    '  • Eine Bedingung, die für ALLE Ausgänge gilt, aber nur einmal erwähnt wird (z. B. Not-Halt → jeder Ausgang && ¬NH).',
+                    '  • Mehrere Gründe aus VERSCHIEDENEN Sätzen, die in EINE Bedingung zusammenfließen (z. B. ein Reset R1).',
+                    '  • Ein Wort, das für MEHRERE Signale steht (z. B. „beide Handtaster" → HT_L && HT_R).',
+                    '  • Speicher → Ausgang: bei RS/SR folgt der Ausgang dem Speichersignal Q1 (kein eigenes Wort im Text).',
+                    '  Ergibt sich die Logik 1:1 aus den markierten Wörtern, gib "implicit": [] zurück.',
+                    ''
+                ], rubrik, regeln, [''], example, [
                     '',
-                    'REGELN:',
-                    '  • Jede in "vars" als "out" deklarierte Variable braucht genau eine "solution"-Zeile (AUSGANG := …).',
-                    '  • Verwende in Ausdrücken die "vars"-Namen; bei Maxi zusätzlich klar benannte Zwischensignale.',
-                    '  • Für UND/ODER möglichst abwechslungsreiche natürliche Formulierungen wählen.',
-                    '  • Ablenker als [N:…] markieren, nicht als Logik.',
-                    '',
-                    'BEISPIEL-AUSGABE (mini):',
-                    '{',
-                    '  "title": "Warnlampe & Hupe",',
-                    '  "category": "Meldung & Anzeige",',
-                    '  "size": "mini",',
-                    '  "level": 1,',
-                    '  "intro": "Achte auf wenn, und, oder.",',
-                    '  "text": "Die [A:Lampe leuchtet|LAMPE], [L:wenn|COND] [E:Schalter A|SCHALTER_A] [L:und|AND] [E:Schalter B|SCHALTER_B] [N:eingeschaltet] sind. Die [A:Hupe ertönt|HUPE], [L:wenn|COND] [E:Sensor 1|SENSOR_1] [L:oder|OR] [E:Sensor 2|SENSOR_2] auslöst.",',
-                    '  "vars": ["SCHALTER_A : in : Schalter A", "SCHALTER_B : in : Schalter B", "SENSOR_1 : in : Sensor 1", "SENSOR_2 : in : Sensor 2", "LAMPE : out : Lampe", "HUPE : out : Hupe"],',
-                    '  "solution": ["LAMPE := SCHALTER_A && SCHALTER_B", "HUPE := SENSOR_1 || SENSOR_2"]',
-                    '}',
-                    '',
-                    'Wandle nun DIESES Szenario in das Format um (nur das JSON ausgeben):',
+                    finalInstr,
                     '--- SZENARIO ---',
                     '[Hier dein Szenario frei beschreiben oder einfügen]'
-                ].join('\n');
+                ]).join('\n');
             }
             function _szEdAiStatus(msg, err, id) {
                 const s = document.getElementById(id || 'sz-ai-apply-status');
                 if (s) { s.textContent = msg || ''; s.style.color = err ? '#ef9a9a' : '#a5d6a7'; }
             }
+            window._szEdSetAiMode = function (mode) {
+                _szAiMode = (mode === 'maxi' || mode === 'mini-fort') ? mode : 'mini-basics';
+                const ta = document.getElementById('sz-ai-prompt'); if (ta) ta.value = _szEdBuildPrompt(_szAiMode);
+                const btns = document.querySelectorAll('.sz-ai-mode');
+                btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-aimode') === _szAiMode); });
+                _szEdAiStatus('', false, 'sz-ai-copy-ind');
+            };
             window._szEdOpenAI = function () {
                 const m = document.getElementById('sz-ai-modal'); if (!m) return;
-                const ta = document.getElementById('sz-ai-prompt'); if (ta && !ta.value) ta.value = _szEdBuildPrompt();
+                // Vorauswahl an der aktuell im Editor gewählten Größe/Tier ausrichten.
+                const szSel = document.getElementById('sz-ed-size');
+                const tierSel = document.getElementById('sz-ed-tier');
+                let m0 = _szAiMode;
+                if (szSel && szSel.value === 'maxi') m0 = 'maxi';
+                else if (tierSel && tierSel.value === 'fortgeschritten') m0 = 'mini-fort';
+                else if (tierSel && tierSel.value === 'basics') m0 = 'mini-basics';
+                window._szEdSetAiMode(m0);
                 _szEdAiStatus('', false, 'sz-ai-copy-ind'); _szEdAiStatus('');
                 m.style.display = 'flex';
             };
@@ -53212,7 +53535,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 set('sz-ed-title', d.title || '');
                 set('sz-ed-cat', d.category || '');
                 set('sz-ed-size', d.size === 'maxi' ? 'maxi' : 'mini');
+                const _advRaw = /\b(RS|SR|TON|TOF|TP|CTU|CTD)\b/i.test(JSON.stringify(d.solution || '') + ' ' + (d.text || '')) || /\bS1(_SR)?\b|\bQ1(_SR)?\b/i.test(JSON.stringify(d.solution || ''));
+                set('sz-ed-tier', (d.tier === 'fortgeschritten' || _advRaw) ? 'fortgeschritten' : 'basics');
                 set('sz-ed-level', String(d.level || 2));
+                window._szEdSyncRubrik();
                 set('sz-ed-intro', d.intro || '');
                 set('sz-ed-pin', d.pin || '');
                 let text = '';
@@ -53234,6 +53560,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }).filter(Boolean).join('\n');
                 else if (typeof d.logic === 'string') solLines = d.logic;
                 set('sz-ed-sol', solLines);
+                let implLines = '';
+                if (Array.isArray(d.implicit)) implLines = d.implicit.map(function (n) {
+                    if (typeof n === 'string') return n;
+                    if (n && (n.t || n.d)) return (n.t ? n.t + ' :: ' : '') + (n.d || n.text || '');
+                    return '';
+                }).filter(Boolean).join('\n');
+                set('sz-ed-implicit', implLines);
                 _szEdId = null;   // als neues Szenario übernehmen
                 const ex = document.getElementById('sz-ed-export-one'); if (ex) ex.style.display = 'none';
                 _szEdShowForm(true);
@@ -53283,8 +53616,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 card.className = 'task-mgr-card';
                 card.innerHTML = '<div class="task-mgr-card-name">' + _szEsc(s.title || 'Unbenannt') + '</div>'
                     + '<div class="task-mgr-card-meta">'
-                    + '<span class="sz-lvl-tag" style="background:' + lv.bg + ';color:' + lv.fg + ';">' + lv.label + '</span>'
-                    + ' <span class="sz-tier-tag ' + (s.tier === 'fortgeschritten' ? 'fort' : 'basic') + '">' + (s.tier === 'fortgeschritten' ? 'Fortgeschritten' : 'Basics') + '</span>'
+                    + '<span class="sz-lvl-tag" data-sztip="tasklvl:' + (s.tier === 'fortgeschritten' ? 'fortgeschritten' : 'basics') + ':' + (s.level || 1) + '" style="background:' + lv.bg + ';color:' + lv.fg + ';">' + lv.label + '</span>'
+                    + ' <span class="sz-tier-tag ' + (s.tier === 'fortgeschritten' ? 'fort' : 'basic') + '" data-sztip="tier:' + (s.tier === 'fortgeschritten' ? 'fortgeschritten' : 'basics') + '">' + (s.tier === 'fortgeschritten' ? 'Fortgeschritten' : 'Basics') + '</span>'
                     + (s.category ? ' &bull; ' + _szEsc(s.category) : '')
                     + (builtin ? ' &bull; <span style="color:#78909c;">Beispiel</span>' : '')
                     + '</div><div>'
@@ -53322,8 +53655,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
                 const mini = all.filter(function (s) { return (s.size || 'mini') !== 'maxi' && flt(s); });
                 const maxi = all.filter(function (s) { return (s.size || 'mini') === 'maxi' && flt(s); });
-                const tbtn = function (v, lbl) { return '<button class="sz-tier-btn' + (_szTierFilter === v ? ' active' : '') + '" onclick="_szSetTierFilter(\'' + v + '\')">' + lbl + '</button>'; };
-                const lbtn = function (v, lbl) { return '<button class="sz-tier-btn' + (String(_szLevelFilter) === String(v) ? ' active' : '') + '" onclick="_szSetLevelFilter(' + (v === 'all' ? '\'all\'' : v) + ')">' + lbl + '</button>'; };
+                const tbtn = function (v, lbl) { return '<button class="sz-tier-btn' + (_szTierFilter === v ? ' active' : '') + '" data-sztip="tier:' + v + '" onclick="_szSetTierFilter(\'' + v + '\')">' + lbl + '</button>'; };
+                const lbtn = function (v, lbl) { return '<button class="sz-tier-btn' + (String(_szLevelFilter) === String(v) ? ' active' : '') + '" data-sztip="lvl:' + v + '" onclick="_szSetLevelFilter(' + (v === 'all' ? '\'all\'' : v) + ')">' + lbl + '</button>'; };
                 list.innerHTML = '<div class="sz-tier-filter"><span class="sz-tier-lbl">Kategorie:</span>'
                     + tbtn('all', 'Alle') + tbtn('basics', '🔵 Basics') + tbtn('fortgeschritten', '🟣 Fortgeschritten') + '</div>'
                     + '<div class="sz-tier-filter"><span class="sz-tier-lbl">Schwierigkeit:</span>'
@@ -53350,12 +53683,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 set('sz-ed-title', (builtin ? (s.title || '') + ' (Kopie)' : (s.title || '')));
                 set('sz-ed-cat', s.category || '');
                 set('sz-ed-size', s.size === 'maxi' ? 'maxi' : 'mini');
+                set('sz-ed-tier', s.tier === 'fortgeschritten' ? 'fortgeschritten' : (s.tier === 'basics' ? 'basics' : _szDetectTier(s)));
                 set('sz-ed-level', String(s.level || 1));
+                window._szEdSyncRubrik();
                 set('sz-ed-intro', s.intro || '');
                 set('sz-ed-pin', builtin ? '' : (s.pin || ''));
                 set('sz-ed-text', _szSegToMarkup(s.seg || []));
                 set('sz-ed-vars', (s.vars || []).map(function (v) { return v.name + ' : ' + v.kind + ' : ' + (v.desc || ''); }).join('\n'));
                 set('sz-ed-sol', (s.solution || []).map(function (x) { return x.lhs + ' := ' + x.rhs; }).join('\n'));
+                set('sz-ed-implicit', _szImplicitToText(s.implicit));
                 _szEdId = builtin ? null : s.id;
                 const ex = document.getElementById('sz-ed-export-one'); if (ex) ex.style.display = builtin ? 'none' : '';
                 _szEdShowForm(true);

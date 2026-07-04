@@ -2036,6 +2036,20 @@
         .hub-header h2 { margin:0; font-size:17px; color:#fff; font-weight:700; letter-spacing:0.4px; display:flex; align-items:center; gap:8px; white-space:nowrap; }
         .hub-search { flex:1; background:#12121e; border:1px solid #3a3a4a; border-radius:6px; color:#e6edf3; padding:7px 12px; font-size:13px; outline:none; }
         .hub-search:focus { border-color:#42a5f5; }
+        .hub-search-results { flex:1 1 auto; min-height:0; overflow-y:auto; padding:4px 14px 16px; }
+        .hub-sr-count { color:#78909c; font-size:12px; margin:2px 4px 12px; }
+        .hub-sr-group { margin-bottom:14px; }
+        .hub-sr-group-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#8a9aa7; margin:8px 4px 7px; }
+        .hub-sr-item { display:flex; gap:10px; align-items:flex-start; padding:8px 11px; border:1px solid #2a2a3a; border-radius:8px; background:#161622; cursor:pointer; margin-bottom:6px; transition:border-color .12s, background .12s; }
+        .hub-sr-item:hover { border-color:#42a5f5; background:#1a1a2c; }
+        .hub-sr-icon { font-size:16px; line-height:1.3; flex-shrink:0; }
+        .hub-sr-main { min-width:0; flex:1; }
+        .hub-sr-title { color:#e6edf3; font-size:13px; font-weight:600; }
+        .hub-sr-sub { color:#78909c; font-size:11px; margin-top:1px; }
+        .hub-sr-snip { color:#9aa7b2; font-size:11px; margin-top:3px; line-height:1.45; max-height:2.9em; overflow:hidden; }
+        .hub-sr-more { color:#42a5f5; font-size:11px; padding:4px 6px 2px; cursor:pointer; }
+        .hub-sr-more:hover { text-decoration:underline; }
+        .hub-sr-empty { color:#78909c; font-size:13px; padding:24px 8px; text-align:center; }
         .hub-close { background:none; border:none; color:#aaa; font-size:22px; cursor:pointer; line-height:1; padding:0 4px; flex-shrink:0; }
         .hub-body { display:flex; flex:1; overflow:hidden; }
         /* Links: Tabs (schmal). Rechts: Inhaltsfläche (breit), hostet die adoptierten Modal-Boxen. */
@@ -3642,6 +3656,7 @@
             <div id="task-editor-header" style="background:#1565c0; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; border-radius:7px 7px 0 0; position:sticky; top:0; z-index:10; flex-shrink:0; cursor:move; user-select:none;">
                 <span style="color:#fff; font-weight:bold;">✏️ Aufgaben-Editor</span>
                 <span style="display:flex; align-items:center; gap:8px;">
+                    <button onclick="window._taskEdOpenAI()" style="background:#673ab7; color:#fff; border:none; border-radius:4px; padding:5px 12px; cursor:pointer; font-size:12px; font-weight:bold;" title="Aufgabe per KI erstellen (Prompt + Import)">🤖 Per KI erstellen</button>
                     <button id="task-editor-collapse" onclick="window._taskEditorToggle()" style="background:none; border:none; color:#fff; cursor:pointer; font-size:14px; line-height:1; padding:0 2px; opacity:0.85;" title="Auf-/Zuklappen (bis auf die Leiste)">▼</button>
                     <button onclick="window._taskEditorClose()" style="background:none; border:none; color:#fff; cursor:pointer; font-size:16px;">✖</button>
                 </span>
@@ -3813,7 +3828,7 @@
             <div class="hub-box">
                 <div class="hub-header">
                     <h2>🎓 Lernzentrum</h2>
-                    <input id="hub-search" class="hub-search" type="text" placeholder="Suchen … (Tour, Lektion, Beispiel, Aufgabe, Tutorial)" oninput="hubFilter(this.value)" onkeydown="if(event.key==='Escape')closeHub()">
+                    <input id="hub-search" class="hub-search" type="text" placeholder="Alles durchsuchen … (Lektionen, Tutorials, Aufgaben, Analyse, Beispiele, Fachbegriffe)" oninput="hubFilter(this.value)" onkeydown="if(event.key==='Escape')closeHub()">
                     <button class="hub-close" onclick="closeHub()" title="Schließen (Esc)">✕</button>
                 </div>
                 <div class="hub-body">
@@ -3831,6 +3846,7 @@
                     </div>
                     <div class="hub-content" id="hub-content">
                         <div id="hub-welcome"></div>
+                        <div id="hub-search-results" class="hub-search-results" style="display:none;"></div>
                         <div class="hub-panel lex-panel" data-hub-panel="lexikon" id="hub-panel-lexikon">
                             <div class="lex-head">
                                 <div>
@@ -3948,8 +3964,8 @@
                 <div class="sz-ed-body">
                     <div class="sz-ed-list-col">
                         <div class="sz-ed-list-actions">
-                            <button class="sz-btn sz-btn-primary" onclick="_szEdNew()">➕ Neu</button>
-                            <button class="sz-btn sz-btn-ai" onclick="_szEdOpenAI()" title="KI-Prompt: beliebiges Szenario per KI ins Editor-Format umwandeln">🤖 KI</button>
+                            <button class="sz-btn sz-btn-primary" onclick="_szEdNew()">➕ Neu (manuell)</button>
+                            <button class="sz-btn sz-btn-ai" onclick="_szEdOpenAI()" title="KI-Prompt: beliebiges Szenario per KI ins Editor-Format umwandeln">🤖 mit KI erstellen</button>
                             <button class="sz-btn" onclick="_szEdImportClick()">📥 Import</button>
                             <button class="sz-btn" onclick="_szEdExportPackage()">📦 Paket</button>
                             <input type="file" id="sz-ed-import-file" accept=".json" style="display:none" onchange="_szEdImportFile(event)">
@@ -3957,7 +3973,7 @@
                         <div class="sz-ed-list" id="sz-ed-list"></div>
                     </div>
                     <div class="sz-ed-form-col">
-                        <div class="sz-ed-empty" id="sz-ed-empty">Wähle links ein Szenario zum Bearbeiten oder erstelle mit „➕ Neu" ein neues.</div>
+                        <div class="sz-ed-empty" id="sz-ed-empty">Wähle links ein Szenario zum Bearbeiten oder erstelle mit „➕ Neu (manuell)" bzw. „🤖 mit KI erstellen" ein neues.</div>
                         <div class="sz-ed-form-inner" id="sz-ed-form-inner" style="display:none;">
                             <div class="sz-ed-row"><label>Titel</label><input id="sz-ed-title" type="text" placeholder="z. B. Behälter-Überwachung"></div>
                             <div class="sz-ed-row2">
@@ -4730,7 +4746,32 @@
                     <button onclick="copyAIPrompt()" style="background: #007acc; color: white; border: none; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-weight: bold;" data-i18n="ai_btn_copy">Kopieren</button>
                 </div>
             </div>
-        </div> 
+        </div>
+        <!-- KI-Prompt: komplette Aufgabe erstellen (aus dem Aufgaben-Editor) -->
+        <div id="task-ai-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:4000; align-items:center; justify-content:center; font-family:sans-serif;">
+            <div style="background:#1e1e2e; border:1px solid #3a3a4a; border-radius:10px; width:min(94vw,780px); max-height:92vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.9);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:13px 18px; border-bottom:1px solid #333;">
+                    <span style="color:#fff; font-weight:bold;">🤖 KI-Prompt <span style="font-weight:400;color:#90a4ae;font-size:12px;">— Aufgabe per KI erstellen</span></span>
+                    <button onclick="window._taskEdCloseAI()" title="Schließen" style="background:none;border:none;color:#aaa;font-size:20px;cursor:pointer;line-height:1;">✕</button>
+                </div>
+                <div style="padding:16px 18px; overflow-y:auto;">
+                    <p style="color:#b0bec5;font-size:12.5px;line-height:1.6;margin:0 0 12px;"><b>1.</b> Prompt kopieren, ganz unten deine Aufgabe (frei formuliert) einsetzen und einer KI (ChatGPT, Claude, Gemini …) geben. <b>2.</b> Die JSON-Antwort unten einfügen und „In den Editor übernehmen".</p>
+                    <label style="display:block;font-size:11.5px;color:#90a4ae;font-weight:600;margin-bottom:5px;">Prompt (erklärt das komplette .valitask-Format, alle Editor-Optionen und die VALIS-Code-Syntax):</label>
+                    <textarea id="task-ai-prompt" readonly rows="12" spellcheck="false" style="width:100%;box-sizing:border-box;background:#0e0e18;border:1px solid #3a3a4a;border-radius:6px;color:#d4d4d4;font-family:Consolas,monospace;font-size:11px;line-height:1.5;padding:10px;resize:vertical;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                        <button onclick="window._taskEdCopyPrompt()" style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:bold;">📋 Prompt kopieren</button>
+                        <span id="task-ai-copy-ind" style="color:#a5d6a7;font-size:12px;"></span>
+                    </div>
+                    <label style="display:block;font-size:11.5px;color:#90a4ae;font-weight:600;margin:14px 0 5px;">KI-Antwort (JSON) hier einfügen:</label>
+                    <textarea id="task-ai-json" rows="7" spellcheck="false" placeholder='{ "type":"valitask", "name":"...", "description":"...", "conditions":[ ... ] }' style="width:100%;box-sizing:border-box;background:#0e0e18;border:1px solid #3a3a4a;border-radius:6px;color:#d4d4d4;font-family:Consolas,monospace;font-size:11px;line-height:1.5;padding:10px;resize:vertical;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">
+                        <button onclick="window._taskEdApplyJson()" style="background:#2e7d32;color:#fff;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:bold;">✓ In den Editor übernehmen</button>
+                        <button onclick="window._taskEdCloseAI()" style="background:#555;color:#fff;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:12px;">Schließen</button>
+                        <span id="task-ai-apply-status" style="font-size:12px;"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
 		<div id="plugin-modal" style="display: none; position: fixed; top: 10vh; left: 50%; transform: translateX(-50%); background: #2d2d30; padding: 20px; border: 1px solid #444; border-radius: 5px; box-shadow: 0 4px 25px rgba(0,0,0,0.9); z-index: 3000; width: 500px; max-width: 90vw; max-height: 80vh; flex-direction: column;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #555; padding-bottom: 10px; margin-bottom: 15px;">
                 <h3 style="margin:0; color:#fff;" data-i18n="plug_mgr_title">🧩 Plugin Manager</h3>
@@ -24520,6 +24561,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { _taskRestoreObjectRestrictions(); } catch(e){}
             try { _taskRestoreBlockAreas();         } catch(e){}
             try { _taskRestoreHideAreas();          } catch(e){}
+            try { _taskRestoreForceMode();          } catch(e){}
+            try { _taskRestoreFestoConfig();        } catch(e){}
             if (taskObj.preset) {
                 let presetData = {
                     code: taskObj.preset.code || '',
@@ -24592,6 +24635,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Bearbeitungsbereich-Sperren anwenden
             if (taskObj.blockAreas) _taskApplyBlockAreas(taskObj.blockAreas);
             if (taskObj.hideAreas)  _taskApplyHideAreas(taskObj.hideAreas);
+            // Globalen Betriebsmodus + FESTO-Modus-Vorgaben erzwingen
+            if (taskObj.enforceMode) _taskApplyForceMode(taskObj.enforceMode);
+            if (taskObj.festoConfig) _taskApplyFestoConfig(taskObj.festoConfig);
             // Simulation automatisch starten falls gewünscht und noch nicht aktiv
             if (taskObj.autoStartSim && !isSimulationActive) toggleSimulation();
             // Musterlösung-Button initialisieren
@@ -24670,6 +24716,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 schaltplan:     'circuit-wrapper',
                 circuitEditor:  'circuit-editor-wrapper',
                 factory2d:      'factory-wrapper',
+                festo:          'festo-wrapper',
                 schrittkette:   'sk-wrapper'
             };
             for (let [key, id] of Object.entries(panelIds)) {
@@ -24772,7 +24819,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let ta = document.getElementById('code');
             if (ta) { ta.readOnly = false; ta.classList.remove('task-area-blocked-code'); }
             // Panel-Sperren entfernen
-            ['simulator-panel','fbs-wrapper','circuit-wrapper','circuit-editor-wrapper','factory-wrapper','sk-wrapper'].forEach(id => {
+            ['simulator-panel','fbs-wrapper','circuit-wrapper','circuit-editor-wrapper','factory-wrapper','festo-wrapper','sk-wrapper'].forEach(id => {
                 let el = document.getElementById(id);
                 if (el) el.classList.remove('task-area-blocked');
             });
@@ -24840,7 +24887,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // In Grid-Layout erzwingt CSS "display:flex !important" auf allen Panels →
             // erst in flex-row wechseln damit display:none greift
             _taskSavedLayout = null;
-            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.circuitEditor || areas.factory2d;
+            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.circuitEditor || areas.factory2d || areas.festo;
             if (_wsAnyHide && typeof currentLayout !== 'undefined' && currentLayout.startsWith('grid-')) {
                 _taskSavedLayout = currentLayout;
                 window.changeWorkspaceLayout('flex-row');
@@ -24852,6 +24899,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { key:'schaltplan',    btn:'btn-view-iec',      pid:'circuit-wrapper' },
                 { key:'circuitEditor', btn:'btn-view-iec-edit', pid:'circuit-editor-wrapper' },
                 { key:'factory2d',     btn:'btn-view-fac',      pid:'factory-wrapper' },
+                { key:'festo',         btn:'btn-view-festo',    pid:'festo-wrapper' },
                 { key:'schrittkette',  btn:'btn-view-sk',       pid:'sk-wrapper' },
             ];
             for (let {key, btn, pid} of wsPanels) {
@@ -24902,6 +24950,90 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const scVis = document.getElementById('simulator-container')?.style.display !== 'none';
             const res = document.getElementById('panel-resizer');
             if (res) res.style.display = (ecVis && scVis) ? 'block' : 'none';
+        }
+
+        // ── Aufgaben: globale Modi (E-Pneu/SPS) erzwingen ───────────────────────
+        // Modus ohne Bestätigungsdialog umschalten: window.confirm kurz überbrücken,
+        // damit alle Seiteneffekte von toggleEpneuMode greifen (Sim-Panel, Schaltplan …).
+        function _taskSetEpneuMode(wantEpneu) {
+            if (typeof window.toggleEpneuMode !== 'function') return;
+            if (!!window.epneuMode === !!wantEpneu) return;
+            const oc = window.confirm;
+            window.confirm = function () { return true; };
+            try { window.toggleEpneuMode(); } catch (e) {} finally { window.confirm = oc; }
+        }
+        let _taskPrevEpneuMode = null;
+        let _taskModeEnforced = false;
+        function _taskApplyForceMode(mode) {
+            if (mode !== 'epneu' && mode !== 'sps') return;
+            _taskPrevEpneuMode = !!window.epneuMode;
+            _taskSetEpneuMode(mode === 'epneu');
+            _taskModeEnforced = true;
+            const eb = document.getElementById('btn-epneu-mode');
+            if (eb) { eb.dataset.taskModeLock = '1'; eb.style.pointerEvents = 'none'; eb.style.opacity = '0.55'; eb.style.cursor = 'not-allowed'; }
+        }
+        function _taskRestoreForceMode() {
+            if (!_taskModeEnforced) return;
+            _taskModeEnforced = false;
+            if (_taskPrevEpneuMode !== null) _taskSetEpneuMode(_taskPrevEpneuMode);
+            _taskPrevEpneuMode = null;
+            const eb = document.getElementById('btn-epneu-mode');
+            if (eb && eb.dataset.taskModeLock) { delete eb.dataset.taskModeLock; eb.style.pointerEvents = ''; eb.style.opacity = ''; eb.style.cursor = ''; }
+        }
+
+        // ── Aufgaben: FESTO-Modus-Vorgaben ──────────────────────────────────────
+        // Freier Aufbau vorschalten/erzwingen, Schritt-/Trainings-/Stromfluss-Toggle
+        // sperren. Erzwingen über Umhüllen der window-Setter (überlebt Re-Render/
+        // Detach); Toolbar-Elemente werden zusätzlich optisch deaktiviert.
+        let _taskFestoState = null;
+        function _taskFestoDoc() {
+            try { if (typeof window._festoDoc === 'function') return window._festoDoc() || document; } catch (e) {}
+            return document;
+        }
+        function _taskDisableFestoEl(id) {
+            [document, _taskFestoDoc()].forEach(function (d) {
+                const el = d && d.getElementById(id);
+                if (!el || el.dataset.taskFestoLock) return;
+                el.dataset.taskFestoLock = '1';
+                if ('disabled' in el) el.disabled = true;
+                el.style.pointerEvents = 'none'; el.style.opacity = '0.45'; el.style.cursor = 'not-allowed';
+            });
+        }
+        function _taskApplyFestoConfig(cfg) {
+            if (!cfg) return;
+            _taskFestoState = { orig: {}, activatedFB: false };
+            const wrapForce = function (name, forced) {
+                if (typeof window[name] !== 'function') return;
+                _taskFestoState.orig[name] = window[name];
+                const orig = _taskFestoState.orig[name];
+                window[name] = function () { return orig.call(window, forced); };
+                try { orig.call(window, forced); } catch (e) {}
+            };
+            if (cfg.freeBuildForce) {
+                wrapForce('_toggleFestoFreeBuild', true);
+                _taskFestoState.activatedFB = true;
+                _taskDisableFestoEl('festo-freebuild-toggle');
+            } else if (cfg.freeBuildPreset) {
+                if (typeof window._toggleFestoFreeBuild === 'function') { try { window._toggleFestoFreeBuild(true); } catch (e) {} }
+                _taskFestoState.activatedFB = true;
+            }
+            if (cfg.lockStep)  { wrapForce('_setFestoStepMode', false);  _taskDisableFestoEl('festo-step-toggle'); }
+            if (cfg.lockTrain) { wrapForce('_setFestoTrainMode', false); _taskDisableFestoEl('festo-train-toggle'); }
+            if (cfg.lockFlow)  { wrapForce('_setFestoFlowAnim', false);  _taskDisableFestoEl('festo-flow-anim'); }
+        }
+        function _taskRestoreFestoConfig() {
+            if (!_taskFestoState) return;
+            const st = _taskFestoState; _taskFestoState = null;
+            Object.keys(st.orig).forEach(function (name) { window[name] = st.orig[name]; });
+            if (st.activatedFB && typeof window._toggleFestoFreeBuild === 'function') { try { window._toggleFestoFreeBuild(false); } catch (e) {} }
+            [document, _taskFestoDoc()].forEach(function (d) {
+                if (!d || !d.querySelectorAll) return;
+                d.querySelectorAll('[data-task-festo-lock]').forEach(function (el) {
+                    delete el.dataset.taskFestoLock;
+                    if ('disabled' in el) el.disabled = false;
+                    el.style.pointerEvents = ''; el.style.opacity = ''; el.style.cursor = '';
+                });
+            });
         }
 
         // ── Musterlösung ────────────────────────────────────────────────────────
@@ -24998,6 +25130,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'factory_object':  return 'Fabrikobjekt platzieren';
                 case 'sim_running':     return 'Simulation laufen lassen';
                 case 'despawner_count': return 'Teile verarbeiten';
+                case 'festo_train':     return 'FESTO-Aufbau abschließen';
                 case 'custom_js':       return 'Bedingung erfüllen';
                 default:                return cond.type;
             }
@@ -25014,6 +25147,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'factory_object':  return `${_getObjectTypeLabel(cond.objectType)}` + (cond.linkedVar ? ` → ${cond.linkedVar}` : '');
                 case 'sim_running':     return `≥ ${cond.minSeconds} s`;
                 case 'despawner_count': return `${cond.count} Teile`;
+                case 'festo_train':     return 'FESTO-Trainingsmodus komplett verkabelt';
                 case 'custom_js':       return cond.expression || '(JS)';
                 default:                return '';
             }
@@ -25121,6 +25255,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             _taskRestoreObjectRestrictions();
             _taskRestoreBlockAreas();
             _taskRestoreHideAreas();
+            _taskRestoreForceMode();
+            _taskRestoreFestoConfig();
             activeTask = null;
             taskSolved = false;
             // Tipp-/Check-State zurücksetzen
@@ -25822,6 +25958,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         return _cache(true);
                     }
                     case 'factory_object':  return factoryObjects.some(o => o.type === cond.objectType && o.linkedVar === cond.linkedVar);
+                    case 'festo_train':     return !!(window._festoCablesList && window._festoCablesList.length > 0 && window._festoTrainPlaced && window._festoTrainPlaced.length >= window._festoCablesList.length);
                     case 'sim_running':     return taskSimSeconds >= cond.minSeconds;
                     case 'despawner_count': return taskDespawnCount >= cond.count;
                     case 'custom_js':       return !!new Function('spsState','factoryObjects','globalInputs','globalOutputs','taskSimSeconds','return '+cond.expression)(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
@@ -25947,18 +26084,110 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
 
         // === Aufgaben-Editor ===
+        // Erfolgsbedingungen: nach Themen gruppiert, mit alltagssprachlichen Namen.
+        // Die internen `value`-Schlüssel bleiben unverändert (Abwärtskompatibilität).
         const _COND_TYPES = [
-            { value:'sps_output',      label:'SPS Ausgang (Output)' },
-            { value:'sps_input',       label:'SPS Eingang (Input)' },
-            { value:'variable_exists', label:'Variable deklariert' },
-            { value:'code_contains',   label:'Code enthält Muster (Regex)' },
-            { value:'logic_equivalent',label:'Logik-Äquivalenz (syntax-unabhängig)' },
-            { value:'component_type',  label:'Bauteiltyp zugewiesen' },
-            { value:'factory_object',  label:'Fabrikobjekt vorhanden' },
-            { value:'sim_running',     label:'Simulation läuft (Mindestzeit)' },
-            { value:'despawner_count', label:'Teile verarbeitet (Despawner)' },
-            { value:'custom_js',       label:'Eigener JS-Ausdruck' },
+            // Code
+            { value:'variable_exists', group:'Code/Logik, die sich aus anderen Editoren ergibt', label:'Variable kommt im Code-Editor vor' },
+            { value:'code_contains',   group:'Code/Logik, die sich aus anderen Editoren ergibt', label:'Code enthält ein bestimmtes Muster' },
+            { value:'logic_equivalent',group:'Code/Logik, die sich aus anderen Editoren ergibt', label:'Logik ist gleichwertig zum Referenz-Code' },
+            // Simulation & Verhalten
+            { value:'sps_output',      group:'Simulation & Verhalten',label:'Ausgang erhält bei der Simulation einen Wert' },
+            { value:'sps_input',       group:'Simulation & Verhalten',label:'Eingang erhält bei der Simulation einen Wert' },
+            { value:'sim_running',     group:'Simulation & Verhalten',label:'Simulation läuft mindestens X Sekunden' },
+            { value:'despawner_count', group:'Simulation & Verhalten',label:'Bestimmte Anzahl Teile verarbeitet (Despawner)' },
+            // Aufbau & Zuordnung
+            { value:'component_type',  group:'Aufbau & Zuordnung',    label:'Variable hat einen bestimmten Bauteiltyp' },
+            { value:'factory_object',  group:'Aufbau & Zuordnung',    label:'Fabrikobjekt ist mit Variable verknüpft' },
+            { value:'festo_train',     group:'Aufbau & Zuordnung',    label:'FESTO-Aufbau (Trainingsmodus) abgeschlossen' },
+            // Erweitert
+            { value:'custom_js',       group:'Erweitert',             label:'Eigener JS-Ausdruck' },
         ];
+        // Erklärtext pro Bedingung (wie unter dem Referenz-Code-Feld) — beschreibt,
+        // WANN die Bedingung als erfüllt gilt. Muss zur jeweiligen Prüffunktion in
+        // _checkCondition passen.
+        const _COND_EXPLAIN = {
+            variable_exists: 'Erfüllt, sobald diese Variable im Programm vorkommt — sie also im Code-Editor als Ein- oder Ausgang auftaucht (z. B. links oder rechts einer Zuweisung). Der Wert spielt keine Rolle, nur dass sie existiert.',
+            code_contains:   'Erfüllt, wenn der Code-Text zum angegebenen regulären Ausdruck passt. Damit lässt sich das Vorkommen bestimmter Bausteine/Schreibweisen verlangen (z. B. „SR", „TON"). Achtung: rein textuell — Groß-/Kleinschreibung und Syntax zählen.',
+            logic_equivalent:'Erfüllt, wenn das Programm für alle Eingangskombinationen dieselben Ausgangswerte liefert wie der Referenz-Code — unabhängig von der verwendeten Syntax. VALIS vergleicht dazu die Wahrheitstabellen beider Programme.',
+            sps_output:      'Erfüllt, wenn die gewählte Variable während der laufenden Simulation genau den erwarteten Wert (1/0) hat. Gedacht für Ausgänge (z. B. „Motor läuft"). Nur bei aktiver Simulation prüfbar.',
+            sps_input:       'Erfüllt, wenn die gewählte Variable während der laufenden Simulation genau den erwarteten Wert (1/0) hat. Gedacht für Eingänge (z. B. „Taster gedrückt"). Nur bei aktiver Simulation prüfbar.',
+            sim_running:     'Erfüllt, sobald die Simulation für mindestens die angegebene Zeit gelaufen ist (zählt die Sim-Zeit seit Aufgabenstart). Nützlich, um „lauffähig halten" zu verlangen.',
+            despawner_count: 'Erfüllt, wenn seit Aufgabenstart mindestens die angegebene Anzahl Werkstücke von einem Despawner (Auswerfer/Ziel) verarbeitet (entfernt) wurde. Nützlich als Funktionsnachweis: Ist die Anlage gesperrt und enthält Despawner, belegt eine erreichte Teile-Zahl, dass die selbst gebaute Steuerungslogik tatsächlich funktioniert.',
+            component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
+            factory_object:  'Erfüllt, wenn in der 2D-Anlage ein Objekt des gewählten Bauteils steht, das mit der angegebenen Variable verknüpft ist (Rechtsklick auf das Objekt → Variable zuweisen).',
+            festo_train:     'Erfüllt, wenn im FESTO-Panel der Trainingsmodus genutzt und der komplette Aufbau erfolgreich verkabelt wurde — also alle geforderten Kabel korrekt gesteckt sind.',
+            custom_js:       'Erfüllt, wenn der angegebene JavaScript-Ausdruck true ergibt. Für Sonderfälle. Verfügbar sind u. a.: spsState, factoryObjects, globalInputs, globalOutputs, taskSimSeconds.',
+        };
+        function _condExplainHtml(type) {
+            const t = _COND_EXPLAIN[type];
+            if (!t) return '';
+            return `<div style="color:#78909c;font-size:10px;line-height:1.5;margin-top:5px;padding:6px 8px;background:#111;border-left:2px solid #37474f;border-radius:3px;">ℹ️ ${t}</div>`;
+        }
+        // Zentrale Bauteiltyp-Liste (component_type-Bedingung + KI-Prompt) — eine Quelle,
+        // damit Editor-Dropdown und Prompt automatisch synchron bleiben.
+        const _TASK_COMP_TYPES = [
+            ['taster','Taster (Schließer)'],['taster_nc','Taster (Öffner)'],
+            ['schalter','Schalter (rastend)'],['schalter_nc','Schalter (Öffner, rastend)'],
+            ['nothalt','Not-Halt (Öffner)'],['key_switch','Schlüsselschalter'],
+            ['light_curtain','Lichtgitter (NC)'],
+            ['sensor_opt','Sensor Optisch'],['sensor_kap','Sensor Kapazitiv'],
+            ['sensor_mag','Sensor Magnetisch'],['sensor_reed','Reed-Kontakt'],['mech_sensor','Positions-Schalter'],
+            ['led','LED / Lampe'],['valve','Ventil (MB)'],['contactor','Schütz (K)'],
+            ['motor','Motor (M)'],['heater','Heizung (E)'],['siren','Signalhorn (H)'],
+            ['relais','Relais / Hilfsrelais (-KF)'],
+        ];
+
+        // Objekt-Einschränkung (thematisch Teil der 2D-Anlage): Radios + erlaubte
+        // Typen/Max-Zahlen + „Löschen verhindern". Wird als Unterpunkt der
+        // 2D-Anlage-Zeile in den Bearbeitungsbereichen gerendert. IDs/Namen bleiben
+        // unverändert → das Sammeln (_taskCollectFromEditor) funktioniert ortsunabhängig.
+        function _taskRenderObjectRestriction(task) {
+            const rm = task.restrictObjects === true ? 'conditions' : (task.restrictObjects || 'none');
+            const mc = task.objectMaxCounts || {};
+            const cntInpStyle = 'width:42px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;';
+            const typeOpts = _getFactoryObjectTypes().map(({type, label}) => {
+                const mcVal = mc[type] !== undefined ? mc[type] : '';
+                return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:3px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                    <input type="checkbox" class="ted-allow-type" data-type="${_escHtml(type)}" ${(task.allowedObjectTypes||[]).includes(type)?'checked':''}>
+                    <span style="flex:1;">${_escHtml(label)}</span>
+                    <span style="color:#607d8b;font-size:10px;">max:</span><input type="number" class="ted-max-count" data-type="${_escHtml(type)}" min="0" value="${mcVal}" placeholder="∞" style="${cntInpStyle}">
+                </label>`;
+            }).join('');
+            const condTypes = [...new Set((task.conditions||[]).filter(c=>c.type==='factory_object'&&c.objectType).map(c=>c.objectType))];
+            const allTypes = _getFactoryObjectTypes();
+            const condCountOpts = condTypes.map(t => {
+                const info = allTypes.find(x=>x.type===t) || {label:t};
+                const mcVal = mc[t] !== undefined ? mc[t] : '';
+                return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;color:#b0bec5;font-size:11px;">
+                    <span style="flex:1;">${_escHtml(info.label)}</span>
+                    <span style="color:#607d8b;font-size:10px;">max:</span><input type="number" class="ted-max-count" data-type="${_escHtml(t)}" min="0" value="${mcVal}" placeholder="∞" style="${cntInpStyle}">
+                </div>`;
+            }).join('');
+            return `<div style="margin-top:8px;">
+                <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">🔩 Objekt-Einschränkung</div>
+                ${[['none','Keine Einschränkung'],['conditions','Nur geforderte Objekte (aus den Fabrikobjekt-Bedingungen)'],['manual','Manuell festlegen']].map(([val,lbl])=>
+                    `<label style="display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                        <input type="radio" name="ted-restrict" value="${val}" ${rm===val?'checked':''} onchange="window._taskToggleRestrictMode(this.value)">
+                        ${lbl}
+                    </label>`).join('')}
+                <div id="ted-restrict-conditions" style="display:${rm==='conditions'?'block':'none'};margin-top:6px;border:1px solid #333;border-radius:3px;padding:6px;background:#111;">
+                    <div style="color:#546e7a;font-size:10px;margin-bottom:5px;">Anzahl pro Typ begrenzen (leer = unbegrenzt):</div>
+                    ${condCountOpts || '<span style="color:#546e7a;font-size:10px;">Keine Fabrikobjekt-Bedingungen vorhanden</span>'}
+                </div>
+                <div id="ted-restrict-manual" style="display:${rm==='manual'?'block':'none'};margin-top:6px;max-height:180px;overflow-y:auto;border:1px solid #333;border-radius:3px;padding:6px;background:#111;">
+                    ${typeOpts}
+                </div>
+                <label style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                    <input type="checkbox" id="ted-block-newvar" ${(task.blockAreas||{}).factoryNewVars?'checked':''} style="margin-top:2px;">
+                    <span>Neue Objekte zur Anlage hinzufügen sperren <span style="color:#607d8b;font-size:10px;">(nur wirksam wenn 2D Anlage nicht vollständig gesperrt)</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                    <input type="checkbox" id="ted-prevent-delete" ${task.preventDelete ? 'checked' : ''}>
+                    <span>Löschen von nicht gesperrten Objekten während der Aufgabe verhindern <span style="color:#607d8b;font-size:10px;">(Relevant bei Aufgaben, die das Entfernen von Objekten nicht erlauben, z.B. durch „max count"-Einschränkungen oder wenn wichtige Objekte als Teil der Aufgabe vorgegeben werden)</span></span>
+                </label>
+            </div>`;
+        }
 
         // Anzeigenamen für Built-in Fabrikobjekte
         const _BUILTIN_OBJ_NAMES = {
@@ -26023,17 +26252,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'code_contains':
                     return `<label class="task-ed-label">Regex-Muster</label><input class="task-ed-input cond-pattern" type="text" value="${_escHtml(cond.pattern||'')}" placeholder="z.B. SR oder TON">`;
                 case 'component_type': {
-                    const _allTypes = [
-                        ['taster','Taster (Schließer)'],['taster_nc','Taster (Öffner)'],
-                        ['schalter','Schalter (rastend)'],['schalter_nc','Schalter (Öffner, rastend)'],
-                        ['nothalt','Not-Halt (Öffner)'],['key_switch','Schlüsselschalter'],
-                        ['light_curtain','Lichtgitter (NC)'],
-                        ['sensor_opt','Sensor Optisch'],['sensor_kap','Sensor Kapazitiv'],
-                        ['sensor_mag','Sensor Magnetisch'],['sensor_reed','Reed-Kontakt'],['mech_sensor','Positions-Schalter'],
-                        ['led','LED / Lampe'],['valve','Ventil (MB)'],['contactor','Schütz (K)'],
-                        ['motor','Motor (M)'],['heater','Heizung (E)'],['siren','Signalhorn (H)'],
-                        ['relais','Relais / Hilfsrelais (-KF)'],
-                    ];
+                    const _allTypes = _TASK_COMP_TYPES;
                     const sel = _allTypes.map(([v,l]) => `<option value="${v}" ${v===(cond.compType||'led')?'selected':''}>${l}</option>`).join('');
                     return `<label class="task-ed-label">Variable</label>
                         <input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. A_MOTOR">
@@ -26042,8 +26261,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 case 'logic_equivalent':
                     return `<label class="task-ed-label">Referenz-Code (beliebige gültige Syntax)</label>
-                        <textarea class="task-ed-input cond-refcode" rows="4" placeholder="z.B.:\nA_MOTOR := E_TASTER1 AND E_TASTER2\nA_LAMPE := A_MOTOR" style="resize:vertical;font-family:monospace;font-size:11px;width:100%;box-sizing:border-box;">${_escHtml(cond.refCode||'')}</textarea>
-                        <div style="color:#546e7a;font-size:10px;margin-top:3px;">Das Programm gilt als korrekt, wenn es für alle Eingangskombinationen dieselben Ausgangswerte liefert wie der Referenz-Code — unabhängig von der verwendeten Syntax.</div>`;
+                        <textarea class="task-ed-input cond-refcode" rows="4" placeholder="z.B.:\nA_MOTOR := E_TASTER1 AND E_TASTER2\nA_LAMPE := A_MOTOR" style="resize:vertical;font-family:monospace;font-size:11px;width:100%;box-sizing:border-box;">${_escHtml(cond.refCode||'')}</textarea>`;
                 case 'factory_object': {
                     const dlId = 'task-obj-types-dl';
                     const dlOpts = _getFactoryObjectTypes().map(({label}) => `<option value="${_escHtml(label)}">`).join('');
@@ -26070,7 +26288,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let row = document.createElement('div');
             row.className = 'task-cond-row';
             row.dataset.condIdx = index;
-            let typeOpts = _COND_TYPES.map(t => `<option value="${t.value}" ${cond.type===t.value?'selected':''}>${_escHtml(t.label)}</option>`).join('');
+            const _grpOrder = [];
+            _COND_TYPES.forEach(t => { const g = t.group || ''; if (_grpOrder.indexOf(g) === -1) _grpOrder.push(g); });
+            let typeOpts = _grpOrder.map(g => {
+                const opts = _COND_TYPES.filter(t => (t.group || '') === g).map(t => `<option value="${t.value}" ${cond.type===t.value?'selected':''}>${_escHtml(t.label)}</option>`).join('');
+                return g ? `<optgroup label="${_escHtml(g)}">${opts}</optgroup>` : opts;
+            }).join('');
             const hintEnabled = (cond.hintEnabled === undefined) ? true : !!cond.hintEnabled;
             row.innerHTML = `
                 <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
@@ -26083,9 +26306,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     <button style="background:#c62828;color:#fff;border:none;border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;" title="Löschen">🗑</button>
                 </div>
                 <div class="cond-extra">${_buildCondExtra(cond)}</div>
+                <div class="cond-explain">${_condExplainHtml(cond.type)}</div>
                 <div><label class="task-ed-label">Anzeigetext</label><input class="task-ed-input cond-label-inp" type="text" value="${_escHtml(cond.label||'')}" placeholder="z.B. Motor läuft"></div>`;
             row.querySelector('.cond-type-sel').addEventListener('change', function() {
                 row.querySelector('.cond-extra').innerHTML = _buildCondExtra({ type: this.value });
+                const ex = row.querySelector('.cond-explain'); if (ex) ex.innerHTML = _condExplainHtml(this.value);
             });
             row.querySelector('button').addEventListener('click', () => { row.remove(); });
             // Draggable nur aktiv wenn Handle angeklickt wird
@@ -26336,6 +26561,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 schaltplan:      !!(document.getElementById('ted-block-iec') || {}).checked,
                 circuitEditor:   !!(document.getElementById('ted-block-edit') || {}).checked,
                 factory2d:       !!(document.getElementById('ted-block-2d') || {}).checked,
+                festo:           !!(document.getElementById('ted-block-festo') || {}).checked,
                 factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
                 excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
                 disableFromCode: !!(document.getElementById('ted-block-edit-no-fromcode') || {}).checked,
@@ -26348,7 +26574,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 schaltplan:   !!(document.getElementById('ted-hide-iec') || {}).checked,
                 circuitEditor:!!(document.getElementById('ted-hide-edit') || {}).checked,
                 factory2d:    !!(document.getElementById('ted-hide-2d') || {}).checked,
+                festo:        !!(document.getElementById('ted-hide-festo') || {}).checked,
             };
+            task.festoConfig = {
+                freeBuildPreset: !!(document.getElementById('ted-festo-fb-preset') || {}).checked,
+                freeBuildForce:  !!(document.getElementById('ted-festo-fb-force') || {}).checked,
+                lockStep:        !!(document.getElementById('ted-festo-lock-step') || {}).checked,
+                lockTrain:       !!(document.getElementById('ted-festo-lock-train') || {}).checked,
+                lockFlow:        !!(document.getElementById('ted-festo-lock-flow') || {}).checked,
+            };
+            const _enfMode = document.querySelector('input[name="ted-enforce-mode"]:checked');
+            task.enforceMode = _enfMode ? _enfMode.value : 'none';
             return task;
         }
 
@@ -26543,49 +26779,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">✅ Erfolgsbedingungen der aktuellen Stufe (alle müssen erfüllt sein, mind. eine vorhanden)</div>
                     <div id="ted-cond-list"></div>
                     <button onclick="window._taskAddCondition()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:11px;">+ Bedingung hinzufügen</button>
-                    ${(() => {
-                        const rm = task.restrictObjects === true ? 'conditions' : (task.restrictObjects || 'none');
-                        const mc = task.objectMaxCounts || {};
-                        const cntInpStyle = 'width:42px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:2px 4px;font-size:11px;';
-                        const typeOpts = _getFactoryObjectTypes().map(({type, label}) => {
-                            const mcVal = mc[type] !== undefined ? mc[type] : '';
-                            return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:3px;cursor:pointer;color:#b0bec5;font-size:11px;">
-                                <input type="checkbox" class="ted-allow-type" data-type="${_escHtml(type)}" ${(task.allowedObjectTypes||[]).includes(type)?'checked':''}>
-                                <span style="flex:1;">${_escHtml(label)}</span>
-                                <span style="color:#607d8b;font-size:10px;">max:</span><input type="number" class="ted-max-count" data-type="${_escHtml(type)}" min="0" value="${mcVal}" placeholder="∞" style="${cntInpStyle}">
-                            </label>`;
-                        }).join('');
-                        // For 'conditions' mode: show count inputs for types derived from factory_object conditions
-                        const condTypes = [...new Set((task.conditions||[]).filter(c=>c.type==='factory_object'&&c.objectType).map(c=>c.objectType))];
-                        const allTypes = _getFactoryObjectTypes();
-                        const condCountOpts = condTypes.map(t => {
-                            const info = allTypes.find(x=>x.type===t) || {label:t};
-                            const mcVal = mc[t] !== undefined ? mc[t] : '';
-                            return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;color:#b0bec5;font-size:11px;">
-                                <span style="flex:1;">${_escHtml(info.label)}</span>
-                                <span style="color:#607d8b;font-size:10px;">max:</span><input type="number" class="ted-max-count" data-type="${_escHtml(t)}" min="0" value="${mcVal}" placeholder="∞" style="${cntInpStyle}">
-                            </div>`;
-                        }).join('');
-                        return `<div style="margin-top:10px;">
-                            <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">🔩 Objekt-Einschränkung</div>
-                            ${[['none','Keine Einschränkung'],['conditions','Nur geforderte Objekte ("Fabrikobjekt vorhanden"-Erfolgsbedingungen)'],['manual','Manuell festlegen']].map(([val,lbl])=>
-                                `<label style="display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:pointer;color:#b0bec5;font-size:11px;">
-                                    <input type="radio" name="ted-restrict" value="${val}" ${rm===val?'checked':''} onchange="window._taskToggleRestrictMode(this.value)">
-                                    ${lbl}
-                                </label>`).join('')}
-                            <div id="ted-restrict-conditions" style="display:${rm==='conditions'?'block':'none'};margin-top:6px;border:1px solid #333;border-radius:3px;padding:6px;background:#111;">
-                                <div style="color:#546e7a;font-size:10px;margin-bottom:5px;">Anzahl pro Typ begrenzen (leer = unbegrenzt):</div>
-                                ${condCountOpts || '<span style="color:#546e7a;font-size:10px;">Keine factory_object-Bedingungen vorhanden</span>'}
-                            </div>
-                            <div id="ted-restrict-manual" style="display:${rm==='manual'?'block':'none'};margin-top:6px;max-height:180px;overflow-y:auto;border:1px solid #333;border-radius:3px;padding:6px;background:#111;">
-                                ${typeOpts}
-                            </div>
-                            <label style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer;color:#b0bec5;font-size:11px;">
-                                <input type="checkbox" id="ted-prevent-delete" ${task.preventDelete ? 'checked' : ''}>
-                                Löschen von nicht gesperrten Objekten während der Aufgabe verhindern (Relevant bei Aufgaben, die das Entfernen von Objekten nicht erlauben, z.B. durch "max count" Einschränkungen oder wenn wichtige Objekte als Teil der Aufgabe vorgegeben werden)
-                            </label>
-                        </div>`;
-                    })()}
                 </div>
                 <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">💡 Musterlösung</div>
@@ -26640,12 +26833,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         </tr></thead>
                         <tbody>
                         ${[
-                            ['code',   'Code-Editor',        'ted-block-code',   'ted-hide-code',   (task.blockAreas||{}).codeEditor,  (task.hideAreas||{}).codeEditor,  ''],
-                            ['io',     'Ein-/Ausgänge',      'ted-block-io',     'ted-hide-io',     (task.blockAreas||{}).ioPanel,     (task.hideAreas||{}).ioPanel,     ''],
+                            ['code',   'Code-Editor',        'ted-block-code',   'ted-hide-code',   (task.blockAreas||{}).codeEditor,  (task.hideAreas||{}).codeEditor,  '(Auch bei gesperrtem Code-Editor kann Code weiterhin über Logikplan, Auto-Schaltplan, Schaltplan-Editor, den freien Aufbaumodus im FESTO-Panel sowie das Schrittketten-Panel erstellt bzw. dorthin synchronisiert werden. Ausnahme: Der Schaltplan-Editor synchronisiert nicht, wenn hier seine Optionen „Aus Code" / Live-Sync deaktiviert sind.)'],
+                            ['io',     'Ein-/Ausgänge',      'ted-block-io',     'ted-hide-io',     (task.blockAreas||{}).ioPanel,     (task.hideAreas||{}).ioPanel,     '(Bei Sperrung entfällt hier die Bauteiltyp-Zuweisung der Ein-/Ausgänge. Der Typ lässt sich dann nur noch über das Rechtsklick-Menü des Auto-Schaltplans, die Platzierung im Schaltplan-Editor oder den freien Aufbaumodus des FESTO-Panels ändern. Neue Ein-/Ausgänge entstehen weiterhin automatisch, sobald sie im Code vorkommen — zunächst mit Standardtyp.)'],
                             ['fbs',    'Logikplan',          'ted-block-fbs',    'ted-hide-fbs',    (task.blockAreas||{}).logikplan,   (task.hideAreas||{}).logikplan,   '(Sperren lässt Code-Bearbeitung über FBS zu, wenn nicht gesperrt)'],
                             ['iec',    'Schaltplan',         'ted-block-iec',    'ted-hide-iec',    (task.blockAreas||{}).schaltplan,  (task.hideAreas||{}).schaltplan,  '(Sperren lässt Code-Bearbeitung über Schaltplan zu, wenn nicht gesperrt)'],
                             ['edit',   '🎨 Schaltplan-Editor','ted-block-edit',  'ted-hide-edit',   (task.blockAreas||{}).circuitEditor,(task.hideAreas||{}).circuitEditor,'(Sperren lässt Wires/Komponenten betrachten, aber nichts mehr ändern)'],
                             ['2d',     '2D Anlage',          'ted-block-2d',     'ted-hide-2d',     (task.blockAreas||{}).factory2d,   (task.hideAreas||{}).factory2d,   ''],
+                            ['festo',  '🔌 FESTO-Aufbau',    'ted-block-festo',  'ted-hide-festo',  (task.blockAreas||{}).festo,       (task.hideAreas||{}).festo,       ''],
                         ].map(([key,label,blockId,hideId,blockChk,hideChk,hint]) => `
                             <tr style="border-top:1px solid #2a2a2a;">
                                 <td style="padding:4px 0;">${label}${hint?`<br><span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}</td>
@@ -26669,24 +26863,49 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 </td>
                             </tr>`:''}${key==='2d'?`
                             <tr>
-                                <td colspan="3" style="padding:2px 0 5px 16px;">
+                                <td colspan="3" style="padding:2px 0 6px 16px;">
                                     <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
                                         <input type="checkbox" id="ted-block-2d-excl-ctrl" ${(task.blockAreas||{}).excludeControls?'checked':''}>
                                         <span>Bedienelemente (Taster, Schalter, Not-Halt, Schlüsselschalter) von der Sperre ausschließen <span style="color:#607d8b;font-size:10px;">(bleiben klickbar wenn 2D-Anlage gesperrt)</span></span>
                                     </label>
+                                    ${_taskRenderObjectRestriction(task)}
+                                </td>
+                            </tr>`:''}${key==='festo'?`
+                            <tr>
+                                <td colspan="3" style="padding:2px 0 6px 16px;">
+                                    <div style="color:#607d8b;font-size:10px;margin-bottom:4px;">FESTO-Modus-Vorgaben (greifen beim Start der Aufgabe):</div>
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;">
+                                        <input type="checkbox" id="ted-festo-fb-preset" ${(task.festoConfig||{}).freeBuildPreset?'checked':''}>
+                                        <span>🧩 „Freier Aufbau" voraktivieren</span>
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;">
+                                        <input type="checkbox" id="ted-festo-fb-force" ${(task.festoConfig||{}).freeBuildForce?'checked':''}>
+                                        <span>🔒 „Freier Aufbau" erzwingen <span style="color:#607d8b;font-size:10px;">(bleibt aktiv, Umschalten für den Lerner gesperrt)</span></span>
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;">
+                                        <input type="checkbox" id="ted-festo-lock-step" ${(task.festoConfig||{}).lockStep?'checked':''}>
+                                        <span>🪜 Schritt-Modus sperren</span>
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;">
+                                        <input type="checkbox" id="ted-festo-lock-train" ${(task.festoConfig||{}).lockTrain?'checked':''}>
+                                        <span>🎓 Trainingsmodus sperren</span>
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
+                                        <input type="checkbox" id="ted-festo-lock-flow" ${(task.festoConfig||{}).lockFlow?'checked':''}>
+                                        <span>⚡ Stromfluss-Animation sperren</span>
+                                    </label>
                                 </td>
                             </tr>`:''}
                         `).join('')}
-                        <tr style="border-top:1px solid #333;">
-                            <td colspan="3" style="padding-top:6px;">
-                                <label style="display:flex;align-items:flex-start;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;">
-                                    <input type="checkbox" id="ted-block-newvar" ${(task.blockAreas||{}).factoryNewVars?'checked':''} style="margin-top:2px;">
-                                    <span>Neue Objekte zur Anlage hinzufügen sperren <span style="color:#607d8b;font-size:10px;">(nur wirksam wenn 2D Anlage nicht vollständig gesperrt)</span></span>
-                                </label>
-                            </td>
-                        </tr>
                         </tbody>
                     </table>
+                </div>
+                <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
+                    <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">⚙️ Globalen Betriebsmodus erzwingen</div>
+                    <div style="color:#607d8b;font-size:10px;margin-bottom:7px;">Setzt beim Start der Aufgabe den Modus und sperrt den ⚡-Umschalter; beim Beenden wird der vorherige Modus wiederhergestellt.</div>
+                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;"><input type="radio" name="ted-enforce-mode" value="none" ${(task.enforceMode||'none')==='none'?'checked':''}><span>Nicht erzwingen <span style="color:#607d8b;font-size:10px;">(Nutzerwahl bleibt)</span></span></label>
+                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;margin-bottom:3px;"><input type="radio" name="ted-enforce-mode" value="epneu" ${(task.enforceMode)==='epneu'?'checked':''}><span>⚡ E-Pneumatik-Modus erzwingen</span></label>
+                    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:#b0bec5;font-size:11px;"><input type="radio" name="ted-enforce-mode" value="sps" ${(task.enforceMode)==='sps'?'checked':''}><span>🖥 SPS-Modus erzwingen</span></label>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #444;padding-top:12px;">
                     <button onclick="window._taskEditorSave()" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:bold;">💾 Lokal speichern</button>
@@ -26768,6 +26987,203 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let task = _taskCleanInternal(_taskCollectFromEditor());
             if (!task.name) { alert('Bitte einen Aufgabennamen eingeben.'); return; }
             _exportTask(task);
+        };
+
+        // ── KI-Prompt: komplette Aufgabe per KI erstellen ───────────────────
+        // Erklärt der KI das gesamte .valitask-Format, ALLE Editor-Optionen samt
+        // Wirkung sowie die VALIS-Code-Syntax. Die JSON-Antwort wird über den
+        // bestehenden Editor-Ladepfad (_openTaskEditor) importiert.
+        function _taskEdBuildPrompt() {
+            // Dynamische Listen aus den lebenden Datenstrukturen — der Prompt aktualisiert
+            // sich automatisch, wenn Objekttypen, Bauteiltypen oder Bedingungen dazukommen.
+            let objTypes = '';
+            try { objTypes = _getFactoryObjectTypes().map(function (o) { return o.type + ' (' + o.label + ')'; }).join(', '); } catch (e) {}
+            let compTypeList = '';
+            try { compTypeList = _TASK_COMP_TYPES.map(function (p) { return p[0] + ' (' + p[1] + ')'; }).join(', '); } catch (e) {}
+            const _condFieldSpec = {
+                variable_exists: '{ "variable": "A_LAMPE" }',
+                code_contains:   '{ "pattern": "SR|TON" }',
+                logic_equivalent:'{ "refCode": "A_MOTOR := E_T1 && E_T2\\nA_LAMPE := A_MOTOR" }',
+                sps_output:      '{ "variable": "A_MOTOR", "value": true }',
+                sps_input:       '{ "variable": "E_TASTER", "value": true }',
+                sim_running:     '{ "minSeconds": 5 }',
+                despawner_count: '{ "count": 10 }',
+                component_type:  '{ "variable": "A_MOTOR", "compType": "motor" }',
+                factory_object:  '{ "objectType": "conveyor", "linkedVar": "A_BAND" }',
+                festo_train:     '{ }',
+                custom_js:       "{ \"expression\": \"spsState['A_X']===true\" }"
+            };
+            let condBlock = '';
+            try {
+                condBlock = _COND_TYPES.map(function (ct) {
+                    const spec = _condFieldSpec[ct.value] || '{ ... }';
+                    const expl = String(_COND_EXPLAIN[ct.value] || '').replace(/\s+/g, ' ').trim();
+                    return '• ' + ct.value + '  ' + spec + (expl ? '\n    ' + expl : '');
+                }).join('\n');
+            } catch (e) {}
+            return [
+                'Du erstellst eine ÜBUNGSAUFGABE für den Steuerungstechnik-Simulator VALIS im .valitask-Format.',
+                'Gib AUSSCHLIESSLICH ein einziges JSON-Objekt zurück (keine Erklärung, keine Code-Fences).',
+                '',
+                '=== JSON-FORMAT (alle Felder; optionale dürfen weggelassen werden) ===',
+                '{',
+                '  "version": "1.0",',
+                '  "type": "valitask",',
+                '  "name": "Kurzer Titel der Aufgabe",',
+                '  "description": "Aufgabenstellung für den Lernenden. \\n erzeugt Zeilenumbrueche.",',
+                '  "hint": "Optionale Tipps (\\n fuer Zeilenumbrueche).",',
+                '  "category": "Thema, z. B. Automatisierungstechnik",',
+                '  "difficulty": "leicht",             // leicht | mittel | schwer',
+                '  "timeLimit": 0,                     // Zeitlimit in Sekunden; 0 = kein Limit',
+                '  "autoStartSim": false,              // Simulation beim Aufgabenstart automatisch starten',
+                '  "conditions": [ /* Erfolgsbedingungen, siehe unten */ ],',
+                '  "restrictObjects": "none",          // none | manual | conditions (2D-Objekt-Einschraenkung)',
+                '  "allowedObjectTypes": [],           // nur bei "manual": erlaubte 2D-Objekttypen (Liste unten)',
+                '  "objectMaxCounts": {},              // optional Max-Anzahl je Typ, z. B. {"taster":2}',
+                '  "preventDelete": false,             // Loeschen nicht gesperrter Objekte waehrend der Aufgabe verhindern',
+                '  "blockAreas": {},                   // Bereiche SPERREN (sichtbar, aber nicht bedienbar) — Schluessel unten',
+                '  "hideAreas": {},                    // Bereiche AUSBLENDEN (ganz weg) — Schluessel unten',
+                '  "festoConfig": {},                  // FESTO-Modus-Vorgaben — Schluessel unten',
+                '  "enforceMode": "none",              // none | epneu | sps (Betriebsmodus erzwingen)',
+                '  "solutionMode": "hidden",           // hidden | always | after_time | after_partial | after_both',
+                '  "solutionMinTime": 60,              // Sekunden (bei after_time / after_both)',
+                '  "solutionMinDone": 1,               // Anzahl erledigter Bedingungen (bei after_partial / after_both)',
+                '  "solution": { "code": "" },         // optional Musterloesung als VALIS-Code (Syntax unten)',
+                '  "stages": []                        // optional mehrstufig (siehe unten) — ersetzt dann description/hint/conditions',
+                '}',
+                '',
+                '=== ERFOLGSBEDINGUNGEN ("conditions") ===',
+                'Jede Bedingung: { "type": <Typ>, "label": "Kurztext fuer die Anzeige", "hintEnabled": true, ...Typ-Felder }.',
+                'Alle Bedingungen einer Stufe muessen erfuellt sein; mindestens eine ist noetig. Typen (Feld-Beispiel) und Wirkung:',
+                '',
+                condBlock,
+                '',
+                '=== DATENQUELLE DER BEDINGUNGEN (WICHTIG — sonst unerfuellbar) ===',
+                '  Aus dem CODE (geparst): variable_exists, code_contains, logic_equivalent, sps_output, sps_input, component_type.',
+                '    Nur erfuellbar, wenn Code im Code-Editor steht. Code darf auch aus Logikplan/Schaltplan-Editor/Schrittketten/FESTO stammen — aber nur, wenn dessen Sync NICHT abgeschaltet ist.',
+                '  Aus 2D-Anlage / Simulation / FESTO: factory_object, despawner_count, sim_running, festo_train.',
+                '  FALLSTRICK "manueller Aufbau": Sperrst du den Code-Editor UND schaltest die Schaltplan-Editor-Sync ab (disableFromCode/disableLiveSync), entsteht aus einer Handzeichnung KEIN Code automatisch — code-basierte Bedingungen bleiben unerfuellt. Dann ENTWEDER Sync anlassen, ODER in der description ausdruecklich sagen, dass der Lerner "Code generieren" druecken muss, ODER nur nicht-code-basierte Bedingungen nutzen.',
+                '',
+                '=== VARIABLENNAMEN (WICHTIG) ===',
+                '  logic_equivalent, variable_exists, sps_* und component_type vergleichen ueber EXAKTE Variablennamen. Nenne die geforderten Namen daher IMMER in der description (z. B. "Verwende exakt: E_START, E_STOP, A_MOTOR, A_LAMPE"), sonst kann der Lerner die Bedingung nicht treffen.',
+                '',
+                '=== BEREICHE SPERREN ("blockAreas") — Wert true sperrt ===',
+                '  "codeEditor"      Code-Editor schreibgeschuetzt. Code kann trotzdem ueber Logikplan/Auto-Schaltplan/Schaltplan-Editor/FESTO-Freibau/Schrittketten erzeugt/synchronisiert werden.',
+                '  "ioPanel"         Ein-/Ausgaenge-Panel gesperrt. Bauteiltyp-Zuweisung entfaellt dort; neue I/O entstehen weiter automatisch aus dem Code (Standardtyp).',
+                '  "logikplan"       Logikplan (FBS) gesperrt.',
+                '  "schaltplan"      Auto-Schaltplan gesperrt.',
+                '  "circuitEditor"   Schaltplan-Editor gesperrt (Betrachten ja, Aendern nein).',
+                '  "factory2d"       2D-Anlage gesperrt.',
+                '  "festo"           FESTO-Aufbau-Panel gesperrt.',
+                '  "factoryNewVars"  Neue Objekte zur 2D-Anlage hinzufuegen sperren (nur wenn 2D nicht ganz gesperrt).',
+                '  "excludeControls" Bedienelemente (Taster/Schalter/Not-Halt) bleiben trotz 2D-Sperre klickbar.',
+                '  "disableFromCode" Schaltplan-Editor: "Aus Code"-Button + Live-Sync aus (Lerner muss selbst verdrahten).',
+                '  "disableLiveSync" Schaltplan-Editor: Live-Sync komplett aus.',
+                '',
+                '=== BEREICHE AUSBLENDEN ("hideAreas") — Wert true blendet ganz aus ===',
+                '  Schluessel: codeEditor, ioPanel, logikplan, schaltplan, circuitEditor, factory2d, festo.',
+                '',
+                '=== 2D-OBJEKT-EINSCHRAENKUNG ===',
+                '  "restrictObjects": "none"        keine Einschraenkung.',
+                '                     "conditions"  nur Objekttypen, die in factory_object-Bedingungen gefordert sind.',
+                '                     "manual"      nur die in "allowedObjectTypes" gelisteten Typen platzierbar.',
+                '  "objectMaxCounts": Obergrenze je Typ.   "preventDelete": Loeschen verhindern.',
+                '',
+                '=== FESTO-VORGABEN ("festoConfig") ===',
+                '  "freeBuildPreset" true = "Freier Aufbau" beim Start aktivieren.',
+                '  "freeBuildForce"  true = "Freier Aufbau" erzwingen (Lerner kann nicht abschalten).',
+                '  "lockStep" / "lockTrain" / "lockFlow"  true = Schritt-Modus / Trainingsmodus / Stromfluss-Animation sperren.',
+                '',
+                '=== BETRIEBSMODUS ("enforceMode") ===',
+                '  Legt fest, WAS eine Variable bedeutet und WIE Schaltplan/FESTO-Aufbau gezeichnet werden. Der Code (Namen, Operatoren, Logik) bleibt in beiden Modi identisch.',
+                '  "sps"   SPS-Modus (Standard): Variable = Signal an der SPS-Klemme wie im CPU-Programm. NC-Kontakte (Not-Halt, Lichtgitter) liefern in Ruhe 1 → im Code muss negiert werden; NOTAUS==1 heisst NICHT gedrueckt. Auto-Schaltplan als Klemmenplan. Fuer klassische SPS-Programmieraufgaben.',
+                '  "epneu" E-Pneumatik-Modus: Variable = physischer Betaetigungszustand des Bauteils. Schliesser -> X, Oeffner -> ¬X; NOTAUS==1 heisst gedrueckt. Plan-zu-Code 1:1, elektromechanische Schaltplan-/FESTO-Darstellung. Fuer reine Relais-/E-Pneumatik-Schaltungen OHNE SPS.',
+                '  "none"  nicht erzwingen (Nutzerwahl bleibt). Ein erzwungener Modus sperrt den Umschalter waehrend der Aufgabe und wird danach zurueckgesetzt.',
+                '  FAUSTREGEL: klassische SPS-Programmieraufgaben -> "sps". Manuelle Relais-/Schaltplan-Verdrahtung, Selbsthaltung als PHYSISCHER Haltekontakt, reine E-Pneumatik -> "epneu". Wichtig: Der refCode einer Oeffner-/NC-Logik ist MODUSABHAENGIG (SPS: NC liefert in Ruhe 1 -> im Code negieren; E-Pneu: Variable = physischer Betaetigungszustand). Schreibe refCode und Beschreibung passend zum gewaehlten Modus.',
+                '',
+                '=== MEHRSTUFIG ("stages", optional) ===',
+                '  Array aus { "description": "...", "hint": "...", "conditions": [ ... ] }. Bei "stages" gelten description/hint/conditions je Stufe; die Stufen werden nacheinander freigeschaltet.',
+                '',
+                '=== VALIS-CODE-SYNTAX (fuer solution.code, refCode, code_contains) ===',
+                '  Zuweisung: :=   UND: &&   ODER: ||   NICHT: ¬   Klammern ( ) fuer Vorrang.   Kommentar: //   Jede Zuweisung in eigener Zeile.',
+                '  Speicher RS (ruecksetzdominant): S1 := <setzen>, R1 := <ruecksetzen>, Ausgang ist Q1 (weitere: S2/R2 -> Q2).',
+                '  Speicher SR (setzdominant): S1_SR := <setzen>, R1_SR := <ruecksetzen>, Ausgang ist Q1_SR.',
+                '  WICHTIG bei Selbsthaltungen: im refCode/solution IMMER die RS-/SR-Form (S1/R1 -> Q1) nutzen, NIEMALS die selbstreferenzielle Form (X := (X || ...) && ...). Grund: logic_equivalent prueft die Halte-/Speicherfunktion nur bei echten RS/SR-Gliedern; die selbstreferenzielle Form wird speicherlos ausgewertet, sodass sogar eine Loesung OHNE Selbsthaltung faelschlich durchginge. (Eine im Schaltplan gezeichnete Selbsthaltung wird ohnehin automatisch als RS-Glied erkannt.)',
+                '  Zeitglieder: HILFS := TON(EINGANG, 2.5) (Einschaltverzoegerung), TOF(...) (Ausschaltverzoegerung/Nachlauf), TP(...) (Impuls). Zeit in Sekunden.',
+                '  Zaehler: HILFS := CTU(ZAEHL_SIGNAL, RESET, 5).',
+                '  Variablennamen: GROSSBUCHSTABEN, Unterstriche statt Leerzeichen, keine Umlaute (ae/oe/ue/ss). Ueblich: E_ fuer Eingaenge, A_ fuer Ausgaenge.',
+                '',
+                '=== BAUTEILTYPEN (fuer component_type.compType und die Hardware) ===',
+                '  compType ist der Bezeichner vor der Klammer:',
+                '  ' + (compTypeList || 'taster (Taster), taster_nc (Taster Oeffner), schalter, schalter_nc, nothalt (Not-Halt), key_switch (Schluesselschalter), light_curtain (Lichtgitter), sensor_opt, sensor_kap, sensor_mag, sensor_reed, mech_sensor, led (LED/Lampe), valve (Ventil/Motor/Band/Zylinder), contactor (Schuetz), motor, heater (Heizung), siren (Signalhorn), relais (Hilfsrelais)') + '.',
+                '',
+                '=== 2D-OBJEKTTYPEN (fuer factory_object.objectType und allowedObjectTypes) ===',
+                '  Alle aktuell verfuegbaren Typen (Built-ins UND installierte Komponenten/Plugins) — objectType ist jeweils der Bezeichner vor der Klammer:',
+                '  ' + (objTypes || 'taster (Taster), schalter (Schalter), nothalt (Not-Halt), led (Lampe/LED), sensor_ind (Sensor Induktiv), sensor_kap (Sensor Kapazitiv), sensor_mag (Sensor Magnetisch), sensor_reed (Reed-Kontakt), sensor_opt (Sensor Optisch), conveyor (Foerderband), zylinder_single (Zylinder einfachwirkend), zylinder_double (Zylinder doppelwirkend), despawner (Auswerfer/Ziel), spawner_metall (Werkstueck-Quelle Metall), spawner_kunststoff (Werkstueck-Quelle Kunststoff), frame (Rahmen), wall (Wand), zone_side (Zone Seitenansicht), zone_top (Zone Draufsicht)') + '.',
+                '',
+                '=== REGELN ===',
+                '  • Mindestens eine Erfolgsbedingung (bzw. je Stufe). Fuer die Logikpruefung bevorzugt logic_equivalent; fuer den Aufbau factory_object/component_type.',
+                '  • Pruefe: Kann jede Bedingung mit den gewaehlten Sperren ueberhaupt erfuellt werden? (siehe DATENQUELLE oben) — sonst ist die Aufgabe unloesbar.',
+                '  • logic_equivalent prueft NUR die Logik, nicht WIE sie entstand. Soll der Lerner einen bestimmten Weg gehen (z. B. nur von Hand im Schaltplan-Editor), sperre/verbirg die anderen Wege (z. B. logikplan, schaltplan) — beachte dabei die DATENQUELLE.',
+                '  • refCode muss zum enforceMode passen (NC-Semantik) und alle in Bedingungen genannten Variablennamen exakt in der description auffuehren.',
+                '  • Sperren/Ausblenden nur setzen, wenn die Aufgabe es verlangt; Widersprueche vermeiden (nicht denselben Bereich sperren UND ausblenden).',
+                '  • "label" bei jeder Bedingung kurz und lernerfreundlich.',
+                '  • Ausschliesslich das JSON ausgeben.',
+                '',
+                '=== BEISPIEL ===',
+                '{',
+                '  "version":"1.0","type":"valitask",',
+                '  "name":"Selbsthaltung mit Not-Halt",',
+                '  "description":"Ein Motor soll per Start-Taster starten und laufen bleiben (Selbsthaltung). Der Not-Halt (Oeffner) stoppt ihn sofort. Eine gruene Lampe zeigt Betrieb.",',
+                '  "hint":"Nutze ein RS-Glied: S1 := E_START && ¬E_NOTHALT, R1 := ¬E_NOTHALT. Der Ausgang ist Q1.",',
+                '  "category":"Automatisierungstechnik","difficulty":"mittel","timeLimit":0,',
+                '  "conditions":[',
+                '    {"type":"variable_exists","label":"Motor-Ausgang vorhanden","hintEnabled":true,"variable":"A_MOTOR"},',
+                '    {"type":"logic_equivalent","label":"Steuerungslogik korrekt","hintEnabled":true,"refCode":"S1 := E_START && ¬E_NOTHALT\\nR1 := ¬E_NOTHALT\\nA_MOTOR := Q1\\nA_LAMPE := Q1"},',
+                '    {"type":"sim_running","label":"Anlage getestet","hintEnabled":false,"minSeconds":5}',
+                '  ],',
+                '  "restrictObjects":"none","blockAreas":{"circuitEditor":true},"hideAreas":{},',
+                '  "solutionMode":"after_time","solutionMinTime":120,',
+                '  "solution":{"code":"S1 := E_START && ¬E_NOTHALT\\nR1 := ¬E_NOTHALT\\nA_MOTOR := Q1\\nA_LAMPE := Q1"}',
+                '}',
+                '',
+                'Erstelle nun die Aufgabe aus dieser Beschreibung (nur das JSON ausgeben):',
+                '--- AUFGABE ---',
+                '[Beschreibe hier deine gewuenschte Aufgabe frei: Was soll gebaut/programmiert werden, welche Bedingungen pruefen, welche Bereiche sperren, Schwierigkeit, Zeitlimit ...]'
+            ].join('\n');
+        }
+        window._taskEdOpenAI = function() {
+            const m = document.getElementById('task-ai-modal'); if (!m) return;
+            const ta = document.getElementById('task-ai-prompt'); if (ta) ta.value = _taskEdBuildPrompt();
+            const st = document.getElementById('task-ai-apply-status'); if (st) st.textContent = '';
+            const ci = document.getElementById('task-ai-copy-ind'); if (ci) ci.textContent = '';
+            m.style.display = 'flex';
+        };
+        window._taskEdCloseAI = function() { const m = document.getElementById('task-ai-modal'); if (m) m.style.display = 'none'; };
+        window._taskEdCopyPrompt = function() {
+            const ta = document.getElementById('task-ai-prompt'); if (!ta) return;
+            ta.select();
+            try { document.execCommand('copy'); } catch (_) {}
+            try { if (navigator.clipboard) navigator.clipboard.writeText(ta.value); } catch (_) {}
+            const ci = document.getElementById('task-ai-copy-ind'); if (ci) { ci.textContent = '📋 kopiert!'; setTimeout(function () { ci.textContent = ''; }, 2000); }
+        };
+        window._taskEdApplyJson = function() {
+            const ta = document.getElementById('task-ai-json');
+            const st = document.getElementById('task-ai-apply-status');
+            const setStatus = function (m, err) { if (st) { st.textContent = m || ''; st.style.color = err ? '#ef9a9a' : '#a5d6a7'; } };
+            let raw = (ta ? ta.value : '').trim();
+            if (!raw) { setStatus('Bitte zuerst die JSON-Antwort einfuegen.', true); return; }
+            raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+            if (raw[0] !== '{') { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); if (a !== -1 && b > a) raw = raw.slice(a, b + 1); }
+            let task;
+            try { task = JSON.parse(raw); } catch (e) { setStatus('Kein gueltiges JSON: ' + e.message, true); return; }
+            if (task && task.type === 'valipack') { setStatus('Das ist ein Paket, keine einzelne Aufgabe.', true); return; }
+            if (!task || typeof task !== 'object' || (!task.name && !task.conditions && !task.stages)) { setStatus('Unerwartetes Format — erwarte ein Aufgaben-JSON.', true); return; }
+            task.type = 'valitask';
+            task.version = task.version || '1.0';
+            if (!task.id) task.id = 'task-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+            window._taskEdCloseAI();
+            try { window._openTaskEditor(task); } catch (e) { window._taskEdOpenAI(); setStatus('Konnte nicht in den Editor laden: ' + e.message, true); }
         };
 
         // Import .valitask (supports multiple files)
@@ -50789,6 +51205,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     desc: 'Vom Schaltplan zur realen Verdrahtung: Strang für Strang aufbauen, richtige Kabelfarben wählen und Anschlusskennziffern korrekt lesen. Trainiert mit den FESTO-Lehrpanels direkt am virtuellen Schaltwand-Aufbau.'
                 }
             ];
+            // LESSONS liegt in dieser IIFE; für die globale Lernzentrum-Suche
+            // (andere IIFE) über window bereitstellen.
+            try { window._hubLessons = LESSONS; } catch (e) {}
             // Modal-Renderer Stufe 1: Kategorie-Auswahl (zwei große Karten).
             // Hält das Modal kompakt — der User sieht nicht direkt alle
             // Lektionen, sondern wählt erst Grundlagen vs. Fortgeschritten.
@@ -51637,6 +52056,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
             }
             function _hubShowWelcome() {
+                const sr = document.getElementById('hub-search-results'); if (sr) { sr.style.display = 'none'; sr.innerHTML = ''; }
                 const welcome = document.getElementById('hub-welcome');
                 if (welcome) { welcome.innerHTML = HUB_WELCOME; welcome.style.display = ''; }
                 const content = document.getElementById('hub-content');
@@ -53127,7 +53547,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (dl) { const cats = []; _szList().forEach(function (s) { const c = s.category || ''; if (c && cats.indexOf(c) === -1) cats.push(c); }); dl.innerHTML = cats.map(function (c) { return '<option value="' + _szEsc(c) + '">'; }).join(''); }
                 const host = document.getElementById('sz-ed-list');
                 if (!host) return;
-                if (!_szUserScenarios.length) { host.innerHTML = '<div class="sz-ed-hint">Noch keine eigenen Szenarien.<br>„➕ Neu" erstellt das erste.</div>'; return; }
+                if (!_szUserScenarios.length) { host.innerHTML = '<div class="sz-ed-hint">Noch keine eigenen Szenarien.<br>„➕ Neu (manuell)" oder „🤖 mit KI erstellen" legt das erste an.</div>'; return; }
                 host.innerHTML = '';
                 _szUserScenarios.forEach(function (s) {
                     const lv = _SZ_LEVELS[s.level] || _SZ_LEVELS[1];
@@ -53791,6 +54211,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const content = document.getElementById('hub-content');
                 const welcome = document.getElementById('hub-welcome');
                 if (!content) return;
+                const sr = document.getElementById('hub-search-results'); if (sr) { sr.style.display = 'none'; sr.innerHTML = ''; }
                 if (welcome) welcome.style.display = 'none';
                 content.querySelectorAll('.hub-panel').forEach(function (p) {
                     p.classList.toggle('active', p.getAttribute('data-hub-panel') === id);
@@ -53853,10 +54274,115 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Alle anderen: Inhalt direkt IM Hub anzeigen (kein separates Modal).
                 window._hubShowSection(id);
             };
-            window.hubFilter = function (query) {
+            // ── Globale Lernzentrum-Suche über ALLE Inhalte ─────────────────
+            // Indexiert Lektionen, Komponenten-Tutorials, Analyse-Aufgaben,
+            // Aufgaben, Beispiele und Fachbegriffe. Jeder Treffer weiß, wie er
+            // sich öffnet. Datenquellen liegen im selben Skript-Scope; jede in
+            // try/catch, damit eine fehlende Quelle die anderen nicht bricht.
+            function _hubSnip(t) { return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 150); }
+            const _HUB_SR_NAME = { lektionen: 'Lektionen', tutorials: 'Komponenten-Tutorials', szenario: 'Analyse-Aufgaben', aufgaben: 'Aufgaben', beispiele: 'Beispiele', lexikon: 'Fachbegriffe' };
+            const _HUB_SR_ICON = { lektionen: '📚', tutorials: '🧩', szenario: '🔎', aufgaben: '🎯', beispiele: '📋', lexikon: '📖' };
+            const _HUB_SR_ORDER = ['lektionen', 'tutorials', 'szenario', 'aufgaben', 'beispiele', 'lexikon'];
+            function _hubBuildIndex() {
+                const out = [];
+                const push = function (section, icon, title, sub, extra, open) {
+                    if (!title) return;
+                    out.push({ section: section, icon: icon, title: String(title), sub: sub || '', snip: _hubSnip(extra),
+                        hay: (String(title) + ' ' + (sub || '') + ' ' + (extra || '')).toLowerCase(), open: open });
+                };
+                try { (window._hubLessons || []).forEach(function (l) {
+                    const steps = (l.steps || []).map(function (s) { return (s.title || '') + ' ' + (s.text || ''); }).join(' ');
+                    push('lektionen', l.icon || '📚', l.title || l.id, 'Lektion', (l.desc || '') + ' ' + steps,
+                        function () { try { window.startLesson(l.id); } catch (e) { window._hubShowSection('lektionen'); } });
+                }); } catch (e) {}
+                try { window._tutIndex.forEach(function (cat) { (cat.entries || []).forEach(function (en) {
+                    const data = (window._tutData || {})[en.key];
+                    const ch = data ? (data.chapters || []).map(function (c) { return (c.num || '') + ' ' + (c.title || ''); }).join(' ') : '';
+                    push('tutorials', en.icon || '🧩', en.title, cat.cat || '', (en.desc || '') + ' ' + ch,
+                        function () { try { if (window.closeHub) window.closeHub(); window.openCompTutorial(en.key); } catch (e) { window._hubShowSection('tutorials'); } });
+                }); }); } catch (e) {}
+                try { _szList().forEach(function (s) {
+                    const seg = (s.seg || []).map(function (x) { return x.t || ''; }).join(' ');
+                    const tier = (s.tier === 'fortgeschritten' ? 'Fortgeschritten' : 'Basics') + ' · ' + (s.size === 'maxi' ? 'Maxi' : 'Mini');
+                    push('szenario', '🔎', s.title || s.id, (s.category || '') + ' · ' + tier, (s.intro || '') + ' ' + seg,
+                        function () { window._hubShowSection('szenario'); try { window._szStartAnalysis(s.id); } catch (e) {} });
+                }); } catch (e) {}
+                try {
+                    const tasks = _EXAMPLE_TASKS.concat(typeof _getLocalTasks === 'function' ? (_getLocalTasks() || []) : []);
+                    tasks.forEach(function (t) {
+                        push('aufgaben', '🎯', t.name || t.id, (t.category || '') + (t.difficulty ? ' · ' + t.difficulty : ''), (t.description || '') + ' ' + (t.hint || ''),
+                            function () { if (window.closeHub) window.closeHub(); try { window._startTask(t); } catch (e) {} });
+                    });
+                } catch (e) {}
+                try { EXAMPLE_META.forEach(function (m) {
+                    push('beispiele', '📋', m.title || m.key, m.category || '', (m.desc || '') + ' ' + (m.title_en || '') + ' ' + (m.desc_en || ''),
+                        function () { if (window.closeHub) window.closeHub(); try { window.loadExample(m.key); } catch (e) {} });
+                }); } catch (e) {}
+                try { (window.VALIS_LEXIKON || []).forEach(function (x) {
+                    push('lexikon', '📖', x.t, (x.c || '') + ((x.a && x.a.length) ? ' · ' + x.a.join(', ') : ''), (x.d || '') + ' ' + ((x.a || []).join(' ')),
+                        function () { window._hubShowSection('lexikon'); const i = document.getElementById('lex-search'); if (i) i.value = x.t; if (window._lexFilter) window._lexFilter(); });
+                }); } catch (e) {}
+                return out;
+            }
+            function _hubClearSearchInput() { const s = document.getElementById('hub-search'); if (s) s.value = ''; }
+            function _hubHideSearchResults() {
+                const r = document.getElementById('hub-search-results');
+                if (r) { r.style.display = 'none'; r.innerHTML = ''; }
+                const content = document.getElementById('hub-content');
+                const welcome = document.getElementById('hub-welcome');
+                const anyActive = content && content.querySelector('.hub-panel.active');
+                if (!anyActive && welcome) welcome.style.display = '';
+            }
+            function _hubSearchRender(q) {
+                const r = document.getElementById('hub-search-results');
+                const content = document.getElementById('hub-content');
+                if (!r || !content) return;
+                const welcome = document.getElementById('hub-welcome'); if (welcome) welcome.style.display = 'none';
+                content.querySelectorAll('.hub-panel').forEach(function (p) { p.classList.remove('active'); });
+                _hubMarkTab(null);
+                const tokens = q.split(/\s+/).filter(Boolean);
+                const hits = _hubBuildIndex().filter(function (e) { return tokens.every(function (t) { return e.hay.indexOf(t) !== -1; }); });
+                hits.forEach(function (e) { e._score = (e.title.toLowerCase().indexOf(q) !== -1 ? 2 : 0); });
+                const esc = function (x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+                let html;
+                if (!hits.length) {
+                    html = '<div class="hub-sr-empty">Keine Treffer für „' + esc(q) + '". Versuche einen anderen Begriff.</div>';
+                } else {
+                    const PER = 12;
+                    html = '<div class="hub-sr-count">' + hits.length + ' Treffer für „' + esc(q) + '"</div>';
+                    _HUB_SR_ORDER.forEach(function (sec) {
+                        const grp = hits.filter(function (e) { return e.section === sec; }).sort(function (a, b) { return b._score - a._score; });
+                        if (!grp.length) return;
+                        html += '<div class="hub-sr-group"><div class="hub-sr-group-title">' + _HUB_SR_ICON[sec] + ' ' + esc(_HUB_SR_NAME[sec]) + ' (' + grp.length + ')</div>';
+                        grp.slice(0, PER).forEach(function (e) {
+                            html += '<div class="hub-sr-item" data-i="' + hits.indexOf(e) + '">'
+                                + '<div class="hub-sr-icon">' + e.icon + '</div>'
+                                + '<div class="hub-sr-main"><div class="hub-sr-title">' + esc(e.title) + '</div>'
+                                + (e.sub ? '<div class="hub-sr-sub">' + esc(e.sub) + '</div>' : '')
+                                + (e.snip ? '<div class="hub-sr-snip">' + esc(e.snip) + '</div>' : '')
+                                + '</div></div>';
+                        });
+                        if (grp.length > PER) html += '<div class="hub-sr-more" data-open-sec="' + sec + '">+ ' + (grp.length - PER) + ' weitere — Bereich öffnen</div>';
+                        html += '</div>';
+                    });
+                }
+                r.innerHTML = html;
+                r.querySelectorAll('.hub-sr-item').forEach(function (el) {
+                    el.addEventListener('click', function () {
+                        const entry = hits[parseInt(el.getAttribute('data-i'), 10)];
+                        if (!entry) return;
+                        _hubClearSearchInput(); _hubHideSearchResults();
+                        try { entry.open(); } catch (e) {}
+                    });
+                });
+                r.querySelectorAll('[data-open-sec]').forEach(function (el) {
+                    el.addEventListener('click', function () { _hubClearSearchInput(); window._hubShowSection(el.getAttribute('data-open-sec')); });
+                });
+                r.style.display = '';
+            }
+            function _hubFilterSidebar(q) {
                 const list = document.getElementById('hub-list');
                 if (!list) return;
-                const q = (query || '').trim().toLowerCase();
                 const children = Array.prototype.slice.call(list.children);
                 let lastGroup = null, groupHasVisible = false;
                 children.forEach(function (el) {
@@ -53871,6 +54397,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 });
                 if (lastGroup) lastGroup.classList.toggle('hub-hidden', !groupHasVisible);
+            }
+            window.hubFilter = function (query) {
+                const q = (query || '').trim().toLowerCase();
+                _hubFilterSidebar(q);
+                if (q.length >= 2) _hubSearchRender(q);
+                else _hubHideSearchResults();
             };
 
             // Strg+K (bzw. Cmd+K) öffnet/schließt das Lernzentrum von überall.
@@ -63543,6 +64075,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (toBus)   window._festoTrainUsedPins.add(finalTo);
                 window._festoTrainPlaced.push(match.idx);
                 _trainDrawPlacedCable(finalFrom, finalTo, match.cable.color);
+                // Aufgaben-Erfolgsbedingung „FESTO-Aufbau abgeschlossen" live prüfen.
+                if (typeof activeTask !== 'undefined' && activeTask && !taskSolved && window._taskCheckConditions) { try { window._taskCheckConditions(); } catch (e) {} }
                 // Fortschritts-Anzeige
                 const cables = window._festoCablesList || [];
                 const strand = window._festoTrainCurrentStrand;

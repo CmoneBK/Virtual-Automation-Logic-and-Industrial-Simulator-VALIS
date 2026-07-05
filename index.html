@@ -2897,7 +2897,7 @@
                     <button id="btn-iec-anschluss" class="btn-export" style="background-color: #0288d1; border: 1px solid #01579b; display: none;" onclick="window._toggleIecAnschlussView && window._toggleIecAnschlussView()" title="Wechselt im SPS-Modus zwischen der programmzentrierten Schaltplan-Sicht (was die SPS intern verschaltet) und der Anschluss-/Klemmenplan-Sicht (DIN EN 60204 — reine I/O-Zuordnung zur SPS, das was der Elektriker am Schaltschrank braucht). Nur im SPS-Modus verfügbar.">👁 Programm</button>
                     <button id="btn-iec-toggle" class="btn-export" title="Schaltplan-Optionen ein-/ausklappen — Hardware-Limit, Schaltplan-Modus (Relais/Direkt), Bunte Pfade, Wechslernummerierung, Fortlaufende Nummerierung, Getrennte Stromkreise, Detail-Stufe." style="background-color: #607d8b; border: 1px solid #455a64;" onclick="toggleIecToolbar()" data-i18n="iec_options">⚡ Elektro-Optionen</button>
                     <div id="iec-button-group">
-                        <button id="btn-toggle-strict" class="btn-export" title="Hardware-Limit umschalten: MULTI = beliebig viele Wechslerkontakte pro Relais (didaktisch entspannt). REAL = limitiert auf 4 Wechsler (1 FESTO 162241), zusätzliche Kontakte erzwingen ein neues Hilfsrelais — realistisch für den Werkstatt-Aufbau." style="background-color: #4caf50; border: 1px solid #333;" onclick="toggleStrictHardware()">♾️ Hardware-Limit: MULTI</button>
+                        <button id="btn-toggle-strict" class="btn-export" title="Hardware-Limit umschalten: MULTI = Hardware-Kontakte werden direkt im benötigten Kontaktsinn gezeichnet (didaktisch entspannt); Kontakt-Belegung frei umschaltbar. STRIKT = realistisch für den Werkstatt-Aufbau: braucht ein physischer Eingang (Taster/Schalter/Sensor) einen Kontaktsinn, den das reale Bauteil nicht direkt liefert (z. B. Öffner-Taster als Schließer verwendet), wird automatisch ein Koppelrelais (-KF) eingefügt; das freie Umbelegen von Hardware-Kontakten ist dann gesperrt." style="background-color: #4caf50; border: 1px solid #333;" onclick="toggleStrictHardware()">♾️ Hardware-Limit: MULTI</button>
                         <button id="btn-toggle-nh-aux" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleNothaltAuxRelay()" title="Not-Halte als eigenständige Hilfsrelais-Stränge zeichnen (klassisch SF→KF). Standard: AUS — Not-Halt erscheint als normaler Kontakt direkt im Strang.">🛡 Not-Halt-Relais: AUS</button>
 						<button id="btn-toggle-econ" class="btn-export" title="Schaltplan-Darstellungs-Modus durchschalten:&#10;• Relais (Klassisch) — jedes Logik-Gatter wird als Hilfsrelais mit Spule + Kontakt gezeichnet (Industrie-Standard)&#10;• Direkt (Wirtschaftlich) — Kontakte sitzen direkt im Lastpfad, kein zusätzliches Hilfsrelais (spart Bauteile)&#10;• Pneumatik — Druckluft-Symbolik&#10;• Elektronisch — Halbleiter-Logik" style="background-color: #555; border: 1px solid #333;" onclick="toggleEconMode()" data-i18n="iec_mode_relay">💼 Modus: Relais (Klassisch)</button>
                         <button id="btn-toggle-colors" class="btn-export" title="Bunte Pfade — jeder Logik-Strang bekommt im Schaltplan eine stabile Farbe (synchron zu „Bunte Linien" im Logikplan). Erleichtert das visuelle Trennen paralleler Stränge. Die FESTO-Aufbau-Kabel übernehmen diese Farben automatisch, wenn dort „Bunte Kabel" aktiv ist." style="background-color: #555; border: 1px solid #333;" onclick="toggleCircuitColors()" data-i18n="iec_colors_off">🌈 Bunte Pfade: AUS</button>
@@ -7475,11 +7475,15 @@ You must output exactly this JSON format. The logic code goes as a single string
         // unterschiedlichen Listen verstreut (light_curtain mal drin, mal nicht; ComponentRegistry.isNC
         // mal berücksichtigt, mal nicht). Das hier ist die EINZIGE Quelle der Wahrheit.
         window._isNCContact = function(cType) {
+            // WICHTIG: Immer ein echtes Boolean liefern. Der letzte Term kann sonst
+            // `undefined` zurückgeben (Registry-Eintrag existiert, aber .isNC ist nicht
+            // gesetzt) — und ein `!==`-Vergleich (Koppelrelais-Check) würde dann
+            // `false !== undefined` = true auswerten und ein Aux-Relais erfinden.
             return cType === 'nothalt'
                 || cType === 'taster_nc'
                 || cType === 'schalter_nc'
                 || cType === 'light_curtain'
-                || (typeof ComponentRegistry !== 'undefined' && ComponentRegistry[cType] && ComponentRegistry[cType].isNC);
+                || !!(typeof ComponentRegistry !== 'undefined' && ComponentRegistry[cType] && ComponentRegistry[cType].isNC);
         };
         // Variable-Semantik-NC-Flag (modus-abhängig). Entkoppelt:
         //   - _isNCContact:           "Wie ist die HARDWARE physisch verdrahtet?"
@@ -61088,10 +61092,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let cx = x0, cy = y0, rowH = 0;
                 FB.boards.forEach(b => {
                     const d = FB_DIM[b.type]; if (!d) return;
+                    if (b.moved) return;   // vom Nutzer frei positioniert → nicht ins Auto-Raster
                     if (cx > x0 && cx + d.w > svgW - x0) { cx = x0; cy += rowH + gap; rowH = 0; }
                     b.x = cx; b.y = cy; cx += d.w + gap; rowH = Math.max(rowH, d.h);
                 });
-                FB._height = cy + rowH + 40;
+                let h = cy + rowH + 40;
+                FB.boards.forEach(b => { const d = FB_DIM[b.type]; if (d && b.moved) h = Math.max(h, b.y + d.h + 40); });
+                FB._height = h;
             }
             // ---- Renderer: echte Board-Drawer + Overlay (Kabel/×/✓) ----
             function _renderFestoFreeBuild() {
@@ -61184,8 +61191,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 FB.boards.forEach(b => {
                     const d = FB_DIM[b.type]; if (!d) return;
+                    // Verschiebe-Griff: Eck-Button oben links (analog zum ×-Button rechts) — deckt keine Sockel ab.
+                    const mvb = el('g', { class:'fb-move', 'data-fb-move': b.id, style:'cursor:move;' }, ov);
+                    el('circle', { cx:b.x + 12, cy:b.y + 12, r:9, fill:'#455a64', stroke:'#78909c', 'stroke-width':1 }, mvb);
+                    el('text', { x:b.x + 12, y:b.y + 15, 'text-anchor':'middle', 'font-size':11, fill:'#cfd8dc', 'pointer-events':'none' }, mvb).textContent = '⠿';
                     const anyVer = verified && Object.values(b.slotVars||{}).some(v => v && verified.has(v.toUpperCase()));
-                    if (anyVer) el('text', { x:b.x + 8, y:b.y + 16, 'font-size':15, fill:'#2e7d32', 'font-weight':'bold', 'pointer-events':'none' }, ov).textContent = '✓';
+                    if (anyVer) el('text', { x:b.x + 27, y:b.y + 16, 'font-size':15, fill:'#2e7d32', 'font-weight':'bold', 'pointer-events':'none' }, ov).textContent = '✓';
                     const rb = el('g', { class:'fb-del', 'data-fb-del': b.id, style:'cursor:pointer;' }, ov);
                     el('circle', { cx:b.x + d.w - 12, cy:b.y + 12, r:9, fill:'#ef5350' }, rb);
                     el('text', { x:b.x + d.w - 12, y:b.y + 16, 'text-anchor':'middle', 'font-size':13, fill:'#fff', 'font-weight':'bold', 'pointer-events':'none' }, rb).textContent = '×';
@@ -61196,6 +61207,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.onmousedown = (ev) => {
                     const t = ev.target;
                     if ((t.classList && t.classList.contains('fb-cable-hit')) || (t.closest && t.closest('.fb-del'))) { ev.stopPropagation(); return; }
+                    // Board am Kopf verschieben (statt Pan): eigener Drag mit SVG-Koordinaten.
+                    const moveH = t.closest && t.closest('.fb-move');
+                    if (moveH) {
+                        ev.stopPropagation(); ev.preventDefault();
+                        const board = _fbBoardById(moveH.getAttribute('data-fb-move')); if (!board) return;
+                        const fdoc2 = _festoDoc();
+                        const p0 = _fbClientToSvg(svg, ev.clientX, ev.clientY);
+                        const offX = p0 ? (p0.x - board.x) : 0, offY = p0 ? (p0.y - board.y) : 0;
+                        let raf = 0, movedFlag = false;
+                        const onMoveB = (e) => {
+                            const p = _fbClientToSvg(svg, e.clientX, e.clientY); if (!p) return;
+                            board.x = Math.max(0, Math.round(p.x - offX)); board.y = Math.max(0, Math.round(p.y - offY));
+                            board.moved = true; movedFlag = true;
+                            if (!raf) raf = requestAnimationFrame(() => { raf = 0; _fbRerender(); });
+                        };
+                        const onUpB = () => {
+                            fdoc2.removeEventListener('mousemove', onMoveB, true);
+                            fdoc2.removeEventListener('mouseup', onUpB, true);
+                            if (movedFlag) { FB.verifiedVars = null; _fbSave(); _fbRerender(); }
+                        };
+                        fdoc2.addEventListener('mousemove', onMoveB, true);
+                        fdoc2.addEventListener('mouseup', onUpB, true);
+                        return;
+                    }
                     const key = t.getAttribute && t.getAttribute('data-festo-socket');
                     if (!key) return; // leerer Bereich → Pan zulassen
                     ev.stopPropagation(); ev.preventDefault();
@@ -61257,6 +61292,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const t = ev.target;
                 const del = t.closest && t.closest('.fb-del');
                 if (del) { _fbRemoveBoard(del.getAttribute('data-fb-del')); return; }
+                if (t.closest && t.closest('.fb-move')) return;   // Verschiebe-Griff: kein Klick-Handling
                 if (t.classList && t.classList.contains('fb-cable-hit')) { _fbRemoveCable(t.getAttribute('data-fb-cable')); return; }
                 // Buchsen werden über den Pointer-Flow (mousedown→mouseup) behandelt,
                 // damit Drag und Zwei-Klick beide funktionieren — hier NICHT deselektieren.
@@ -61574,11 +61610,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Bei schmalem FESTO-Panel bricht die Toolbar mehrzeilig um und wird
             // höher — ein fixes top:52px würde dann in die Leiste ragen. Wir setzen
             // top dynamisch auf festo-body.offsetTop (= genau unter Banner/Toolbar/Info).
+            let _fbDragMoved = false;
+            const _fbDragDocs = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+            const _fbD = { on: false, sx: 0, sy: 0, sl: 0, st: 0, moved: false, panel: null };
+            // Freibau-Panel am Kopf verschiebbar machen (wie andere Modale): Klick ohne
+            // Bewegung klappt weiter ein/aus; ein Drag positioniert frei und löst die
+            // automatische Toolbar-Kopplung. Funktioniert auch im abgekoppelten FESTO-Fenster.
+            function _fbInitDrag(panel) {
+                if (!panel) return;
+                const head = panel.querySelector('#fb-panel-head');
+                if (!head) return;
+                if (!head.dataset.fbDragInit) {
+                    head.dataset.fbDragInit = '1';
+                    head.style.cursor = 'move';
+                    head.setAttribute('title', 'Ziehen zum Verschieben · Klick zum Ein-/Ausklappen');
+                    head.addEventListener('mousedown', function (e) {
+                        if (e.button !== 0) return;
+                        _fbD.on = true; _fbD.moved = false; _fbD.panel = panel; _fbDragMoved = false;
+                        _fbD.sl = parseInt(panel.style.left, 10); if (isNaN(_fbD.sl)) _fbD.sl = panel.offsetLeft;
+                        _fbD.st = parseInt(panel.style.top, 10);  if (isNaN(_fbD.st)) _fbD.st = panel.offsetTop;
+                        _fbD.sx = e.clientX; _fbD.sy = e.clientY;
+                        e.preventDefault();
+                    });
+                }
+                const doc = head.ownerDocument;
+                if (_fbDragDocs && !_fbDragDocs.has(doc)) {
+                    _fbDragDocs.add(doc);
+                    doc.addEventListener('mousemove', function (e) {
+                        if (!_fbD.on || !_fbD.panel) return;
+                        const dx = e.clientX - _fbD.sx, dy = e.clientY - _fbD.sy;
+                        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) _fbD.moved = true;
+                        _fbD.panel.style.left = (_fbD.sl + dx) + 'px';
+                        _fbD.panel.style.top = (_fbD.st + dy) + 'px';
+                    });
+                    doc.addEventListener('mouseup', function () {
+                        if (!_fbD.on) return;
+                        _fbD.on = false;
+                        if (_fbD.moved && _fbD.panel) { _fbD.panel.dataset.fbMoved = '1'; _fbDragMoved = true; }
+                    });
+                }
+            }
             function _fbPositionPanel() {
                 const fdoc = _festoDoc();
                 const panel = fdoc.getElementById('fb-panel');
                 const body = fdoc.getElementById('festo-body');
                 if (!panel || !body) return;
+                _fbInitDrag(panel);
+                if (panel.dataset.fbMoved) return;   // vom Nutzer verschoben → nicht mehr an die Toolbar koppeln
                 panel.style.top = (body.offsetTop + 12) + 'px';
             }
             let _fbPanelRO = null;
@@ -61657,6 +61735,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             // Schwebendes Freibau-Panel ein-/ausklappen (nur Body, Kopf bleibt).
             window._fbTogglePanel = function() {
+                if (_fbDragMoved) { _fbDragMoved = false; return; }   // war ein Drag, kein Klick
                 const body = _festoDoc().getElementById('fb-panel-body');
                 const caret = _festoDoc().getElementById('fb-panel-caret');
                 if (!body) return;

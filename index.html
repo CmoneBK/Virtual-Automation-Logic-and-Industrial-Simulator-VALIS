@@ -2114,6 +2114,11 @@
         .lex-cat-count { color:#607d8b; font-weight:400; }
         .lex-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:10px; }
         .lex-card { background:#12121e; border:1px solid #2a2a3a; border-radius:9px; padding:11px 13px; }
+        /* Glossar-Automatik: erkannte Begriffe + Karten-Tooltip */
+        .gloss-term { border-bottom:1px dotted #90a4ae; cursor:help; }
+        .gloss-term:hover { border-bottom-color:#42a5f5; color:#e6edf3; }
+        #lex-tip { position:fixed; display:none; z-index:9800; max-width:360px; pointer-events:none; filter:drop-shadow(0 10px 26px rgba(0,0,0,0.6)); }
+        #lex-tip .lex-card { background:#161622; }
         .lex-card-head { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:5px; }
         .lex-term { color:#fff; font-weight:700; font-size:13.5px; }
         .lex-alias { color:#78909c; font-size:11px; font-family:Consolas,monospace; }
@@ -3954,6 +3959,7 @@
         </div>
         <div id="sz-op-tip"></div>
         <div id="sz-info-tip"></div>
+        <div id="lex-tip"></div>
         <!-- Szenario-Editor: eigene Mini-Szenarien erstellen / verwalten / teilen -->
         <div id="sz-editor-modal">
             <div class="sz-ed-box">
@@ -16528,6 +16534,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
             const area = document.getElementById('tut-content-area');
             area.innerHTML = data.chapters[_tutCh].content;
+            if (window._glossaryAnnotate) window._glossaryAnnotate(area);
             area.scrollTop = 0;
             document.getElementById('tut-progress').textContent = `${_tutCh + 1} / ${data.chapters.length}`;
             document.getElementById('tut-btn-prev').disabled = _tutCh === 0;
@@ -26057,11 +26064,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     stagesEl.style.display = 'block';
                 }
                 document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(stage.description || activeTask.description || '');
+                if (window._glossaryAnnotate) window._glossaryAnnotate(document.getElementById('task-panel-desc'));
                 const hintAvail = !!(stage.hint || activeTask.hint);
                 document.getElementById('task-hint-btn').style.display = hintAvail ? 'inline-block' : 'none';
             } else {
                 if (stagesEl) { stagesEl.style.display = 'none'; stagesEl.innerHTML = ''; }
                 document.getElementById('task-panel-desc').innerHTML = _taskMarkdownToHtml(activeTask.description || '');
+                if (window._glossaryAnnotate) window._glossaryAnnotate(document.getElementById('task-panel-desc'));
                 document.getElementById('task-hint-btn').style.display = activeTask.hint ? 'inline-block' : 'none';
             }
         }
@@ -49575,6 +49584,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _initTooltipDrag();
                 document.getElementById('tut-title').textContent = step.title;
                 document.getElementById('tut-text').innerHTML = step.text;
+                if (window._glossaryAnnotate) window._glossaryAnnotate(document.getElementById('tut-text'));
                 document.getElementById('tut-progress').textContent = `${i + 1} / ${_activeSteps.length}`;
                 document.getElementById('tut-prev').disabled = (i === 0);
                 document.getElementById('tut-next').textContent = (i === _activeSteps.length - 1) ? '✓ Fertig' : 'Weiter →';
@@ -51892,6 +51902,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { t: 'Selbsthaltung', a: ['Haltekreis', 'Speicherfunktion'], c: 'Logik & Verknüpfung', d: 'Ein Ausgang, der sich nach dem Einschalten selbst gesetzt hält, bis er bewusst zurückgesetzt wird. In VALIS wird das sauber über ein RS-/SR-Glied umgesetzt (<code>S1</code>/<code>R1</code> → <code>Q1</code>) statt über eine Rückkopplung auf den eigenen Ausgang.' },
                 { t: 'RS-Glied', a: ['RS', 'Rücksetzen dominant'], c: 'Logik & Verknüpfung', d: 'Speicherglied mit Setz- (S) und Rücksetzeingang (R); das Rücksetzen hat Vorrang (Sicherheits-Standard). In VALIS schreibt man <code>S1 := setzen</code> und <code>R1 := rücksetzen</code> — der Speicherausgang heißt <code>Q1</code> (z. B. <code>MOTOR := Q1</code>).' },
                 { t: 'SR-Glied', a: ['SR', 'Setzen dominant'], c: 'Logik & Verknüpfung', d: 'Speicherglied, bei dem das Setzen (S) Vorrang hat. In VALIS schreibt man <code>S1_SR := setzen</code> und <code>R1_SR := rücksetzen</code> — der Speicherausgang heißt <code>Q1_SR</code>.' },
+                { t: 'setzen', a: ['Setzen', 'gesetzt', 'S-Eingang', 'einschalten', 'aktivieren', 'starten'], c: 'Logik & Verknüpfung', d: 'Einen Speicher (RS/SR) oder Ausgang aktiv (1) machen — der <b>S-Eingang</b>. Je nach Aufgabe steht dafür auch: „einschalten", „aktivieren", „starten", „scharfschalten", „einrasten", „speichern" oder z. B. „die Meldung wird gesetzt / rastet ein". Gegenstück: <b>rücksetzen</b>.' },
+                { t: 'rücksetzen', a: ['Rücksetzen', 'zurücksetzen', 'R-Eingang', 'ausschalten', 'abschalten', 'stoppen'], c: 'Logik & Verknüpfung', d: 'Einen Speicher (RS/SR) oder Zähler wieder auf 0 bringen — der <b>R-Eingang</b>. Je nach Aufgabe steht dafür auch: „ausschalten", „abschalten", „stoppen", „löschen", „quittieren", „freigeben", „entriegeln" oder z. B. „bleibt gespeichert, bis der Bediener quittiert". Gegenstück: <b>setzen</b>.' },
+                { t: 'löschen', a: ['gelöscht', 'Speicher löschen', 'Zähler löschen'], c: 'Logik & Verknüpfung', d: 'Einen gespeicherten Zustand oder einen Zählerstand bewusst auf 0 bringen — im RS/SR-/Zähler-Kontext gleichbedeutend mit <b>rücksetzen</b> (nicht das Leeren des Code-Editors gemeint).' },
+                { t: 'einrasten', a: ['rastet ein', 'eingerastet', 'verklinken'], c: 'Logik & Verknüpfung', d: 'Ein Speicherglied „rastet ein": es übernimmt den Zustand 1 und hält ihn selbstständig, bis es zurückgesetzt wird (typisch für eine Selbsthaltung bzw. das Setzen eines RS-Glieds).' },
+                { t: 'Vorrang', a: ['dominant', 'Rücksetzvorrang', 'Setzvorrang', 'rücksetzdominant', 'setzdominant'], c: 'Logik & Verknüpfung', d: 'Legt bei einem Speicher fest, was bei <b>gleichzeitigem</b> Setzen UND Rücksetzen gewinnt: beim <b>RS-Glied</b> das Rücksetzen (Sicherheits-Standard), beim <b>SR-Glied</b> das Setzen.' },
+                { t: 'Speicherglied', a: ['Speicher', 'speichern', 'gespeichert', 'halten', 'gehalten', 'Latch'], c: 'Logik & Verknüpfung', d: 'Baustein, der einen Zustand über die SPS-Zyklen hinweg festhält — in VALIS ein RS- oder SR-Glied. „Speichern" / „halten" heißt: der Ausgang bleibt 1, auch wenn das Setz-Signal längst wieder weg ist.' },
                 { t: 'Flanke', a: ['steigende Flanke', 'fallende Flanke', 'Signalwechsel'], c: 'Logik & Verknüpfung', d: 'Der Wechsel eines Signals von 0→1 (steigende Flanke) bzw. 1→0 (fallende Flanke). Zähler und viele Auswertungen reagieren auf die Flanke, nicht auf den Dauerzustand.' },
                 // ── Zeit & Zählen ──
                 { t: 'Zeitglied', a: ['Timer', 'Zeitrelais'], c: 'Zeit & Zählen', d: 'Baustein, der ein Signal zeitlich verzögert oder begrenzt (TON, TOF, TP).' },
@@ -51900,6 +51916,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { t: 'Impuls', a: ['TP', 'Wischimpuls'], c: 'Zeit & Zählen', d: 'Ein kurzer Eingangs-Puls erzeugt ein Ausgangssignal mit fester Dauer — unabhängig davon, wie lange der Eingang anliegt. <code>OUT := TP(IN, 3.0)</code>.' },
                 { t: 'Nachlauf', a: ['Nachlaufzeit'], c: 'Zeit & Zählen', d: 'Zeitspanne, die ein Aktor nach dem Ausschalten noch weiterläuft — meist mit einer Ausschaltverzögerung (TOF) umgesetzt.' },
                 { t: 'Zähler', a: ['CTU', 'Vorwärtszähler'], c: 'Zeit & Zählen', d: 'Zählt die steigenden Flanken eines Signals; erreicht der Zählerstand den Grenzwert, wird der Ausgang WAHR. Ein Reset setzt ihn zurück. <code>OUT := CTU(Zählsignal, Reset, 5)</code>.' },
+                { t: 'ablaufen', a: ['läuft ab', 'abgelaufen', 'Zeit abgelaufen'], c: 'Zeit & Zählen', d: 'Die eingestellte Zeit eines Zeitglieds „läuft ab". Erst danach schaltet der Ausgang (TON) bzw. fällt er ab (TOF).' },
+                { t: 'verzögern', a: ['Verzögerung', 'verzögert', 'zeitverzögert'], c: 'Zeit & Zählen', d: 'Ein Signal zeitlich hinauszögern — beim Einschalten (TON) oder beim Ausschalten (TOF).' },
+                { t: 'anstoßen', a: ['angestoßen', 'triggern', 'getriggert', 'Trigger'], c: 'Zeit & Zählen', d: 'Ein Zeitglied oder einen Impuls (TP) starten. Beim Impuls genügt ein kurzer Anstoß — die Ausgangsdauer ist danach fest, egal wie lange der Eingang anliegt.' },
+                { t: 'hochzählen', a: ['zählt hoch', 'inkrementieren', 'Vorwärtszählen'], c: 'Zeit & Zählen', d: 'Der Zähler (CTU) erhöht bei jeder steigenden Flanke am Zähleingang seinen Stand um 1.' },
+                { t: 'Grenzwert', a: ['Sollwert', 'Vorwahl', 'Zählgrenze'], c: 'Zeit & Zählen', d: 'Der eingestellte Zählwert, ab dem der Zählerausgang (CTU) WAHR wird — z. B. „nach 10 Teilen". <code>OUT := CTU(Signal, Reset, 10)</code>.' },
+                { t: 'Zählerstand', a: ['aktueller Zählwert', 'Zählstand', 'Istwert'], c: 'Zeit & Zählen', d: 'Der aktuelle Wert eines Zählers. Erreicht er den Grenzwert, schaltet der Ausgang; ein Reset bringt den Stand auf 0 zurück.' },
                 // ── Signale & Zustände ──
                 { t: 'Eingang', a: ['Input', 'E', 'Ex.y'], c: 'Signale & Zustände', d: 'Signal, das von außen in die Steuerung kommt (Taster, Schalter, Sensor). An der SPS eine Eingangsklemme.' },
                 { t: 'Ausgang', a: ['Output', 'A', 'Ax.y'], c: 'Signale & Zustände', d: 'Signal, mit dem die Steuerung etwas ansteuert (Lampe, Ventil, Motor). An der SPS eine Ausgangsklemme.' },
@@ -51913,6 +51935,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { t: 'Grundstellung', a: ['Ausgangsstellung', 'Ruhelage'], c: 'Signale & Zustände', d: 'Der definierte Ruhezustand einer Anlage oder eines Zylinders (z. B. Zylinder eingefahren), von dem aus ein Ablauf startet.' },
                 { t: 'scharfschalten', a: ['scharf', 'scharfgeschaltet', 'bereitmachen'], c: 'Signale & Zustände', d: 'Eine Funktion aktivieren bzw. bereit machen, sodass ein folgendes Ereignis wirken kann.' },
                 { t: 'Trockenlaufschutz', a: [], c: 'Signale & Zustände', d: 'Schutzfunktion, die eine Pumpe abschaltet, wenn kein Medium mehr vorhanden ist (Schutz vor Trockenlauf).' },
+                { t: 'anliegen', a: ['liegt an', 'anstehen', 'steht an'], c: 'Signale & Zustände', d: 'Ein Signal „liegt an" bzw. „steht an", wenn es dauerhaft 1 ist. Wichtig für die Einschaltverzögerung: der Eingang muss die Zeit <b>ununterbrochen</b> anliegen, sonst startet sie neu.' },
+                { t: 'anziehen', a: ['zieht an', 'angezogen', 'bestromen'], c: 'Signale & Zustände', d: 'Ein Relais oder Schütz „zieht an": die Spule wird bestromt und die Kontakte schalten (Zustand wird 1). Gegenstück: abfallen.' },
+                { t: 'abfallen', a: ['fällt ab', 'abgefallen', 'entregen'], c: 'Signale & Zustände', d: 'Ein Relais/Signal „fällt ab": es geht auf 0 (Spule wird stromlos, Kontakte öffnen). Bei der Ausschaltverzögerung (TOF) beginnt die Nachlaufzeit erst mit dem Abfall des Eingangs. Gegenstück: anziehen.' },
+                { t: 'entriegeln', a: ['entriegelt', 'Entriegelung', 'aufheben'], c: 'Signale & Zustände', d: 'Eine Verriegelung/Sperre aufheben, sodass ein zuvor blockierter Zustand wieder möglich ist — Gegenstück zur Verriegelung.' },
                 // ── Bedienelemente ──
                 { t: 'Taster', a: ['Drucktaster', 'Tastfunktion'], c: 'Bedienelemente', d: 'Bedienelement, das nur schaltet, solange es gedrückt wird (kein Rasten) — z. B. Start-Taster.' },
                 { t: 'Schalter', a: ['Rastschalter'], c: 'Bedienelemente', d: 'Bedienelement, das seinen Zustand beibehält, bis es erneut betätigt wird (Rastfunktion).' },
@@ -51984,6 +52010,109 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 host.innerHTML = html || '<div class="lex-empty">Kein Begriff gefunden.</div>';
             };
             window._lexFilter = function () { window._lexRender(); };
+        })();
+
+        // ============================================================
+        // === GLOSSAR-AUTOMATIK — Lexikon-Begriffe in Texten          ===
+        // === erkennen und als Lexikon-Karte (Custom-Tooltip)         ===
+        // === anbieten. Wiederverwendbar via window._glossaryAnnotate. ===
+        // ============================================================
+        (function () {
+            let _cache = null;                 // { re, map }
+            const _SKIP = { CODE:1, PRE:1, KBD:1, A:1, SCRIPT:1, STYLE:1, TEXTAREA:1, INPUT:1, BUTTON:1, SELECT:1, OPTION:1, SVG:1 };
+            function _build() {
+                if (_cache) return _cache;
+                const lex = window.VALIS_LEXIKON || [];
+                const map = {};
+                lex.forEach(function (e) {
+                    [e.t].concat(e.a || []).forEach(function (s) {
+                        const str = String(s || '').trim();
+                        if (str.length < 3) return;                 // zu kurz (A, E, NC, TON …)
+                        if (!/[a-zäöüß]/.test(str)) return;          // muss Kleinbuchstaben enthalten → keine reinen Abk./Symbole
+                        if (/[<>{}()\[\]=&|¬:\/]/.test(str)) return; // keine Code-/Symbolschnipsel
+                        const key = str.toLowerCase();
+                        if (!map[key]) map[key] = e;
+                    });
+                });
+                const keys = Object.keys(map).sort(function (a, b) { return b.length - a.length; });
+                let re = null;
+                if (keys.length) {
+                    const esc = keys.map(function (k) { return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+                    try { re = new RegExp('(?<![\\p{L}\\p{N}_])(' + esc.join('|') + ')(?![\\p{L}\\p{N}_])', 'giu'); }
+                    catch (e) { re = new RegExp('\\b(' + esc.join('|') + ')\\b', 'gi'); }   // Fallback ohne Lookbehind/Unicode
+                }
+                _cache = { re: re, map: map };
+                return _cache;
+            }
+            // Erkennt Lexikon-Begriffe in root und umhuellt das ERSTE Vorkommen je Begriff
+            // mit <span class="gloss-term" data-lex="…">. Robust (bricht nie den Render).
+            window._glossaryAnnotate = function (root) {
+                try {
+                    if (!root || root.nodeType !== 1) return;
+                    const built = _build(); if (!built.re) return;
+                    const re = built.re, map = built.map, seen = {};
+                    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                        acceptNode: function (node) {
+                            if (!node.nodeValue || !/\S/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+                            let p = node.parentNode;
+                            while (p && p !== root) {
+                                if (p.nodeType === 1) {
+                                    if (_SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
+                                    if (p.classList && (p.classList.contains('gloss-term') || p.classList.contains('lex-term') || p.classList.contains('no-gloss'))) return NodeFilter.FILTER_REJECT;
+                                }
+                                p = p.parentNode;
+                            }
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    });
+                    const nodes = []; let nd; while ((nd = walker.nextNode())) nodes.push(nd);
+                    nodes.forEach(function (node) {
+                        const text = node.nodeValue; re.lastIndex = 0;
+                        let m, last = 0, frag = null;
+                        while ((m = re.exec(text)) !== null) {
+                            const matched = m[1], key = matched.toLowerCase();
+                            if (seen[key] || !map[key]) continue;
+                            seen[key] = 1;
+                            if (!frag) frag = document.createDocumentFragment();
+                            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+                            const span = document.createElement('span');
+                            span.className = 'gloss-term';
+                            span.setAttribute('data-lex', map[key].t);
+                            span.textContent = matched;
+                            frag.appendChild(span);
+                            last = m.index + matched.length;
+                        }
+                        if (frag) {
+                            if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+                            node.parentNode.replaceChild(frag, node);
+                        }
+                    });
+                } catch (e) { /* Annotation darf nie den Render brechen */ }
+            };
+            window._glossaryReset = function () { _cache = null; };   // Cache leeren, falls Lexikon erweitert wird
+            // Tooltip mit der Lexikon-Karte.
+            window._showLexTip = function (el) {
+                const term = el.getAttribute('data-lex'); if (!term) return;
+                const tip = document.getElementById('lex-tip'); if (!tip) return;
+                const html = (window._lexCardHtml ? window._lexCardHtml(term) : ''); if (!html) return;
+                tip.innerHTML = html; tip.style.display = 'block';
+                const r = el.getBoundingClientRect();
+                const tw = tip.offsetWidth, th = tip.offsetHeight;
+                const left = Math.max(8, Math.min(r.left, window.innerWidth - tw - 8));
+                let top = r.bottom + 8;
+                if (top + th > window.innerHeight - 8) top = r.top - th - 8;
+                if (top < 8) top = 8;
+                tip.style.left = left + 'px'; tip.style.top = top + 'px';
+            };
+            window._hideLexTip = function () { const t = document.getElementById('lex-tip'); if (t) t.style.display = 'none'; };
+            document.addEventListener('mouseover', function (e) {
+                const el = e.target.closest && e.target.closest('.gloss-term');
+                if (el) window._showLexTip(el);
+            });
+            document.addEventListener('mouseout', function (e) {
+                const el = e.target.closest && e.target.closest('.gloss-term');
+                if (el) window._hideLexTip();
+            });
         })();
 
         // ============================================================
@@ -52748,7 +52877,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const sz = _szGet();
                 _szRenderPicker();
                 const intro = document.getElementById('sz-intro');
-                if (intro) intro.textContent = sz.intro;
+                if (intro) { intro.textContent = sz.intro; if (window._glossaryAnnotate) window._glossaryAnnotate(intro); }
                 window._szPick(_szCat);
                 _szBuildText();
                 const res = document.getElementById('sz-result'); if (res) res.innerHTML = '';
@@ -53013,6 +53142,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     + '<div class="sz-actions" style="margin-top:14px;">'
                     + '<button class="sz-btn sz-btn-primary" onclick="_szDenkDone()">Verstanden → weiter zu Schritt 4 · Code →</button>'
                     + '<button class="sz-btn" onclick="_szGoto(2)">← Zurück</button></div>';
+                if (window._glossaryAnnotate) window._glossaryAnnotate(host);
             }
             window._szDenkDone = function () { _szMaxStep = Math.max(_szMaxStep, 4); _szSyncSteps(); _szGoto(4); };
 

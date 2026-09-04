@@ -65419,6 +65419,41 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
         } catch (_) {}
 
+        // Mitgelieferte Beispiele sollen die Umgebung nicht fluten - sie sind
+        // ohnehin ueberall vorhanden. Was der Beispiel-Loader NEU anlegt, wird mit
+        // seinem Fingerabdruck als bereits bekannt vermerkt und deshalb nicht
+        // hochgeladen. Bearbeitet jemand ein solches Element, aendert sich der
+        // Fingerabdruck - ab dann wird es ganz normal mitgespeichert.
+        try {
+            var _origLoadEx = window._loadExampleTasks;
+            if (typeof _origLoadEx === 'function') {
+                window._loadExampleTasks = function () {
+                    var seen = {};
+                    ['valisTasks', 'valisTaskPackages'].forEach(function (k) {
+                        lsArr(k).forEach(function (it) { if (it && it.id) seen[k + '|' + it.id] = 1; });
+                    });
+                    var r = _origLoadEx.apply(this, arguments);
+                    try {
+                        var meta = metaGet(), changed = false;
+                        collectWatched().forEach(function (it) {
+                            // Nur Aufgaben und Pakete - der Loader legt nichts anderes an.
+                            if (it.mk.indexOf('valisTasks|') !== 0 &&
+                                it.mk.indexOf('valisTaskPackages|') !== 0) return;
+                            if (seen[it.mk] || meta[it.mk]) return;   // vorher da oder schon bekannt
+                            meta[it.mk] = {
+                                uid: null, v: 0,
+                                fp: fpOf(JSON.stringify(it.payload)),
+                                example: true
+                            };
+                            changed = true;
+                        });
+                        if (changed) metaSet(meta);
+                    } catch (_) {}
+                    return r;
+                };
+            }
+        } catch (_) {}
+
         /* ---- Zugangs-Link ------------------------------------------------- */
 
         function renderLink() {

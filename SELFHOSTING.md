@@ -201,7 +201,9 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
 * Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
   ein neuer Link macht den vorherigen ungültig.
 * **Automatisches Speichern** erfasst Aufgaben, Aufgabenpakete, Szenarien und
-  Szenario-Pakete, solange eine Umgebung angemeldet ist. **Löschungen werden
+  Szenario-Pakete, solange eine Umgebung angemeldet ist. **Mitgelieferte
+  Beispielaufgaben werden dabei übersprungen** – erst wenn jemand eine davon
+  bearbeitet, wird sie gespeichert. **Löschungen werden
   bewusst nicht übertragen** – sonst würde ein Gerät mit weniger Inhalten die
   Umgebung leerräumen. Löschen geschieht ausdrücklich im Panel.
 * Bei einem echten Versionskonflikt wird **nicht** überschrieben; das Element
@@ -414,7 +416,9 @@ and automatic deletion are the brakes. If it gets abused, set
 * Share links (`#s=TOKEN`) are read-only and one active link per object;
   creating a new one invalidates the previous.
 * **Automatic saving** covers tasks, task packages, scenarios and scenario
-  packages while an environment is logged in. **Deletions are deliberately not
+  packages while an environment is logged in. **Bundled example tasks are
+  skipped** – only once someone edits one does it get stored. **Deletions are
+  deliberately not
   propagated** – otherwise a device holding fewer items would wipe the
   environment. Deleting happens explicitly in the panel.
 * On a genuine version conflict nothing is overwritten; the item stays unsaved

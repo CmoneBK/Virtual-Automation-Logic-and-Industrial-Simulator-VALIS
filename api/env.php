@@ -22,6 +22,16 @@ function clean_pin(mixed $raw): ?string {
     return $p;
 }
 
+/**
+ * Nicht geheime, stabile Kennung der Umgebung. Der Client trennt damit seine
+ * lokalen Sync-Daten je Umgebung - sonst zeigen gemerkte Versionsnummern nach
+ * einem Wechsel auf fremde Objekte. Aus der Kennung laesst sich der Zugangscode
+ * nicht ableiten.
+ */
+function env_ref(int $envId): string {
+    return substr(hash('sha256', valis_config()['pepper'] . '|envref|' . $envId), 0, 16);
+}
+
 function issue_token(int $envId): array {
     $cfg   = valis_config();
     $token = rtrim(strtr(base64_encode(random_bytes(33)), '+/', '-_'), '=');
@@ -63,6 +73,7 @@ if ($act === 'create') {
                 'ok'       => true,
                 // Der Code wird hier EINMALIG ausgeliefert und nirgends im Klartext gespeichert.
                 'code'     => $code,
+                'env'      => env_ref($envId),
                 'has_pin'  => $pin !== null,
                 'quota'    => ['bytes' => (int)$cfg['quota_bytes'], 'objects' => (int)$cfg['quota_objects']],
             ] + issue_token($envId));
@@ -118,6 +129,7 @@ if ($act === 'login') {
 
     json_out([
         'ok'      => true,
+        'env'     => env_ref((int)$env['id']),
         'has_pin' => $env['pin_hash'] !== null,
         'quota'   => ['bytes' => (int)$cfg['quota_bytes'], 'objects' => (int)$cfg['quota_objects']],
     ] + issue_token((int)$env['id']));

@@ -120,11 +120,27 @@ if ($act === 'put') {
     $pdo->beginTransaction();
     try {
         $st = $pdo->prepare(
-            'SELECT id, version, bytes FROM objects
+            'SELECT id, version, bytes, deleted_at FROM objects
              WHERE env_id = ? AND kind = ? AND obj_uid = ? FOR UPDATE'
         );
         $st->execute([$envId, $kind, $uid]);
         $cur = $st->fetch();
+
+        // Ein soft-geloeschtes Objekt ist fuer den Client unsichtbar, weil `get`
+        // es ausblendet. Er darf es also berechtigt fuer neu halten. Ohne diese
+        // Ausnahme entstuende eine Sackgasse: `put` findet die Zeile, `get` nicht
+        // - die Version waere nie zu lernen und es gaebe dauerhaft 409.
+        if ($cur && $cur['deleted_at'] !== null) {
+            $newVersion = (int)$cur['version'] + 1;
+            $pdo->prepare(
+                'UPDATE objects SET name = ?, data = ?, bytes = ?, version = ?,
+                        updated_at = UTC_TIMESTAMP(), deleted_at = NULL
+                 WHERE id = ?'
+            )->execute([$name, $json, $bytes, $newVersion, $cur['id']]);
+            $pdo->commit();
+            json_out(['ok' => true, 'kind' => $kind, 'uid' => $uid, 'version' => $newVersion,
+                      'revived' => true, 'usage' => sync_usage($envId)]);
+        }
 
         if (!$cur) {
             if ($base !== 0) { $pdo->rollBack(); fail('not_found', 404); }

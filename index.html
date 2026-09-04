@@ -64495,6 +64495,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
 
         function readTok() { try { return localStorage.getItem(TOKEN_KEY); } catch (_) { return null; } }
+        /** Nicht geheime Kennung der Umgebung - trennt lokale Sync-Daten je Umgebung. */
+        C.envRef = function () { try { return localStorage.getItem('valisCloudEnv') || ''; } catch (_) { return ''; } };
+        function writeEnv(e) {
+            try { e ? localStorage.setItem('valisCloudEnv', e) : localStorage.removeItem('valisCloudEnv'); } catch (_) {}
+        }
         function writeTok(t) {
             try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (_) {}
             C.token = t;
@@ -64534,18 +64539,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         C.createEnvironment = function (pin, signupSecret) {
             return req('env.php', {
                 action: 'create', pin: pin || null, signup_secret: signupSecret || ''
-            }, false).then(function (j) { writeTok(j.token); C.quota = j.quota; return j; });
+            }, false).then(function (j) { writeTok(j.token); writeEnv(j.env || ''); C.quota = j.quota; return j; });
         };
 
         C.login = function (code, pin) {
             return req('env.php', { action: 'login', code: code, pin: pin || '' }, false)
-                .then(function (j) { writeTok(j.token); C.quota = j.quota; return j; });
+                .then(function (j) { writeTok(j.token); writeEnv(j.env || ''); C.quota = j.quota; return j; });
         };
 
         C.logout = function () {
             return req('env.php', { action: 'logout' })
                 .catch(function () {})
-                .then(function () { writeTok(null); });
+                .then(function () { writeTok(null); writeEnv(''); });
         };
 
         C.isLoggedIn = function () { return !!(C.token || readTok()); };
@@ -64953,7 +64958,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +   '<span style="margin-left:auto;color:'
                   +     (syncStat.conflict || syncStat.err ? '#ef9a9a' : '#9e9e9e') + ';">'
                   +     (syncStat.err ? esc(syncStat.err)
-                        : syncStat.conflict ? (syncStat.conflict + ' Konflikt(e) - nicht ueberschrieben')
+                        : syncStat.conflict ? ('<a href="#" id="cl-cf" style="color:#ef9a9a;">'
+                            + syncStat.conflict + ' Konflikt(e) - l&ouml;sen</a>')
                         : syncing ? 'speichert …'
                         : syncStat.at ? ('zuletzt ' + new Date(syncStat.at).toLocaleTimeString())
                         : 'bereit') + '</span></div>'
@@ -64965,6 +64971,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 box.querySelector('#cl-save').onclick = saveCurrent;
                 box.querySelector('#cl-add').onclick = renderAdd;
                 box.querySelector('#cl-auto').onchange = function () { setAuto(this.checked); };
+                var cfLink = box.querySelector('#cl-cf');
+                if (cfLink) cfLink.onclick = function (ev) { ev.preventDefault(); renderConflicts(); };
                 Array.prototype.forEach.call(box.querySelectorAll('[data-share]'), function (b) {
                     b.onclick = function () {
                         renderShare(b.getAttribute('data-kind'), b.getAttribute('data-share'),
@@ -65207,15 +65215,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             catch (_) { return []; }
         }
         /** Stabile Zuordnung lokale ID -> Objekt-UID, damit erneutes Hochladen aktualisiert. */
+        /**
+         * Sync-Daten MUESSEN je Umgebung getrennt sein. Sonst zeigen gemerkte
+         * Versionsnummern und Objekt-UIDs nach einem Wechsel auf fremde Objekte -
+         * das Ergebnis waren nicht aufloesbare Konflikte.
+         */
+        function skey(base) { return base + ':' + (C.envRef() || 'anon'); }
         function uidFor(localId) {
-            var map = {};
-            try { map = JSON.parse(localStorage.getItem('valisCloudObjMap') || '{}') || {}; } catch (_) {}
+            var k = skey('valisCloudObjMap'), map = {};
+            try { map = JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (_) {}
             if (!map[localId]) {
                 map[localId] = C.newUid();
-                try { localStorage.setItem('valisCloudObjMap', JSON.stringify(map)); } catch (_) {}
+                try { localStorage.setItem(k, JSON.stringify(map)); } catch (_) {}
             }
             return map[localId];
         }
+        // Einmalig: nicht getrennte Altdaten entfernen. Sie zeigen auf unbekannte
+        // Umgebungen und wuerden dauerhaft Konflikte erzeugen.
+        try {
+            localStorage.removeItem('valisCloudObjMap');
+            localStorage.removeItem('valisCloudSync');
+        } catch (_) {}
 
         function renderAdd() {
             var tasks = lsArr('valisTasks'), packs = lsArr('valisTaskPackages');
@@ -65266,6 +65286,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                      .then(function (base) {
                         run(C.put(kind, uid, nm || id, payload, base), 'Lege ab …', function () {
                             say('In die Umgebung gelegt.', '#8bc34a'); renderEnv();
+                        }, function (e) {
+                            // Ausdrueckliche Nutzeraktion: einmal mit der echten Version
+                            // nachfassen, statt mit einem nackten Fehler abzubrechen.
+                            if (e && e.message === 'conflict' && e.data && e.data.server) {
+                                C.put(kind, uid, nm || id, payload, e.data.server.version)
+                                 .then(function () { say('In die Umgebung gelegt.', '#8bc34a'); renderEnv(); })
+                                 .catch(function (e2) { handleErr(e2); });
+                                return true;
+                            }
+                            return false;
                         });
                      });
                 };
@@ -65287,6 +65317,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         var SYNC_KEY = 'valisCloudSync', AUTO_KEY = 'valisCloudAutoSync';
         var syncTimer = null, syncing = false;
         var syncStat = { ok: 0, conflict: 0, at: 0, err: '', pending: 0 };
+        var conflicts = {};   // mk -> { kind, uid, name, mine, fp, server }
 
         function autoOn() {
             try { return localStorage.getItem(AUTO_KEY) !== '0'; } catch (_) { return true; }
@@ -65296,9 +65327,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (on) schedule();
         }
         function metaGet() {
-            try { return JSON.parse(localStorage.getItem(SYNC_KEY) || '{}') || {}; } catch (_) { return {}; }
+            try { return JSON.parse(localStorage.getItem(skey(SYNC_KEY)) || '{}') || {}; } catch (_) { return {}; }
         }
-        function metaSet(m) { try { localStorage.setItem(SYNC_KEY, JSON.stringify(m)); } catch (_) {} }
+        function metaSet(m) { try { localStorage.setItem(skey(SYNC_KEY), JSON.stringify(m)); } catch (_) {} }
         /** Kurzer Inhalts-Fingerabdruck, damit Unveraendertes nicht erneut hochlaedt. */
         function fpOf(str) {
             var h = 5381, i = str.length;
@@ -65372,7 +65403,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 var uid = (q.m && q.m.uid) || uidFor(q.it.uidKey);
                 var base = (q.m && q.m.v) || 0;
                 C.put(q.it.kind, uid, q.it.name, q.it.payload, base).then(function (j) {
-                    meta[q.it.mk] = { uid: uid, v: j.version, fp: q.fp }; okc++; step();
+                    meta[q.it.mk] = { uid: uid, v: j.version, fp: q.fp };
+                    delete conflicts[q.it.mk];
+                    okc++; step();
                 }).catch(function (e) {
                     var isConf = e && e.message === 'conflict';
                     if (isConf && !(q.m && q.m.v) && e.data && e.data.server) {
@@ -65383,7 +65416,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                          .catch(function () { conf++; step(); });
                         return;
                     }
-                    if (isConf) { conf++; step(); return; }   // NIE still ueberschreiben
+                    if (isConf) {
+                        // NIE still ueberschreiben - aber merken, damit der Nutzer
+                        // entscheiden kann statt in einer Sackgasse zu landen.
+                        conflicts[q.it.mk] = {
+                            mk: q.it.mk, kind: q.it.kind, uid: uid, name: q.it.name,
+                            mine: q.it.payload, fp: q.fp,
+                            server: (e.data && e.data.server) || null
+                        };
+                        conf++; step(); return;
+                    }
                     syncStat.err = (e && e.message) || 'fehler';
                     done();
                 });
@@ -65453,6 +65495,84 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
             }
         } catch (_) {}
+
+        /* ---- Konflikte aufloesen ------------------------------------------ */
+
+        /** Serverfassung lokal uebernehmen - ueber die vorhandenen Import-Pfade. */
+        function serverToLocal(cf) {
+            var d = cf.server && cf.server.data;
+            if (!d) return false;
+            var nm = (cf.name || 'server').replace(/[^a-zA-Z0-9_\-]/g, '-');
+            if (cf.kind === 'valitask') return importViaInput('task-upload', nm + '.valitask', d);
+            if (cf.kind === 'valipack') return importViaInput('pack-upload', nm + '.valipack', d);
+            // Szenarien: Eintrag mit gleicher id ersetzen.
+            var key = cf.mk.split('|')[0], id = cf.mk.split('|')[1];
+            try {
+                var arr = lsArr(key), i = -1;
+                arr.forEach(function (x, n) { if (x && String(x.id) === id) i = n; });
+                if (i >= 0) arr[i] = d; else arr.push(d);
+                localStorage.setItem(key, JSON.stringify(arr));
+                return true;
+            } catch (_) { return false; }
+        }
+
+        function renderConflicts() {
+            var list = Object.keys(conflicts);
+            if (!list.length) { renderEnv(); return; }
+            var rows = list.map(function (mk) {
+                var cf = conflicts[mk];
+                return '<div style="background:#252528;border:1px solid #3a3a3a;border-radius:6px;'
+                     + 'padding:11px;margin-bottom:8px;">'
+                     + '<div style="font-weight:600;font-size:13px;">' + esc(cf.name || mk) + '</div>'
+                     + '<div style="font-size:11px;color:#777;margin:3px 0 9px;">' + esc(kindLabel(cf.kind))
+                     +   (cf.server ? ' &middot; Server: v' + cf.server.version + ', '
+                          + esc(fmtDate(cf.server.updated_at)) : '') + '</div>'
+                     + '<button data-cfmine="' + esc(mk) + '" style="background:#2e7d32;color:#fff;border:none;'
+                     +   'border-radius:3px;padding:6px 10px;cursor:pointer;font-size:11px;margin-right:6px;">'
+                     +   'Meine Fassung behalten</button>'
+                     + '<button data-cfsrv="' + esc(mk) + '" style="background:#1565c0;color:#fff;border:none;'
+                     +   'border-radius:3px;padding:6px 10px;cursor:pointer;font-size:11px;">'
+                     +   'Serverfassung &uuml;bernehmen</button></div>';
+            }).join('');
+            box.innerHTML =
+                '<div style="font-size:12px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+              +   'Diese Elemente wurden auch anderswo geaendert und deshalb <b>nicht</b> ueberschrieben. '
+              +   'Die jeweils unterlegene Fassung wird als lokaler Snapshot gesichert.</div>'
+              + rows
+              + '<button id="cf-back" style="width:100%;margin-top:6px;background:#3a3a3a;color:#ccc;border:none;'
+              +   'border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>';
+            box.querySelector('#cf-back').onclick = renderEnv;
+
+            Array.prototype.forEach.call(box.querySelectorAll('[data-cfmine]'), function (b) {
+                b.onclick = function () {
+                    var cf = conflicts[b.getAttribute('data-cfmine')];
+                    if (!cf) return;
+                    var base = cf.server ? cf.server.version : 0;
+                    run(C.put(cf.kind, cf.uid, cf.name, cf.mine, base), 'Speichere …', function (j) {
+                        var meta = metaGet();
+                        meta[cf.mk] = { uid: cf.uid, v: j.version, fp: cf.fp };
+                        metaSet(meta);
+                        delete conflicts[cf.mk];
+                        syncStat.conflict = Object.keys(conflicts).length;
+                        refreshBadge(); renderConflicts();
+                    });
+                };
+            });
+            Array.prototype.forEach.call(box.querySelectorAll('[data-cfsrv]'), function (b) {
+                b.onclick = function () {
+                    var cf = conflicts[b.getAttribute('data-cfsrv')];
+                    if (!cf || !cf.server) return;
+                    if (!serverToLocal(cf)) { say('Uebernehmen nicht moeglich.', '#ef9a9a'); return; }
+                    var meta = metaGet();
+                    meta[cf.mk] = { uid: cf.uid, v: cf.server.version, fp: fpOf(JSON.stringify(cf.server.data)) };
+                    metaSet(meta);
+                    delete conflicts[cf.mk];
+                    syncStat.conflict = Object.keys(conflicts).length;
+                    say('Serverfassung uebernommen.', '#8bc34a');
+                    refreshBadge(); renderConflicts();
+                };
+            });
+        }
 
         /* ---- Zugangs-Link ------------------------------------------------- */
 

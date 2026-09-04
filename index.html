@@ -64587,5 +64587,468 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window.VALIS_CLOUD = C;
     })();
     </script>
+    <script>
+    /* ============================================================
+       VALIS Cloud – Oberflaeche "Meine Umgebung"
+
+       Rein additiv: erzeugt Button und Modal komplett per JS und nur dann,
+       wenn VALIS_CLOUD.available true ist. Auf GitHub Pages passiert nichts.
+
+       Zustandsbruecke: Statt den Arbeitsstand neu einzusammeln (die noetigen
+       Variablen sind IIFE-lokal), nutzen wir das bestehende Snapshot-Bundle
+       ueber window.saveSnapshot / window.loadSnapshot. Die Snapshot-Liste des
+       Nutzers wird dabei exakt wiederhergestellt, es bleibt kein Rest zurueck.
+       ============================================================ */
+    (function () {
+        'use strict';
+        var C = window.VALIS_CLOUD;
+        if (!C) return;
+
+        var SNAP_KEY = 'valis_snapshots';
+        var KIND = 'session';
+        var modal = null, box = null, status = null, busy = false;
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function fmtBytes(n) {
+            n = Number(n) || 0;
+            return n < 1024 ? n + ' B'
+                 : n < 1048576 ? (n / 1024).toFixed(1) + ' KB'
+                 : (n / 1048576).toFixed(2) + ' MB';
+        }
+        function fmtDate(s) {
+            if (!s) return '';
+            var d = new Date(String(s).replace(' ', 'T') + 'Z');
+            return isNaN(d) ? String(s) : d.toLocaleString();
+        }
+        function say(msg, color) {
+            if (!status) return;
+            status.textContent = msg || '';
+            status.style.color = color || '#9e9e9e';
+        }
+
+        /* ---- Snapshot-Bruecke ------------------------------------------- */
+
+        function readSnaps() {
+            try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '[]'); } catch (_) { return []; }
+        }
+        /** Aktuellen Arbeitsstand als Bundle holen, ohne die Snapshot-Liste zu veraendern. */
+        function captureBundle() {
+            if (typeof window.saveSnapshot !== 'function') return null;
+            var before = localStorage.getItem(SNAP_KEY);
+            try {
+                window.saveSnapshot('__cloud_tmp__');
+                var arr = readSnaps();
+                var snap = arr && arr.length ? arr[0] : null;
+                if (!snap) return null;
+                return {
+                    code: snap.code, types: snap.types, layout: snap.layout,
+                    factory: snap.factory, plugins: snap.plugins, keyBindings: snap.keyBindings
+                };
+            } finally {
+                // Liste exakt zuruecksetzen: kein Temp-Eintrag, kein verdraengter Snapshot.
+                if (before === null) localStorage.removeItem(SNAP_KEY);
+                else localStorage.setItem(SNAP_KEY, before);
+                if (typeof window.renderSnapshotList === 'function') {
+                    try { window.renderSnapshotList(); } catch (_) {}
+                }
+            }
+        }
+        /** Bundle ueber den erprobten Snapshot-Restore einspielen (fragt selbst nach). */
+        function restoreBundle(bundle) {
+            if (typeof window.loadSnapshot !== 'function' || !bundle) return false;
+            var before = localStorage.getItem(SNAP_KEY);
+            var id = '__cloud_restore__' + Date.now();
+            try {
+                var arr = readSnaps();
+                arr.unshift({
+                    id: id, name: '__cloud_restore__', ts: Date.now(),
+                    code: bundle.code, types: bundle.types, layout: bundle.layout,
+                    factory: bundle.factory, plugins: bundle.plugins, keyBindings: bundle.keyBindings
+                });
+                localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
+                window.loadSnapshot(id);
+                return true;
+            } finally {
+                if (before === null) localStorage.removeItem(SNAP_KEY);
+                else localStorage.setItem(SNAP_KEY, before);
+                if (typeof window.renderSnapshotList === 'function') {
+                    try { window.renderSnapshotList(); } catch (_) {}
+                }
+            }
+        }
+        /** Verlierer eines Konflikts lokal sichern, damit nie etwas verloren geht. */
+        function keepAsSnapshot(name, bundle) {
+            if (!bundle) return;
+            try {
+                var arr = readSnaps();
+                arr.unshift({
+                    id: 'cloud' + Date.now(), name: name, ts: Date.now(),
+                    code: bundle.code, types: bundle.types, layout: bundle.layout,
+                    factory: bundle.factory, plugins: bundle.plugins, keyBindings: bundle.keyBindings
+                });
+                while (arr.length > 25) arr.pop();
+                localStorage.setItem(SNAP_KEY, JSON.stringify(arr));
+                if (typeof window.renderSnapshotList === 'function') window.renderSnapshotList();
+            } catch (_) {}
+        }
+
+        /* ---- Modalgeruest ------------------------------------------------ */
+
+        function ensureModal() {
+            if (modal) return;
+            modal = document.createElement('div');
+            modal.id = 'cloud-modal';
+            modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'
+                + 'background:#2d2d30;color:#eee;border:1px solid #444;border-radius:8px;z-index:10000;'
+                + 'width:640px;max-width:94vw;max-height:88vh;box-shadow:0 10px 40px rgba(0,0,0,.6);'
+                + 'font-family:Segoe UI,Tahoma,sans-serif;display:none;flex-direction:column;';
+            modal.innerHTML =
+                '<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #444;">'
+              +   '<span style="font-size:16px;font-weight:600;">&#9729;&#65039; Meine Umgebung</span>'
+              +   '<span id="cloud-status" style="font-size:11px;color:#9e9e9e;margin-left:auto;"></span>'
+              +   '<button id="cloud-x" style="background:#444;color:#fff;border:none;border-radius:4px;'
+              +     'width:26px;height:24px;cursor:pointer;font-size:14px;line-height:1;">&times;</button>'
+              + '</div>'
+              + '<div id="cloud-box" style="padding:16px 18px;overflow:auto;"></div>';
+            document.body.appendChild(modal);
+            box = modal.querySelector('#cloud-box');
+            status = modal.querySelector('#cloud-status');
+            modal.querySelector('#cloud-x').onclick = close;
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && modal.style.display !== 'none') close();
+            });
+        }
+        function open() { ensureModal(); modal.style.display = 'flex'; render(); }
+        function close() { if (modal) modal.style.display = 'none'; }
+
+        function render() {
+            say('');
+            if (C.isLoggedIn()) renderEnv(); else renderAuth();
+        }
+
+        /* ---- Anmelden / Anlegen ------------------------------------------ */
+
+        function renderAuth() {
+            box.innerHTML =
+                '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+              + '<div style="flex:1;min-width:260px;background:#252528;border:1px solid #3a3a3a;border-radius:6px;padding:14px;">'
+              +   '<div style="font-weight:600;margin-bottom:8px;">Anmelden</div>'
+              +   '<div style="font-size:11px;color:#9e9e9e;margin-bottom:8px;">Mit deinem Zugangscode.</div>'
+              +   '<input id="cl-code" placeholder="XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" '
+              +     'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#fff;border:1px solid #555;'
+              +     'border-radius:4px;padding:8px;font-family:monospace;font-size:14px;letter-spacing:1px;text-transform:uppercase;">'
+              +   '<input id="cl-pin" placeholder="PIN (falls gesetzt)" inputmode="numeric" autocomplete="off" '
+              +     'style="width:100%;box-sizing:border-box;margin-top:8px;background:#1b1b1e;color:#fff;'
+              +     'border:1px solid #555;border-radius:4px;padding:8px;font-size:13px;">'
+              +   '<button id="cl-login" style="width:100%;margin-top:10px;background:#2e7d32;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:13px;">Anmelden</button>'
+              + '</div>'
+              + '<div style="flex:1;min-width:260px;background:#252528;border:1px solid #3a3a3a;border-radius:6px;padding:14px;">'
+              +   '<div style="font-weight:600;margin-bottom:8px;">Neue Umgebung</div>'
+              +   '<div style="font-size:11px;color:#9e9e9e;margin-bottom:8px;">'
+              +     'Ohne Name, ohne E-Mail. Du bekommst einen Zugangscode.</div>'
+              +   '<input id="cl-newpin" placeholder="PIN 4-6 Ziffern (optional)" inputmode="numeric" autocomplete="off" '
+              +     'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#fff;border:1px solid #555;'
+              +     'border-radius:4px;padding:8px;font-size:13px;">'
+              +   '<button id="cl-create" style="width:100%;margin-top:10px;background:#1565c0;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:13px;">Umgebung anlegen</button>'
+              +   '<div style="margin-top:10px;font-size:11px;color:#ef9a9a;line-height:1.5;">'
+              +     '&#9888;&#65039; Es gibt <b>keine Wiederherstellung</b>. Der Code ist der einzige Zugang &ndash; '
+              +     'verloren heisst weg.</div>'
+              + '</div></div>';
+
+            box.querySelector('#cl-login').onclick = function () {
+                var code = box.querySelector('#cl-code').value;
+                var pin = box.querySelector('#cl-pin').value;
+                if (!code.trim()) { say('Bitte Code eingeben.', '#ef9a9a'); return; }
+                run(C.login(code, pin), 'Anmelden …', function () { render(); });
+            };
+            box.querySelector('#cl-create').onclick = function () {
+                var pin = box.querySelector('#cl-newpin').value.trim();
+                if (pin && !/^\d{4,6}$/.test(pin)) { say('PIN muss 4-6 Ziffern haben.', '#ef9a9a'); return; }
+                run(C.createEnvironment(pin || null), 'Anlegen …', function (j) { renderCodeBackup(j.code); });
+            };
+        }
+
+        /* ---- Code-Sicherung (Pflichtschritt) ------------------------------ */
+
+        function renderCodeBackup(code) {
+            box.innerHTML =
+                '<div style="background:#3a2c00;border:1px solid #8d6e00;border-radius:6px;padding:12px;margin-bottom:14px;'
+              +   'font-size:12px;line-height:1.6;">'
+              +   '<b>&#9888;&#65039; Sichere diesen Code jetzt.</b><br>'
+              +   'Er wird <b>nur dieses eine Mal</b> angezeigt. Es gibt keine Wiederherstellung &ndash; '
+              +   'kein Zuruecksetzen, keine E-Mail, niemand kann dir helfen. Ohne den Code ist die Umgebung verloren.'
+              + '</div>'
+              + '<div style="text-align:center;background:#1b1b1e;border:1px solid #555;border-radius:6px;padding:16px;">'
+              +   '<div id="cl-code-txt" style="font-family:monospace;font-size:26px;letter-spacing:3px;color:#8bc34a;'
+              +     'user-select:all;word-break:break-all;">' + esc(code) + '</div>'
+              +   '<div id="cl-qr" style="margin:14px auto 0;width:160px;height:160px;background:#fff;padding:8px;'
+              +     'border-radius:4px;box-sizing:content-box;"></div>'
+              + '</div>'
+              + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+              +   '<button id="cl-copy" style="flex:1;min-width:120px;background:#455a64;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Kopieren</button>'
+              +   '<button id="cl-dl" style="flex:1;min-width:120px;background:#2e7d32;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Als Datei sichern</button>'
+              +   '<button id="cl-print" style="flex:1;min-width:120px;background:#455a64;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Drucken</button>'
+              + '</div>'
+              + '<label style="display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:12px;cursor:pointer;">'
+              +   '<input type="checkbox" id="cl-ack" style="margin-top:2px;cursor:pointer;">'
+              +   '<span>Ich habe den Code gesichert und weiss, dass es keine Wiederherstellung gibt.</span>'
+              + '</label>'
+              + '<button id="cl-go" disabled style="width:100%;margin-top:12px;background:#37474f;color:#889;border:none;'
+              +   'border-radius:4px;padding:10px;font-size:13px;cursor:not-allowed;">Weiter</button>';
+
+            try {
+                if (typeof QRCode === 'function') {
+                    new QRCode(box.querySelector('#cl-qr'), { text: code, width: 160, height: 160 });
+                }
+            } catch (_) {}
+
+            box.querySelector('#cl-copy').onclick = function () {
+                try {
+                    navigator.clipboard.writeText(code);
+                    say('Code kopiert.', '#8bc34a');
+                } catch (_) { say('Kopieren nicht moeglich – bitte markieren.', '#ef9a9a'); }
+            };
+            box.querySelector('#cl-dl').onclick = function () {
+                var txt = 'VALIS - Zugangscode fuer deine Umgebung\r\n\r\n' + code
+                        + '\r\n\r\nDieser Code ist der einzige Zugang. Es gibt keine Wiederherstellung.\r\n'
+                        + 'Bewahre ihn sicher auf.\r\n';
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+                a.download = 'valis-zugangscode.txt';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+            };
+            box.querySelector('#cl-print').onclick = function () {
+                var w = window.open('', '_blank');
+                if (!w) { say('Popup blockiert.', '#ef9a9a'); return; }
+                w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>VALIS Zugangscode</title>'
+                    + '<style>body{font-family:sans-serif;padding:40px;}h1{font-size:18px;}'
+                    + 'code{font-size:28px;letter-spacing:4px;display:block;margin:24px 0;}'
+                    + 'p{font-size:13px;max-width:60ch;}</style></head><body>'
+                    + '<h1>VALIS &ndash; Zugangscode</h1><code>' + esc(code) + '</code>'
+                    + '<p>Dieser Code ist der einzige Zugang zu deiner Umgebung. '
+                    + 'Es gibt keine Wiederherstellung.</p></body></html>');
+                w.document.close(); w.focus(); w.print();
+            };
+            var ack = box.querySelector('#cl-ack'), go = box.querySelector('#cl-go');
+            ack.onchange = function () {
+                go.disabled = !ack.checked;
+                go.style.background = ack.checked ? '#2e7d32' : '#37474f';
+                go.style.color = ack.checked ? '#fff' : '#889';
+                go.style.cursor = ack.checked ? 'pointer' : 'not-allowed';
+            };
+            go.onclick = function () { if (!go.disabled) render(); };
+        }
+
+        /* ---- Angemeldet --------------------------------------------------- */
+
+        function renderEnv() {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Lade …</div>';
+            C.list().then(function (j) {
+                var u = j.usage || {};
+                var pct = u.bytes_max ? Math.min(100, Math.round(u.bytes / u.bytes_max * 100)) : 0;
+                var rows = (j.objects || []).map(function (o) {
+                    return '<tr style="border-top:1px solid #3a3a3a;">'
+                        + '<td style="padding:7px 6px;">' + esc(o.name || '(ohne Namen)')
+                        +   '<div style="font-size:10px;color:#777;">' + esc(o.kind) + ' &middot; v' + o.version
+                        +   ' &middot; ' + fmtBytes(o.bytes) + '</div></td>'
+                        + '<td style="padding:7px 6px;font-size:11px;color:#9e9e9e;white-space:nowrap;">'
+                        +   esc(fmtDate(o.updated_at)) + '</td>'
+                        + '<td style="padding:7px 6px;white-space:nowrap;text-align:right;">'
+                        +   '<button data-load="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
+                        +     'style="background:#1565c0;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
+                        +     'cursor:pointer;font-size:11px;">Laden</button> '
+                        +   '<button data-del="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
+                        +     'style="background:#5d2b2b;color:#fff;border:none;border-radius:3px;padding:5px 8px;'
+                        +     'cursor:pointer;font-size:11px;">L&ouml;schen</button>'
+                        + '</td></tr>';
+                }).join('');
+
+                box.innerHTML =
+                    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
+                  +   '<button id="cl-save" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;'
+                  +     'padding:9px 14px;cursor:pointer;font-size:13px;">Aktuellen Stand speichern</button>'
+                  +   '<button id="cl-logout" style="margin-left:auto;background:#444;color:#ddd;border:none;'
+                  +     'border-radius:4px;padding:8px 12px;cursor:pointer;font-size:12px;">Abmelden</button>'
+                  + '</div>'
+                  + '<div style="font-size:11px;color:#9e9e9e;margin-bottom:4px;">'
+                  +   fmtBytes(u.bytes) + ' von ' + fmtBytes(u.bytes_max) + ' &middot; '
+                  +   (u.objects || 0) + ' von ' + (u.objects_max || 0) + ' Objekten</div>'
+                  + '<div style="height:5px;background:#1b1b1e;border-radius:3px;overflow:hidden;margin-bottom:14px;">'
+                  +   '<div style="height:100%;width:' + pct + '%;background:' + (pct > 90 ? '#c62828' : '#2e7d32') + ';"></div></div>'
+                  + (rows
+                      ? '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + rows + '</table>'
+                      : '<div style="color:#777;font-size:12px;padding:18px 0;text-align:center;">'
+                        + 'Noch nichts gespeichert.</div>');
+
+                box.querySelector('#cl-save').onclick = saveCurrent;
+                box.querySelector('#cl-logout').onclick = function () {
+                    run(C.logout(), 'Abmelden …', function () { render(); });
+                };
+                Array.prototype.forEach.call(box.querySelectorAll('[data-load]'), function (b) {
+                    b.onclick = function () { loadObject(b.getAttribute('data-kind'), b.getAttribute('data-load')); };
+                });
+                Array.prototype.forEach.call(box.querySelectorAll('[data-del]'), function (b) {
+                    b.onclick = function () {
+                        if (!confirm('Dieses Objekt loeschen?')) return;
+                        run(C.remove(b.getAttribute('data-kind'), b.getAttribute('data-del')),
+                            'Loesche …', function () { renderEnv(); });
+                    };
+                });
+            }).catch(handleErr);
+        }
+
+        /* ---- Speichern / Laden / Konflikt --------------------------------- */
+
+        function currentUid() {
+            try { return localStorage.getItem('valisCloudSessionUid') || ''; } catch (_) { return ''; }
+        }
+        function setCurrent(uid, version) {
+            try {
+                localStorage.setItem('valisCloudSessionUid', uid);
+                localStorage.setItem('valisCloudSessionVer', String(version));
+            } catch (_) {}
+        }
+        function currentVer() {
+            try { return parseInt(localStorage.getItem('valisCloudSessionVer') || '0', 10) || 0; } catch (_) { return 0; }
+        }
+
+        function saveCurrent() {
+            var bundle = captureBundle();
+            if (!bundle) { say('Arbeitsstand konnte nicht gelesen werden.', '#ef9a9a'); return; }
+            var name = prompt('Name fuer diesen Stand:', 'Stand vom ' + new Date().toLocaleString());
+            if (name === null) return;
+            var uid = currentUid(), base = currentVer();
+            if (!uid) { uid = C.newUid(); base = 0; }
+            put(uid, name, bundle, base);
+        }
+        function put(uid, name, bundle, base) {
+            run(C.put(KIND, uid, name, bundle, base), 'Speichere …', function (j) {
+                setCurrent(j.uid, j.version);
+                say('Gespeichert (v' + j.version + ').', '#8bc34a');
+                renderEnv();
+            }, function (e) {
+                if (e && e.message === 'conflict' && e.data && e.data.server) {
+                    conflict(uid, name, bundle, e.data.server);
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        function conflict(uid, name, mine, server) {
+            box.innerHTML =
+                '<div style="background:#3a2c00;border:1px solid #8d6e00;border-radius:6px;padding:12px;'
+              +   'font-size:12px;line-height:1.6;margin-bottom:14px;">'
+              +   '<b>Auf einem anderen Geraet geaendert.</b><br>'
+              +   'Der Server steht auf <b>v' + server.version + '</b> ('
+              +   esc(server.name || '') + ', ' + esc(fmtDate(server.updated_at)) + '). '
+              +   'Nichts wird ueberschrieben, ohne dass du es entscheidest &ndash; '
+              +   'die jeweils andere Fassung wird zusaetzlich als lokaler Snapshot gesichert.'
+              + '</div>'
+              + '<div style="display:flex;flex-direction:column;gap:8px;">'
+              +   '<button id="cf-mine" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;'
+              +     'padding:10px;cursor:pointer;font-size:13px;text-align:left;">Meinen Stand behalten'
+              +     '<div style="font-size:11px;opacity:.8;">Server wird ueberschrieben, Serverfassung als Snapshot gesichert.</div></button>'
+              +   '<button id="cf-srv" style="background:#1565c0;color:#fff;border:none;border-radius:4px;'
+              +     'padding:10px;cursor:pointer;font-size:13px;text-align:left;">Serverstand laden'
+              +     '<div style="font-size:11px;opacity:.8;">Mein Stand wird vorher als Snapshot gesichert.</div></button>'
+              +   '<button id="cf-copy" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
+              +     'padding:10px;cursor:pointer;font-size:13px;text-align:left;">Als Kopie speichern'
+              +     '<div style="font-size:11px;opacity:.8;">Beide Faelle bleiben erhalten.</div></button>'
+              +   '<button id="cf-cancel" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+              +     'padding:8px;cursor:pointer;font-size:12px;">Abbrechen</button>'
+              + '</div>';
+
+            box.querySelector('#cf-mine').onclick = function () {
+                keepAsSnapshot('Server v' + server.version + ' (Konflikt)', server.data);
+                put(uid, name, mine, server.version);
+            };
+            box.querySelector('#cf-srv').onclick = function () {
+                keepAsSnapshot('Mein Stand (Konflikt)', mine);
+                setCurrent(uid, server.version);
+                if (restoreBundle(server.data)) { say('Serverstand geladen.', '#8bc34a'); }
+                renderEnv();
+            };
+            box.querySelector('#cf-copy').onclick = function () {
+                var nu = C.newUid();
+                put(nu, name + ' (Kopie)', mine, 0);
+            };
+            box.querySelector('#cf-cancel').onclick = renderEnv;
+        }
+
+        function loadObject(kind, uid) {
+            run(C.get(kind, uid), 'Lade …', function (o) {
+                if (restoreBundle(o.data)) {
+                    setCurrent(o.uid, o.version);
+                    say('Geladen: ' + (o.name || o.uid) + ' (v' + o.version + ').', '#8bc34a');
+                    close();
+                } else {
+                    say('Einspielen nicht moeglich.', '#ef9a9a');
+                }
+            });
+        }
+
+        /* ---- Hilfsmittel -------------------------------------------------- */
+
+        function run(promise, msg, ok, onErr) {
+            if (busy) return;
+            busy = true; say(msg);
+            promise.then(function (j) {
+                busy = false;
+                if (ok) ok(j);
+            }).catch(function (e) {
+                busy = false;
+                if (onErr && onErr(e)) return;
+                handleErr(e);
+            });
+        }
+        function handleErr(e) {
+            var m = (e && e.message) || 'unbekannt';
+            var map = {
+                unauthorized: 'Sitzung abgelaufen – bitte neu anmelden.',
+                bad_credentials: 'Code oder PIN stimmt nicht.',
+                locked: 'Zu viele Fehlversuche. Bitte spaeter erneut versuchen.',
+                rate_limited: 'Zu viele Anfragen. Bitte spaeter erneut versuchen.',
+                quota_bytes: 'Speicherplatz der Umgebung erschoepft.',
+                quota_objects: 'Maximale Objektzahl erreicht.',
+                object_too_large: 'Dieser Stand ist zu gross zum Speichern.',
+                signup_closed: 'Neue Umgebungen sind derzeit gesperrt.',
+                not_found: 'Nicht gefunden.',
+                code_format: 'Der Code hat das falsche Format.',
+                pin_format: 'PIN muss 4-6 Ziffern haben.'
+            };
+            say(map[m] || ('Fehler: ' + m), '#ef9a9a');
+            if (m === 'unauthorized') { try { localStorage.removeItem('valisCloudToken'); } catch (_) {} render(); }
+        }
+
+        /* ---- Einstieg ----------------------------------------------------- */
+
+        C.ready.then(function (available) {
+            if (!available) return;   // GitHub Pages: nichts einbauen
+            var ref = document.getElementById('btn-hub');
+            var btn = document.createElement('button');
+            btn.className = 'btn-export';
+            btn.id = 'btn-cloud';
+            btn.textContent = '☁️ Meine Umgebung';
+            btn.title = 'Eigene Umgebung auf dem Server – Staende geraeteuebergreifend speichern und abrufen. '
+                      + 'Zugang ausschliesslich per Code, ohne Name oder E-Mail.';
+            btn.style.cssText = 'background:#0277bd;font-size:11px;padding:3px 8px;box-shadow:none;';
+            btn.onclick = open;
+            if (ref && ref.parentNode) ref.parentNode.insertBefore(btn, ref.nextSibling);
+            else document.body.appendChild(btn);
+            window._openCloudPanel = open;
+        });
+    })();
+    </script>
 </body>
 </html>

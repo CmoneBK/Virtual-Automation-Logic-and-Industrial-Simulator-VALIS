@@ -151,6 +151,20 @@ if ($act === 'destroy') {
     json_out(['ok' => true]);
 }
 
+// ------------------------------------- Alle ANDEREN Geraete abmelden
+// Notausgang, wenn ein Geraete-Link abhanden kommt - etwa als Verknuepfung in
+// einem Ordner, den auch andere lesen koennen. Die eigene Sitzung bleibt
+// bestehen, alle uebrigen Token dieser Umgebung werden ungueltig.
+if ($act === 'logout_others') {
+    $envId = require_env();
+    $hdr = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
+    preg_match('/^Bearer\s+([A-Za-z0-9_\-]{20,120})$/', trim($hdr), $mm);
+    $keep = isset($mm[1]) ? token_hash($mm[1]) : '';
+    $st = db()->prepare('DELETE FROM sessions WHERE env_id = ? AND token_hash <> ?');
+    $st->execute([$envId, $keep]);
+    json_out(['ok' => true, 'removed' => $st->rowCount()]);
+}
+
 // ------------------------------------------------- Geraete-Link ausstellen
 // Stellt fuer ein anderes Geraet ein EIGENES Sitzungstoken aus. Damit muss der
 // Zugangscode weder gespeichert noch in einen Link geschrieben werden. Jedes

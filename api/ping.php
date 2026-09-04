@@ -9,14 +9,24 @@ declare(strict_types=1);
  */
 require __DIR__ . '/_boot.php';
 
-$db = false;
+$db     = false;
 $signup = false;
-try {
-    db()->query('SELECT 1');
-    $db = true;
-    $signup = (bool)valis_config()['allow_open_signup'];
-} catch (Throwable $e) {
-    error_log('[valis-api] ping: db unavailable: ' . $e->getMessage());
+$reason = null;
+
+// Bewusst NICHT abbrechen, wenn etwas fehlt: ping soll immer 200 liefern und
+// sagen, WAS fehlt. Der Client schaltet die Cloud ohnehin nur bei db === true frei.
+$cfg = valis_config(false);
+if ($cfg === []) {
+    $reason = 'config_missing';
+} else {
+    try {
+        db()->query('SELECT 1');
+        $db     = true;
+        $signup = (bool)$cfg['allow_open_signup'];
+    } catch (Throwable $e) {
+        $reason = 'db_error';
+        error_log('[valis-api] ping: db unavailable: ' . $e->getMessage());
+    }
 }
 
 json_out([
@@ -25,4 +35,5 @@ json_out([
     'v'         => 1,
     'db'        => $db,
     'signup'    => $signup,
+    'reason'    => $reason,
 ]);

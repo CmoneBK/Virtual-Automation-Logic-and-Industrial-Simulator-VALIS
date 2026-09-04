@@ -44,15 +44,26 @@ set_error_handler(function (int $no, string $str, string $file, int $line): bool
  *   2. <parent-of-document-root>/valis-secrets/config.php
  * Beide liegen AUSSERHALB von /projekte/valis/ und ueberleben damit rsync --delete.
  */
-function valis_config(): array {
+function valis_config(bool $required = true): array {
     static $cfg = null;
     if ($cfg !== null) return $cfg;
 
     $candidates = [];
     $env = getenv('VALIS_CONFIG');
     if (is_string($env) && $env !== '') $candidates[] = $env;
-    $docroot = $_SERVER['DOCUMENT_ROOT'] ?? '';
-    if ($docroot !== '') $candidates[] = dirname($docroot) . '/valis-secrets/config.php';
+
+    // Vom DOCUMENT_ROOT aus nach oben wandern und auf jeder Ebene beide
+    // ueblichen Ablagen pruefen. Bei KeyHelp ist DOCUMENT_ROOT z. B.
+    // /home/users/<user>/www/<domain>; zwei Ebenen hoeher liegt das Home mit
+    // dem von KeyHelp vorgesehenen, nicht web-erreichbaren Verzeichnis files/.
+    $dir = $_SERVER['DOCUMENT_ROOT'] ?? '';
+    for ($up = 0; $up < 5 && $dir !== '' && $dir !== '/' && $dir !== '.'; $up++) {
+        $candidates[] = $dir . '/files/valis-secrets/config.php';
+        $candidates[] = $dir . '/valis-secrets/config.php';
+        $parent = dirname($dir);
+        if ($parent === $dir) break;
+        $dir = $parent;
+    }
 
     foreach ($candidates as $path) {
         if (is_readable($path)) {
@@ -72,7 +83,8 @@ function valis_config(): array {
             return $cfg;
         }
     }
-    fail('config_missing', 503);
+    if ($required) fail('config_missing', 503);
+    return [];   // nur fuer ping.php: erlaubt eine Diagnose-Antwort statt 503
 }
 
 function db(): PDO {

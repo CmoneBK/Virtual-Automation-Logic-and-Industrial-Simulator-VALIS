@@ -64555,6 +64555,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         C.isLoggedIn = function () { return !!(C.token || readTok()); };
 
+        /** Stellt ein eigenes Sitzungstoken fuer ein anderes Geraet aus. */
+        C.deviceLink = function () { return req('env.php', { action: 'devicelink' }); };
+        /** Uebernimmt ein per Geraete-Link empfangenes Token als eigene Sitzung. */
+        C.adoptToken = function (token, env) { writeTok(token); writeEnv(env || ''); };
+
         /* ---- Objekte -------------------------------------------------
            Ein Objekt ist ein VALIS-Artefakt in seinem bestehenden Format
            (Snapshot-Bundle, .valitask, .valipack, .valisscenario, ...).
@@ -64625,16 +64630,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         var KIND = 'session';
         var modal = null, box = null, status = null, busy = false;
 
-        // Der Zugangscode bleibt NUR im Arbeitsspeicher. Er wird bewusst nicht
-        // persistiert - im localStorage liegt allein das ablaufende Sitzungstoken.
-        var sessionCode = '', sessionHasPin = false;
 
         // Zugangs-Link auswerten. Bewusst im Fragment (#) und nicht in der Query:
         // Fragmente werden nie an den Server gesendet und tauchen daher nicht im
         // Apache-Access-Log auf. Das Fragment wird sofort aus der Adresszeile
         // entfernt, damit der Code nicht sichtbar stehen bleibt.
-        var linkLogin = null, linkShare = null;
+        var linkLogin = null, linkShare = null, linkDevice = null;
         try {
+            var md = (location.hash || '').match(/^#dev=([A-Za-z0-9_\-]{20,120})(?:&e=([a-f0-9]{16}))?$/);
+            if (md) {
+                linkDevice = { token: md[1], env: md[2] || '' };
+                history.replaceState(null, '', location.pathname + location.search);
+            }
             var ms = (location.hash || '').match(/^#s=([A-Za-z2-9]{12})$/);
             if (ms) {
                 linkShare = ms[1].toUpperCase();
@@ -64673,11 +64680,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             status.style.color = color || '#9e9e9e';
         }
 
-        function buildLink() {
-            if (!sessionCode) return '';
-            return location.origin + location.pathname
-                 + '#env=' + encodeURIComponent(sessionCode) + '&p=' + (sessionHasPin ? '1' : '0');
-        }
 
         /* ---- Snapshot-Bruecke ------------------------------------------- */
 
@@ -64814,20 +64816,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 var code = box.querySelector('#cl-code').value;
                 var pin = box.querySelector('#cl-pin').value;
                 if (!code.trim()) { say('Bitte Code eingeben.', '#ef9a9a'); return; }
-                run(C.login(code, pin), 'Anmelden …', function (j) {
-                    sessionCode = code.trim().toUpperCase();
-                    sessionHasPin = !!(j && j.has_pin);
-                    render();
-                });
+                run(C.login(code, pin), 'Anmelden …', function () { render(); });
             };
             box.querySelector('#cl-create').onclick = function () {
                 var pin = box.querySelector('#cl-newpin').value.trim();
                 if (pin && !/^\d{4,6}$/.test(pin)) { say('PIN muss 4-6 Ziffern haben.', '#ef9a9a'); return; }
-                run(C.createEnvironment(pin || null), 'Anlegen …', function (j) {
-                    sessionCode = j.code;
-                    sessionHasPin = !!j.has_pin;
-                    renderCodeBackup(j.code);
-                });
+                run(C.createEnvironment(pin || null), 'Anlegen …', function (j) { renderCodeBackup(j.code); });
             };
         }
 
@@ -65577,66 +65571,47 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         /* ---- Zugangs-Link ------------------------------------------------- */
 
         function renderLink() {
-            if (!sessionCode) {
-                // Nach einem Seiten-Neuladen ist nur noch das Token da, nicht der Code.
+            // Ein Geraete-Link enthaelt NICHT den Zugangscode, sondern ein eigens
+            // ausgestelltes Sitzungstoken. Deshalb muss hier nie ein Code eingegeben
+            // werden, und ein abhandengekommener Link laesst sich durch Abmelden
+            // des betroffenen Geraets bzw. Ablauf entwerten.
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Link wird erzeugt …</div>';
+            run(C.deviceLink(), 'Erzeuge Link …', function (j) {
+                var url = location.origin + location.pathname + '#dev=' + j.token
+                        + (j.env ? '&e=' + j.env : '');
                 box.innerHTML =
-                    '<div style="font-size:12px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
-                  +   'Dein Zugangscode wird aus Sicherheitsgruenden nicht gespeichert. '
-                  +   'Gib ihn einmal ein, um den Link zu erzeugen.</div>'
-                  + '<input id="lk-code" placeholder="XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" '
-                  +   'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#fff;border:1px solid #555;'
-                  +   'border-radius:4px;padding:8px;font-family:monospace;font-size:14px;text-transform:uppercase;">'
-                  + '<div style="display:flex;gap:8px;margin-top:10px;">'
-                  +   '<button id="lk-ok" style="flex:1;background:#1565c0;color:#fff;border:none;border-radius:4px;'
-                  +     'padding:9px;cursor:pointer;font-size:13px;">Link erzeugen</button>'
-                  +   '<button id="lk-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
-                  +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button></div>';
-                box.querySelector('#lk-ok').onclick = function () {
-                    var v = box.querySelector('#lk-code').value.trim().toUpperCase();
-                    if (!v) { say('Bitte Code eingeben.', '#ef9a9a'); return; }
-                    sessionCode = v; renderLink();
+                    '<div style="background:#3a2c00;border:1px solid #8d6e00;border-radius:6px;padding:12px;'
+                  +   'font-size:12px;line-height:1.6;margin-bottom:14px;">'
+                  +   '<b>&#9888;&#65039; Dieser Link meldet ohne Rueckfrage an.</b><br>'
+                  +   'Er ist fuer <b>deine eigenen Geraete</b> gedacht &ndash; behandle ihn wie ein Passwort. '
+                  +   'Er enthaelt <b>nicht</b> deinen Zugangscode und laeuft nach '
+                  +   (j.expires_days || 60) + ' Tagen ab. Zum Weitergeben von Inhalten ist er nicht gedacht.'
+                  + '</div>'
+                  + '<input id="lk-url" readonly value="' + esc(url) + '" '
+                  +   'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#8bc34a;border:1px solid #555;'
+                  +   'border-radius:4px;padding:8px;font-family:monospace;font-size:11px;">'
+                  + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+                  +   '<button id="lk-copy" style="flex:1;min-width:110px;background:#2e7d32;color:#fff;border:none;'
+                  +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Kopieren</button>'
+                  +   '<button id="lk-qr" style="flex:1;min-width:110px;background:#455a64;color:#fff;border:none;'
+                  +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">QR anzeigen</button>'
+                  +   '<button id="lk-back2" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+                  +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
+                  + '</div><div id="lk-qrbox" style="margin:14px auto 0;width:160px;"></div>';
+                box.querySelector('#lk-copy').onclick = function () {
+                    box.querySelector('#lk-url').select();
+                    try { navigator.clipboard.writeText(url); say('Link kopiert.', '#8bc34a'); }
+                    catch (_) { say('Kopieren nicht moeglich - bitte markieren.', '#ef9a9a'); }
                 };
-                box.querySelector('#lk-back').onclick = renderEnv;
-                return;
-            }
-
-            var url = buildLink();
-            box.innerHTML =
-                '<div style="background:#3a2c00;border:1px solid #8d6e00;border-radius:6px;padding:12px;'
-              +   'font-size:12px;line-height:1.6;margin-bottom:14px;">'
-              +   '<b>&#9888;&#65039; Dieser Link ist dein Zugang.</b><br>'
-              +   'Wer ihn hat, kommt in deine Umgebung und kann alles aendern &ndash; behandle ihn wie ein '
-              +   'Passwort. Zum Weitergeben von Inhalten ist er <b>nicht</b> gedacht.'
-              +   (sessionHasPin
-                     ? '<br>Deine PIN ist gesetzt: beim Oeffnen wird sie abgefragt, der Link allein genuegt also nicht.'
-                     : '<br><b>Ohne PIN reicht dieser Link allein aus.</b> Setze eine PIN, wenn du Links nutzt.')
-              + '</div>'
-              + '<input id="lk-url" readonly value="' + esc(url) + '" '
-              +   'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#8bc34a;border:1px solid #555;'
-              +   'border-radius:4px;padding:8px;font-family:monospace;font-size:11px;">'
-              + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
-              +   '<button id="lk-copy" style="flex:1;min-width:110px;background:#2e7d32;color:#fff;border:none;'
-              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Kopieren</button>'
-              +   '<button id="lk-qr" style="flex:1;min-width:110px;background:#455a64;color:#fff;border:none;'
-              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">QR anzeigen</button>'
-              +   '<button id="lk-back2" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
-              +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
-              + '</div><div id="lk-qrbox" style="margin:14px auto 0;width:160px;"></div>';
-
-            box.querySelector('#lk-copy').onclick = function () {
-                var el = box.querySelector('#lk-url');
-                el.select();
-                try { navigator.clipboard.writeText(url); say('Link kopiert.', '#8bc34a'); }
-                catch (_) { say('Kopieren nicht moeglich - bitte markieren.', '#ef9a9a'); }
-            };
-            box.querySelector('#lk-qr').onclick = function () {
-                var t = box.querySelector('#lk-qrbox');
-                t.innerHTML = '';
-                t.style.cssText = 'margin:14px auto 0;width:160px;background:#fff;padding:8px;border-radius:4px;';
-                try { if (typeof QRCode === 'function') new QRCode(t, { text: url, width: 160, height: 160 }); }
-                catch (_) { say('QR-Code nicht moeglich.', '#ef9a9a'); }
-            };
-            box.querySelector('#lk-back2').onclick = renderEnv;
+                box.querySelector('#lk-qr').onclick = function () {
+                    var t = box.querySelector('#lk-qrbox');
+                    t.innerHTML = '';
+                    t.style.cssText = 'margin:14px auto 0;width:160px;background:#fff;padding:8px;border-radius:4px;';
+                    try { if (typeof QRCode === 'function') new QRCode(t, { text: url, width: 160, height: 160 }); }
+                    catch (_) { say('QR-Code nicht moeglich.', '#ef9a9a'); }
+                };
+                box.querySelector('#lk-back2').onclick = renderEnv;
+            });
         }
 
         /** PIN-Abfrage, wenn ein Zugangs-Link auf eine Umgebung mit PIN zeigt. */
@@ -65655,11 +65630,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
               +   'border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Abbrechen</button>';
             var go = function () {
                 var pin = box.querySelector('#lp-pin').value;
-                run(C.login(code, pin), 'Anmelden …', function (j) {
-                    sessionCode = code.trim().toUpperCase();
-                    sessionHasPin = !!(j && j.has_pin);
-                    render();
-                });
+                run(C.login(code, pin), 'Anmelden …', function () { render(); });
             };
             box.querySelector('#lp-go').onclick = go;
             box.querySelector('#lp-pin').onkeydown = function (e) { if (e.key === 'Enter') go(); };
@@ -65719,17 +65690,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             refreshBadge();
             if (C.isLoggedIn()) schedule();
 
+            if (linkDevice) {
+                C.adoptToken(linkDevice.token, linkDevice.env);
+                refreshBadge(); schedule(); open(); render();
+                return;
+            }
             if (linkShare) { open(); renderShared(linkShare); return; }
             if (!linkLogin) return;
             open();
             if (linkLogin.hasPin) { renderLinkPin(linkLogin.code); return; }
             // Ohne bekanntes PIN-Kennzeichen einmal ohne PIN versuchen; schlaegt das
             // fehl, ist eine PIN gesetzt und wir fragen sie nach.
-            run(C.login(linkLogin.code, ''), 'Anmelden …', function (j) {
-                sessionCode = linkLogin.code.trim().toUpperCase();
-                sessionHasPin = !!(j && j.has_pin);
-                render();
-            }, function (e) {
+            run(C.login(linkLogin.code, ''), 'Anmelden …', function () { render(); }, function (e) {
                 if (e && e.message === 'bad_credentials') {
                     renderLinkPin(linkLogin.code, 'Diese Umgebung verlangt eine PIN.');
                     return true;

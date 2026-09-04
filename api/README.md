@@ -90,7 +90,18 @@ Log-Anonymisierung bzw. kurze Aufbewahrung konfigurieren.
 
 ## Zugangs-Links
 
-Ein Zugangs-Link meldet direkt in eine Umgebung an:
+Der Knopf im Panel erzeugt einen **Geraete-Link**. Er enthaelt **nicht** den
+Zugangscode, sondern ein eigens ausgestelltes Sitzungstoken (`env.php`,
+Aktion `devicelink`):
+
+    https://t-bk.de/projekte/valis/#dev=<token>&e=<envref>
+
+Vorteile gegenueber einem Code im Link: der Code bleibt geheim, das Token
+laeuft ab (`session_ttl_days`) und laesst sich einzeln entwerten - jedes Geraet
+hat eine eigene Zeile in `sessions`, Abmelden betrifft nur dieses Geraet.
+Weil es bereits eine authentifizierte Sitzung ist, wird **keine PIN** abgefragt.
+
+Aeltere Links mit dem Zugangscode werden weiterhin gelesen:
 
     https://t-bk.de/projekte/valis/#env=XXXXX-XXXXX-XXXXX&p=1
 

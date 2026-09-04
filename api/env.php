@@ -151,4 +151,14 @@ if ($act === 'destroy') {
     json_out(['ok' => true]);
 }
 
+// ------------------------------------------------- Geraete-Link ausstellen
+// Stellt fuer ein anderes Geraet ein EIGENES Sitzungstoken aus. Damit muss der
+// Zugangscode weder gespeichert noch in einen Link geschrieben werden. Jedes
+// Geraet bekommt eine eigene Zeile in `sessions` - Abmelden auf dem einen
+// Geraet beendet die Sitzung des anderen also nicht.
+if ($act === 'devicelink') {
+    $envId = require_env();
+    json_out(['ok' => true, 'env' => env_ref($envId)] + issue_token($envId));
+}
+
 fail('unknown_action');

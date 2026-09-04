@@ -75,6 +75,7 @@ function valis_config(bool $required = true): array {
                 'signup_secret'       => '',
                 'quota_bytes'         => 5 * 1024 * 1024,
                 'quota_objects'       => 300,
+                'max_object_bytes'    => 2 * 1024 * 1024,
                 'session_ttl_days'    => 60,
                 'inactive_delete_days'=> 365,
                 'signup_per_ip_day'   => 20,

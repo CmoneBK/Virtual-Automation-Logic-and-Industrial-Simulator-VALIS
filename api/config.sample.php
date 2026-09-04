@@ -33,6 +33,8 @@ return [
     // Quota je Umgebung
     'quota_bytes'          => 5 * 1024 * 1024,
     'quota_objects'        => 300,
+    // Groesstes einzelnes Objekt (2D-Anlagen koennen gross werden)
+    'max_object_bytes'     => 2 * 1024 * 1024,
 
     // Sitzungsdauer eines Geraete-Logins
     'session_ttl_days'     => 60,

@@ -100,6 +100,18 @@ bei der Erzeugung einmalig anzeigen und zum Sichern zwingen (Download / QR / Dru
 |---|---|
 | `ping.php` | Capability-Probe + Diagnose (kein Auth) |
 | `env.php` | `create` / `login` / `logout` / `destroy` |
+| `obj.php` | `list` / `get` / `put` / `delete` / `usage` (Bearer-Token) |
 | `gc.php` | Wartung, per Cron |
 
-Noch offen: `obj.php` (Objekte lesen/schreiben mit Versionierung), `share.php`.
+Noch offen: `share.php` (read-only Freigabe-Links).
+
+## Konflikte bei Mehrgeraete-Nutzung
+
+`put` erwartet `base_version` - die Version, auf der die Aenderung aufsetzt
+(`0` = neu anlegen). Weicht sie vom Serverstand ab, antwortet die API mit
+**HTTP 409** und liefert unter `server` den kompletten aktuellen Stand mit.
+Es wird nie still ueberschrieben. Der Client kann damit anbieten:
+*meins behalten* / *Server behalten* / *als Kopie speichern* - und den
+Verlierer als Snapshot ablegen, sodass nichts verloren geht.
+
+`delete` ist ein Soft-Delete; `gc.php` entfernt endgueltig nach 30 Tagen.

@@ -64550,6 +64550,40 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         C.isLoggedIn = function () { return !!(C.token || readTok()); };
 
+        /* ---- Objekte -------------------------------------------------
+           Ein Objekt ist ein VALIS-Artefakt in seinem bestehenden Format
+           (Snapshot-Bundle, .valitask, .valipack, .valisscenario, ...).
+           Konflikt: put() lehnt mit error "conflict" ab; e.data.server
+           enthaelt dann den Serverstand zum Vergleichen/Kopieren.        */
+
+        C.newUid = function () {
+            try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
+            var s4 = function () {
+                return Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(1);
+            };
+            return s4() + s4() + "-" + s4() + "-" + s4() + "-" + s4() + "-" + s4() + s4() + s4();
+        };
+
+        C.list = function (kind) {
+            return req("obj.php", { action: "list", kind: kind || "" });
+        };
+        C.get = function (kind, uid) {
+            return req("obj.php", { action: "get", kind: kind, uid: uid })
+                .then(function (j) { return j.object; });
+        };
+        C.put = function (kind, uid, name, data, baseVersion) {
+            return req("obj.php", {
+                action: "put", kind: kind, uid: uid, name: name || "",
+                data: data, base_version: baseVersion || 0
+            });
+        };
+        C.remove = function (kind, uid) {
+            return req("obj.php", { action: "delete", kind: kind, uid: uid });
+        };
+        C.usage = function () {
+            return req("obj.php", { action: "usage" }).then(function (j) { return j.usage; });
+        };
+
         window.VALIS_CLOUD = C;
     })();
     </script>

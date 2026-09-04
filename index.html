@@ -64771,7 +64771,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         function render() {
             say('');
-            if (C.isLoggedIn()) renderEnv(); else renderAuth();
+            if (C.isLoggedIn()) { refreshBadge(); schedule(); renderEnv(); } else { refreshBadge(); renderAuth(); }
         }
 
         /* ---- Anmelden / Anlegen ------------------------------------------ */
@@ -64945,6 +64945,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +   (u.objects || 0) + ' von ' + (u.objects_max || 0) + ' Objekten</div>'
                   + '<div style="height:5px;background:#1b1b1e;border-radius:3px;overflow:hidden;margin-bottom:14px;">'
                   +   '<div style="height:100%;width:' + pct + '%;background:' + (pct > 90 ? '#c62828' : '#2e7d32') + ';"></div></div>'
+                  + '<div style="display:flex;align-items:center;gap:8px;font-size:11px;margin-bottom:12px;'
+                  +   'padding:7px 9px;background:#252528;border:1px solid #3a3a3a;border-radius:4px;">'
+                  +   '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;">'
+                  +     '<input type="checkbox" id="cl-auto"' + (autoOn() ? ' checked' : '') + ' style="cursor:pointer;">'
+                  +     'Neues automatisch hier speichern</label>'
+                  +   '<span style="margin-left:auto;color:'
+                  +     (syncStat.conflict || syncStat.err ? '#ef9a9a' : '#9e9e9e') + ';">'
+                  +     (syncStat.err ? esc(syncStat.err)
+                        : syncStat.conflict ? (syncStat.conflict + ' Konflikt(e) - nicht ueberschrieben')
+                        : syncing ? 'speichert …'
+                        : syncStat.at ? ('zuletzt ' + new Date(syncStat.at).toLocaleTimeString())
+                        : 'bereit') + '</span></div>'
                   + (rows
                       ? '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + rows + '</table>'
                       : '<div style="color:#777;font-size:12px;padding:18px 0;text-align:center;">'
@@ -64952,6 +64964,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 box.querySelector('#cl-save').onclick = saveCurrent;
                 box.querySelector('#cl-add').onclick = renderAdd;
+                box.querySelector('#cl-auto').onchange = function () { setAuto(this.checked); };
                 Array.prototype.forEach.call(box.querySelectorAll('[data-share]'), function (b) {
                     b.onclick = function () {
                         renderShare(b.getAttribute('data-kind'), b.getAttribute('data-share'),
@@ -65247,7 +65260,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     }
                     if (!payload) { say('Nicht gefunden.', '#ef9a9a'); return; }
-                    var uid = uidFor(id);
+                    var uid = uidFor((kind === 'valitask' ? 'valisTasks' : 'valisTaskPackages') + ':' + id);
                     C.get(kind, uid).then(function (ex) { return ex.version; })
                      .catch(function () { return 0; })
                      .then(function (base) {
@@ -65258,6 +65271,153 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
             });
         }
+
+        /* ---- Automatisches Speichern -------------------------------------- */
+
+        // Alle beobachteten Arten sind Arrays mit `id` und werden ueber
+        // localStorage.setItem geschrieben. Ein Hook darauf erfasst deshalb jeden
+        // Erstell-, Import- und Bearbeitungspfad, ohne die verstreuten
+        // Schreibstellen anfassen zu muessen.
+        var WATCH = {
+            valisTasks:           { kind: 'valitask',     label: 'Aufgabe' },
+            valisTaskPackages:    { kind: 'valipack',     label: 'Aufgabenpaket', embedTasks: true },
+            valisSzUserScenarios: { kind: 'scenario',     label: 'Szenario' },
+            valisSzPackages:      { kind: 'scenariopack', label: 'Szenario-Paket' }
+        };
+        var SYNC_KEY = 'valisCloudSync', AUTO_KEY = 'valisCloudAutoSync';
+        var syncTimer = null, syncing = false;
+        var syncStat = { ok: 0, conflict: 0, at: 0, err: '', pending: 0 };
+
+        function autoOn() {
+            try { return localStorage.getItem(AUTO_KEY) !== '0'; } catch (_) { return true; }
+        }
+        function setAuto(on) {
+            try { localStorage.setItem(AUTO_KEY, on ? '1' : '0'); } catch (_) {}
+            if (on) schedule();
+        }
+        function metaGet() {
+            try { return JSON.parse(localStorage.getItem(SYNC_KEY) || '{}') || {}; } catch (_) { return {}; }
+        }
+        function metaSet(m) { try { localStorage.setItem(SYNC_KEY, JSON.stringify(m)); } catch (_) {} }
+        /** Kurzer Inhalts-Fingerabdruck, damit Unveraendertes nicht erneut hochlaedt. */
+        function fpOf(str) {
+            var h = 5381, i = str.length;
+            while (i) { h = (h * 33 ^ str.charCodeAt(--i)) >>> 0; }
+            return h.toString(36) + ':' + str.length;
+        }
+
+        function collectWatched() {
+            var out = [];
+            Object.keys(WATCH).forEach(function (key) {
+                var spec = WATCH[key];
+                lsArr(key).forEach(function (it) {
+                    if (!it || !it.id) return;
+                    var payload = it;
+                    if (spec.embedTasks) {
+                        // Wie beim .valipack-Export: enthaltene Aufgaben einbetten.
+                        var ids = it.taskIds || [];
+                        payload = Object.assign({}, it, {
+                            tasks: lsArr('valisTasks').filter(function (t) { return ids.indexOf(t.id) >= 0; })
+                        });
+                    }
+                    out.push({
+                        mk: key + '|' + it.id,
+                        uidKey: key + ':' + it.id,
+                        kind: spec.kind,
+                        name: it.name || it.title || String(it.id),
+                        payload: payload
+                    });
+                });
+            });
+            return out;
+        }
+
+        function schedule() {
+            if (syncTimer) clearTimeout(syncTimer);
+            syncTimer = setTimeout(runSync, 2500);   // Sammelt schnelle Folgeaenderungen
+        }
+
+        function runSync() {
+            syncTimer = null;
+            if (syncing || !C.available || !C.isLoggedIn() || !autoOn()) return;
+
+            var meta = metaGet(), queue = [];
+            collectWatched().forEach(function (it) {
+                var fp = fpOf(JSON.stringify(it.payload));
+                var m = meta[it.mk];
+                if (m && m.fp === fp) return;         // unveraendert
+                queue.push({ it: it, fp: fp, m: m || null });
+            });
+            syncStat.pending = queue.length;
+            if (!queue.length) { refreshBadge(); return; }
+
+            var more = queue.length > 25;
+            queue = queue.slice(0, 25);              // schont Server und Quota
+            syncing = true;
+            syncStat.err = '';
+            var i = 0, okc = 0, conf = 0;
+
+            function done() {
+                syncing = false;
+                syncStat.ok = okc; syncStat.conflict = conf; syncStat.at = Date.now();
+                syncStat.pending = more ? 1 : 0;
+                metaSet(meta);
+                refreshBadge();
+                if (more) schedule();
+                if (modal && modal.style.display !== 'none' && C.isLoggedIn()) renderEnv();
+            }
+            function step() {
+                if (i >= queue.length) { done(); return; }
+                var q = queue[i++];
+                var uid = (q.m && q.m.uid) || uidFor(q.it.uidKey);
+                var base = (q.m && q.m.v) || 0;
+                C.put(q.it.kind, uid, q.it.name, q.it.payload, base).then(function (j) {
+                    meta[q.it.mk] = { uid: uid, v: j.version, fp: q.fp }; okc++; step();
+                }).catch(function (e) {
+                    var isConf = e && e.message === 'conflict';
+                    if (isConf && !(q.m && q.m.v) && e.data && e.data.server) {
+                        // Wir kannten die Version nur nicht - einmal mit der echten
+                        // Version nachfassen. Das ist kein inhaltlicher Konflikt.
+                        C.put(q.it.kind, uid, q.it.name, q.it.payload, e.data.server.version)
+                         .then(function (j2) { meta[q.it.mk] = { uid: uid, v: j2.version, fp: q.fp }; okc++; step(); })
+                         .catch(function () { conf++; step(); });
+                        return;
+                    }
+                    if (isConf) { conf++; step(); return; }   // NIE still ueberschreiben
+                    syncStat.err = (e && e.message) || 'fehler';
+                    done();
+                });
+            }
+            step();
+        }
+
+        function refreshBadge() {
+            var b = document.getElementById('btn-cloud');
+            if (!b) return;
+            var t = 'Eigene Umgebung auf dem Server.';
+            if (!C.isLoggedIn()) { b.textContent = '\u2601\uFE0F Meine Umgebung'; b.title = t; return; }
+            if (syncStat.conflict) {
+                b.textContent = '\u2601\uFE0F Meine Umgebung \u26A0';
+                b.title = syncStat.conflict + ' Element(e) nicht gespeichert (Konflikt) - im Panel pruefen.';
+            } else if (syncStat.err) {
+                b.textContent = '\u2601\uFE0F Meine Umgebung \u26A0';
+                b.title = 'Automatisches Speichern: ' + syncStat.err;
+            } else {
+                b.textContent = '\u2601\uFE0F Meine Umgebung';
+                b.title = t + (syncStat.at ? ' Zuletzt gespeichert: ' + new Date(syncStat.at).toLocaleTimeString() : '');
+            }
+        }
+
+        // Der Hook ruft IMMER zuerst das Original auf und kapselt die Beobachtung,
+        // damit ein Fehler hier niemals das Speichern in VALIS stoert.
+        try {
+            var _origSet = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function (k, v) {
+                var r = _origSet(k, v);
+                try { if (WATCH[k]) schedule(); } catch (_) {}
+                return r;
+            };
+        } catch (_) {}
 
         /* ---- Zugangs-Link ------------------------------------------------- */
 
@@ -65400,6 +65560,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (ref && ref.parentNode) ref.parentNode.insertBefore(btn, ref.nextSibling);
             else document.body.appendChild(btn);
             window._openCloudPanel = open;
+
+            refreshBadge();
+            if (C.isLoggedIn()) schedule();
 
             if (linkShare) { open(); renderShared(linkShare); return; }
             if (!linkLogin) return;

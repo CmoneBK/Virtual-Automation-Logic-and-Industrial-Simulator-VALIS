@@ -199,7 +199,13 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
   Layout, 2D-Anlage, Plugins, Tastenbelegung). Aufgaben, Szenarien und Pakete
   sind im Schema vorgesehen, aber noch nicht angebunden.
 * Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
-  ein neuer Link macht den vorherigen ungueltig.
+  ein neuer Link macht den vorherigen ungültig.
+* **Automatisches Speichern** erfasst Aufgaben, Aufgabenpakete, Szenarien und
+  Szenario-Pakete, solange eine Umgebung angemeldet ist. **Löschungen werden
+  bewusst nicht übertragen** – sonst würde ein Gerät mit weniger Inhalten die
+  Umgebung leerräumen. Löschen geschieht ausdrücklich im Panel.
+* Bei einem echten Versionskonflikt wird **nicht** überschrieben; das Element
+  bleibt ungespeichert und wird im Panel als Konflikt gemeldet.
 
 ## Fehlersuche
 
@@ -407,6 +413,12 @@ and automatic deletion are the brakes. If it gets abused, set
   by the schema but not wired up yet.
 * Share links (`#s=TOKEN`) are read-only and one active link per object;
   creating a new one invalidates the previous.
+* **Automatic saving** covers tasks, task packages, scenarios and scenario
+  packages while an environment is logged in. **Deletions are deliberately not
+  propagated** – otherwise a device holding fewer items would wipe the
+  environment. Deleting happens explicitly in the panel.
+* On a genuine version conflict nothing is overwritten; the item stays unsaved
+  and is reported as a conflict in the panel.
 
 ## Troubleshooting
 

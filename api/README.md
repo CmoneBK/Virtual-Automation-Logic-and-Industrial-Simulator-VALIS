@@ -88,6 +88,30 @@ Log-Anonymisierung bzw. kurze Aufbewahrung konfigurieren.
 * Keine CORS-Header → die API ist ausschließlich von der Server-Instanz nutzbar.
 * Der PHP-Quelltext ist öffentlich – die Sicherheit enthält daher keine Obscurity.
 
+## Zugangs-Links
+
+Ein Zugangs-Link meldet direkt in eine Umgebung an:
+
+    https://t-bk.de/projekte/valis/#env=XXXXX-XXXXX-XXXXX&p=1
+
+Der Code steht im **Fragment** (`#`), nicht in der Query. Das ist bewusst so:
+Fragmente werden vom Browser **nie an den Server gesendet** und tauchen deshalb
+nicht im Apache-Access-Log auf. Eine Query (`?code=...`) wuerde den Zugang im
+Klartext auf die Platte schreiben.
+
+* Das Fragment wird nach dem Auswerten sofort aus der Adresszeile entfernt.
+* `p=1` bedeutet: fuer diese Umgebung ist eine PIN gesetzt, sie wird abgefragt.
+  `p=0` meldet direkt an. Das Kennzeichen wird beim Erzeugen des Links gesetzt,
+  der Server wird dazu nicht gefragt - es gibt also kein Orakel, mit dem man
+  die Existenz eines Codes pruefen koennte.
+* Der Zugangscode wird im Client **nur im Arbeitsspeicher** gehalten, nie
+  persistiert. Im localStorage liegt allein das ablaufende Sitzungstoken.
+
+**Ein Zugangs-Link ist ein Passwort, kein Freigabe-Link.** Wer ihn hat, kann
+alles aendern. Zum Weitergeben von Inhalten ist `share.php` vorgesehen
+(read-only, pro Objekt) - noch nicht gebaut. Ohne gesetzte PIN genuegt der Link
+allein; mit PIN ist er nur der erste Faktor.
+
 ## Es gibt keine Wiederherstellung
 
 Ohne Zuordnung Code → Person kann niemand eine Identität bestätigen.

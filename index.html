@@ -64584,6 +64584,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return req("obj.php", { action: "usage" }).then(function (j) { return j.usage; });
         };
 
+        C.shareCreate = function (kind, uid, expiresDays) {
+            return req("share.php", { action: "create", kind: kind, uid: uid, expires_days: expiresDays || 0 });
+        };
+        C.shareRevoke = function (kind, uid) {
+            return req("share.php", { action: "revoke", kind: kind, uid: uid });
+        };
+        /** Lesen einer Freigabe - bewusst OHNE Anmeldung. */
+        C.readShare = function (token) {
+            return req("share.php", { action: "read", token: token }, false)
+                .then(function (j) { return j.object; });
+        };
+
         window.VALIS_CLOUD = C;
     })();
     </script>
@@ -64616,8 +64628,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Fragmente werden nie an den Server gesendet und tauchen daher nicht im
         // Apache-Access-Log auf. Das Fragment wird sofort aus der Adresszeile
         // entfernt, damit der Code nicht sichtbar stehen bleibt.
-        var linkLogin = null;
+        var linkLogin = null, linkShare = null;
         try {
+            var ms = (location.hash || '').match(/^#s=([A-Za-z2-9]{12})$/);
+            if (ms) {
+                linkShare = ms[1].toUpperCase();
+                history.replaceState(null, '', location.pathname + location.search);
+            }
             var m = (location.hash || '').match(/^#env=([^&]+)(?:&p=([01]))?/);
             if (m) {
                 linkLogin = {
@@ -64902,6 +64919,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         +   '<button data-load="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'style="background:#1565c0;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
                         +     'cursor:pointer;font-size:11px;">Laden</button> '
+                        +   '<button data-share="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
+                        +     'data-name="' + esc(o.name || '') + '" '
+                        +     'style="background:#00695c;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
+                        +     'cursor:pointer;font-size:11px;">Teilen</button> '
                         +   '<button data-del="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'style="background:#5d2b2b;color:#fff;border:none;border-radius:3px;padding:5px 8px;'
                         +     'cursor:pointer;font-size:11px;">L&ouml;schen</button>'
@@ -64912,6 +64933,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">'
                   +   '<button id="cl-save" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 14px;cursor:pointer;font-size:13px;">Aktuellen Stand speichern</button>'
+                  +   '<button id="cl-add" style="background:#1565c0;color:#fff;border:none;border-radius:4px;'
+                  +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#43; Aufgabe/Paket</button>'
                   +   '<button id="cl-link" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#128279; Zugangs-Link</button>'
                   +   '<button id="cl-logout" style="margin-left:auto;background:#444;color:#ddd;border:none;'
@@ -64928,6 +64951,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         + 'Noch nichts gespeichert.</div>');
 
                 box.querySelector('#cl-save').onclick = saveCurrent;
+                box.querySelector('#cl-add').onclick = renderAdd;
+                Array.prototype.forEach.call(box.querySelectorAll('[data-share]'), function (b) {
+                    b.onclick = function () {
+                        renderShare(b.getAttribute('data-kind'), b.getAttribute('data-share'),
+                                    b.getAttribute('data-name'));
+                    };
+                });
                 box.querySelector('#cl-link').onclick = renderLink;
                 box.querySelector('#cl-logout').onclick = function () {
                     run(C.logout(), 'Abmelden …', function () { render(); });
@@ -65033,6 +65063,199 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } else {
                     say('Einspielen nicht moeglich.', '#ef9a9a');
                 }
+            });
+        }
+
+        /* ---- Freigabe ------------------------------------------------------ */
+
+        var KIND_LABEL = { session: 'Anlage', valitask: 'Aufgabe', valipack: 'Aufgabenpaket' };
+        function kindLabel(k) { return KIND_LABEL[k] || k; }
+
+        function shareUrl(token) {
+            return location.origin + location.pathname + '#s=' + token;
+        }
+
+        /**
+         * Nutzt die vorhandenen Datei-Import-Pfade wieder, statt deren Logik zu
+         * duplizieren: ein synthetisches File in den versteckten Input legen und
+         * das change-Ereignis ausloesen. Damit gelten Pruefungen, ID-Vergabe und
+         * Oberflaechen-Aktualisierung unveraendert.
+         */
+        function importViaInput(inputId, filename, obj) {
+            var el = document.getElementById(inputId);
+            if (!el) return false;
+            try {
+                var dt = new DataTransfer();
+                dt.items.add(new File([JSON.stringify(obj)], filename, { type: 'application/json' }));
+                el.files = dt.files;
+                el.dispatchEvent(new Event('change'));
+                return true;
+            } catch (_) { return false; }
+        }
+        /** Notnagel, falls DataTransfer fehlt: Datei zum Herunterladen anbieten. */
+        function offerDownload(filename, obj) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' }));
+            a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+        }
+
+        function applyShared(o) {
+            var nm = (o.name || 'Freigabe').replace(/[^a-zA-Z0-9_\-]/g, '-');
+            if (o.kind === 'valitask') {
+                if (!importViaInput('task-upload', nm + '.valitask', o.data)) offerDownload(nm + '.valitask', o.data);
+                close(); return;
+            }
+            if (o.kind === 'valipack') {
+                if (!importViaInput('pack-upload', nm + '.valipack', o.data)) offerDownload(nm + '.valipack', o.data);
+                close(); return;
+            }
+            if (o.kind === 'session') {
+                if (restoreBundle(o.data)) close();
+                else say('Einspielen nicht moeglich.', '#ef9a9a');
+                return;
+            }
+            offerDownload(nm + '.json', o.data);
+            close();
+        }
+
+        /** Ansicht fuer einen per Link empfangenen Inhalt (ohne Anmeldung). */
+        function renderShared(token) {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Freigabe wird geladen …</div>';
+            C.readShare(token).then(function (o) {
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;margin-bottom:10px;">Jemand hat dir etwas geteilt:</div>'
+                  + '<div style="background:#252528;border:1px solid #3a3a3a;border-radius:6px;padding:14px;">'
+                  +   '<div style="font-size:15px;font-weight:600;">' + esc(o.name || '(ohne Namen)') + '</div>'
+                  +   '<div style="font-size:11px;color:#777;margin-top:4px;">' + esc(kindLabel(o.kind))
+                  +     ' &middot; Stand ' + esc(fmtDate(o.updated_at)) + '</div></div>'
+                  + '<button id="sh-go" style="width:100%;margin-top:12px;background:#2e7d32;color:#fff;border:none;'
+                  +   'border-radius:4px;padding:10px;cursor:pointer;font-size:13px;">Uebernehmen</button>'
+                  + (o.kind === 'session'
+                      ? '<div style="font-size:11px;color:#ef9a9a;margin-top:8px;">Ersetzt deinen aktuellen '
+                        + 'Arbeitsstand. Du wirst noch einmal gefragt.</div>' : '')
+                  + '<button id="sh-no" style="width:100%;margin-top:8px;background:#3a3a3a;color:#ccc;border:none;'
+                  +   'border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Abbrechen</button>';
+                box.querySelector('#sh-go').onclick = function () { applyShared(o); };
+                box.querySelector('#sh-no').onclick = function () { close(); };
+            }).catch(function (e) {
+                box.innerHTML = '<div style="font-size:12px;color:#ef9a9a;line-height:1.6;">'
+                  + 'Diese Freigabe gibt es nicht (mehr). Links koennen zurueckgezogen werden '
+                  + 'oder ablaufen.</div>';
+            });
+        }
+
+        /** Freigabe-Link fuer ein eigenes Objekt erzeugen und anzeigen. */
+        function renderShare(kind, uid, name) {
+            run(C.shareCreate(kind, uid), 'Erzeuge Link …', function (j) {
+                var url = shareUrl(j.token);
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;margin-bottom:10px;">Freigabe-Link f&uuml;r '
+                  +   '<b>' + esc(name || uid) + '</b> (' + esc(kindLabel(kind)) + '):</div>'
+                  + '<input id="sc-url" readonly value="' + esc(url) + '" '
+                  +   'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#8bc34a;border:1px solid #555;'
+                  +   'border-radius:4px;padding:8px;font-family:monospace;font-size:12px;">'
+                  + '<div id="sc-qr" style="margin:14px auto 0;width:176px;background:#fff;padding:8px;'
+                  +   'border-radius:4px;box-sizing:border-box;"></div>'
+                  + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+                  +   '<button id="sc-copy" style="flex:1;min-width:110px;background:#2e7d32;color:#fff;border:none;'
+                  +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Kopieren</button>'
+                  +   '<button id="sc-rev" style="flex:1;min-width:110px;background:#5d2b2b;color:#fff;border:none;'
+                  +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Freigabe aufheben</button>'
+                  +   '<button id="sc-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+                  +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
+                  + '</div>'
+                  + '<div style="font-size:11px;color:#9e9e9e;margin-top:12px;line-height:1.6;">'
+                  +   'Nur-Lesen: Empf&auml;nger brauchen keine Umgebung und k&ouml;nnen dein Objekt nicht &auml;ndern. '
+                  +   'Ein neuer Link macht den vorherigen ung&uuml;ltig. '
+                  +   'Achte darauf, dass in Namen und Texten keine personenbezogenen Angaben stehen.</div>';
+                try {
+                    if (typeof QRCode === 'function') new QRCode(box.querySelector('#sc-qr'), { text: url, width: 160, height: 160 });
+                } catch (_) {}
+                box.querySelector('#sc-copy').onclick = function () {
+                    box.querySelector('#sc-url').select();
+                    try { navigator.clipboard.writeText(url); say('Link kopiert.', '#8bc34a'); }
+                    catch (_) { say('Kopieren nicht moeglich - bitte markieren.', '#ef9a9a'); }
+                };
+                box.querySelector('#sc-rev').onclick = function () {
+                    run(C.shareRevoke(kind, uid), 'Hebe auf …', function () {
+                        say('Freigabe aufgehoben.', '#8bc34a'); renderEnv();
+                    });
+                };
+                box.querySelector('#sc-back').onclick = renderEnv;
+            });
+        }
+
+        /* ---- Lokales in die Umgebung legen -------------------------------- */
+
+        function lsArr(key) {
+            try { var a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a : []; }
+            catch (_) { return []; }
+        }
+        /** Stabile Zuordnung lokale ID -> Objekt-UID, damit erneutes Hochladen aktualisiert. */
+        function uidFor(localId) {
+            var map = {};
+            try { map = JSON.parse(localStorage.getItem('valisCloudObjMap') || '{}') || {}; } catch (_) {}
+            if (!map[localId]) {
+                map[localId] = C.newUid();
+                try { localStorage.setItem('valisCloudObjMap', JSON.stringify(map)); } catch (_) {}
+            }
+            return map[localId];
+        }
+
+        function renderAdd() {
+            var tasks = lsArr('valisTasks'), packs = lsArr('valisTaskPackages');
+            var rowsT = tasks.map(function (t) {
+                return '<button data-add="valitask" data-id="' + esc(t.id) + '" style="display:block;width:100%;'
+                     + 'text-align:left;background:#252528;color:#eee;border:1px solid #3a3a3a;border-radius:4px;'
+                     + 'padding:8px;margin-bottom:6px;cursor:pointer;font-size:12px;">'
+                     + esc(t.name || t.id) + '</button>';
+            }).join('');
+            var rowsP = packs.map(function (pk) {
+                return '<button data-add="valipack" data-id="' + esc(pk.id) + '" style="display:block;width:100%;'
+                     + 'text-align:left;background:#252528;color:#eee;border:1px solid #3a3a3a;border-radius:4px;'
+                     + 'padding:8px;margin-bottom:6px;cursor:pointer;font-size:12px;">'
+                     + esc(pk.name || pk.id) + ' <span style="color:#777;">('
+                     + ((pk.taskIds || []).length) + ' Aufgaben)</span></button>';
+            }).join('');
+            box.innerHTML =
+                '<div style="font-size:12px;color:#9e9e9e;margin-bottom:10px;">'
+              +   'W&auml;hle, was in deine Umgebung soll. Danach l&auml;sst es sich teilen.</div>'
+              + '<div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.7px;margin:6px 0;">Aufgaben</div>'
+              + (rowsT || '<div style="color:#777;font-size:12px;margin-bottom:8px;">Keine lokalen Aufgaben.</div>')
+              + '<div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.7px;margin:10px 0 6px;">Pakete</div>'
+              + (rowsP || '<div style="color:#777;font-size:12px;">Keine lokalen Pakete.</div>')
+              + '<button id="ad-back" style="width:100%;margin-top:12px;background:#3a3a3a;color:#ccc;border:none;'
+              +   'border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>';
+            box.querySelector('#ad-back').onclick = renderEnv;
+            Array.prototype.forEach.call(box.querySelectorAll('[data-add]'), function (b) {
+                b.onclick = function () {
+                    var kind = b.getAttribute('data-add'), id = b.getAttribute('data-id');
+                    var payload = null, nm = '';
+                    if (kind === 'valitask') {
+                        payload = lsArr('valisTasks').filter(function (t) { return t.id === id; })[0];
+                        nm = payload && payload.name;
+                    } else {
+                        var pk = lsArr('valisTaskPackages').filter(function (x) { return x.id === id; })[0];
+                        if (pk) {
+                            // Wie beim .valipack-Export: enthaltene Aufgaben einbetten.
+                            var ids = pk.taskIds || [];
+                            var inc = lsArr('valisTasks').filter(function (t) { return ids.indexOf(t.id) >= 0; });
+                            payload = Object.assign({}, pk, { tasks: inc });
+                            nm = pk.name;
+                        }
+                    }
+                    if (!payload) { say('Nicht gefunden.', '#ef9a9a'); return; }
+                    var uid = uidFor(id);
+                    C.get(kind, uid).then(function (ex) { return ex.version; })
+                     .catch(function () { return 0; })
+                     .then(function (base) {
+                        run(C.put(kind, uid, nm || id, payload, base), 'Lege ab …', function () {
+                            say('In die Umgebung gelegt.', '#8bc34a'); renderEnv();
+                        });
+                     });
+                };
             });
         }
 
@@ -65178,6 +65401,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             else document.body.appendChild(btn);
             window._openCloudPanel = open;
 
+            if (linkShare) { open(); renderShared(linkShare); return; }
             if (!linkLogin) return;
             open();
             if (linkLogin.hasPin) { renderLinkPin(linkLogin.code); return; }

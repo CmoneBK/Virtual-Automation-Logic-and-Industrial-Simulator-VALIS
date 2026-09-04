@@ -125,9 +125,26 @@ bei der Erzeugung einmalig anzeigen und zum Sichern zwingen (Download / QR / Dru
 | `ping.php` | Capability-Probe + Diagnose (kein Auth) |
 | `env.php` | `create` / `login` / `logout` / `destroy` |
 | `obj.php` | `list` / `get` / `put` / `delete` / `usage` (Bearer-Token) |
+| `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
 | `gc.php` | Wartung, per Cron |
 
-Noch offen: `share.php` (read-only Freigabe-Links).
+## Freigabe-Links
+
+`share.php create` erzeugt fuer ein Objekt einen 12-Zeichen-Token (60 Bit):
+
+    https://t-bk.de/projekte/valis/#s=ABCDEFGHJKLM
+
+Das ergibt rund 46 Zeichen und damit einen kleinen, gut scannbaren QR-Code -
+im Gegensatz zu den bisherigen `#state=`-Links, die die kompletten Daten tragen.
+
+* `read` braucht **keine Anmeldung**; Empfaenger haben keine eigene Umgebung.
+  Der Zugriff ist auf **Lesen eines einzelnen Objekts** beschraenkt.
+* Je Objekt gibt es hoechstens **eine** aktive Freigabe. Ein neuer Link macht den
+  vorherigen ungueltig - das ist zugleich der Widerruf. `revoke` hebt sie ganz auf.
+* Gespeichert wird nur der Hash des Tokens. Ein verlorener Link laesst sich nicht
+  wiederherstellen, nur neu erzeugen.
+* Unbekannt, abgelaufen und falsch formatiert liefern einheitlich 404.
+* Lesezugriffe sind je IP begrenzt (300/Stunde) und werden in `hits` gezaehlt.
 
 ## Konflikte bei Mehrgeraete-Nutzung
 

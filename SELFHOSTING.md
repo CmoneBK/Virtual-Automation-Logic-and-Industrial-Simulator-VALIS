@@ -198,7 +198,8 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
 * Gespeichert wird derzeit nur das **Session-Bündel** (Code, Bauteiltypen,
   Layout, 2D-Anlage, Plugins, Tastenbelegung). Aufgaben, Szenarien und Pakete
   sind im Schema vorgesehen, aber noch nicht angebunden.
-* `share.php` (read-only Freigabe einzelner Objekte) ist noch nicht gebaut.
+* Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
+  ein neuer Link macht den vorherigen ungueltig.
 
 ## Fehlersuche
 
@@ -404,7 +405,8 @@ and automatic deletion are the brakes. If it gets abused, set
 * Only the **session bundle** is stored so far (code, component types, layout,
   2D factory, plugins, key bindings). Tasks, scenarios and packages are covered
   by the schema but not wired up yet.
-* `share.php` (read-only sharing of individual objects) is not built yet.
+* Share links (`#s=TOKEN`) are read-only and one active link per object;
+  creating a new one invalidates the previous.
 
 ## Troubleshooting
 

@@ -89,6 +89,15 @@ Da es sich um eine reine HTML/JS/CSS-Anwendung handelt, sind keine Build-Schritt
 2. Öffnen Sie die Datei `index.html` in einem beliebigen modernen Webbrowser oder [testen Sie die Live Demo](https://cmonebk.github.io/Virtual-Automation-Logic-and-Industrial-Simulator-VALIS/).
 3. Beginnen Sie, Ihre Logik einzutippen, oder klicken Sie auf **"📋 Beispiele"**, um ein Modal-Fenster mit Beispielprojekten zu öffnen – jedes mit Kurzbeschreibung und einer Live-Vorschau der 2D-Anlage.
 
+### Optional: eigener Server
+
+Auf einem eigenen Webserver mit PHP und MySQL/MariaDB lassen sich zusätzlich
+**persönliche Umgebungen** freischalten: Nutzer speichern ihre Stände per Zugangscode
+und rufen sie geräteübergreifend wieder ab. Ohne Server ändert sich nichts –
+VALIS erkennt selbst, ob die Server-Funktion vorhanden ist.
+
+➡️ **[Anleitung zum Selbst-Hosten](SELFHOSTING.md)**
+
 ## 📖 Syntax & Logik-Regeln
 
 Der Editor verwendet eine einfache Syntax im Pseudocode-Stil, um Logikgatter und Zuweisungen zu definieren.
@@ -233,6 +242,15 @@ Since this is a vanilla HTML/JS/CSS application, no build steps or bundlers are 
 1. Clone or download the repository.
 2. Open `index.html` in any modern web browser or [play the Live Demo](https://cmonebk.github.io/Virtual-Automation-Logic-and-Industrial-Simulator-VALIS/).
 3. Start typing your logic in the left panel, or click **"📋 Beispiele"** to open a modal with example projects — each with a short description and a live canvas preview of the 2D factory.
+
+### Optional: your own server
+
+On your own web server with PHP and MySQL/MariaDB you can additionally enable
+**personal environments**: users store their work behind an access code and
+retrieve it across devices. Without a server nothing changes — VALIS detects on
+its own whether the server feature is present.
+
+➡️ **[Self-hosting guide](SELFHOSTING.md)**
 
 ## 📖 Syntax & Logic Rules
 

@@ -64557,6 +64557,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         /** Stellt ein eigenes Sitzungstoken fuer ein anderes Geraet aus. */
         C.deviceLink = function () { return req('env.php', { action: 'devicelink' }); };
+        /** Kopfdaten der seit `since` geaenderten Objekte (ohne data). */
+        C.poll = function (since) { return req('obj.php', { action: 'poll', since: since || '' }); };
         /** Uebernimmt ein per Geraete-Link empfangenes Token als eigene Sitzung. */
         C.adoptToken = function (token, env) { writeTok(token); writeEnv(env || ''); };
 
@@ -64778,7 +64780,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         function render() {
             say('');
-            if (C.isLoggedIn()) { refreshBadge(); schedule(); renderEnv(); } else { refreshBadge(); renderAuth(); }
+            if (C.isLoggedIn()) { refreshBadge(); schedule(); startPolling(); renderEnv(); }
+            else { refreshBadge(); stopPolling(); renderAuth(); }
         }
 
         /* ---- Anmelden / Anlegen ------------------------------------------ */
@@ -65427,6 +65430,167 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             step();
         }
 
+        /* ---- Live-Abgleich zwischen Geraeten -------------------------------- */
+
+        // Abgerufen wird per Polling, nicht per SSE/Long-Polling: jede offene
+        // Verbindung wuerde einen PHP-FPM-Prozess dauerhaft belegen. Bei einer
+        // ganzen Klasse waere der Server damit sofort erschoepft. Ein schlanker
+        // Abruf alle paar Sekunden ist hier die belastbarere Loesung.
+        var KIND2KEY = {
+            valitask: 'valisTasks', valipack: 'valisTaskPackages',
+            scenario: 'valisSzUserScenarios', scenariopack: 'valisSzPackages'
+        };
+        var POLL_MS = 5000;
+        var pollSince = '', pollTimer = null, polling = false, applyingRemote = false;
+
+        /** Schreibt lokal, ohne den Upload-Hook auszuloesen (sonst Endlosschleife). */
+        function writeLocal(key, arr) {
+            applyingRemote = true;
+            try { localStorage.setItem(key, JSON.stringify(arr)); }
+            finally { applyingRemote = false; }
+        }
+        function upsertLocal(key, item) {
+            if (!item || !item.id) return false;
+            var arr = lsArr(key), i = -1;
+            arr.forEach(function (x, n) { if (x && String(x.id) === String(item.id)) i = n; });
+            if (i >= 0) arr[i] = item; else arr.push(item);
+            writeLocal(key, arr);
+            return true;
+        }
+        function removeLocal(key, id) {
+            var arr = lsArr(key), out = arr.filter(function (x) { return !x || String(x.id) !== String(id); });
+            if (out.length === arr.length) return false;
+            writeLocal(key, out);
+            return true;
+        }
+        /** uid -> lokaler Schluessel, aus der Zuordnungstabelle rueckwaerts. */
+        function localIdForUid(uid) {
+            try {
+                var map = JSON.parse(localStorage.getItem(skey('valisCloudObjMap')) || '{}') || {};
+                for (var k in map) if (map[k] === uid) return k;   // 'valisTasks:ID'
+            } catch (_) {}
+            return '';
+        }
+        function rememberUid(localId, uid) {
+            try {
+                var k = skey('valisCloudObjMap');
+                var map = JSON.parse(localStorage.getItem(k) || '{}') || {};
+                map[localId] = uid;
+                localStorage.setItem(k, JSON.stringify(map));
+            } catch (_) {}
+        }
+
+        /** Fingerabdruecke der genannten Eintraege neu setzen, damit nichts zurueckwandert. */
+        function reconcile(mks, versions) {
+            var meta = metaGet(), byMk = {};
+            collectWatched().forEach(function (it) { byMk[it.mk] = it; });
+            mks.forEach(function (mk) {
+                var it = byMk[mk];
+                if (!it) { delete meta[mk]; return; }   // lokal geloescht
+                meta[mk] = {
+                    uid: (meta[mk] && meta[mk].uid) || versions[mk].uid,
+                    v: versions[mk].v,
+                    fp: fpOf(JSON.stringify(it.payload))
+                };
+            });
+            metaSet(meta);
+        }
+
+        function pollOnce() {
+            if (polling || syncing || !C.available || !C.isLoggedIn() || !autoOn()) return;
+            polling = true;
+            C.poll(pollSince).then(function (j) {
+                pollSince = j.now || pollSince;
+                var chs = (j.changes || []).filter(function (c) { return KIND2KEY[c.kind]; });
+                if (!chs.length) { polling = false; return; }
+                applyChanges(chs).then(function () { polling = false; });
+            }).catch(function () { polling = false; });
+        }
+
+        function applyChanges(chs) {
+            var meta = metaGet(), local = {}, touched = [], versions = {};
+            collectWatched().forEach(function (it) { local[it.mk] = it; });
+
+            var i = 0, changed = 0;
+            return new Promise(function (resolve) {
+                function step() {
+                    if (i >= chs.length) {
+                        if (touched.length) {
+                            reconcile(touched, versions);
+                            if (typeof window._taskMgrRender === 'function') {
+                                try { window._taskMgrRender(); } catch (_) {}
+                            }
+                            say(changed + ' Aenderung(en) von einem anderen Geraet uebernommen.', '#8bc34a');
+                            if (modal && modal.style.display !== 'none' && C.isLoggedIn()) renderEnv();
+                        }
+                        resolve();
+                        return;
+                    }
+                    var ch = chs[i++], key = KIND2KEY[ch.kind];
+                    var localId = localIdForUid(ch.uid);
+                    var mk = localId ? localId.replace(':', '|') : '';
+                    var m = mk ? meta[mk] : null;
+
+                    // Schon auf diesem Stand? Dann nichts tun.
+                    if (m && m.v >= ch.version) { step(); return; }
+                    // Lokal unveroeffentlichte Aenderung? Nicht ueberschreiben -
+                    // das ist ein echter Konflikt und wird im Panel angeboten.
+                    if (mk && local[mk] && m && fpOf(JSON.stringify(local[mk].payload)) !== m.fp) {
+                        conflicts[mk] = {
+                            mk: mk, kind: ch.kind, uid: ch.uid, name: ch.name,
+                            mine: local[mk].payload, fp: fpOf(JSON.stringify(local[mk].payload)),
+                            server: null
+                        };
+                        syncStat.conflict = Object.keys(conflicts).length;
+                        refreshBadge(); step(); return;
+                    }
+
+                    if (ch.deleted) {
+                        if (mk) {
+                            var id = mk.split('|')[1];
+                            if (removeLocal(key, id)) { changed++; }
+                            touched.push(mk); versions[mk] = { uid: ch.uid, v: ch.version };
+                        }
+                        step(); return;
+                    }
+
+                    C.get(ch.kind, ch.uid).then(function (o) {
+                        var d = o.data;
+                        if (!d || !d.id) { step(); return; }
+                        if (ch.kind === 'valipack') {
+                            // Eingebettete Aufgaben mitziehen, Paket ohne sie ablegen -
+                            // genau wie beim .valipack-Import.
+                            (Array.isArray(d.tasks) ? d.tasks : []).forEach(function (tk) {
+                                if (tk && tk.id) upsertLocal('valisTasks', tk);
+                            });
+                            var pk = Object.assign({}, d); delete pk.tasks;
+                            upsertLocal(key, pk);
+                        } else {
+                            upsertLocal(key, d);
+                        }
+                        var nmk = key + '|' + d.id;
+                        rememberUid(key + ':' + d.id, ch.uid);
+                        touched.push(nmk); versions[nmk] = { uid: ch.uid, v: ch.version };
+                        changed++; step();
+                    }).catch(function () { step(); });
+                }
+                step();
+            });
+        }
+
+        function startPolling() {
+            if (pollTimer) return;
+            pollTimer = setInterval(function () {
+                // Im Hintergrundtab nicht abfragen - spart Server und Akku.
+                if (document.hidden) return;
+                pollOnce();
+            }, POLL_MS);
+        }
+        function stopPolling() {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            pollSince = '';
+        }
+
         function refreshBadge() {
             var b = document.getElementById('btn-cloud');
             if (!b) return;
@@ -65450,7 +65614,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             var _origSet = localStorage.setItem.bind(localStorage);
             localStorage.setItem = function (k, v) {
                 var r = _origSet(k, v);
-                try { if (WATCH[k]) schedule(); } catch (_) {}
+                try { if (WATCH[k] && !applyingRemote) schedule(); } catch (_) {}
                 return r;
             };
         } catch (_) {}
@@ -65688,7 +65852,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._openCloudPanel = open;
 
             refreshBadge();
-            if (C.isLoggedIn()) schedule();
+            if (C.isLoggedIn()) { schedule(); startPolling(); pollOnce(); }
 
             if (linkDevice) {
                 C.adoptToken(linkDevice.token, linkDevice.env);

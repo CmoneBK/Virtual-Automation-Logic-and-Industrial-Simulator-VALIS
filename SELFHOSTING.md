@@ -200,6 +200,14 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
   sind im Schema vorgesehen, aber noch nicht angebunden.
 * Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
   ein neuer Link macht den vorherigen ungültig.
+* **Live-Abgleich:** Sind mehrere Geräte in derselben Umgebung angemeldet,
+  gleichen sie Aufgaben, Pakete und Szenarien alle 5 Sekunden ab (`obj.php`,
+  Aktion `poll`). Bewusst per Polling statt SSE/Long-Polling: eine offene
+  Verbindung je Schüler würde die PHP-FPM-Prozesse belegen und den Server bei
+  einer ganzen Klasse lahmlegen. Der Abruf liefert nur Kopfdaten; Inhalte werden
+  einzeln nachgeholt. Im Hintergrundtab wird nicht abgefragt.
+  Der **Arbeitsstand im Editor** wird NICHT live übertragen – gleichzeitiges
+  Tippen würde sich sonst gegenseitig überschreiben.
 * **Automatisches Speichern** erfasst Aufgaben, Aufgabenpakete, Szenarien und
   Szenario-Pakete, solange eine Umgebung angemeldet ist. **Mitgelieferte
   Beispielaufgaben werden dabei übersprungen** – erst wenn jemand eine davon
@@ -415,6 +423,14 @@ and automatic deletion are the brakes. If it gets abused, set
   by the schema but not wired up yet.
 * Share links (`#s=TOKEN`) are read-only and one active link per object;
   creating a new one invalidates the previous.
+* **Live sync:** With several devices logged into the same environment, tasks,
+  packages and scenarios are reconciled every 5 seconds (`obj.php`, action
+  `poll`). Deliberately polling rather than SSE/long-polling: one open
+  connection per student would tie up PHP-FPM workers and exhaust the server for
+  a whole class. The poll returns headers only; contents are fetched
+  individually. Background tabs do not poll.
+  The **editor working state is NOT live-synced** – concurrent typing would
+  overwrite itself.
 * **Automatic saving** covers tasks, task packages, scenarios and scenario
   packages while an environment is logged in. **Bundled example tasks are
   skipped** – only once someone edits one does it get stored. **Deletions are

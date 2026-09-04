@@ -198,12 +198,54 @@ if ($act === 'delete') {
     // Soft-Delete: gc.php raeumt nach 30 Tagen endgueltig auf. Versehentliches
     // Loeschen bleibt damit eine Weile umkehrbar.
     $st = db()->prepare(
-        'UPDATE objects SET deleted_at = UTC_TIMESTAMP(), version = version + 1
+        'UPDATE objects SET deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP(),
+                version = version + 1
          WHERE env_id = ? AND kind = ? AND obj_uid = ? AND deleted_at IS NULL'
     );
     $st->execute([$envId, $kind, $uid]);
     if ($st->rowCount() === 0) fail('not_found', 404);
     json_out(['ok' => true, 'usage' => sync_usage($envId)]);
+}
+
+// ----------------------------------------------------------- Aenderungen holen
+/**
+ * Liefert die seit `since` geaenderten Objekte - absichtlich OHNE `data`.
+ * Der Client vergleicht Versionen und holt nur das per `get` nach, was er
+ * wirklich braucht. Damit bleibt der Dauer-Abruf billig, auch wenn eine ganze
+ * Klasse in derselben Umgebung arbeitet.
+ *
+ * Geloeschte Objekte sind enthalten (deleted = true), damit Loeschungen auf den
+ * anderen Geraeten ankommen.
+ */
+if ($act === 'poll') {
+    $since = (string)($in['since'] ?? '');
+    $sql  = 'SELECT kind, obj_uid, name, version, updated_at, deleted_at
+             FROM objects WHERE env_id = ?';
+    $args = [$envId];
+    if ($since !== '' && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $since)) {
+        $sql .= ' AND updated_at > ?';
+        $args[] = $since;
+    }
+    $sql .= ' ORDER BY updated_at ASC LIMIT 500';
+    $st = db()->prepare($sql);
+    $st->execute($args);
+
+    json_out([
+        'ok'      => true,
+        // Serverzeit als Marke fuer den naechsten Abruf - so spielen abweichende
+        // Uhren auf den Clients keine Rolle.
+        'now'     => gmdate('Y-m-d H:i:s'),
+        'changes' => array_map(static function (array $r): array {
+            return [
+                'kind'       => $r['kind'],
+                'uid'        => $r['obj_uid'],
+                'name'       => $r['name'],
+                'version'    => (int)$r['version'],
+                'updated_at' => $r['updated_at'],
+                'deleted'    => $r['deleted_at'] !== null,
+            ];
+        }, $st->fetchAll()),
+    ]);
 }
 
 // ------------------------------------------------------------------- Verbrauch

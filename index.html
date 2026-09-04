@@ -64473,5 +64473,85 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
     <div id="code-glossary-popup" role="tooltip" aria-hidden="true"></div>
     <div id="code-var-tooltip" role="tooltip" aria-hidden="true"></div>
     <div id="code-error-popup" role="dialog" aria-hidden="true"></div>
+    <script>
+    /* ============================================================
+       VALIS Cloud – Capability-Fassade (rein additiv)
+
+       Auf GitHub Pages wird api/ping.php als Rohtext ausgeliefert →
+       JSON.parse schlaegt fehl → available bleibt false → VALIS verhaelt
+       sich exakt wie bisher. Kein bestehender Pfad wird beruehrt.
+       ============================================================ */
+    (function () {
+        'use strict';
+        var API = 'api/';
+        var TOKEN_KEY = 'valisCloudToken';
+
+        var C = {
+            available: false,   // API erreichbar UND Datenbank verfuegbar
+            signupOpen: false,  // offene Registrierung serverseitig erlaubt
+            token: null,
+            quota: null,
+            ready: null
+        };
+
+        function readTok() { try { return localStorage.getItem(TOKEN_KEY); } catch (_) { return null; } }
+        function writeTok(t) {
+            try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (_) {}
+            C.token = t;
+        }
+
+        function req(path, body, withAuth) {
+            var headers = { 'Content-Type': 'application/json' };
+            var t = (withAuth === false) ? null : (C.token || readTok());
+            if (t) headers['Authorization'] = 'Bearer ' + t;
+            return fetch(API + path, {
+                method: 'POST', headers: headers, cache: 'no-store',
+                body: JSON.stringify(body || {})
+            }).then(function (r) {
+                return r.json().catch(function () { return null; }).then(function (j) {
+                    if (!r.ok || !j || j.ok !== true) {
+                        var e = new Error((j && j.error) || ('http_' + r.status));
+                        e.status = r.status; e.data = j;
+                        throw e;
+                    }
+                    return j;
+                });
+            });
+        }
+
+        C.ready = fetch(API + 'ping.php', { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.valis_api === 1 && j.db === true) {
+                    C.available = true;
+                    C.signupOpen = !!j.signup;
+                }
+            })
+            .catch(function () { C.available = false; })
+            .then(function () { C.token = readTok(); return C.available; });
+
+        /** Legt eine neue Umgebung an. Der Code kommt EINMALIG zurueck. */
+        C.createEnvironment = function (pin, signupSecret) {
+            return req('env.php', {
+                action: 'create', pin: pin || null, signup_secret: signupSecret || ''
+            }, false).then(function (j) { writeTok(j.token); C.quota = j.quota; return j; });
+        };
+
+        C.login = function (code, pin) {
+            return req('env.php', { action: 'login', code: code, pin: pin || '' }, false)
+                .then(function (j) { writeTok(j.token); C.quota = j.quota; return j; });
+        };
+
+        C.logout = function () {
+            return req('env.php', { action: 'logout' })
+                .catch(function () {})
+                .then(function () { writeTok(null); });
+        };
+
+        C.isLoggedIn = function () { return !!(C.token || readTok()); };
+
+        window.VALIS_CLOUD = C;
+    })();
+    </script>
 </body>
 </html>

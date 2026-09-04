@@ -1,0 +1,73 @@
+-- VALIS Cloud – Schema (MariaDB, utf8mb4)
+-- In KeyHelp eine Datenbank anlegen, dann:  mysql -u USER -p DBNAME < schema.sql
+--
+-- Datenschutz-Design:
+--   * kein Name, keine E-Mail, kein Geburtsdatum, keine Adresse
+--   * keine Zuordnungstabelle Code -> Person (bewusst nicht vorhanden)
+--   * Codes nur als Hash (mit serverseitigem Pepper)
+--   * IP-Adressen nur als tagesgesalzener Hash in rate_limits, mit TTL
+
+CREATE TABLE IF NOT EXISTS environments (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code_hash     CHAR(64)        NOT NULL,
+  pin_hash      VARCHAR(255)    NULL,
+  created_at    DATETIME        NOT NULL,
+  last_seen_at  DATETIME        NOT NULL,
+  bytes_used    INT UNSIGNED    NOT NULL DEFAULT 0,
+  obj_count     INT UNSIGNED    NOT NULL DEFAULT 0,
+  failed_logins SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  locked_until  DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_code (code_hash),
+  KEY idx_last_seen (last_seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash CHAR(64)        NOT NULL,
+  env_id     BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME        NOT NULL,
+  expires_at DATETIME        NOT NULL,
+  PRIMARY KEY (token_hash),
+  KEY idx_env (env_id),
+  KEY idx_expires (expires_at),
+  CONSTRAINT fk_sessions_env FOREIGN KEY (env_id) REFERENCES environments (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ein Objekt = ein VALIS-Artefakt in seinem BESTEHENDEN Format
+-- (Snapshot-Bundle, .valitask, .valipack, .valisscenario, ...).
+CREATE TABLE IF NOT EXISTS objects (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  env_id     BIGINT UNSIGNED NOT NULL,
+  kind       VARCHAR(32)     NOT NULL,
+  obj_uid    CHAR(36)        NOT NULL,
+  name       VARCHAR(200)    NOT NULL DEFAULT '',
+  data       LONGTEXT        NOT NULL,
+  bytes      INT UNSIGNED    NOT NULL DEFAULT 0,
+  version    INT UNSIGNED    NOT NULL DEFAULT 1,
+  updated_at DATETIME        NOT NULL,
+  deleted_at DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_obj (env_id, kind, obj_uid),
+  KEY idx_env_kind (env_id, kind, deleted_at),
+  CONSTRAINT fk_objects_env FOREIGN KEY (env_id) REFERENCES environments (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Read-only Freigabe einzelner Objekte (ersetzt lange LZString-URLs).
+CREATE TABLE IF NOT EXISTS shares (
+  token_hash CHAR(64)        NOT NULL,
+  object_id  BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME        NOT NULL,
+  expires_at DATETIME        NULL,
+  hits       INT UNSIGNED    NOT NULL DEFAULT 0,
+  PRIMARY KEY (token_hash),
+  KEY idx_object (object_id),
+  CONSTRAINT fk_shares_obj FOREIGN KEY (object_id) REFERENCES objects (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket       VARCHAR(48) NOT NULL,
+  window_start BIGINT      NOT NULL,
+  hits         INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket),
+  KEY idx_window (window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

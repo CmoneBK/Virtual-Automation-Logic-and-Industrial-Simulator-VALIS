@@ -315,6 +315,31 @@ veröffentlichen direkt. Wer keine Moderation will, setzt
 | `unauthorized` | Sitzung abgelaufen (`session_ttl_days`) – neu anmelden |
 | Alle Codes plötzlich ungültig | Der `pepper` wurde geändert. Nicht umkehrbar. |
 
+### `db_error` – Access denied
+
+Der mit Abstand häufigste Fall: Das Datenbank-Passwort wurde im Hosting-Panel
+(KeyHelp, Plesk, cPanel) gewechselt, die `config.php` behielt das alte. Von Hand
+anmelden klappt dann, PHP nicht. Prüfen, ob genau der String funktioniert, den
+PHP liest – ohne ihn anzuzeigen:
+
+```bash
+CFG=/pfad/zu/valis-secrets/config.php
+php -r "\$c=require '$CFG';
+  printf('user=%s name=%s pass_len=%d' . PHP_EOL, \$c['db_user'], \$c['db_name'], strlen(\$c['db_pass']));"
+PW=$(php -r "\$c=require '$CFG'; echo \$c['db_pass'];")
+MYSQL_PWD="$PW" mysql -u DBUSER DBNAME -e "SELECT 1;" && echo OK || echo FALSCH
+unset PW
+```
+
+Wechsle das Passwort danach **im Panel**, nicht per `ALTER USER` – sonst kennt
+das Panel den neuen Wert nicht und seine phpMyAdmin-Anmeldung bricht.
+
+> **`sed -i` als root zerstört die Dateirechte.** Es schreibt eine neue Datei
+> und benennt sie um; die gehört danach root, und der PHP-Benutzer kann sie
+> nicht mehr lesen – Symptom: `config_missing`. Entweder als der richtige
+> Benutzer bearbeiten oder Eigentümer und Rechte anschließend wiederherstellen
+> (`chown --reference=…`).
+
 ---
 
 # <a id="english-version"></a>Self-hosting VALIS – optional environments ("account system")
@@ -596,4 +621,28 @@ set `allow_library_submit` to `false`: then only curators can fill the library.
 | `db_error` | wrong credentials; exact message in the PHP error log |
 | `rate_limited` while testing | `signup_per_ip_day` reached – raise it or reuse the token |
 | `unauthorized` | session expired (`session_ttl_days`) – log in again |
-| All codes suddenly invalid | the `pepper` was changed. Not reversible. |
+| All codes suddenly invalid | The `pepper` was changed. Not reversible. |
+
+### `db_error` – Access denied
+
+By far the most common case: the database password was changed in the hosting
+panel (KeyHelp, Plesk, cPanel) while `config.php` kept the old one. Logging in
+by hand works, PHP does not. Check whether exactly the string PHP reads still
+works, without displaying it:
+
+```bash
+CFG=/pfad/zu/valis-secrets/config.php
+php -r "\$c=require '$CFG';
+  printf('user=%s name=%s pass_len=%d' . PHP_EOL, \$c['db_user'], \$c['db_name'], strlen(\$c['db_pass']));"
+PW=$(php -r "\$c=require '$CFG'; echo \$c['db_pass'];")
+MYSQL_PWD="$PW" mysql -u DBUSER DBNAME -e "SELECT 1;" && echo OK || echo WRONG
+unset PW
+```
+
+Change the password **in the panel**, not via `ALTER USER` – otherwise the panel
+does not know the new value and its phpMyAdmin login breaks.
+
+> **`sed -i` as root destroys the file permissions.** It writes a new file and
+> renames it; that file then belongs to root and the PHP user can no longer read
+> it – symptom: `config_missing`. Either edit as the correct user, or restore
+> owner and mode afterwards (`chown --reference=…`).

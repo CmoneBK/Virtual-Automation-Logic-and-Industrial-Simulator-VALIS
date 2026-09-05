@@ -136,6 +136,10 @@ bei der Erzeugung einmalig anzeigen und zum Sichern zwingen (Download / QR / Dru
 | `ping.php` | Capability-Probe + Diagnose (kein Auth) |
 | `env.php` | `create` / `login` / `logout` / `destroy` / `devicelink` / `redeem` / `logout_others` |
 | `obj.php` | `list` / `get` / `put` / `delete` / `usage` / `poll` / `live` (Bearer-Token) |
+
+Die Aktion `live` kennt zwei Betriebsarten (`live_mode`): `pen`
+(Stift-Weitergabe, genau einer schreibt) und `rt` (Echtzeit, alle schreiben;
+die Zusammenfuehrung der Staende passiert im Client).
 | `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
 | `gc.php` | Wartung, per Cron |
 

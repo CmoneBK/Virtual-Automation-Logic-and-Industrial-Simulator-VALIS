@@ -75,6 +75,8 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >
 >     mysql -u valis -p valis < api/migrate-live.sql
 >     mysql -u valis -p valis < api/migrate-devicelinks.sql
+>     mysql -u valis -p valis < api/migrate-penrequest.sql
+>     mysql -u valis -p valis < api/migrate-livemode.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -208,7 +210,19 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
   sind im Schema vorgesehen, aber noch nicht angebunden.
 * Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
   ein neuer Link macht den vorherigen ungültig.
-* **Gemeinsam bearbeiten (Stift-Weitergabe):** Auf einem Sitzungs-Eintrag
+* **Gemeinsam bearbeiten – zwei Betriebsarten**, je Sitzung wählbar:
+  * **Stift-Weitergabe:** Einer bearbeitet, die anderen lesen mit und sind
+    schreibgeschützt. Ruhig und eindeutig.
+  * **Echtzeit:** Alle bearbeiten gleichzeitig. Die Stände werden per
+    Dreiwege-Zusammenführung verschmolzen – Code zeilenweise, 2D-Objekte und
+    Bauteiltypen einzeln. Ändern zwei dieselbe Zeile, gewinnt die
+    Serverfassung und es wird gemeldet. Die Material-Partikel der Simulation
+    bleiben absichtlich lokal, sie ändern sich in jedem Takt.
+    Das nutzt VALIS' Code-First-Eigenschaft: Schreibt ein Generator den Code
+    komplett neu, bleibt nach dem Diff nur die tatsächlich geänderte Zeile
+    übrig – gleichzeitiges Tippen überlebt.
+
+* **Stift-Weitergabe im Detail:** Auf einem Sitzungs-Eintrag
   lässt sich die gemeinsame Bearbeitung einschalten. Es hat immer genau
   **einer den Stift** und darf ändern; alle anderen sehen dessen Stand live
   und sind währenddessen schreibgeschützt (dieselben Sperren wie in einer
@@ -320,6 +334,8 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >
 >     mysql -u valis -p valis < api/migrate-live.sql
 >     mysql -u valis -p valis < api/migrate-devicelinks.sql
+>     mysql -u valis -p valis < api/migrate-penrequest.sql
+>     mysql -u valis -p valis < api/migrate-livemode.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.

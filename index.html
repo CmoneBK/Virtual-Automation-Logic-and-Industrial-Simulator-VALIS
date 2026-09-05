@@ -64579,8 +64579,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         /** Macht alle anderen Geräte-Sitzungen dieser Umgebung ungültig. */
         C.logoutOthers = function () { return req('env.php', { action: 'logout_others' }); };
         /** Stift-Verwaltung der gemeinsamen Bearbeitung. */
-        C.live = function (kind, uid, op, device) {
-            return req('obj.php', { action: 'live', kind: kind, uid: uid, op: op, device: device });
+        C.live = function (kind, uid, op, device, mode) {
+            return req('obj.php', {
+                action: 'live', kind: kind, uid: uid, op: op, device: device, mode: mode || ''
+            });
         };
         /** Uebernimmt ein per Geräte-Link empfangenes Token als eigene Sitzung. */
         C.adoptToken = function (token, env) { writeTok(token); writeEnv(env || ''); };
@@ -65723,6 +65725,163 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         } catch (_) {}
 
+        /* ---- Dreiwege-Zusammenfuehrung ------------------------------------- */
+        //
+        // Grundlage des Echtzeit-Modus. Statt Staende zu ueberschreiben, werden
+        // sie zusammengefuehrt: Was nur einer geaendert hat, wird uebernommen;
+        // nur bei echter Ueberschneidung muss entschieden werden.
+        //
+        // Genau das macht auch die Code-First-Eigenschaft von VALIS nutzbar: Wenn
+        // ein Generator den Code komplett neu schreibt, faktisch aber nur eine
+        // Zeile anders ist, bleibt davon nach dem Diff auch nur diese eine Zeile
+        // uebrig - der gleichzeitige Eingriff des anderen ueberlebt.
+
+        /** Laengste gemeinsame Teilfolge, als Paare zusammengehoeriger Indizes. */
+        function lcsPairs(a, b) {
+            var n = a.length, m = b.length, i, j;
+            if (!n || !m) return [];
+            // Bei sehr grossen Eingaben nicht quadratisch werden.
+            if (n * m > 4000000) return [];
+            var dp = [];
+            for (i = 0; i <= n; i++) dp.push(new Int32Array(m + 1));
+            for (i = n - 1; i >= 0; i--) {
+                for (j = m - 1; j >= 0; j--) {
+                    dp[i][j] = (a[i] === b[j]) ? dp[i + 1][j + 1] + 1
+                             : Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+            var out = [];
+            i = 0; j = 0;
+            while (i < n && j < m) {
+                if (a[i] === b[j]) { out.push([i, j]); i++; j++; }
+                else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+                else j++;
+            }
+            return out;
+        }
+
+        /**
+         * Dreiwege-Zusammenfuehrung von Text, zeilenweise.
+         * Rueckgabe: { text, conflict } - conflict nur, wenn beide Seiten
+         * DIESELBE Stelle unterschiedlich geaendert haben.
+         */
+        function mergeText3(base, mine, theirs) {
+            if (mine === theirs) return { text: mine, conflict: false };
+            if (base === mine)   return { text: theirs, conflict: false };
+            if (base === theirs) return { text: mine, conflict: false };
+
+            var B = String(base).split('\n'), M = String(mine).split('\n'), T = String(theirs).split('\n');
+            var pm = lcsPairs(B, M), pt = lcsPairs(B, T);
+            var mapM = {}, mapT = {};
+            pm.forEach(function (p) { mapM[p[0]] = p[1]; });
+            pt.forEach(function (p) { mapT[p[0]] = p[1]; });
+
+            // Ankerzeilen: in allen drei Fassungen unveraendert vorhanden.
+            var anchors = [], lastM = -1, lastT = -1;
+            for (var b = 0; b < B.length; b++) {
+                if (!(b in mapM) || !(b in mapT)) continue;
+                if (mapM[b] <= lastM || mapT[b] <= lastT) continue;   // Reihenfolge wahren
+                anchors.push([b, mapM[b], mapT[b]]);
+                lastM = mapM[b]; lastT = mapT[b];
+            }
+
+            var out = [], conflict = false;
+            var bi = 0, mi = 0, ti = 0;
+            function chunk(bEnd, mEnd, tEnd) {
+                var bc = B.slice(bi, bEnd).join('\n');
+                var mc = M.slice(mi, mEnd), tc = T.slice(ti, tEnd);
+                var mcs = mc.join('\n'), tcs = tc.join('\n');
+                if (mcs === tcs)      { out = out.concat(mc); }
+                else if (bc === mcs)  { out = out.concat(tc); }   // nur der andere hat geaendert
+                else if (bc === tcs)  { out = out.concat(mc); }   // nur ich habe geaendert
+                else { out = out.concat(tc); conflict = true; }   // echte Ueberschneidung
+            }
+            anchors.forEach(function (a) {
+                chunk(a[0], a[1], a[2]);
+                out.push(B[a[0]]);
+                bi = a[0] + 1; mi = a[1] + 1; ti = a[2] + 1;
+            });
+            chunk(B.length, M.length, T.length);
+            return { text: out.join('\n'), conflict: conflict };
+        }
+
+        /** Dreiwege-Zusammenfuehrung einer flachen Zuordnung (z. B. Bauteiltypen). */
+        function mergeMap3(base, mine, theirs) {
+            var out = {}, k;
+            var keys = {};
+            [base, mine, theirs].forEach(function (o) { for (k in (o || {})) keys[k] = 1; });
+            for (k in keys) {
+                var b = base ? base[k] : undefined,
+                    m = mine ? mine[k] : undefined,
+                    t = theirs ? theirs[k] : undefined;
+                var v = (m === t) ? m : (b === m ? t : (b === t ? m : t));
+                if (v !== undefined) out[k] = v;
+            }
+            return out;
+        }
+
+        /**
+         * Dreiwege-Zusammenfuehrung einer Objektliste ueber ihre id.
+         * Geloescht wird nur, was die eine Seite entfernt und die andere nicht
+         * angefasst hat - so verschwindet nichts versehentlich.
+         */
+        function mergeById3(base, mine, theirs) {
+            var idx = function (arr) {
+                var o = {};
+                (arr || []).forEach(function (x) { if (x && x.id != null) o[String(x.id)] = x; });
+                return o;
+            };
+            var B = idx(base), M = idx(mine), T = idx(theirs);
+            var seen = {}, out = [], id;
+            var order = (theirs || []).concat(mine || []);
+            order.forEach(function (x) {
+                if (!x || x.id == null) return;
+                id = String(x.id);
+                if (seen[id]) return;
+                seen[id] = 1;
+                var b = B[id], m = M[id], t = T[id];
+                var bs = b ? JSON.stringify(b) : '', ms = m ? JSON.stringify(m) : '', ts = t ? JSON.stringify(t) : '';
+                if (!m && !t) return;                       // beide entfernt
+                if (!m) { if (bs === ts) return; out.push(t); return; }   // ich entfernt, anderer unveraendert -> weg
+                if (!t) { if (bs === ms) return; out.push(m); return; }   // anderer entfernt
+                if (ms === ts) { out.push(m); return; }
+                if (bs === ms) { out.push(t); return; }     // nur der andere hat geaendert
+                if (bs === ts) { out.push(m); return; }     // nur ich habe geaendert
+                out.push(t);                                 // Ueberschneidung
+            });
+            return out;
+        }
+
+        function parseJ(v, fb) { try { return JSON.parse(v); } catch (_) { return fb; } }
+
+        /**
+         * Fuehrt zwei Arbeitsstaende zusammen. `items` bleibt bewusst lokal:
+         * das sind die Material-Partikel der Simulation, die sich in jedem Takt
+         * aendern - sie zu synchronisieren waere sinnlos und wuerde nur stoeren.
+         */
+        function mergeBundle3(base, mine, theirs) {
+            if (!base || !theirs) return { bundle: mine, conflict: false };
+            var code = mergeText3(base.code || '', mine.code || '', theirs.code || '');
+            var fb = parseJ(base.factory, {}) || {}, fm = parseJ(mine.factory, {}) || {}, ft = parseJ(theirs.factory, {}) || {};
+            var factory = {};
+            Object.keys(ft).concat(Object.keys(fm)).forEach(function (k) { factory[k] = ft[k]; });
+            factory.objects = mergeById3(fb.objects, fm.objects, ft.objects);
+            if (fb.pins || fm.pins || ft.pins) factory.pins = mergeById3(fb.pins, fm.pins, ft.pins);
+            factory.items = fm.items || ft.items || [];   // Partikel bleiben lokal
+
+            return {
+                bundle: {
+                    code: code.text,
+                    types: JSON.stringify(mergeMap3(parseJ(base.types, {}), parseJ(mine.types, {}), parseJ(theirs.types, {}))),
+                    layout: mine.layout || theirs.layout,          // Ansichtssache, bleibt lokal
+                    factory: JSON.stringify(factory),
+                    plugins: JSON.stringify(mergeMap3(parseJ(base.plugins, {}), parseJ(mine.plugins, {}), parseJ(theirs.plugins, {}))),
+                    keyBindings: mine.keyBindings || theirs.keyBindings
+                },
+                conflict: code.conflict
+            };
+        }
+
         /* ---- Gemeinsame Bearbeitung (Stift-Weitergabe) --------------------- */
 
         // Bewusst KEIN CRDT: In VALIS schreiben Logikplan, Auto-Schaltplan,
@@ -65737,7 +65896,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             circuitEditor: true, factory2d: true, festo: true, factoryNewVars: true
         };
         var live = { kind: '', uid: '', name: '', on: false, mine: false, taken: false,
-                     timer: null, lastVer: 0, lastFp: '', locked: false };
+                     mode: 'pen', timer: null, lastVer: 0, lastFp: '', locked: false,
+                     base: null };
+        var rtBusy = false, rtConflictAt = 0;
 
         function deviceId() {
             try {
@@ -65833,6 +65994,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return;
             }
             if (!live.uid) return;
+            if (live.mode === 'rt') {   // kein Stift vorhanden
+                open(); renderLive(live.kind, live.uid, live.name);
+                return;
+            }
             if (live.mine) {
                 C.live(live.kind, live.uid, 'release', deviceId())
                  .then(function () { startLive(live.kind, live.uid, live.name, false); })
@@ -65934,11 +66099,92 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }).catch(function () {});
         }
 
+        /* ---- Echtzeit ------------------------------------------------------ */
+
+        /**
+         * Setzt den Code, ohne die Schreibmarke zu verlieren. Ein stumpfes
+         * Ueberschreiben wuerde den Cursor bei jedem Takt ans Ende reissen und
+         * gemeinsames Tippen unbenutzbar machen.
+         */
+        function setCodeKeepCaret(text) {
+            var ta = document.getElementById('code');
+            var old = ta ? ta.value : '';
+            var pos = ta ? ta.selectionStart : 0;
+            if (typeof window._setCodeUndoable === 'function') window._setCodeUndoable(text);
+            else if (ta) ta.value = text;
+            if (!ta) return;
+            var i = 0, n = Math.min(old.length, text.length);
+            while (i < n && old.charAt(i) === text.charAt(i)) i++;
+            // Vor der Abweichung bleibt die Marke stehen, dahinter wandert sie
+            // um die Laengendifferenz mit.
+            var np = (pos <= i) ? pos : pos + (text.length - old.length);
+            np = Math.max(0, Math.min(text.length, np));
+            try { ta.setSelectionRange(np, np); } catch (_) {}
+        }
+
+        /** Spielt nur das ein, was sich wirklich geaendert hat. */
+        function rtApply(merged, mine) {
+            var heavy = merged.types !== mine.types
+                     || merged.factory !== mine.factory
+                     || merged.plugins !== mine.plugins;
+            if (heavy) { restoreSilently(merged); return; }
+            if (merged.code !== mine.code) setCodeKeepCaret(merged.code);
+        }
+
+        function rtStep(st) {
+            if (rtBusy) return;
+            var mine = captureBundle();
+            if (!mine) return;
+
+            // Etwas Neues vom Server? Dann zusammenfuehren statt ueberschreiben.
+            if (st.version > live.lastVer) {
+                rtBusy = true;
+                C.get(live.kind, live.uid).then(function (o) {
+                    var res = mergeBundle3(live.base || o.data, mine, o.data);
+                    if (res.conflict) rtConflictAt = Date.now();
+                    rtApply(res.bundle, mine);
+                    live.base = res.bundle;
+                    live.lastVer = o.version;
+                    // Nur zurueckschreiben, wenn wir etwas beizusteuern haben.
+                    if (fpOf(JSON.stringify(res.bundle)) === fpOf(JSON.stringify(o.data))) return null;
+                    return C.put(live.kind, live.uid, live.name, res.bundle, o.version)
+                            .then(function (j) { live.lastVer = j.version; });
+                }).catch(function () {}).then(function () { rtBusy = false; });
+                return;
+            }
+
+            // Nichts Neues - eigene Aenderung hochladen.
+            if (!live.base) { live.base = mine; return; }
+            if (fpOf(JSON.stringify(mine)) === fpOf(JSON.stringify(live.base))) return;
+            rtBusy = true;
+            C.put(live.kind, live.uid, live.name, mine, live.lastVer).then(function (j) {
+                live.base = mine; live.lastVer = j.version;
+            }).catch(function (e) {
+                // Jemand war schneller - im naechsten Takt zusammenfuehren.
+                if (e && e.message === 'conflict') live.lastVer = 0;
+            }).then(function () { rtBusy = false; });
+        }
+
         function liveTick() {
             if (!live.uid || !C.isLoggedIn()) return;
-            C.live(live.kind, live.uid, live.mine ? 'beat' : 'status', deviceId()).then(function (st) {
+            var op = (live.mode === 'rt') ? 'status' : (live.mine ? 'beat' : 'status');
+            C.live(live.kind, live.uid, op, deviceId()).then(function (st) {
                 live.on = !!st.on; live.mine = !!st.mine; live.taken = !!st.taken;
+                live.mode = st.mode || 'pen';
                 if (!live.on) { stopLive(); say('Gemeinsame Bearbeitung wurde beendet.', '#9e9e9e'); return; }
+
+                if (live.mode === 'rt') {
+                    // Kein Stift, keine Sperren - alle schreiben, die Staende
+                    // werden zusammengefuehrt.
+                    followLock(false);
+                    var frisch = (Date.now() - rtConflictAt) < 6000;
+                    liveBanner(frisch
+                        ? '🟢 Echtzeit – gleiche Zeile geändert, Serverfassung übernommen'
+                        : '🟢 Echtzeit – ihr arbeitet gemeinsam',
+                        frisch ? '#e65100' : '#00695c');
+                    rtStep(st);
+                    return;
+                }
                 if (live.mine) {
                     followLock(false);
                     // Eine Anfrage muss beim Inhaber sichtbar werden - sonst bleibt
@@ -65963,9 +66209,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
         }
 
-        function startLive(kind, uid, name, mine) {
+        function startLive(kind, uid, name, mine, mode) {
             live.kind = kind; live.uid = uid; live.name = name || '';
             live.mine = !!mine; live.lastVer = 0;
+            if (mode) live.mode = mode;
+            live.base = (live.mode === 'rt') ? captureBundle() : null;
             // Leerer Fingerabdruck heisst: beim naechsten Takt wird der eigene
             // Stand hochgeladen. Genau das ist beim Uebernehmen des Stifts
             // gewollt - sonst saehen die Mitleser weiter den zuletzt
@@ -65980,6 +66228,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             followLock(false);
             liveBanner('', '');
             live.kind = ''; live.uid = ''; live.on = false; live.mine = false;
+            live.mode = 'pen'; live.base = null; rtConflictAt = 0;
             liveRemember();
         }
 
@@ -65987,7 +66236,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Status wird geladen …</div>';
             C.live(kind, uid, 'status', deviceId()).then(function (st) {
                 var aktiv = !!st.on, meins = !!st.mine, belegt = !!st.taken;
+                var rt = (st.mode === 'rt');
                 var lage = !aktiv ? 'Aus – nur du arbeitest an diesem Stand.'
+                         : rt     ? 'Echtzeit: Alle bearbeiten gleichzeitig, die Stände werden zusammengeführt.'
                          : meins  ? 'Du hast den Stift und kannst bearbeiten.'
                          : belegt ? 'Jemand anders hat den Stift. Du liest mit.'
                                   : 'Der Stift ist gerade frei.';
@@ -66007,25 +66258,42 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +   'padding:12px;margin-bottom:12px;font-size:13px;">' + esc(lage) + '</div>'
                   + '<div style="display:flex;flex-direction:column;gap:8px;">'
                   + (!aktiv
-                      ? '<button id="lv-on" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;'
-                        + 'padding:10px;cursor:pointer;font-size:13px;">Gemeinsame Bearbeitung starten</button>'
-                      : (meins
+                      ? '<button id="lv-pen" style="background:#4527a0;color:#fff;border:none;border-radius:4px;'
+                        + 'padding:10px;cursor:pointer;font-size:13px;text-align:left;">Stift-Weitergabe starten'
+                        + '<div style="font-size:11px;opacity:.85;">Einer bearbeitet, die anderen lesen mit und '
+                        + 'sind schreibgeschützt. Ruhig und eindeutig – gut zum Vorführen und für Partnerarbeit.</div></button>'
+                        + '<button id="lv-rt" style="background:#00695c;color:#fff;border:none;border-radius:4px;'
+                        + 'padding:10px;cursor:pointer;font-size:13px;text-align:left;">Echtzeit starten'
+                        + '<div style="font-size:11px;opacity:.85;">Alle bearbeiten gleichzeitig; die Stände werden '
+                        + 'zusammengeführt. Ändern zwei dieselbe Zeile, gewinnt die Serverfassung.</div></button>'
+                      : (rt
+                          ? '<div style="background:#123;border:1px solid #2c4a63;border-radius:6px;padding:10px;'
+                            + 'font-size:11px;line-height:1.6;color:#9e9e9e;">In dieser Betriebsart gibt es keinen Stift. '
+                            + 'Getrennte Änderungen werden übernommen, bei derselben Zeile gewinnt die Serverfassung. '
+                            + 'Die Material-Partikel der Simulation bleiben absichtlich lokal.</div>'
+                          : (meins
                           ? '<button id="lv-give" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
                             + 'padding:10px;cursor:pointer;font-size:13px;">Stift abgeben</button>'
                           : '<button id="lv-take" style="background:#1565c0;color:#fff;border:none;border-radius:4px;'
                             + 'padding:10px;cursor:pointer;font-size:13px;">Stift übernehmen'
                             + (belegt ? '<div style="font-size:11px;opacity:.85;">Erst möglich, wenn der andere '
-                                        + 'abgibt oder ihn ~25 s nicht nutzt.</div>' : '') + '</button>')
+                                        + 'abgibt oder ihn ~25 s nicht nutzt.</div>' : '') + '</button>'))
                         + '<button id="lv-off" style="background:#5d2b2b;color:#fff;border:none;border-radius:4px;'
                         + 'padding:9px;cursor:pointer;font-size:12px;">Gemeinsame Bearbeitung beenden</button>')
                   +   '<button id="lv-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
                   +     'padding:8px;cursor:pointer;font-size:12px;">Zurück</button>'
                   + '</div>';
 
-                var b1 = box.querySelector('#lv-on');
-                if (b1) b1.onclick = function () {
-                    run(C.live(kind, uid, 'on', deviceId()), 'Starte …', function () {
-                        startLive(kind, uid, name, true); renderLive(kind, uid, name);
+                var bp = box.querySelector('#lv-pen');
+                if (bp) bp.onclick = function () {
+                    run(C.live(kind, uid, 'on', deviceId(), 'pen'), 'Starte …', function () {
+                        startLive(kind, uid, name, true, 'pen'); renderLive(kind, uid, name);
+                    });
+                };
+                var br = box.querySelector('#lv-rt');
+                if (br) br.onclick = function () {
+                    run(C.live(kind, uid, 'on', deviceId(), 'rt'), 'Starte …', function () {
+                        startLive(kind, uid, name, false, 'rt'); renderLive(kind, uid, name);
                     });
                 };
                 var b2 = box.querySelector('#lv-take');

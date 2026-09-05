@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS objects (
   -- Zeitpunkt der letzten Stift-Anfrage. Der Inhaber sieht daran, dass jemand
   -- uebernehmen moechte; sonst bliebe ein Klick des anderen voellig unsichtbar.
   live_req_at DATETIME       NULL,
+  -- Betriebsart der Zusammenarbeit: 'pen' = Stift-Weitergabe (einer schreibt),
+  -- 'rt' = Echtzeit (alle schreiben, Staende werden zusammengefuehrt).
+  live_mode  VARCHAR(8)      NOT NULL DEFAULT 'pen',
   PRIMARY KEY (id),
   UNIQUE KEY uq_obj (env_id, kind, obj_uid),
   KEY idx_env_kind (env_id, kind, deleted_at),

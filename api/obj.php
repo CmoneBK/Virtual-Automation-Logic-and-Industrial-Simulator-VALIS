@@ -221,13 +221,15 @@ if ($act === 'live') {
     $uid  = clean_uid($in['uid'] ?? '');
     $op   = (string)($in['op'] ?? 'status');
     $dev  = (string)($in['device'] ?? '');
+    $mode = (string)($in['mode'] ?? '');
+    if ($mode !== '' && $mode !== 'pen' && $mode !== 'rt') fail('mode_invalid');
     if (!preg_match('/^[A-Za-z0-9_-]{8,40}$/', $dev)) fail('device_invalid');
 
     $pdo = db();
     $pdo->beginTransaction();
     try {
         $sel = $pdo->prepare(
-            'SELECT id, version, updated_at, live_on, live_owner, live_until, live_req_at
+            'SELECT id, version, updated_at, live_on, live_owner, live_until, live_req_at, live_mode
              FROM objects
              WHERE env_id = ? AND kind = ? AND obj_uid = ? AND deleted_at IS NULL
              FOR UPDATE'
@@ -244,7 +246,12 @@ if ($act === 'live') {
         $newOn = (int)$r['live_on']; $newOwner = $r['live_owner']; $ttl = null;
         // $req: true = Anfrage setzen, false = loeschen, null = unveraendert
         $req = null;
-        if ($op === 'on')          { $newOn = 1; $newOwner = $dev; $ttl = true;  $req = false; }
+        $newMode = (string)$r['live_mode'];
+        // Im Echtzeit-Modus gibt es keinen Stift - alle duerfen schreiben.
+        if ($op === 'on')          { $newOn = 1; $ttl = true; $req = false;
+                                     if ($mode !== '') $newMode = $mode;
+                                     $newOwner = ($newMode === 'rt') ? null : $dev;
+                                     if ($newMode === 'rt') $ttl = false; }
         elseif ($op === 'off')     { $newOn = 0; $newOwner = null; $ttl = false; $req = false; }
         elseif ($op === 'claim')   {
             if ($free || $mine) { $newOn = 1; $newOwner = $dev; $ttl = true; $req = false; }
@@ -265,6 +272,7 @@ if ($act === 'live') {
             if ($req !== null) {
                 $sets[] = 'live_req_at = ' . ($req ? 'UTC_TIMESTAMP()' : 'NULL');
             }
+            if ($newMode !== (string)$r['live_mode']) { $sets[] = 'live_mode = ?'; $args[] = $newMode; }
             $args[] = $r['id'];
             $pdo->prepare('UPDATE objects SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($args);
             $sel->execute([$envId, $kind, $uid]);
@@ -282,6 +290,7 @@ if ($act === 'live') {
     json_out([
         'ok'         => true,
         'on'         => (bool)$r['live_on'],
+        'mode'       => (string)$r['live_mode'],
         // Bewusst nur Ja/Nein statt der fremden Geraetekennung.
         'mine'       => ($r['live_owner'] === $dev && $until >= $t),
         'taken'      => ($r['live_owner'] !== null && $until >= $t),

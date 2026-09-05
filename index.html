@@ -64578,6 +64578,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         C.poll = function (since) { return req('obj.php', { action: 'poll', since: since || '' }); };
         /** Macht alle anderen Geräte-Sitzungen dieser Umgebung ungültig. */
         C.logoutOthers = function () { return req('env.php', { action: 'logout_others' }); };
+
+        /* ---- Bibliothek. Lesen geht ohne Anmeldung. ---------------------- */
+        C.libList     = function (kind) { return req('library.php', { action: 'list', kind: kind || '' }, false); };
+        C.libGet      = function (id)   { return req('library.php', { action: 'get', id: id }, false); };
+        C.libSubmit   = function (kind, uid, title, descr) {
+            return req('library.php', { action: 'submit', kind: kind, uid: uid, title: title, descr: descr });
+        };
+        C.libMine     = function ()     { return req('library.php', { action: 'mine' }); };
+        C.libPending  = function ()     { return req('library.php', { action: 'pending' }); };
+        C.libModerate = function (id, st) { return req('library.php', { action: 'moderate', id: id, status: st }); };
+        C.libWithdraw = function (id)   { return req('library.php', { action: 'withdraw', id: id }); };
+        C.libClaimCurator = function (key) { return req('library.php', { action: 'claim_curator', key: key }); };
         /** Stift-Verwaltung der gemeinsamen Bearbeitung. */
         /** Eigene Position senden und die der anderen holen - ein Aufruf. */
         C.presence = function (kind, uid, device, caret, caretEnd, mx, my) {
@@ -64847,6 +64859,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
               +     'border-radius:4px;padding:8px;font-size:13px;">'
               +   '<button id="cl-create" style="width:100%;margin-top:10px;background:#1565c0;color:#fff;border:none;'
               +     'border-radius:4px;padding:9px;cursor:pointer;font-size:13px;">Umgebung anlegen</button>'
+              +   '<button id="cl-lib2" style="width:100%;margin-top:8px;background:#00695c;color:#fff;'
+              +     'border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">'
+              +     '&#128218; Bibliothek ansehen</button>'
               +   '<div style="margin-top:10px;font-size:11px;color:#ef9a9a;line-height:1.5;">'
               +     '&#9888;&#65039; Es gibt <b>keine Wiederherstellung</b>. Der Code ist der einzige Zugang &ndash; '
               +     'verloren heisst weg.</div>'
@@ -64858,6 +64873,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!code.trim()) { say('Bitte Code eingeben.', '#ef9a9a'); return; }
                 run(C.login(code, pin), 'Anmelden …', function () { render(); });
             };
+            box.querySelector('#cl-lib2').onclick = renderLibrary;
             box.querySelector('#cl-create').onclick = function () {
                 var pin = box.querySelector('#cl-newpin').value.trim();
                 if (pin && !/^\d{4,6}$/.test(pin)) { say('PIN muss 4-6 Ziffern haben.', '#ef9a9a'); return; }
@@ -64968,6 +64984,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                               + '<span style="display:inline-block;width:1px;height:14px;'
                               + 'background:#3a3a3a;margin:0 7px;vertical-align:middle;"></span>'
                             : '')
+                        +   '<button data-pub="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
+                        +     'data-name="' + esc(o.name || '') + '" title="In die Bibliothek dieser '
+                        +     'Installation einreichen" '
+                        +     'style="background:#00695c;color:#fff;border:none;border-radius:3px;'
+                        +     'padding:5px 8px;cursor:pointer;font-size:11px;">&#128218;</button> '
                         +   '<button data-share="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'data-name="' + esc(o.name || '') + '" '
                         +     'style="background:#00695c;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
@@ -64984,6 +65005,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +     'padding:9px 14px;cursor:pointer;font-size:13px;">Aktuellen Stand speichern</button>'
                   +   '<button id="cl-add" style="background:#1565c0;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#43; Aufgabe/Paket</button>'
+                  +   '<button id="cl-lib" style="background:#00695c;color:#fff;border:none;border-radius:4px;'
+                  +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#128218; Bibliothek</button>'
                   +   '<button id="cl-link" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#128279; Zugangs-Link</button>'
                   +   '<button id="cl-logout" style="margin-left:auto;background:#444;color:#ddd;border:none;'
@@ -65014,6 +65037,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 box.querySelector('#cl-save').onclick = saveCurrent;
                 box.querySelector('#cl-add').onclick = renderAdd;
+                box.querySelector('#cl-lib').onclick = renderLibrary;
+                Array.prototype.forEach.call(box.querySelectorAll('[data-pub]'), function (b) {
+                    b.onclick = function () {
+                        libPublish(b.getAttribute('data-kind'), b.getAttribute('data-pub'),
+                                   b.getAttribute('data-name'));
+                    };
+                });
                 box.querySelector('#cl-auto').onchange = function () { setAuto(this.checked); };
                 var cfLink = box.querySelector('#cl-cf');
                 if (cfLink) cfLink.onclick = function (ev) { ev.preventDefault(); renderConflicts(); };
@@ -66427,6 +66457,153 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     say('Serverfassung übernommen.', '#8bc34a');
                     refreshBadge(); renderConflicts();
                 };
+            });
+        }
+
+        /* ---- Bibliothek ---------------------------------------------------- */
+
+        var libIsCurator = false;
+
+        function renderLibrary() {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Bibliothek wird geladen …</div>';
+            Promise.all([
+                C.libList(''),
+                C.isLoggedIn() ? C.libMine().catch(function () { return { items: [], curator: false }; })
+                               : Promise.resolve({ items: [], curator: false })
+            ]).then(function (r) {
+                var pub = r[0].items || [], mine = r[1].items || [];
+                libIsCurator = !!r[1].curator;
+
+                var rows = pub.map(function (it) {
+                    return '<tr style="border-top:1px solid #3a3a3a;">'
+                        + '<td style="padding:7px 6px;">' + esc(it.title)
+                        +   (it.descr ? '<div style="font-size:11px;color:#9e9e9e;">' + esc(it.descr) + '</div>' : '')
+                        +   '<div style="font-size:10px;color:#777;">' + esc(kindLabel(it.kind))
+                        +   ' · ' + fmtBytes(it.bytes) + ' · ' + it.hits + '×</div></td>'
+                        + '<td style="padding:7px 6px;text-align:right;white-space:nowrap;">'
+                        +   '<button data-lget="' + it.id + '" style="background:#2e7d32;color:#fff;border:none;'
+                        +     'border-radius:3px;padding:5px 10px;cursor:pointer;font-size:11px;">Übernehmen</button>'
+                        +   (libIsCurator ? ' <button data-ldel="' + it.id + '" style="background:#5d2b2b;'
+                            + 'color:#fff;border:none;border-radius:3px;padding:5px 8px;cursor:pointer;'
+                            + 'font-size:11px;">Entfernen</button>' : '')
+                        + '</td></tr>';
+                }).join('');
+
+                var mineRows = mine.map(function (it) {
+                    var lab = it.status === 'public' ? 'freigegeben'
+                            : it.status === 'pending' ? 'wartet auf Freigabe' : 'abgelehnt';
+                    return '<div style="font-size:11px;color:#9e9e9e;padding:3px 0;">'
+                         + esc(it.title) + ' — <span style="color:'
+                         + (it.status === 'public' ? '#8bc34a' : it.status === 'pending' ? '#ffb74d' : '#ef9a9a')
+                         + ';">' + lab + '</span>'
+                         + ' <a href="#" data-lwd="' + it.id + '" style="color:#90a4ae;">zurückziehen</a></div>';
+                }).join('');
+
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+                  +   '<b>Bibliothek dieser Installation.</b> Sie kommt <b>zusätzlich</b> zu den '
+                  +   'eingebauten Beispielen — ohne Server bleibt VALIS unverändert vollständig.</div>'
+                  + (rows ? '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + rows + '</table>'
+                          : '<div style="color:#777;font-size:12px;padding:16px 0;text-align:center;">'
+                            + 'Noch nichts veröffentlicht.</div>')
+                  + (mineRows ? '<div style="margin-top:16px;padding-top:10px;border-top:1px solid #3a3a3a;">'
+                        + '<div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.7px;'
+                        + 'margin-bottom:5px;">Von mir eingereicht</div>' + mineRows + '</div>' : '')
+                  + (libIsCurator
+                      ? '<button id="lib-pending" style="width:100%;margin-top:12px;background:#4527a0;color:#fff;'
+                        + 'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">'
+                        + 'Warteschlange prüfen</button>'
+                      : (C.isLoggedIn()
+                          ? '<button id="lib-curator" style="width:100%;margin-top:12px;background:#37474f;'
+                            + 'color:#bbb;border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:11px;">'
+                            + 'Kurator-Schlüssel eingeben</button>' : ''))
+                  + '<button id="lib-back" style="width:100%;margin-top:8px;background:#3a3a3a;color:#ccc;'
+                  +   'border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Zurück</button>';
+
+                box.querySelector('#lib-back').onclick = function () { render(); };
+                var cb = box.querySelector('#lib-curator');
+                if (cb) cb.onclick = function () {
+                    var k = prompt('Kurator-Schlüssel (steht in der Server-Konfiguration):', '');
+                    if (!k) return;
+                    run(C.libClaimCurator(k.trim()), 'Prüfe …', function () {
+                        say('Kurator-Recht erteilt.', '#8bc34a'); renderLibrary();
+                    });
+                };
+                var pb = box.querySelector('#lib-pending');
+                if (pb) pb.onclick = renderLibPending;
+
+                Array.prototype.forEach.call(box.querySelectorAll('[data-lget]'), function (b) {
+                    b.onclick = function () { libTake(parseInt(b.getAttribute('data-lget'), 10)); };
+                });
+                Array.prototype.forEach.call(box.querySelectorAll('[data-ldel]'), function (b) {
+                    b.onclick = function () {
+                        if (!confirm('Diesen Eintrag aus der Bibliothek entfernen?')) return;
+                        run(C.libWithdraw(parseInt(b.getAttribute('data-ldel'), 10)), 'Entferne …', renderLibrary);
+                    };
+                });
+                Array.prototype.forEach.call(box.querySelectorAll('[data-lwd]'), function (a) {
+                    a.onclick = function (ev) {
+                        ev.preventDefault();
+                        run(C.libWithdraw(parseInt(a.getAttribute('data-lwd'), 10)), 'Ziehe zurück …', renderLibrary);
+                    };
+                });
+            }).catch(handleErr);
+        }
+
+        function renderLibPending() {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Warteschlange …</div>';
+            C.libPending().then(function (j) {
+                var items = j.items || [];
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;margin-bottom:12px;">'
+                  +   'Eingereichte Beiträge. Freigegebenes ist für alle sichtbar — bitte auch auf '
+                  +   'personenbezogene Angaben in Texten achten.</div>'
+                  + (items.length ? items.map(function (it) {
+                        return '<div style="background:#252528;border:1px solid #3a3a3a;border-radius:6px;'
+                             + 'padding:10px;margin-bottom:8px;">'
+                             + '<div style="font-weight:600;font-size:13px;">' + esc(it.title) + '</div>'
+                             + '<div style="font-size:11px;color:#9e9e9e;margin:3px 0 8px;">'
+                             +   esc(kindLabel(it.kind)) + ' · ' + fmtBytes(it.bytes) + '</div>'
+                             + '<button data-lok="' + it.id + '" style="background:#2e7d32;color:#fff;border:none;'
+                             +   'border-radius:3px;padding:6px 10px;cursor:pointer;font-size:11px;margin-right:6px;">'
+                             +   'Freigeben</button>'
+                             + '<button data-lno="' + it.id + '" style="background:#5d2b2b;color:#fff;border:none;'
+                             +   'border-radius:3px;padding:6px 10px;cursor:pointer;font-size:11px;">Ablehnen</button>'
+                             + '</div>';
+                    }).join('') : '<div style="color:#777;font-size:12px;padding:14px 0;">Nichts offen.</div>')
+                  + '<button id="lp-back" style="width:100%;margin-top:8px;background:#3a3a3a;color:#ccc;'
+                  +   'border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Zurück</button>';
+                box.querySelector('#lp-back').onclick = renderLibrary;
+                Array.prototype.forEach.call(box.querySelectorAll('[data-lok]'), function (b) {
+                    b.onclick = function () {
+                        run(C.libModerate(parseInt(b.getAttribute('data-lok'), 10), 'public'), 'Gebe frei …', renderLibPending);
+                    };
+                });
+                Array.prototype.forEach.call(box.querySelectorAll('[data-lno]'), function (b) {
+                    b.onclick = function () {
+                        run(C.libModerate(parseInt(b.getAttribute('data-lno'), 10), 'rejected'), 'Lehne ab …', renderLibPending);
+                    };
+                });
+            }).catch(handleErr);
+        }
+
+        /** Eintrag uebernehmen - ueber die BESTEHENDEN Import-Pfade. */
+        function libTake(id) {
+            run(C.libGet(id), 'Hole …', function (j) {
+                var it = j.item;
+                applyShared({ kind: it.kind, name: it.title, data: it.data });
+                say('Übernommen: ' + it.title, '#8bc34a');
+            });
+        }
+
+        /** Eigenes Objekt zur Veroeffentlichung einreichen. */
+        function libPublish(kind, uid, name) {
+            var title = prompt('Titel für die Bibliothek:', name || '');
+            if (title === null || !title.trim()) return;
+            var descr = prompt('Kurze Beschreibung (optional):', '') || '';
+            run(C.libSubmit(kind, uid, title.trim(), descr), 'Reiche ein …', function (r) {
+                say(r.status === 'public' ? 'Veröffentlicht.' : 'Eingereicht — wartet auf Freigabe.', '#8bc34a');
+                renderEnv();
             });
         }
 

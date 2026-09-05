@@ -69,7 +69,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
-`sessions` und `shares` zeigen.
+`sessions`, `shares` und `library` zeigen.
 
 > **Bestehende Installationen** brauchen einmalig:
 >
@@ -78,6 +78,7 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-penrequest.sql
 >     mysql -u valis -p valis < api/migrate-livemode.sql
 >     mysql -u valis -p valis < api/migrate-presence.sql
+>     mysql -u valis -p valis < api/migrate-library.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -168,10 +169,45 @@ Alle in `config.php`:
 | `inactive_delete_days` | 365 | automatische Löschung inaktiver Umgebungen |
 | `signup_per_ip_day` | 20 | Neuanlagen je IP und Tag |
 | `login_max_fails` | 10 | Fehlversuche bis zur Sperre |
+| `curator_key` | `''` | Schlüssel, mit dem eine Umgebung Kurator der Bibliothek wird |
+| `allow_library_submit` | `true` | dürfen normale Umgebungen etwas einreichen? |
 
 Bei offener Registrierung ist dein Server eine **offen beschreibbare API**.
 Quota, Rate-Limits und die automatische Löschung sind die Bremsen dafür. Wird sie
 missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret`.
+
+## Bibliothek
+
+Die Bibliothek ist eine **zusätzliche**, serverseitige Sammlung von Aufgaben,
+Aufgabenpaketen und Anlagen – die in `index.html` eingebauten Beispiele bleiben
+unverändert erhalten und funktionieren auch ohne Server. **Lesen und Übernehmen
+geht ohne Anmeldung**, damit die Bibliothek der öffentliche Teil deiner
+Installation sein kann.
+
+Veröffentlicht wird immer eine **Kopie**. Wer später in seiner Umgebung etwas
+ändert, ändert damit nicht den Bibliothekseintrag – und wer eine Umgebung löscht,
+reißt keine Einträge mit (`env_id` wird dann auf `NULL` gesetzt).
+
+### Kurator-Schlüssel
+
+Der Schlüssel **gehört nicht ins Repository**. Er wird auf dem Server erzeugt und
+nur in die Konfiguration außerhalb des Webroots geschrieben:
+
+```bash
+php -r "echo bin2hex(random_bytes(16)), PHP_EOL;"
+# Ergebnis in config.php bei 'curator_key' eintragen
+```
+
+In VALIS wird er **einmal** eingegeben (Bibliothek → „Kurator werden“). Der Server
+vergleicht ihn zeitkonstant und setzt danach `environments.is_curator = 1`. Der
+Schlüssel wird im Browser **nicht gespeichert** – das Recht hängt an der Umgebung,
+nicht am Gerät, und gilt damit auf jedem Gerät, das in dieser Umgebung angemeldet
+ist. Bleibt `curator_key` leer, kann niemand Kurator werden.
+
+Ohne Kurator-Recht landet Eingereichtes in `pending` und ist für niemanden
+sichtbar außer für den Einreichenden selbst und für Kuratoren. Kuratoren
+veröffentlichen direkt. Wer keine Moderation will, setzt
+`allow_library_submit` auf `false`: dann füllen nur noch Kuratoren die Bibliothek.
 
 ## Sicherheits- und Datenschutz-Design
 
@@ -339,7 +375,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
-`sessions` and `shares`.
+`sessions`, `shares` and `library`.
 
 > **Existing installations** need this once:
 >
@@ -348,6 +384,7 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-penrequest.sql
 >     mysql -u valis -p valis < api/migrate-livemode.sql
 >     mysql -u valis -p valis < api/migrate-presence.sql
+>     mysql -u valis -p valis < api/migrate-library.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.
@@ -437,10 +474,43 @@ All in `config.php`:
 | `inactive_delete_days` | 365 | automatic deletion of inactive environments |
 | `signup_per_ip_day` | 20 | new environments per IP per day |
 | `login_max_fails` | 10 | failed attempts before lockout |
+| `curator_key` | `''` | key that turns an environment into a library curator |
+| `allow_library_submit` | `true` | may ordinary environments submit entries? |
 
 With open signup your server is a **publicly writable API**. Quotas, rate limits
 and automatic deletion are the brakes. If it gets abused, set
 `allow_open_signup` to `false` and hand out a `signup_secret`.
+
+## Library
+
+The library is an **additional**, server-side collection of tasks, task packages
+and plants – the examples built into `index.html` stay untouched and keep working
+without a server. **Reading and taking a copy needs no login**, so the library can
+be the public face of your installation.
+
+Publishing always stores a **copy**. Later edits in the author's environment do
+not change the library entry, and deleting an environment does not take entries
+with it (`env_id` becomes `NULL`).
+
+### Curator key
+
+**Never put the key in the repository.** Generate it on the server and write it
+only into the configuration outside the web root:
+
+```bash
+php -r "echo bin2hex(random_bytes(16)), PHP_EOL;"
+# put the result into config.php under 'curator_key'
+```
+
+It is entered **once** in VALIS (Library → "Become curator"). The server compares
+it in constant time and then sets `environments.is_curator = 1`. The key is **not
+stored in the browser** – the right belongs to the environment, not the device, so
+it applies on every device logged into that environment. An empty `curator_key`
+means nobody can become a curator.
+
+Without curator rights a submission lands in `pending`, visible only to its author
+and to curators. Curators publish directly. If you do not want to moderate at all,
+set `allow_library_submit` to `false`: then only curators can fill the library.
 
 ## Security and data-protection design
 

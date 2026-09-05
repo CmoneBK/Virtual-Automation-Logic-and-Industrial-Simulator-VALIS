@@ -30,6 +30,16 @@ return [
     // Schluessel fuer den Cron-Aufruf von gc.php (php -r 'echo bin2hex(random_bytes(16));')
     'gc_key'               => 'CHANGEME_gc_key',
 
+    // Kurator-Schluessel fuer die Bibliothek. WIRD AUF DEM SERVER ERZEUGT und
+    // gehoert niemals ins Repository - der PHP-Quelltext ist oeffentlich lesbar.
+    // Einmalig in VALIS eingeben; danach traegt die eigene Umgebung das Recht.
+    // Leer lassen = niemand kann Kurator werden.
+    'curator_key'          => '',
+
+    // Duerfen normale Nutzer etwas zur Freigabe einreichen? Eingereichtes ist
+    // erst nach Freigabe durch einen Kurator sichtbar.
+    'allow_library_submit' => true,
+
     // Quota je Umgebung
     'quota_bytes'          => 5 * 1024 * 1024,
     'quota_objects'        => 300,

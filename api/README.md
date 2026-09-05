@@ -142,6 +142,7 @@ Die Aktion `live` kennt zwei Betriebsarten (`live_mode`): `pen`
 die Zusammenfuehrung der Staende passiert im Client).
 | `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
 | `presence.php` | Schreibmarke und Mauszeiger (Bearer-Token) |
+| `library.php` | `list` / `get` (ohne Anmeldung) + `submit` / `mine` / `pending` / `moderate` / `withdraw` / `claim_curator` (Bearer) |
 | `gc.php` | Wartung, per Cron |
 
 Der Endpunkt `presence.php` schreibt die eigene Position UND liefert die der
@@ -178,3 +179,23 @@ Es wird nie still ueberschrieben. Der Client kann damit anbieten:
 Verlierer als Snapshot ablegen, sodass nichts verloren geht.
 
 `delete` ist ein Soft-Delete; `gc.php` entfernt endgueltig nach 30 Tagen.
+
+## Bibliothek
+
+Veroeffentlichte Eintraege liegen in einer EIGENEN Tabelle, nicht in `objects`.
+Eine Veroeffentlichung ist eine Kopie: sie bleibt unveraendert, wenn der Urheber
+sein Original spaeter aendert, und ueberlebt das Loeschen seiner Umgebung
+(`env_id` wird zu `NULL`).
+
+`list` und `get` brauchen KEINE Anmeldung - die Bibliothek ist der
+oeffentliche Teil der Installation. Alles Schreibende braucht eine Umgebung.
+
+Moderation: ohne sie waere die Bibliothek bei offener Registrierung eine offene
+Pinnwand. Eingereichtes steht deshalb auf `pending` und ist nur fuer den
+Einreichenden und fuer Kuratoren sichtbar. Kuratoren veroeffentlichen direkt.
+
+Das Kurator-Recht haengt an der UMGEBUNG (`environments.is_curator`), nicht am
+Geraet. `claim_curator` vergleicht den Schluessel aus der Konfiguration
+zeitkonstant (`hash_equals`) und setzt das Kennzeichen einmalig. Der
+Schluessel wird auf dem Server erzeugt und niemals im Repository abgelegt - der
+PHP-Quelltext ist auf GitHub oeffentlich lesbar.

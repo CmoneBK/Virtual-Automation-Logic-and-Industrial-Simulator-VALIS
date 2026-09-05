@@ -82,6 +82,13 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
+>
+> Die Migrationen sind **nicht wiederholbar**: `ERROR 1060 Duplicate column`
+> bedeutet schlicht, dass die Spalte schon da ist – der Fehler ist folgenlos.
+> Absichtlich kein `ADD COLUMN IF NOT EXISTS`, das kennt nur MariaDB, nicht
+> MySQL. Was wirklich zählt, sagt dir die Kontrolle:
+>
+>     mysql -u valis -p valis -e "SHOW TABLES; SHOW COLUMNS FROM environments;"
 
 > Nutze für das Datenbank-Passwort am besten nur Buchstaben und Ziffern.
 > Zeichen wie `\`, `"`, `$` oder `&` sorgen beim Eintragen in Shell und PHP
@@ -388,6 +395,13 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.
+>
+> The migrations are **not repeatable**: `ERROR 1060 Duplicate column` simply
+> means the column is already there – the error is harmless. Deliberately no
+> `ADD COLUMN IF NOT EXISTS`, which MariaDB has but MySQL does not. What
+> matters is the result:
+>
+>     mysql -u valis -p valis -e "SHOW TABLES; SHOW COLUMNS FROM environments;"
 
 > Prefer an alphanumeric database password. Characters such as `\`, `"`, `$` or
 > `&` reliably cause hard-to-find quoting bugs in shell and PHP.

@@ -65749,14 +65749,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
 
         /** Mitleser bekommen dieselben Sperren wie in einer Aufgabe. */
+        function lockStanding() {
+            try { return !!document.querySelector('.task-block-overlay[data-task-block="1"]'); }
+            catch (_) { return false; }
+        }
         function followLock(on) {
             // Eine laufende Aufgabe hat Vorrang - ihre Sperren duerfen wir nicht
             // aufheben, sonst waere die Aufgabe ploetzlich frei bearbeitbar.
             if (typeof window._taskIsActive === 'function' && window._taskIsActive()) return;
             try {
-                if (on && !live.locked) { window._taskApplyBlockAreas(LIVE_BLOCK); live.locked = true; }
-                else if (!on && live.locked) { window._taskRestoreBlockAreas(); live.locked = false; }
-            } catch (_) {}
+                if (on) {
+                    // Der Merker allein genuegt NICHT: Beim Einspielen eines fremden
+                    // Standes baut loadSnapshot ueber selectLayout/loadFactoryState die
+                    // Panels neu auf - die Sperr-Overlays verschwinden dabei. Deshalb
+                    // wird zusaetzlich geprueft, ob die Sperre wirklich noch steht.
+                    var standing = lockStanding();
+                    if (live.locked && standing) return;
+                    // _taskAddBlockOverlay schuetzt nicht gegen Mehrfach-Overlays,
+                    // daher vor dem erneuten Sperren sauber aufraeumen.
+                    if (standing) window._taskRestoreBlockAreas();
+                    window._taskApplyBlockAreas(LIVE_BLOCK);
+                    live.locked = true;
+                } else if (live.locked) {
+                    window._taskRestoreBlockAreas();
+                    live.locked = false;
+                }
+            } catch (e) {
+                // Frueher stumm verschluckt - ein Scheitern blieb dadurch unbemerkt.
+                live.locked = false;
+                say('Schreibschutz konnte nicht gesetzt werden: ' + ((e && e.message) || '?'), '#ef9a9a');
+            }
         }
 
         /** Einspielen ohne Rueckfrage - loadSnapshot fragt sonst jedes Mal nach. */
@@ -65900,6 +65922,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 live.lastVer = o.version;
                 var b = captureBundle();
                 live.lastFp = b ? fpOf(JSON.stringify(b)) : '';
+                // Das Einspielen hat die Panels neu aufgebaut und die Sperre
+                // mitgenommen - sofort wieder setzen, nicht erst im naechsten Takt.
+                if (!live.mine) { live.locked = false; followLock(true); }
             }).catch(function () {});
         }
 
@@ -65913,11 +65938,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     liveBanner('✏️ Du hast den Stift – klicken zum Abgeben', '#2e7d32');
                     pushIfChanged(st.version);
                 } else {
-                    followLock(true);
                     liveBanner(st.taken
                         ? '👀 Du liest mit – klicken, um den Stift anzufordern'
                         : '✋ Stift ist frei – klicken zum Übernehmen',
                         st.taken ? '#1565c0' : '#6d4c41');
+                    // Nur sperren, wenn wirklich jemand anders schreibt. Ist der
+                    // Stift frei, duerfen beide arbeiten und sich absprechen.
+                    if (st.taken) followLock(true); else followLock(false);
                     if (st.version > live.lastVer) pullNow();
                 }
             }).catch(function (e) {

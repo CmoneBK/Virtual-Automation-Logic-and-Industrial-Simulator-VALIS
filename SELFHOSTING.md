@@ -212,7 +212,9 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
   lässt sich die gemeinsame Bearbeitung einschalten. Es hat immer genau
   **einer den Stift** und darf ändern; alle anderen sehen dessen Stand live
   und sind währenddessen schreibgeschützt (dieselben Sperren wie in einer
-  Aufgabe). Der Stift läuft über einen Herzschlag ab – wer den Tab schließt,
+  Aufgabe) – aber nur, solange tatsächlich jemand anders den Stift hält. Ist er
+  **frei**, dürfen alle arbeiten; wer ihn dann übernimmt, gibt seinen Stand vor.
+  Der Stift läuft über einen Herzschlag ab – wer den Tab schließt,
   gibt ihn nach ~25 Sekunden von selbst frei. Bewusst kein CRDT: In VALIS
   schreiben Logikplan, Schaltplan-Editor, FESTO-Freibau und Schrittketten den
   Code jeweils komplett neu, was für ein CRDT wie „alles löschen, alles neu

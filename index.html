@@ -24714,6 +24714,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             el.appendChild(ov);
         }
 
+        // Fuer den Mitlese-Modus der gemeinsamen Bearbeitung freigegeben: dort
+        // werden dieselben Sperren gesetzt wie bei Aufgaben, statt eine zweite
+        // Sperr-Mechanik zu bauen.
+        window._taskApplyBlockAreas   = function (a) { return _taskApplyBlockAreas(a); };
+        window._taskRestoreBlockAreas = function () { return _taskRestoreBlockAreas(); };
+        window._taskIsActive          = function () { return !!activeTask; };
+
         function _taskApplyBlockAreas(areas) {
             if (!areas) return;
             if (areas.codeEditor) {
@@ -64561,6 +64568,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         C.poll = function (since) { return req('obj.php', { action: 'poll', since: since || '' }); };
         /** Macht alle anderen Geräte-Sitzungen dieser Umgebung ungültig. */
         C.logoutOthers = function () { return req('env.php', { action: 'logout_others' }); };
+        /** Stift-Verwaltung der gemeinsamen Bearbeitung. */
+        C.live = function (kind, uid, op, device) {
+            return req('obj.php', { action: 'live', kind: kind, uid: uid, op: op, device: device });
+        };
         /** Uebernimmt ein per Geräte-Link empfangenes Token als eigene Sitzung. */
         C.adoptToken = function (token, env) { writeTok(token); writeEnv(env || ''); };
 
@@ -64923,6 +64934,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         +   '<button data-load="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'style="background:#1565c0;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
                         +     'cursor:pointer;font-size:11px;">Laden</button> '
+                        + (o.kind === 'session'
+                            ? '<button data-live="' + esc(o.uid) + '" data-name="' + esc(o.name || '') + '" '
+                              + 'style="background:#4527a0;color:#fff;border:none;border-radius:3px;'
+                              + 'padding:5px 10px;cursor:pointer;font-size:11px;">Gemeinsam</button> '
+                            : '')
                         +   '<button data-share="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'data-name="' + esc(o.name || '') + '" '
                         +     'style="background:#00695c;color:#fff;border:none;border-radius:3px;padding:5px 10px;'
@@ -64972,6 +64988,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 box.querySelector('#cl-auto').onchange = function () { setAuto(this.checked); };
                 var cfLink = box.querySelector('#cl-cf');
                 if (cfLink) cfLink.onclick = function (ev) { ev.preventDefault(); renderConflicts(); };
+                Array.prototype.forEach.call(box.querySelectorAll('[data-live]'), function (b) {
+                    b.onclick = function () {
+                        renderLive('session', b.getAttribute('data-live'), b.getAttribute('data-name'));
+                    };
+                });
                 Array.prototype.forEach.call(box.querySelectorAll('[data-share]'), function (b) {
                     b.onclick = function () {
                         renderShare(b.getAttribute('data-kind'), b.getAttribute('data-share'),
@@ -64980,7 +65001,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 box.querySelector('#cl-link').onclick = renderLink;
                 box.querySelector('#cl-logout').onclick = function () {
-                    run(C.logout(), 'Abmelden …', function () { render(); });
+                    run(C.logout(), 'Abmelden …', function () { stopLive(); render(); });
                 };
                 Array.prototype.forEach.call(box.querySelectorAll('[data-load]'), function (b) {
                     b.onclick = function () { loadObject(b.getAttribute('data-kind'), b.getAttribute('data-load')); };
@@ -65656,7 +65677,200 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         } catch (_) {}
 
-        /* ---- Konflikte aufloesen ------------------------------------------ */
+        /* ---- Gemeinsame Bearbeitung (Stift-Weitergabe) --------------------- */
+
+        // Bewusst KEIN CRDT: In VALIS schreiben Logikplan, Auto-Schaltplan,
+        // Schaltplan-Editor, FESTO-Freibau und Schrittketten-Panel den Code
+        // jeweils KOMPLETT neu. Fuer ein CRDT sieht das aus wie "alles loeschen,
+        // alles neu einfuegen" und wuerde die gleichzeitigen Aenderungen des
+        // anderen vernichten. Mit genau einem Schreibenden gibt es das Problem
+        // nicht - und im Unterricht entspricht es der Partnerarbeit.
+        var LIVE_MS = 2500;
+        var LIVE_BLOCK = {
+            codeEditor: true, ioPanel: true, logikplan: true, schaltplan: true,
+            circuitEditor: true, factory2d: true, festo: true, factoryNewVars: true
+        };
+        var live = { kind: '', uid: '', name: '', on: false, mine: false, taken: false,
+                     timer: null, lastVer: 0, lastFp: '', locked: false };
+
+        function deviceId() {
+            try {
+                var k = skey('valisCloudDevice'), v = localStorage.getItem(k);
+                if (!v) { v = C.newUid().replace(/-/g, '').slice(0, 24); localStorage.setItem(k, v); }
+                return v;
+            } catch (_) { return 'dev000000000000'; }
+        }
+        function liveRemember() {
+            try {
+                var k = skey('valisCloudLive');
+                if (live.uid) localStorage.setItem(k, JSON.stringify({ kind: live.kind, uid: live.uid, name: live.name }));
+                else localStorage.removeItem(k);
+            } catch (_) {}
+        }
+
+        /** Mitleser bekommen dieselben Sperren wie in einer Aufgabe. */
+        function followLock(on) {
+            // Eine laufende Aufgabe hat Vorrang - ihre Sperren duerfen wir nicht
+            // aufheben, sonst waere die Aufgabe ploetzlich frei bearbeitbar.
+            if (typeof window._taskIsActive === 'function' && window._taskIsActive()) return;
+            try {
+                if (on && !live.locked) { window._taskApplyBlockAreas(LIVE_BLOCK); live.locked = true; }
+                else if (!on && live.locked) { window._taskRestoreBlockAreas(); live.locked = false; }
+            } catch (_) {}
+        }
+
+        /** Einspielen ohne Rueckfrage - loadSnapshot fragt sonst jedes Mal nach. */
+        function restoreSilently(bundle) {
+            var orig = window.confirm;
+            window.confirm = function () { return true; };
+            try { return restoreBundle(bundle); }
+            finally { window.confirm = orig; }
+        }
+
+        function liveBanner(text, color) {
+            var el = document.getElementById('valis-live-banner');
+            if (!text) { if (el && el.parentNode) el.parentNode.removeChild(el); return; }
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'valis-live-banner';
+                el.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);'
+                    + 'z-index:10001;padding:5px 16px;border-radius:0 0 6px 6px;color:#fff;'
+                    + 'font:600 12px "Segoe UI",Tahoma,sans-serif;cursor:pointer;'
+                    + 'box-shadow:0 2px 10px rgba(0,0,0,.45);';
+                el.title = 'Gemeinsame Bearbeitung – klicken zum Öffnen';
+                el.onclick = function () { open(); renderLive(live.kind, live.uid, live.name); };
+                document.body.appendChild(el);
+            }
+            el.textContent = text;
+            el.style.background = color;
+        }
+
+        function pushIfChanged(serverVersion) {
+            var b = captureBundle();
+            if (!b) return;
+            var fp = fpOf(JSON.stringify(b));
+            if (fp === live.lastFp) return;          // nichts Neues
+            var base = live.lastVer || serverVersion || 0;
+            C.put(live.kind, live.uid, live.name, b, base).then(function (j) {
+                live.lastFp = fp; live.lastVer = j.version;
+            }).catch(function (e) {
+                // Sollte mit nur einem Schreibenden nicht vorkommen; falls doch,
+                // beim naechsten Takt mit der richtigen Version erneut versuchen.
+                if (e && e.message === 'conflict' && e.data && e.data.server) {
+                    live.lastVer = e.data.server.version;
+                }
+            });
+        }
+        function pullNow() {
+            C.get(live.kind, live.uid).then(function (o) {
+                if (!restoreSilently(o.data)) return;
+                live.lastVer = o.version;
+                var b = captureBundle();
+                live.lastFp = b ? fpOf(JSON.stringify(b)) : '';
+            }).catch(function () {});
+        }
+
+        function liveTick() {
+            if (!live.uid || !C.isLoggedIn()) return;
+            C.live(live.kind, live.uid, live.mine ? 'beat' : 'status', deviceId()).then(function (st) {
+                live.on = !!st.on; live.mine = !!st.mine; live.taken = !!st.taken;
+                if (!live.on) { stopLive(); say('Gemeinsame Bearbeitung wurde beendet.', '#9e9e9e'); return; }
+                if (live.mine) {
+                    followLock(false);
+                    liveBanner('✏️ Du hast den Stift – ' + (live.name || 'Gemeinsame Sitzung'), '#2e7d32');
+                    pushIfChanged(st.version);
+                } else {
+                    followLock(true);
+                    liveBanner(st.taken
+                        ? '👀 Du liest mit – jemand anders hat den Stift'
+                        : '👀 Gemeinsam – der Stift ist frei', st.taken ? '#1565c0' : '#6d4c41');
+                    if (st.version > live.lastVer) pullNow();
+                }
+            }).catch(function (e) {
+                if (e && (e.message === 'not_found' || e.message === 'unauthorized')) stopLive();
+            });
+        }
+
+        function startLive(kind, uid, name, mine) {
+            live.kind = kind; live.uid = uid; live.name = name || '';
+            live.mine = !!mine; live.lastVer = 0;
+            var b = captureBundle();
+            live.lastFp = (mine && b) ? fpOf(JSON.stringify(b)) : '';
+            liveRemember();
+            if (!live.timer) live.timer = setInterval(liveTick, LIVE_MS);
+            liveTick();
+        }
+        function stopLive() {
+            if (live.timer) { clearInterval(live.timer); live.timer = null; }
+            followLock(false);
+            liveBanner('', '');
+            live.kind = ''; live.uid = ''; live.on = false; live.mine = false;
+            liveRemember();
+        }
+
+        function renderLive(kind, uid, name) {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Status wird geladen …</div>';
+            C.live(kind, uid, 'status', deviceId()).then(function (st) {
+                var aktiv = !!st.on, meins = !!st.mine, belegt = !!st.taken;
+                var lage = !aktiv ? 'Aus – nur du arbeitest an diesem Stand.'
+                         : meins  ? 'Du hast den Stift und kannst bearbeiten.'
+                         : belegt ? 'Jemand anders hat den Stift. Du liest mit.'
+                                  : 'Der Stift ist gerade frei.';
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+                  +   '<b>Gemeinsam bearbeiten</b> – ' + esc(name || uid) + '<br>'
+                  +   'Immer genau <b>einer</b> hat den Stift und darf ändern; alle anderen sehen '
+                  +   'seinen Stand live und arbeiten so lange schreibgeschützt. Dadurch kann '
+                  +   'nichts überschrieben werden.</div>'
+                  + '<div style="background:#252528;border:1px solid #3a3a3a;border-radius:6px;'
+                  +   'padding:12px;margin-bottom:12px;font-size:13px;">' + esc(lage) + '</div>'
+                  + '<div style="display:flex;flex-direction:column;gap:8px;">'
+                  + (!aktiv
+                      ? '<button id="lv-on" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;'
+                        + 'padding:10px;cursor:pointer;font-size:13px;">Gemeinsame Bearbeitung starten</button>'
+                      : (meins
+                          ? '<button id="lv-give" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
+                            + 'padding:10px;cursor:pointer;font-size:13px;">Stift abgeben</button>'
+                          : '<button id="lv-take" style="background:#1565c0;color:#fff;border:none;border-radius:4px;'
+                            + 'padding:10px;cursor:pointer;font-size:13px;">Stift übernehmen'
+                            + (belegt ? '<div style="font-size:11px;opacity:.85;">Erst möglich, wenn der andere '
+                                        + 'abgibt oder ihn ~25 s nicht nutzt.</div>' : '') + '</button>')
+                        + '<button id="lv-off" style="background:#5d2b2b;color:#fff;border:none;border-radius:4px;'
+                        + 'padding:9px;cursor:pointer;font-size:12px;">Gemeinsame Bearbeitung beenden</button>')
+                  +   '<button id="lv-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+                  +     'padding:8px;cursor:pointer;font-size:12px;">Zurück</button>'
+                  + '</div>';
+
+                var b1 = box.querySelector('#lv-on');
+                if (b1) b1.onclick = function () {
+                    run(C.live(kind, uid, 'on', deviceId()), 'Starte …', function () {
+                        startLive(kind, uid, name, true); renderLive(kind, uid, name);
+                    });
+                };
+                var b2 = box.querySelector('#lv-take');
+                if (b2) b2.onclick = function () {
+                    run(C.live(kind, uid, 'claim', deviceId()), 'Übernehme …', function (st2) {
+                        if (!st2.mine) { say('Der Stift ist noch vergeben.', '#ef9a9a'); return; }
+                        startLive(kind, uid, name, true); renderLive(kind, uid, name);
+                    });
+                };
+                var b3 = box.querySelector('#lv-give');
+                if (b3) b3.onclick = function () {
+                    run(C.live(kind, uid, 'release', deviceId()), 'Gebe ab …', function () {
+                        live.mine = false; startLive(kind, uid, name, false); renderLive(kind, uid, name);
+                    });
+                };
+                var b4 = box.querySelector('#lv-off');
+                if (b4) b4.onclick = function () {
+                    run(C.live(kind, uid, 'off', deviceId()), 'Beende …', function () {
+                        stopLive(); renderLive(kind, uid, name);
+                    });
+                };
+                box.querySelector('#lv-back').onclick = renderEnv;
+            }).catch(handleErr);
+        }
+
+        /* ---- Konflikte auflösen ------------------------------------------ */
 
         /** Serverfassung lokal übernehmen - ueber die vorhandenen Import-Pfade. */
         function serverToLocal(cf) {
@@ -65893,7 +66107,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._openCloudPanel = open;
 
             refreshBadge();
-            if (C.isLoggedIn()) { schedule(); startPolling(); pollOnce(); }
+            if (C.isLoggedIn()) {
+                schedule(); startPolling(); pollOnce();
+                // Nach einem Neuladen die gemeinsame Sitzung fortsetzen - als
+                // Mitleser; den Stift muss man bewusst wieder uebernehmen.
+                try {
+                    var lv = JSON.parse(localStorage.getItem(skey('valisCloudLive')) || 'null');
+                    if (lv && lv.uid) startLive(lv.kind || 'session', lv.uid, lv.name, false);
+                } catch (_) {}
+            }
 
             if (linkDevice) {
                 C.adoptToken(linkDevice.token, linkDevice.env);

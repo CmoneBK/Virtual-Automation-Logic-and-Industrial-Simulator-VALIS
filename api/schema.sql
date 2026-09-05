@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS objects (
   version    INT UNSIGNED    NOT NULL DEFAULT 1,
   updated_at DATETIME        NOT NULL,
   deleted_at DATETIME        NULL,
+  -- Gemeinsame Bearbeitung (Stift-Weitergabe): live_on schaltet den Modus,
+  -- live_owner haelt die Geraetekennung des Stiftinhabers, live_until ist der
+  -- Herzschlag. Laeuft er ab, ist der Stift automatisch wieder frei - sonst
+  -- bliebe er nach einem geschlossenen Tab fuer immer vergeben.
+  live_on    TINYINT(1)      NOT NULL DEFAULT 0,
+  live_owner VARCHAR(40)     NULL,
+  live_until DATETIME        NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_obj (env_id, kind, obj_uid),
   KEY idx_env_kind (env_id, kind, deleted_at),

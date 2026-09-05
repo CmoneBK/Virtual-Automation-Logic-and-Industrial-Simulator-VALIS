@@ -71,6 +71,14 @@ mysql -u valis -p valis < api/schema.sql
 Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 `sessions` und `shares` zeigen.
 
+> **Bestehende Installationen** (Schema vor der gemeinsamen Bearbeitung)
+> brauchen einmalig:
+>
+>     mysql -u valis -p valis < api/migrate-live.sql
+>
+> Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
+> Aktion `live` fehl; alles andere läuft unverändert weiter.
+
 > Nutze für das Datenbank-Passwort am besten nur Buchstaben und Ziffern.
 > Zeichen wie `\`, `"`, `$` oder `&` sorgen beim Eintragen in Shell und PHP
 > regelmäßig für schwer auffindbare Fehler.
@@ -200,6 +208,15 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
   sind im Schema vorgesehen, aber noch nicht angebunden.
 * Freigabe-Links (`#s=TOKEN`) sind read-only und je Objekt einmalig aktiv;
   ein neuer Link macht den vorherigen ungültig.
+* **Gemeinsam bearbeiten (Stift-Weitergabe):** Auf einem Sitzungs-Eintrag
+  lässt sich die gemeinsame Bearbeitung einschalten. Es hat immer genau
+  **einer den Stift** und darf ändern; alle anderen sehen dessen Stand live
+  und sind währenddessen schreibgeschützt (dieselben Sperren wie in einer
+  Aufgabe). Der Stift läuft über einen Herzschlag ab – wer den Tab schließt,
+  gibt ihn nach ~25 Sekunden von selbst frei. Bewusst kein CRDT: In VALIS
+  schreiben Logikplan, Schaltplan-Editor, FESTO-Freibau und Schrittketten den
+  Code jeweils komplett neu, was für ein CRDT wie „alles löschen, alles neu
+  einfügen" aussieht und gleichzeitige Änderungen zerstören würde.
 * **Live-Abgleich:** Sind mehrere Geräte in derselben Umgebung angemeldet,
   gleichen sie Aufgaben, Pakete und Szenarien alle 5 Sekunden ab (`obj.php`,
   Aktion `poll`). Bewusst per Polling statt SSE/Long-Polling: eine offene
@@ -296,6 +313,14 @@ mysql -u valis -p valis < api/schema.sql
 
 Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 `sessions` and `shares`.
+
+> **Existing installations** (schema from before collaborative editing) need
+> this once:
+>
+>     mysql -u valis -p valis < api/migrate-live.sql
+>
+> Without the three columns `live_on`, `live_owner`, `live_until` the `live`
+> action fails; everything else keeps working unchanged.
 
 > Prefer an alphanumeric database password. Characters such as `\`, `"`, `$` or
 > `&` reliably cause hard-to-find quoting bugs in shell and PHP.
@@ -423,6 +448,14 @@ and automatic deletion are the brakes. If it gets abused, set
   by the schema but not wired up yet.
 * Share links (`#s=TOKEN`) are read-only and one active link per object;
   creating a new one invalidates the previous.
+* **Collaborative editing (passing the pen):** Collaboration can be switched
+  on from a session entry. Exactly **one device holds the pen** and may edit;
+  everyone else follows live and is write-protected meanwhile (the same locks
+  a task uses). The pen expires via heartbeat – closing the tab releases it
+  after ~25 seconds. Deliberately no CRDT: in VALIS the logic plan, circuit
+  editor, FESTO free build and step chains each rewrite the whole code, which
+  a CRDT sees as "delete everything, insert everything" and which would
+  destroy concurrent edits.
 * **Live sync:** With several devices logged into the same environment, tasks,
   packages and scenarios are reconciled every 5 seconds (`obj.php`, action
   `poll`). Deliberately polling rather than SSE/long-polling: one open

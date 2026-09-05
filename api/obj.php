@@ -207,6 +207,75 @@ if ($act === 'delete') {
     json_out(['ok' => true, 'usage' => sync_usage($envId)]);
 }
 
+// -------------------------------------------- Gemeinsame Bearbeitung (Stift)
+/**
+ * Genau EIN Geraet haelt den Stift und darf schreiben, alle anderen lesen mit.
+ * Damit gibt es keine gleichzeitigen Schreibzugriffe - und folglich weder
+ * Zusammenfuehrung noch Datenverlust.
+ *
+ * Der Stift laeuft ueber einen Herzschlag ab (25 s). Schliesst jemand einfach
+ * den Tab, wird er nach kurzer Zeit von selbst wieder frei.
+ */
+if ($act === 'live') {
+    $kind = clean_kind($in['kind'] ?? '');
+    $uid  = clean_uid($in['uid'] ?? '');
+    $op   = (string)($in['op'] ?? 'status');
+    $dev  = (string)($in['device'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9_-]{8,40}$/', $dev)) fail('device_invalid');
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $sel = $pdo->prepare(
+            'SELECT id, version, updated_at, live_on, live_owner, live_until
+             FROM objects
+             WHERE env_id = ? AND kind = ? AND obj_uid = ? AND deleted_at IS NULL
+             FOR UPDATE'
+        );
+        $sel->execute([$envId, $kind, $uid]);
+        $r = $sel->fetch();
+        if (!$r) { $pdo->rollBack(); fail('not_found', 404); }
+
+        $now   = time();
+        $until = $r['live_until'] ? strtotime($r['live_until'] . ' UTC') : 0;
+        $free  = ($r['live_owner'] === null || $until < $now);
+        $mine  = ($r['live_owner'] === $dev && $until >= $now);
+
+        $newOn = (int)$r['live_on']; $newOwner = $r['live_owner']; $ttl = null;
+        if ($op === 'on')          { $newOn = 1; $newOwner = $dev; $ttl = true; }
+        elseif ($op === 'off')     { $newOn = 0; $newOwner = null; $ttl = false; }
+        elseif ($op === 'claim')   { if ($free || $mine) { $newOn = 1; $newOwner = $dev; $ttl = true; } }
+        elseif ($op === 'beat')    { if ($mine) { $ttl = true; } }
+        elseif ($op === 'release') { if ($mine) { $newOwner = null; $ttl = false; } }
+
+        if ($ttl !== null) {
+            $pdo->prepare(
+                'UPDATE objects SET live_on = ?, live_owner = ?, live_until = ' .
+                ($ttl ? 'DATE_ADD(UTC_TIMESTAMP(), INTERVAL 25 SECOND)' : 'NULL') .
+                ' WHERE id = ?'
+            )->execute([$newOn, $newOwner, $r['id']]);
+            $sel->execute([$envId, $kind, $uid]);
+            $r = $sel->fetch();
+            $until = $r['live_until'] ? strtotime($r['live_until'] . ' UTC') : 0;
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+
+    $t = time();
+    json_out([
+        'ok'         => true,
+        'on'         => (bool)$r['live_on'],
+        // Bewusst nur Ja/Nein statt der fremden Geraetekennung.
+        'mine'       => ($r['live_owner'] === $dev && $until >= $t),
+        'taken'      => ($r['live_owner'] !== null && $until >= $t),
+        'version'    => (int)$r['version'],
+        'updated_at' => $r['updated_at'],
+    ]);
+}
+
 // ----------------------------------------------------------- Aenderungen holen
 /**
  * Liefert die seit `since` geaenderten Objekte - absichtlich OHNE `data`.

@@ -65013,7 +65013,33 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             'Lösche …', function () { renderEnv(); });
                     };
                 });
-            }).catch(handleErr);
+            }).catch(function (e) {
+                // Frueher landete der Fehler nur in der schmalen Statuszeile und der
+                // Kasten blieb auf "Lade …" stehen - jeder Fehler sah aus wie ein
+                // Haenger. Jetzt steht er dort, wo man hinschaut, mit Auswegen.
+                var msg = (e && e.message) || 'unbekannt';
+                box.innerHTML =
+                    '<div style="background:#3a1c1c;border:1px solid #7a3535;border-radius:6px;'
+                  +   'padding:12px;font-size:12px;line-height:1.6;margin-bottom:12px;">'
+                  +   'Die Umgebung konnte nicht geladen werden.<br>'
+                  +   '<span style="color:#ef9a9a;">' + esc(errText(msg)) + '</span>'
+                  +   '<div style="color:#9e9e9e;margin-top:6px;font-size:11px;">Kennung: '
+                  +   esc(msg) + '</div></div>'
+                  + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+                  +   '<button id="cl-retry" style="flex:1;min-width:130px;background:#1565c0;color:#fff;'
+                  +     'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">'
+                  +     'Erneut versuchen</button>'
+                  +   '<button id="cl-relogin" style="flex:1;min-width:130px;background:#455a64;color:#fff;'
+                  +     'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">'
+                  +     'Neu anmelden</button>'
+                  + '</div>';
+                box.querySelector('#cl-retry').onclick = renderEnv;
+                box.querySelector('#cl-relogin').onclick = function () {
+                    C.logout().then(function () { stopLive(); render(); });
+                };
+                say(errText(msg), '#ef9a9a');
+                if (msg === 'unauthorized') { try { localStorage.removeItem('valisCloudToken'); } catch (_) {} }
+            });
         }
 
         /* ---- Speichern / Laden / Konflikt --------------------------------- */
@@ -66070,22 +66096,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 handleErr(e);
             });
         }
+        var ERR_TEXT = {
+            unauthorized: 'Sitzung abgelaufen – bitte neu anmelden.',
+            bad_credentials: 'Code oder PIN stimmt nicht.',
+            locked: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
+            rate_limited: 'Zu viele Anfragen. Bitte später erneut versuchen.',
+            quota_bytes: 'Speicherplatz der Umgebung erschöpft.',
+            quota_objects: 'Maximale Objektzahl erreicht.',
+            object_too_large: 'Dieser Stand ist zu groß zum Speichern.',
+            signup_closed: 'Neue Umgebungen sind derzeit gesperrt.',
+            not_found: 'Nicht gefunden.',
+            code_format: 'Der Code hat das falsche Format.',
+            pin_format: 'PIN muss 4-6 Ziffern haben.',
+            internal: 'Der Server meldet einen internen Fehler. Steht die Datenbank-Migration noch aus?',
+            device_invalid: 'Ungültige Gerätekennung.',
+            config_missing: 'Server ist nicht fertig eingerichtet.'
+        };
+        function errText(m) { return ERR_TEXT[m] || ('Fehler: ' + m); }
+
         function handleErr(e) {
             var m = (e && e.message) || 'unbekannt';
-            var map = {
-                unauthorized: 'Sitzung abgelaufen – bitte neu anmelden.',
-                bad_credentials: 'Code oder PIN stimmt nicht.',
-                locked: 'Zu viele Fehlversuche. Bitte später erneut versuchen.',
-                rate_limited: 'Zu viele Anfragen. Bitte später erneut versuchen.',
-                quota_bytes: 'Speicherplatz der Umgebung erschöpft.',
-                quota_objects: 'Maximale Objektzahl erreicht.',
-                object_too_large: 'Dieser Stand ist zu groß zum Speichern.',
-                signup_closed: 'Neue Umgebungen sind derzeit gesperrt.',
-                not_found: 'Nicht gefunden.',
-                code_format: 'Der Code hat das falsche Format.',
-                pin_format: 'PIN muss 4-6 Ziffern haben.'
-            };
-            say(map[m] || ('Fehler: ' + m), '#ef9a9a');
+            say(errText(m), '#ef9a9a');
             if (m === 'unauthorized') { try { localStorage.removeItem('valisCloudToken'); } catch (_) {} render(); }
         }
 
@@ -66106,6 +66137,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             else document.body.appendChild(btn);
             window._openCloudPanel = open;
 
+            // Den Geraete-Link zuerst einloesen: sonst wird der Anmeldezustand
+            // geprueft, bevor das Token gesetzt ist - Abgleich und gemeinsame
+            // Sitzung wuerden dann gar nicht anlaufen.
+            if (linkDevice) C.adoptToken(linkDevice.token, linkDevice.env);
+
             refreshBadge();
             if (C.isLoggedIn()) {
                 schedule(); startPolling(); pollOnce();
@@ -66117,11 +66153,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } catch (_) {}
             }
 
-            if (linkDevice) {
-                C.adoptToken(linkDevice.token, linkDevice.env);
-                refreshBadge(); schedule(); open(); render();
-                return;
-            }
+            if (linkDevice) { open(); render(); return; }
             if (linkShare) { open(); renderShared(linkShare); return; }
             if (!linkLogin) return;
             open();

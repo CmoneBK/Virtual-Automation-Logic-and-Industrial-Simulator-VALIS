@@ -77,6 +77,7 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-devicelinks.sql
 >     mysql -u valis -p valis < api/migrate-penrequest.sql
 >     mysql -u valis -p valis < api/migrate-livemode.sql
+>     mysql -u valis -p valis < api/migrate-presence.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -222,6 +223,16 @@ missbraucht, setze `allow_open_signup` auf `false` und vergib ein `signup_secret
     komplett neu, bleibt nach dem Diff nur die tatsächlich geänderte Zeile
     übrig – gleichzeitiges Tippen überlebt.
 
+* **Anwesenheit:** In beiden Betriebsarten sieht man die **Schreibmarke der
+  anderen im Code-Editor** (farbig, mit Namensfähnchen) und ihren **Mauszeiger
+  in der 2D-Anlage**. Die Position wird in Anlagenkoordinaten übertragen, damit
+  sie trotz unterschiedlichem Zoom bei allen an derselben Stelle landet.
+  Übertragen werden **keine Namen** – Farbe und Bezeichnung leitet der Client
+  aus der zufälligen Gerätekennung ab.
+  Getaktet mit 1 s bei Aktivität, 3 s bei Untätigkeit, im Hintergrundtab gar
+  nicht. Gemessen kostet eine Anfrage ~2 ms, 30 Teilnehmer belegen damit
+  rechnerisch 0,06 PHP-Prozesse – die Last ist vernachlässigbar.
+
 * **Stift-Weitergabe im Detail:** Auf einem Sitzungs-Eintrag
   lässt sich die gemeinsame Bearbeitung einschalten. Es hat immer genau
   **einer den Stift** und darf ändern; alle anderen sehen dessen Stand live
@@ -336,6 +347,7 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-devicelinks.sql
 >     mysql -u valis -p valis < api/migrate-penrequest.sql
 >     mysql -u valis -p valis < api/migrate-livemode.sql
+>     mysql -u valis -p valis < api/migrate-presence.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.

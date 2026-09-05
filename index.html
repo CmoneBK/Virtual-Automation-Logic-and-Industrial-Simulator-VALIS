@@ -64579,6 +64579,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         /** Macht alle anderen Geräte-Sitzungen dieser Umgebung ungültig. */
         C.logoutOthers = function () { return req('env.php', { action: 'logout_others' }); };
         /** Stift-Verwaltung der gemeinsamen Bearbeitung. */
+        /** Eigene Position senden und die der anderen holen - ein Aufruf. */
+        C.presence = function (kind, uid, device, caret, caretEnd, mx, my) {
+            return req('presence.php', {
+                kind: kind, uid: uid, device: device,
+                caret: caret, caret_end: caretEnd, mx: mx, my: my
+            });
+        };
         C.live = function (kind, uid, op, device, mode) {
             return req('obj.php', {
                 action: 'live', kind: kind, uid: uid, op: op, device: device, mode: mode || ''
@@ -66221,10 +66228,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             live.lastFp = '';
             liveRemember();
             if (!live.timer) live.timer = setInterval(liveTick, LIVE_MS);
+            presStart();
             liveTick();
         }
         function stopLive() {
             if (live.timer) { clearInterval(live.timer); live.timer = null; }
+            presStop();
             followLock(false);
             liveBanner('', '');
             live.kind = ''; live.uid = ''; live.on = false; live.mine = false;
@@ -66396,6 +66405,195 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
             });
         }
+
+        /* ---- Anwesenheit: fremde Schreibmarke und Mauszeiger --------------- */
+
+        // Farbe und Name werden aus der zufaelligen Geraetekennung abgeleitet -
+        // es wird ausdruecklich KEIN Klarname uebertragen. Damit bleibt die
+        // Grundlage erhalten, dass der Server keine Person kennt.
+        var PEER_LOOK = [
+            { c: '#ec407a', n: 'Rosa' }, { c: '#42a5f5', n: 'Blau' },
+            { c: '#26a69a', n: 'Türkis' }, { c: '#ffa726', n: 'Orange' },
+            { c: '#9ccc65', n: 'Grün' }, { c: '#ab47bc', n: 'Violett' }
+        ];
+        function peerLook(dev) {
+            var h = 0;
+            for (var i = 0; i < dev.length; i++) h = (h * 31 + dev.charCodeAt(i)) >>> 0;
+            return PEER_LOOK[h % PEER_LOOK.length];
+        }
+
+        var PRES_FAST = 1000, PRES_SLOW = 3000, PRES_IDLE = 15000;
+        var presTimer = null, presBusy = false, presLastAct = 0, presSkip = 0;
+        var presMouse = { x: null, y: null }, presPeers = [];
+
+        function presActive() { return (Date.now() - presLastAct) < PRES_IDLE; }
+
+        /** Bildschirmpunkt -> Anlagenkoordinate. Der Massstab wird aus dem DOM
+         *  abgelesen, damit Zoom und Verschiebung auf beiden Rechnern passen. */
+        function factoryScaleNow(fc) {
+            return (fc && fc.offsetWidth) ? (fc.getBoundingClientRect().width / fc.offsetWidth) : 1;
+        }
+        function clientToFactory(cx, cy) {
+            var fc = document.getElementById('factory-content');
+            if (!fc) return null;
+            var r = fc.getBoundingClientRect(), sc = factoryScaleNow(fc) || 1;
+            return { x: Math.round((cx - r.left) / sc), y: Math.round((cy - r.top) / sc) };
+        }
+        function factoryToClient(fx, fy) {
+            var fc = document.getElementById('factory-content');
+            if (!fc) return null;
+            var r = fc.getBoundingClientRect(), sc = factoryScaleNow(fc) || 1;
+            return { x: r.left + fx * sc, y: r.top + fy * sc };
+        }
+
+        /** Zeichenposition -> Bildschirmrechteck, gemessen am Highlight-Spiegel.
+         *  Der ist zeichengenau ausgerichtet, sonst saesse das Syntax-Highlighting
+         *  daneben - deshalb laesst sich daran exakt messen, statt zu schaetzen. */
+        function offsetToRect(offset) {
+            var hl = document.getElementById('highlighting-content');
+            if (!hl || offset < 0) return null;
+            try {
+                var w = document.createTreeWalker(hl, NodeFilter.SHOW_TEXT, null, false);
+                var acc = 0, node;
+                while ((node = w.nextNode())) {
+                    var len = node.nodeValue.length;
+                    if (acc + len >= offset) {
+                        var rg = document.createRange();
+                        var loc = Math.max(0, Math.min(len, offset - acc));
+                        rg.setStart(node, loc); rg.setEnd(node, loc);
+                        var rect = rg.getBoundingClientRect();
+                        if (rect && (rect.height || rect.top)) return rect;
+                        return node.parentNode && node.parentNode.getBoundingClientRect
+                             ? node.parentNode.getBoundingClientRect() : null;
+                    }
+                    acc += len;
+                }
+            } catch (_) {}
+            return null;
+        }
+
+        function presLayer() {
+            var l = document.getElementById('valis-presence');
+            if (!l) {
+                l = document.createElement('div');
+                l.id = 'valis-presence';
+                l.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
+                document.body.appendChild(l);
+            }
+            return l;
+        }
+        function presClear() {
+            var l = document.getElementById('valis-presence');
+            if (l && l.parentNode) l.parentNode.removeChild(l);
+            presPeers = [];
+        }
+
+        function presRender() {
+            if (!live.uid || !presPeers.length) { presClear(); return; }
+            var l = presLayer();
+            l.innerHTML = '';
+            var ta = document.getElementById('code');
+            var taRect = ta ? ta.getBoundingClientRect() : null;
+
+            presPeers.forEach(function (pr) {
+                var look = peerLook(pr.device || '');
+
+                // Schreibmarke im Code-Editor
+                if (taRect && pr.caret >= 0) {
+                    var rc = offsetToRect(pr.caret);
+                    // Ausserhalb des sichtbaren Editorbereichs nicht zeichnen -
+                    // sonst klebte die Marke beim Scrollen ueber anderen Panels.
+                    if (rc && rc.top >= taRect.top - 2 && rc.bottom <= taRect.bottom + 2
+                           && rc.left >= taRect.left - 2 && rc.left <= taRect.right + 2) {
+                        var h = rc.height || 16;
+                        var car = document.createElement('div');
+                        car.style.cssText = 'position:fixed;width:2px;border-radius:1px;'
+                            + 'background:' + look.c + ';left:' + rc.left + 'px;top:' + rc.top
+                            + 'px;height:' + h + 'px;box-shadow:0 0 4px ' + look.c + ';';
+                        l.appendChild(car);
+                        var tag = document.createElement('div');
+                        tag.textContent = look.n;
+                        tag.style.cssText = 'position:fixed;left:' + rc.left + 'px;top:'
+                            + Math.max(0, rc.top - 13) + 'px;background:' + look.c
+                            + ';color:#fff;font:600 9px "Segoe UI",sans-serif;padding:1px 4px;'
+                            + 'border-radius:3px 3px 3px 0;white-space:nowrap;';
+                        l.appendChild(tag);
+                    }
+                }
+
+                // Mauszeiger in der 2D-Anlage
+                if (pr.mx !== null && pr.my !== null) {
+                    var fw = document.getElementById('factory-wrapper');
+                    var pt = factoryToClient(pr.mx, pr.my);
+                    var fr = fw ? fw.getBoundingClientRect() : null;
+                    if (pt && fr && pt.x >= fr.left && pt.x <= fr.right
+                            && pt.y >= fr.top && pt.y <= fr.bottom) {
+                        var cur = document.createElement('div');
+                        cur.innerHTML = '<svg width="14" height="18" viewBox="0 0 14 18">'
+                            + '<path d="M1 1 L1 14 L4.5 10.5 L7 16 L9.5 15 L7 9.7 L12 9.7 Z" '
+                            + 'fill="' + look.c + '" stroke="#fff" stroke-width="1"/></svg>';
+                        cur.style.cssText = 'position:fixed;left:' + pt.x + 'px;top:' + pt.y + 'px;';
+                        l.appendChild(cur);
+                        var nm = document.createElement('div');
+                        nm.textContent = look.n;
+                        nm.style.cssText = 'position:fixed;left:' + (pt.x + 12) + 'px;top:'
+                            + (pt.y + 12) + 'px;background:' + look.c + ';color:#fff;'
+                            + 'font:600 9px "Segoe UI",sans-serif;padding:1px 4px;border-radius:3px;';
+                        l.appendChild(nm);
+                    }
+                }
+            });
+        }
+
+        function presTick() {
+            if (presBusy || !live.uid || !C.isLoggedIn()) return;
+            if (typeof C.presence !== 'function') return;   // waere sonst ein Fehler je Sekunde
+            if (document.hidden) return;              // im Hintergrund gar nichts senden
+            presBusy = true;
+            var ta = document.getElementById('code');
+            var car = (ta && document.activeElement === ta) ? ta.selectionStart : -1;
+            var cEnd = (ta && document.activeElement === ta) ? ta.selectionEnd : -1;
+            C.presence(live.kind, live.uid, deviceId(), car, cEnd, presMouse.x, presMouse.y)
+             .then(function (j) { presPeers = j.peers || []; presRender(); })
+             .catch(function () {})
+             .then(function () { presBusy = false; });
+        }
+
+        function presStart() {
+            if (presTimer) return;
+            presLastAct = Date.now();
+            presTimer = setInterval(function () {
+                // Bei Untaetigkeit nur jeden dritten Takt senden - spart Anfragen
+                // und Akku, ohne dass es auffaellt. Abzaehlen statt Wanduhr-Modulo,
+                // damit das Verhalten vorhersagbar und pruefbar bleibt.
+                if (!presActive()) {
+                    presSkip = (presSkip + 1) % (PRES_SLOW / PRES_FAST);
+                    if (presSkip !== 0) return;
+                } else { presSkip = 0; }
+                presTick();
+            }, PRES_FAST);
+        }
+        function presStop() {
+            if (presTimer) { clearInterval(presTimer); presTimer = null; }
+            presClear();
+        }
+
+        try {
+            document.addEventListener('mousemove', function (e) {
+                presLastAct = Date.now();
+                var fw = document.getElementById('factory-wrapper');
+                if (!fw) return;
+                var r = fw.getBoundingClientRect();
+                if (e.clientX < r.left || e.clientX > r.right ||
+                    e.clientY < r.top  || e.clientY > r.bottom) { presMouse = { x: null, y: null }; return; }
+                var f = clientToFactory(e.clientX, e.clientY);
+                if (f) presMouse = f;
+            }, true);
+            document.addEventListener('keydown', function () { presLastAct = Date.now(); }, true);
+            // Beim Scrollen im Editor wandern die fremden Marken mit.
+            var taScroll = document.getElementById('code');
+            if (taScroll) taScroll.addEventListener('scroll', presRender);
+        } catch (_) {}
 
         /* ---- Zugangs-Link ------------------------------------------------- */
 

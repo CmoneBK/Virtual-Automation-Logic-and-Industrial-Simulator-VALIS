@@ -141,7 +141,14 @@ Die Aktion `live` kennt zwei Betriebsarten (`live_mode`): `pen`
 (Stift-Weitergabe, genau einer schreibt) und `rt` (Echtzeit, alle schreiben;
 die Zusammenfuehrung der Staende passiert im Client).
 | `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
+| `presence.php` | Schreibmarke und Mauszeiger (Bearer-Token) |
 | `gc.php` | Wartung, per Cron |
+
+Der Endpunkt `presence.php` schreibt die eigene Position UND liefert die der
+anderen in einem Aufruf. Er wird im Sekundentakt gerufen und ist deshalb
+bewusst schlank: ein Upsert, ein Select, ein kleines Aufraeum-Delete. Eintraege
+aelter als 15 s gelten als abwesend. Uebertragen werden keine Namen - Farbe und
+Bezeichnung leitet der Client aus der zufaelligen Geraetekennung ab.
 
 ## Freigabe-Links
 

@@ -34,6 +34,9 @@ $out['shares_deleted'] = $st->rowCount();
 $st = $pdo->query('DELETE FROM device_links WHERE expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()');
 $out['device_links_deleted'] = $st->rowCount();
 
+$st = $pdo->query('DELETE FROM presence WHERE updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR)');
+$out['presence_deleted'] = $st->rowCount();
+
 // Objekte, die als geloescht markiert wurden, nach 30 Tagen endgueltig entfernen.
 $st = $pdo->query('DELETE FROM objects WHERE deleted_at IS NOT NULL AND deleted_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)');
 $out['objects_purged'] = $st->rowCount();

@@ -227,7 +227,7 @@ if ($act === 'live') {
     $pdo->beginTransaction();
     try {
         $sel = $pdo->prepare(
-            'SELECT id, version, updated_at, live_on, live_owner, live_until
+            'SELECT id, version, updated_at, live_on, live_owner, live_until, live_req_at
              FROM objects
              WHERE env_id = ? AND kind = ? AND obj_uid = ? AND deleted_at IS NULL
              FOR UPDATE'
@@ -242,18 +242,31 @@ if ($act === 'live') {
         $mine  = ($r['live_owner'] === $dev && $until >= $now);
 
         $newOn = (int)$r['live_on']; $newOwner = $r['live_owner']; $ttl = null;
-        if ($op === 'on')          { $newOn = 1; $newOwner = $dev; $ttl = true; }
-        elseif ($op === 'off')     { $newOn = 0; $newOwner = null; $ttl = false; }
-        elseif ($op === 'claim')   { if ($free || $mine) { $newOn = 1; $newOwner = $dev; $ttl = true; } }
+        // $req: true = Anfrage setzen, false = loeschen, null = unveraendert
+        $req = null;
+        if ($op === 'on')          { $newOn = 1; $newOwner = $dev; $ttl = true;  $req = false; }
+        elseif ($op === 'off')     { $newOn = 0; $newOwner = null; $ttl = false; $req = false; }
+        elseif ($op === 'claim')   {
+            if ($free || $mine) { $newOn = 1; $newOwner = $dev; $ttl = true; $req = false; }
+            // Vergeben: die Anfrage vormerken, damit der Inhaber sie sieht.
+            else { $req = true; }
+        }
         elseif ($op === 'beat')    { if ($mine) { $ttl = true; } }
-        elseif ($op === 'release') { if ($mine) { $newOwner = null; $ttl = false; } }
+        elseif ($op === 'release') { if ($mine) { $newOwner = null; $ttl = false; $req = false; } }
 
-        if ($ttl !== null) {
-            $pdo->prepare(
-                'UPDATE objects SET live_on = ?, live_owner = ?, live_until = ' .
-                ($ttl ? 'DATE_ADD(UTC_TIMESTAMP(), INTERVAL 25 SECOND)' : 'NULL') .
-                ' WHERE id = ?'
-            )->execute([$newOn, $newOwner, $r['id']]);
+        if ($ttl !== null || $req !== null) {
+            $sets = [];
+            $args = [];
+            if ($ttl !== null) {
+                $sets[] = 'live_on = ?';    $args[] = $newOn;
+                $sets[] = 'live_owner = ?'; $args[] = $newOwner;
+                $sets[] = 'live_until = ' . ($ttl ? 'DATE_ADD(UTC_TIMESTAMP(), INTERVAL 25 SECOND)' : 'NULL');
+            }
+            if ($req !== null) {
+                $sets[] = 'live_req_at = ' . ($req ? 'UTC_TIMESTAMP()' : 'NULL');
+            }
+            $args[] = $r['id'];
+            $pdo->prepare('UPDATE objects SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($args);
             $sel->execute([$envId, $kind, $uid]);
             $r = $sel->fetch();
             $until = $r['live_until'] ? strtotime($r['live_until'] . ' UTC') : 0;
@@ -265,12 +278,16 @@ if ($act === 'live') {
     }
 
     $t = time();
+    $reqAt = $r['live_req_at'] ? strtotime($r['live_req_at'] . ' UTC') : 0;
     json_out([
         'ok'         => true,
         'on'         => (bool)$r['live_on'],
         // Bewusst nur Ja/Nein statt der fremden Geraetekennung.
         'mine'       => ($r['live_owner'] === $dev && $until >= $t),
         'taken'      => ($r['live_owner'] !== null && $until >= $t),
+        // Frische Anfrage (20 s). Eine aeltere gilt als verfallen, damit ein
+        // einmaliger Klick nicht dauerhaft blinkt.
+        'requested'  => ($reqAt > 0 && ($t - $reqAt) < 20),
         'version'    => (int)$r['version'],
         'updated_at' => $r['updated_at'],
     ]);

@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS objects (
   live_on    TINYINT(1)      NOT NULL DEFAULT 0,
   live_owner VARCHAR(40)     NULL,
   live_until DATETIME        NULL,
+  -- Zeitpunkt der letzten Stift-Anfrage. Der Inhaber sieht daran, dass jemand
+  -- uebernehmen moechte; sonst bliebe ein Klick des anderen voellig unsichtbar.
+  live_req_at DATETIME       NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_obj (env_id, kind, obj_uid),
   KEY idx_env_kind (env_id, kind, deleted_at),

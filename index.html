@@ -66936,6 +66936,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Was hier NICHT steht, ist der Punkt: es gibt keinen Aufruf, der in eine
         // fremde Umgebung hineinsieht. Der Endpunkt bietet ihn nicht an.
 
+        // Beim Loeschen wird einmal je Sitzung nachgefragt, nicht bei jedem Mal:
+        // wer aufraeumt, tut das meist in Serie, und eine Frage, die immer kommt,
+        // wird weggeklickt statt gelesen. Nach einem Neuladen fragt sie erneut.
+        var admDelAsked = false;
+
         function admRow(k, v) {
             return '<tr><td style="padding:3px 10px 3px 0;color:#9e9e9e;">' + k + '</td>'
                  + '<td style="padding:3px 0;text-align:right;font-variant-numeric:tabular-nums;">'
@@ -67120,10 +67125,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     run(C.admUnlock(id), 'Entsperre …', function () { renderAdminEnv(id); });
                 };
                 box.querySelector('#av-del').onclick = function () {
-                    var a = prompt('Umgebung #' + id + ' endgültig löschen? Alles darin geht mit. '
-                                 + 'Zum Bestätigen LÖSCHEN eingeben:', '');
-                    if (a === null) return;
-                    if (a.trim().toUpperCase() !== 'LÖSCHEN') { say('Abgebrochen.', '#9e9e9e'); return; }
+                    if (!admDelAsked) {
+                        if (!confirm('Umgebungen endgültig löschen? Alles darin geht mit, '
+                                   + 'und es gibt keine Wiederherstellung.\n\n'
+                                   + 'Diese Frage kommt nur einmal je Sitzung.')) return;
+                        admDelAsked = true;
+                    }
                     run(C.admDelete(id), 'Lösche …', function () {
                         say('Umgebung #' + id + ' gelöscht.', '#8bc34a'); renderAdminEnvs('bytes');
                     });

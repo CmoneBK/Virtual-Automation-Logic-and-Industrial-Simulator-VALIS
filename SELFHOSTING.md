@@ -286,9 +286,12 @@ und `SUM` lesen, nie `name` oder `data`.
 * **Sperren** setzt `locked_until` **und beendet laufende Sitzungen samt
   Geräte-Links**. Ohne das zweite liefe ein bereits angemeldetes Gerät
   unbehelligt weiter – die Sperre wäre wirkungslos.
-* **Löschen** entfernt die Umgebung mit allem darin (CASCADE) und verlangt ein
-  getipptes Bestätigungswort. Die eigene Umgebung lässt sich weder sperren noch
-  löschen.
+* **Löschen** entfernt die Umgebung mit allem darin (CASCADE). Die Oberfläche
+  fragt **einmal je Sitzung** nach – wer aufräumt, tut das meist in Serie, und
+  eine Frage, die jedes Mal kommt, wird weggeklickt statt gelesen. Die
+  Schnittstelle verlangt zusätzlich ein Kennzeichen `confirm`, damit eine
+  versehentliche Anfrage nichts löscht. Die eigene Umgebung lässt sich weder
+  sperren noch löschen.
 
 `admin_log` hat **bewusst keine Fremdschlüssel**: ein Eintrag muss die gelöschte
 Umgebung überleben, sonst räumte gerade das Löschen seinen eigenen Nachweis weg.
@@ -699,9 +702,11 @@ this: the endpoint may read only `COUNT` and `SUM` from `objects`, never `name` 
 * **Lock** sets `locked_until` **and kills running sessions and device links**.
   Without the latter an already logged-in device would carry on untouched and the
   lock would be pointless.
-* **Delete** removes the environment with everything in it (CASCADE) and requires
-  a typed confirmation word. Your own environment can be neither locked nor
-  deleted.
+* **Delete** removes the environment with everything in it (CASCADE). The UI asks
+  **once per session** – clearing up usually happens in a run, and a question that
+  comes every time gets clicked away instead of read. The endpoint additionally
+  requires a `confirm` flag so a stray request deletes nothing. Your own
+  environment can be neither locked nor deleted.
 
 `admin_log` deliberately has **no foreign keys**: an entry has to outlive the
 deleted environment, otherwise deletion would tidy away its own record.

@@ -238,8 +238,10 @@ Zwei Eingriffe, beide ueber die Umgebungs-ID, beide protokolliert:
 * `env_lock` setzt `locked_until` UND loescht Sitzungen und Geraete-Links.
   `locked_until` blockiert nur die ANMELDUNG - ohne den zweiten Schritt liefe
   ein bereits angemeldetes Geraet unbehelligt weiter.
-* `env_delete` verlangt `confirm` = `DELETE` und trifft alles in der
-  Umgebung (CASCADE). Die eigene Umgebung ist fuer beides gesperrt.
+* `env_delete` verlangt das Kennzeichen `confirm` = `DELETE` und trifft alles
+  in der Umgebung (CASCADE). Das ist der Riegel gegen eine versehentliche
+  Anfrage; die Rueckfrage an den Menschen macht die Oberflaeche, einmal je
+  Sitzung. Die eigene Umgebung ist fuer beides gesperrt.
 
 `admin_log` hat KEINE Fremdschluessel: ein Eintrag muss die geloeschte Umgebung
 ueberleben, sonst raeumte das Loeschen seinen eigenen Nachweis weg.

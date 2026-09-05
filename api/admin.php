@@ -203,8 +203,10 @@ if ($act === 'env_delete') {
     $actor = adm_require();
     $id    = adm_int($in['id'] ?? 0);
     if ($id === $actor) fail('self_target', 400);
-    // Ausdrueckliche Bestaetigung: der Eingriff ist endgueltig und trifft alles,
-    // was in der Umgebung liegt (CASCADE).
+    // Riegel gegen eine versehentliche Anfrage: ohne dieses Kennzeichen loescht
+    // der Endpunkt nichts. Die Rueckfrage an den Menschen macht die Oberflaeche,
+    // einmal je Sitzung - der Eingriff ist endgueltig und trifft alles, was in
+    // der Umgebung liegt (CASCADE).
     if (($in['confirm'] ?? '') !== 'DELETE') fail('confirm_required', 400);
 
     $st = db()->prepare('DELETE FROM environments WHERE id = ?');

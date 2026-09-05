@@ -71,6 +71,22 @@ CREATE TABLE IF NOT EXISTS shares (
   CONSTRAINT fk_shares_obj FOREIGN KEY (object_id) REFERENCES objects (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Geraete-Links. Bewusst NICHT dasselbe wie eine Sitzung: ein Link soll ein
+-- Abmelden ueberleben, sonst waere eine Verknuepfung auf dem Rechner nach dem
+-- ersten Abmelden dauerhaft wertlos. Beim Oeffnen wird das Link-Token gegen
+-- eine frische Sitzung eingetauscht.
+CREATE TABLE IF NOT EXISTS device_links (
+  token_hash   CHAR(64)        NOT NULL,
+  env_id       BIGINT UNSIGNED NOT NULL,
+  created_at   DATETIME        NOT NULL,
+  expires_at   DATETIME        NULL,
+  last_used_at DATETIME        NULL,
+  uses         INT UNSIGNED    NOT NULL DEFAULT 0,
+  PRIMARY KEY (token_hash),
+  KEY idx_env (env_id),
+  CONSTRAINT fk_devlinks_env FOREIGN KEY (env_id) REFERENCES environments (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
   bucket       VARCHAR(48) NOT NULL,
   window_start BIGINT      NOT NULL,

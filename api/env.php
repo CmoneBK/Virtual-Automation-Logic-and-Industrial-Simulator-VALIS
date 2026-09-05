@@ -162,7 +162,11 @@ if ($act === 'logout_others') {
     $keep = isset($mm[1]) ? token_hash($mm[1]) : '';
     $st = db()->prepare('DELETE FROM sessions WHERE env_id = ? AND token_hash <> ?');
     $st->execute([$envId, $keep]);
-    json_out(['ok' => true, 'removed' => $st->rowCount()]);
+    // Auch die Geraete-Links entwerten: Wer diesen Notausgang zieht, hat
+    // typischerweise eine Verknuepfung verloren - die muss mit sterben.
+    $sl = db()->prepare('DELETE FROM device_links WHERE env_id = ?');
+    $sl->execute([$envId]);
+    json_out(['ok' => true, 'removed' => $st->rowCount(), 'links_removed' => $sl->rowCount()]);
 }
 
 // ------------------------------------------------- Geraete-Link ausstellen
@@ -172,7 +176,38 @@ if ($act === 'logout_others') {
 // Geraet beendet die Sitzung des anderen also nicht.
 if ($act === 'devicelink') {
     $envId = require_env();
-    json_out(['ok' => true, 'env' => env_ref($envId)] + issue_token($envId));
+    $days  = 365;
+    $token = rtrim(strtr(base64_encode(random_bytes(33)), '+/', '-_'), '=');
+    db()->prepare(
+        'INSERT INTO device_links (token_hash, env_id, created_at, expires_at)
+         VALUES (?, ?, UTC_TIMESTAMP(), DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY))'
+    )->execute([devlink_hash($token), $envId, $days]);
+    json_out(['ok' => true, 'token' => $token, 'env' => env_ref($envId), 'expires_days' => $days]);
+}
+
+// ------------------------------------------- Geraete-Link einloesen
+// Ohne Anmeldung erreichbar - der Link IST der Nachweis. Er wird gegen eine
+// frische Sitzung getauscht und bleibt dabei bestehen, damit eine Verknuepfung
+// auf dem Rechner auch nach einem Abmelden weiter funktioniert.
+if ($act === 'redeem') {
+    if (!rate_ok('redeem|' . ip_hash(), 120, 3600)) fail('rate_limited', 429);
+    $token = (string)($in['token'] ?? '');
+    if (!preg_match('/^[A-Za-z0-9_\-]{20,120}$/', $token)) fail('not_found', 404);
+
+    $st = db()->prepare(
+        'SELECT env_id FROM device_links
+         WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())'
+    );
+    $st->execute([devlink_hash($token)]);
+    $envId = $st->fetchColumn();
+    if ($envId === false) { usleep(random_int(80000, 160000)); fail('not_found', 404); }
+
+    db()->prepare(
+        'UPDATE device_links SET last_used_at = UTC_TIMESTAMP(), uses = uses + 1 WHERE token_hash = ?'
+    )->execute([devlink_hash($token)]);
+    db()->prepare('UPDATE environments SET last_seen_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$envId]);
+
+    json_out(['ok' => true, 'env' => env_ref((int)$envId)] + issue_token((int)$envId));
 }
 
 fail('unknown_action');

@@ -71,10 +71,10 @@ mysql -u valis -p valis < api/schema.sql
 Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 `sessions` und `shares` zeigen.
 
-> **Bestehende Installationen** (Schema vor der gemeinsamen Bearbeitung)
-> brauchen einmalig:
+> **Bestehende Installationen** brauchen einmalig:
 >
 >     mysql -u valis -p valis < api/migrate-live.sql
+>     mysql -u valis -p valis < api/migrate-devicelinks.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -314,10 +314,10 @@ mysql -u valis -p valis < api/schema.sql
 Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 `sessions` and `shares`.
 
-> **Existing installations** (schema from before collaborative editing) need
-> this once:
+> **Existing installations** need this once:
 >
 >     mysql -u valis -p valis < api/migrate-live.sql
+>     mysql -u valis -p valis < api/migrate-devicelinks.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.

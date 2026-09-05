@@ -121,6 +121,11 @@ function code_hash(string $code): string {
 function token_hash(string $token): string {
     return hash('sha256', valis_config()['pepper'] . '|tok|' . $token);
 }
+/** Eigener Hash-Raum fuer Geraete-Links, damit ein Link-Token nie als
+ *  Sitzungs-Token durchgeht (und umgekehrt). */
+function devlink_hash(string $token): string {
+    return hash('sha256', valis_config()['pepper'] . '|devlink|' . $token);
+}
 /**
  * IP nur als tagesgesalzener Hash – wir speichern nie eine rohe IP.
  * (Die Apache-Logs sind davon unberuehrt und separat zu konfigurieren.)

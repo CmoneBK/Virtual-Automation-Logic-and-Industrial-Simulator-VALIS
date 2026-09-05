@@ -64564,6 +64564,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         /** Stellt ein eigenes Sitzungstoken für ein anderes Gerät aus. */
         C.deviceLink = function () { return req('env.php', { action: 'devicelink' }); };
+        /** Geraete-Link gegen eine frische Sitzung tauschen - ohne Anmeldung. */
+        C.redeemDeviceLink = function (token) {
+            return req('env.php', { action: 'redeem', token: token }, false);
+        };
         /** Kopfdaten der seit `since` geaenderten Objekte (ohne data). */
         C.poll = function (since) { return req('obj.php', { action: 'poll', since: since || '' }); };
         /** Macht alle anderen Geräte-Sitzungen dieser Umgebung ungültig. */
@@ -64651,27 +64655,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Apache-Access-Log auf. Das Fragment wird sofort aus der Adresszeile
         // entfernt, damit der Code nicht sichtbar stehen bleibt.
         var linkLogin = null, linkShare = null, linkDevice = null;
-        try {
-            var md = (location.hash || '').match(/^#dev=([A-Za-z0-9_\-]{20,120})(?:&e=([a-f0-9]{16}))?$/);
-            if (md) {
-                linkDevice = { token: md[1], env: md[2] || '' };
-                history.replaceState(null, '', location.pathname + location.search);
-            }
-            var ms = (location.hash || '').match(/^#s=([A-Za-z2-9]{12})$/);
-            if (ms) {
-                linkShare = ms[1].toUpperCase();
-                history.replaceState(null, '', location.pathname + location.search);
-            }
-            var m = (location.hash || '').match(/^#env=([^&]+)(?:&p=([01]))?/);
-            if (m) {
-                linkLogin = {
-                    code: decodeURIComponent(m[1]),
-                    hasPin: m[2] === '1',
-                    known: typeof m[2] !== 'undefined'
-                };
-                history.replaceState(null, '', location.pathname + location.search);
-            }
-        } catch (_) {}
+        function parseHash() {
+            linkLogin = null; linkShare = null; linkDevice = null;
+            try {
+                var md = (location.hash || '').match(/^#dev=([A-Za-z0-9_\-]{20,120})(?:&e=([a-f0-9]{16}))?$/);
+                if (md) {
+                    linkDevice = { token: md[1], env: md[2] || '' };
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
+                var ms = (location.hash || '').match(/^#s=([A-Za-z2-9]{12})$/);
+                if (ms) {
+                    linkShare = ms[1].toUpperCase();
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
+                var m = (location.hash || '').match(/^#env=([^&]+)(?:&p=([01]))?/);
+                if (m) {
+                    linkLogin = {
+                        code: decodeURIComponent(m[1]),
+                        hasPin: m[2] === '1',
+                        known: typeof m[2] !== 'undefined'
+                    };
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
+            } catch (_) {}
+            return !!(linkLogin || linkShare || linkDevice);
+        }
+        parseHash();
 
         function esc(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -64936,8 +64945,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         +     'cursor:pointer;font-size:11px;">Laden</button> '
                         + (o.kind === 'session'
                             ? '<button data-live="' + esc(o.uid) + '" data-name="' + esc(o.name || '') + '" '
+                              + 'title="An diesem Stand gemeinsam arbeiten. Die anderen müssen in '
+                              + 'DIESER Umgebung angemeldet sein (Zugangs-Link) – der Freigabe-Link '
+                              + 'aus &quot;Teilen&quot; genügt dafür nicht." '
                               + 'style="background:#4527a0;color:#fff;border:none;border-radius:3px;'
-                              + 'padding:5px 10px;cursor:pointer;font-size:11px;">Gemeinsam</button> '
+                              + 'padding:5px 10px;cursor:pointer;font-size:11px;">👥 Zusammen</button>'
+                              + '<span style="display:inline-block;width:1px;height:14px;'
+                              + 'background:#3a3a3a;margin:0 7px;vertical-align:middle;"></span>'
                             : '')
                         +   '<button data-share="' + esc(o.uid) + '" data-kind="' + esc(o.kind) + '" '
                         +     'data-name="' + esc(o.name || '') + '" '
@@ -65914,8 +65928,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function startLive(kind, uid, name, mine) {
             live.kind = kind; live.uid = uid; live.name = name || '';
             live.mine = !!mine; live.lastVer = 0;
-            var b = captureBundle();
-            live.lastFp = (mine && b) ? fpOf(JSON.stringify(b)) : '';
+            // Leerer Fingerabdruck heisst: beim naechsten Takt wird der eigene
+            // Stand hochgeladen. Genau das ist beim Uebernehmen des Stifts
+            // gewollt - sonst saehen die Mitleser weiter den zuletzt
+            // gespeicherten statt des tatsaechlichen Arbeitsstands.
+            live.lastFp = '';
             liveRemember();
             if (!live.timer) live.timer = setInterval(liveTick, LIVE_MS);
             liveTick();
@@ -65942,6 +65959,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +   'Immer genau <b>einer</b> hat den Stift und darf ändern; alle anderen sehen '
                   +   'seinen Stand live und arbeiten so lange schreibgeschützt. Dadurch kann '
                   +   'nichts überschrieben werden.</div>'
+                  + '<div style="background:#1b2a3a;border:1px solid #2c4a63;border-radius:6px;'
+                  +   'padding:11px;margin-bottom:12px;font-size:11px;line-height:1.6;">'
+                  +   '<b>Wer kann mitmachen?</b> Nur wer in <b>dieser Umgebung</b> angemeldet ist. '
+                  +   'Dafür gibst du deinen <b>Zugangs-Link</b> weiter (Knopf „🔗 Zugangs-Link“). '
+                  +   'Der <b>Freigabe-Link</b> aus „Teilen“ ist etwas anderes: er zeigt nur eine '
+                  +   'Kopie zum Lesen und führt <i>nicht</i> in die gemeinsame Bearbeitung.</div>'
                   + '<div style="background:#252528;border:1px solid #3a3a3a;border-radius:6px;'
                   +   'padding:12px;margin-bottom:12px;font-size:13px;">' + esc(lage) + '</div>'
                   + '<div style="display:flex;flex-direction:column;gap:8px;">'
@@ -66214,6 +66237,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (m === 'unauthorized') { try { localStorage.removeItem('valisCloudToken'); } catch (_) {} render(); }
         }
 
+        /* ---- Geraete-Link einloesen --------------------------------------- */
+
+        function useDeviceLink() {
+            var d = linkDevice;
+            if (!d) return;
+            open();
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Anmeldung läuft …</div>';
+            C.redeemDeviceLink(d.token).then(function (j) {
+                C.adoptToken(j.token, j.env || d.env);
+                afterAdopt();
+            }).catch(function () {
+                // Aeltere Links enthielten unmittelbar ein Sitzungs-Token. Die
+                // sollen weiter funktionieren, solange die Sitzung lebt.
+                C.adoptToken(d.token, d.env);
+                afterAdopt();
+            });
+        }
+        function afterAdopt() {
+            refreshBadge(); schedule(); startPolling(); pollOnce();
+            try {
+                var lv = JSON.parse(localStorage.getItem(skey('valisCloudLive')) || 'null');
+                if (lv && lv.uid) startLive(lv.kind || 'session', lv.uid, lv.name, false);
+            } catch (_) {}
+            render();
+        }
+
+        // Wird ein Link in die Adresszeile einer bereits geoeffneten Seite
+        // eingefuegt, laedt der Browser nicht neu - es kommt nur hashchange.
+        // Ohne das hier passierte schlicht nichts.
+        window.addEventListener('hashchange', function () {
+            if (!C.available) return;
+            if (!parseHash()) return;
+            if (linkDevice) { useDeviceLink(); return; }
+            if (linkShare) { open(); renderShared(linkShare); return; }
+            if (linkLogin) {
+                open();
+                if (linkLogin.hasPin) { renderLinkPin(linkLogin.code); return; }
+                run(C.login(linkLogin.code, ''), 'Anmelden …', function () { render(); }, function (e) {
+                    if (e && e.message === 'bad_credentials') {
+                        renderLinkPin(linkLogin.code, 'Diese Umgebung verlangt eine PIN.');
+                        return true;
+                    }
+                    return false;
+                });
+            }
+        });
+
         /* ---- Einstieg ----------------------------------------------------- */
 
         C.ready.then(function (available) {
@@ -66231,11 +66301,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             else document.body.appendChild(btn);
             window._openCloudPanel = open;
 
-            // Den Geraete-Link zuerst einloesen: sonst wird der Anmeldezustand
-            // geprueft, bevor das Token gesetzt ist - Abgleich und gemeinsame
-            // Sitzung wuerden dann gar nicht anlaufen.
-            if (linkDevice) C.adoptToken(linkDevice.token, linkDevice.env);
-
             refreshBadge();
             if (C.isLoggedIn()) {
                 schedule(); startPolling(); pollOnce();
@@ -66247,7 +66312,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } catch (_) {}
             }
 
-            if (linkDevice) { open(); render(); return; }
+            if (linkDevice) { useDeviceLink(); return; }
             if (linkShare) { open(); renderShared(linkShare); return; }
             if (!linkLogin) return;
             open();

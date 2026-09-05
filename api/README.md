@@ -134,7 +134,7 @@ bei der Erzeugung einmalig anzeigen und zum Sichern zwingen (Download / QR / Dru
 | Datei | Zweck |
 |---|---|
 | `ping.php` | Capability-Probe + Diagnose (kein Auth) |
-| `env.php` | `create` / `login` / `logout` / `destroy` / `devicelink` / `logout_others` |
+| `env.php` | `create` / `login` / `logout` / `destroy` / `devicelink` / `redeem` / `logout_others` |
 | `obj.php` | `list` / `get` / `put` / `delete` / `usage` / `poll` / `live` (Bearer-Token) |
 | `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
 | `gc.php` | Wartung, per Cron |

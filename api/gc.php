@@ -37,6 +37,14 @@ $out['device_links_deleted'] = $st->rowCount();
 $st = $pdo->query('DELETE FROM presence WHERE updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR)');
 $out['presence_deleted'] = $st->rowCount();
 
+// Klassen-Codes: abgelaufene und widerrufene nach 30 Tagen entfernen. Die
+// Schonfrist laesst der Lehrkraft Zeit, einen Code versehentlich widerrufen
+// zu haben und ihn in der Liste noch zu sehen.
+$st = $pdo->query('DELETE FROM class_codes
+                   WHERE (expires_at IS NOT NULL AND expires_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY))
+                      OR (revoked_at IS NOT NULL AND revoked_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY))');
+$out['class_codes_deleted'] = $st->rowCount();
+
 // Objekte, die als geloescht markiert wurden, nach 30 Tagen endgueltig entfernen.
 $st = $pdo->query('DELETE FROM objects WHERE deleted_at IS NOT NULL AND deleted_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)');
 $out['objects_purged'] = $st->rowCount();

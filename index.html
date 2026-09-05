@@ -64590,6 +64590,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         C.libModerate = function (id, st) { return req('library.php', { action: 'moderate', id: id, status: st }); };
         C.libWithdraw = function (id)   { return req('library.php', { action: 'withdraw', id: id }); };
         C.libClaimCurator = function (key) { return req('library.php', { action: 'claim_curator', key: key }); };
+
+        /* ---- Klassen-Freigabecodes. Einloesen geht ohne Anmeldung. -------- */
+        C.classCreate = function (label, items, days) {
+            return req('class.php', { action: 'create', label: label, items: items, expires_days: days });
+        };
+        C.classList   = function ()   { return req('class.php', { action: 'list' }); };
+        C.classRevoke = function (id) { return req('class.php', { action: 'revoke', id: id }); };
+        C.classRedeem = function (code) { return req('class.php', { action: 'redeem', code: code }, false); };
+        C.classFetch  = function (code, kind, uid) {
+            return req('class.php', { action: 'fetch', code: code, kind: kind, uid: uid }, false);
+        };
         /** Stift-Verwaltung der gemeinsamen Bearbeitung. */
         /** Eigene Position senden und die der anderen holen - ein Aufruf. */
         C.presence = function (kind, uid, device, caret, caretEnd, mx, my) {
@@ -64681,9 +64692,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Fragmente werden nie an den Server gesendet und tauchen daher nicht im
         // Apache-Access-Log auf. Das Fragment wird sofort aus der Adresszeile
         // entfernt, damit der Code nicht sichtbar stehen bleibt.
-        var linkLogin = null, linkShare = null, linkDevice = null;
+        var linkLogin = null, linkShare = null, linkDevice = null, linkClass = null;
         function parseHash() {
-            linkLogin = null; linkShare = null; linkDevice = null;
+            linkLogin = null; linkShare = null; linkDevice = null; linkClass = null;
             try {
                 var md = (location.hash || '').match(/^#dev=([A-Za-z0-9_\-]{20,120})(?:&e=([a-f0-9]{16}))?$/);
                 if (md) {
@@ -64693,6 +64704,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 var ms = (location.hash || '').match(/^#s=([A-Za-z2-9]{12})$/);
                 if (ms) {
                     linkShare = ms[1].toUpperCase();
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
+                // Klassencode: mit oder ohne Trennstrich, damit auch abgetippte
+                // Adressen ankommen.
+                var mk = (location.hash || '').match(/^#k=([A-Za-z2-9]{4})-?([A-Za-z2-9]{4})$/);
+                if (mk) {
+                    linkClass = (mk[1] + '-' + mk[2]).toUpperCase();
                     history.replaceState(null, '', location.pathname + location.search);
                 }
                 var m = (location.hash || '').match(/^#env=([^&]+)(?:&p=([01]))?/);
@@ -64705,7 +64723,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     history.replaceState(null, '', location.pathname + location.search);
                 }
             } catch (_) {}
-            return !!(linkLogin || linkShare || linkDevice);
+            return !!(linkLogin || linkShare || linkDevice || linkClass);
         }
         parseHash();
 
@@ -64862,6 +64880,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
               +   '<button id="cl-lib2" style="width:100%;margin-top:8px;background:#00695c;color:#fff;'
               +     'border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">'
               +     '&#128218; Bibliothek ansehen</button>'
+              +   '<button id="cl-red2" style="width:100%;margin-top:8px;background:#4527a0;color:#fff;'
+              +     'border:none;border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">'
+              +     '&#127891; Klassencode einl&ouml;sen</button>'
               +   '<div style="margin-top:10px;font-size:11px;color:#ef9a9a;line-height:1.5;">'
               +     '&#9888;&#65039; Es gibt <b>keine Wiederherstellung</b>. Der Code ist der einzige Zugang &ndash; '
               +     'verloren heisst weg.</div>'
@@ -64874,6 +64895,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 run(C.login(code, pin), 'Anmelden …', function () { render(); });
             };
             box.querySelector('#cl-lib2').onclick = renderLibrary;
+            box.querySelector('#cl-red2').onclick = askRedeem;
             box.querySelector('#cl-create').onclick = function () {
                 var pin = box.querySelector('#cl-newpin').value.trim();
                 if (pin && !/^\d{4,6}$/.test(pin)) { say('PIN muss 4-6 Ziffern haben.', '#ef9a9a'); return; }
@@ -65007,6 +65029,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#43; Aufgabe/Paket</button>'
                   +   '<button id="cl-lib" style="background:#00695c;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#128218; Bibliothek</button>'
+                  +   '<button id="cl-class" style="background:#4527a0;color:#fff;border:none;border-radius:4px;'
+                  +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#127891; Klassencode</button>'
                   +   '<button id="cl-link" style="background:#455a64;color:#fff;border:none;border-radius:4px;'
                   +     'padding:9px 12px;cursor:pointer;font-size:13px;">&#128279; Zugangs-Link</button>'
                   +   '<button id="cl-logout" style="margin-left:auto;background:#444;color:#ddd;border:none;'
@@ -65038,6 +65062,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 box.querySelector('#cl-save').onclick = saveCurrent;
                 box.querySelector('#cl-add').onclick = renderAdd;
                 box.querySelector('#cl-lib').onclick = renderLibrary;
+                box.querySelector('#cl-class').onclick = renderClass;
                 Array.prototype.forEach.call(box.querySelectorAll('[data-pub]'), function (b) {
                     b.onclick = function () {
                         libPublish(b.getAttribute('data-kind'), b.getAttribute('data-pub'),
@@ -66607,6 +66632,290 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
         }
 
+        /* ---- Klassen-Freigabecodes ----------------------------------------- */
+
+        function classUrl(code) {
+            return location.origin + location.pathname + '#k=' + code;
+        }
+
+        /** Fragt einen Code ab - fuer alle, die keinen Link bekommen haben. */
+        function askRedeem() {
+            var c = prompt('Klassencode eingeben (z. B. KL7M-QX2A):', '');
+            if (c === null) return;
+            var m = c.toUpperCase().replace(/[^A-Z2-9]/g, '');
+            if (m.length !== 8) { say('Ein Klassencode hat 8 Zeichen.', '#ef9a9a'); return; }
+            renderRedeem(m.slice(0, 4) + '-' + m.slice(4));
+        }
+
+        /** Uebersicht der eigenen Codes. */
+        function renderClass() {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Lade …</div>';
+            run(C.classList(), null, function (j) {
+                var rows = (j.codes || []).map(function (c) {
+                    var tot = c.items.length;
+                    var weg = c.items.filter(function (i) { return i.name === null; }).length;
+                    var zustand = c.revoked ? '<span style="color:#ef9a9a;">widerrufen</span>'
+                        : (c.expires_at ? 'gültig bis ' + esc(fmtDate(c.expires_at)) : 'ohne Ablauf');
+                    return '<tr style="border-top:1px solid #3a3a3a;">'
+                        + '<td style="padding:7px 6px;">'
+                        +   '<span style="font-family:monospace;font-size:14px;color:#b39ddb;">'
+                        +     esc(c.code) + '</span>'
+                        +   '<div style="font-size:11px;color:#bbb;margin-top:2px;">'
+                        +     esc(c.label || '(ohne Bezeichnung)') + '</div>'
+                        +   '<div style="font-size:10px;color:#777;">' + tot + ' Objekt(e)'
+                        +     (weg ? ', davon ' + weg + ' gelöscht' : '')
+                        +     ' &middot; ' + zustand
+                        +     ' &middot; ' + c.redeems + '&times; eingelöst</div></td>'
+                        + '<td style="padding:7px 6px;white-space:nowrap;text-align:right;">'
+                        +   (c.revoked ? ''
+                              : '<button data-cq="' + esc(c.code) + '" data-cl="' + esc(c.label || '') + '" '
+                                + 'style="background:#4527a0;color:#fff;border:none;border-radius:3px;'
+                                + 'padding:5px 10px;cursor:pointer;font-size:11px;">Link &amp; QR</button> '
+                                + '<button data-crv="' + c.id + '" '
+                                + 'style="background:#5d2b2b;color:#fff;border:none;border-radius:3px;'
+                                + 'padding:5px 10px;cursor:pointer;font-size:11px;">Widerrufen</button>')
+                        + '</td></tr>';
+                }).join('');
+
+                box.innerHTML =
+                    '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">&#127891; Klassencodes</div>'
+                  + '<div style="font-size:11px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+                  +   'Ein Code gibt eine Auswahl deiner Aufgaben, Pakete und Anlagen heraus &ndash; '
+                  +   'vorlesbar, als Link und als QR-Code. Er nimmt nichts entgegen und legt keine '
+                  +   'Gruppe an: <b>wer eingelöst hat, wird nicht gespeichert</b>, nur wie oft. '
+                  +   'Der Code verweist auf den <b>aktuellen</b> Stand &ndash; korrigierst du etwas, '
+                  +   'wirkt das beim nächsten Einlösen, ohne neuen Code.</div>'
+                  + (rows
+                      ? '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + rows + '</table>'
+                      : '<div style="font-size:12px;color:#777;padding:10px 0;">Noch kein Code angelegt.</div>')
+                  + '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">'
+                  +   '<button id="cc-new" style="flex:1;min-width:150px;background:#4527a0;color:#fff;'
+                  +     'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">'
+                  +     '&#43; Neuen Code erzeugen</button>'
+                  +   '<button id="cc-red" style="flex:1;min-width:150px;background:#2e7d32;color:#fff;'
+                  +     'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">'
+                  +     'Code einlösen</button>'
+                  +   '<button id="cc-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+                  +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
+                  + '</div>';
+
+                box.querySelector('#cc-new').onclick = renderClassNew;
+                box.querySelector('#cc-red').onclick = askRedeem;
+                box.querySelector('#cc-back').onclick = renderEnv;
+                Array.prototype.forEach.call(box.querySelectorAll('[data-cq]'), function (b) {
+                    b.onclick = function () {
+                        renderClassCode(b.getAttribute('data-cq'), b.getAttribute('data-cl'));
+                    };
+                });
+                Array.prototype.forEach.call(box.querySelectorAll('[data-crv]'), function (b) {
+                    b.onclick = function () {
+                        if (!confirm('Diesen Code widerrufen? Wer ihn hat, kommt danach nicht mehr heran.')) return;
+                        run(C.classRevoke(parseInt(b.getAttribute('data-crv'), 10)), 'Widerrufe …', renderClass);
+                    };
+                });
+            });
+        }
+
+        /** Auswahl der Objekte fuer einen neuen Code. */
+        function renderClassNew() {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Lade …</div>';
+            run(C.list(), null, function (j) {
+                var objs = j.objects || [];
+                if (!objs.length) {
+                    box.innerHTML = '<div style="font-size:12px;color:#ef9a9a;">In dieser Umgebung liegt '
+                      + 'noch nichts, das du verteilen könntest.</div>'
+                      + '<button id="cn-back" style="width:100%;margin-top:12px;background:#3a3a3a;color:#ccc;'
+                      +   'border:none;border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Zurück</button>';
+                    box.querySelector('#cn-back').onclick = renderClass;
+                    return;
+                }
+                var list = objs.map(function (o) {
+                    return '<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 4px;'
+                        + 'border-top:1px solid #3a3a3a;cursor:pointer;">'
+                        + '<input type="checkbox" data-ck="' + esc(o.kind) + '" data-cu="' + esc(o.uid) + '" '
+                        +   'style="margin-top:2px;">'
+                        + '<span><span style="font-size:12px;">' + esc(o.name || '(ohne Namen)') + '</span>'
+                        +   '<div style="font-size:10px;color:#777;">' + esc(kindLabel(o.kind))
+                        +   ' &middot; ' + fmtBytes(o.bytes) + '</div></span></label>';
+                }).join('');
+
+                box.innerHTML =
+                    '<div style="font-size:15px;font-weight:600;margin-bottom:10px;">Neuer Klassencode</div>'
+                  + '<input id="cn-label" placeholder="Bezeichnung, z. B. Steuerungstechnik Mi 3./4." '
+                  +   'style="width:100%;box-sizing:border-box;background:#1b1b1e;color:#fff;border:1px solid #555;'
+                  +   'border-radius:4px;padding:8px;font-size:13px;">'
+                  + '<div style="font-size:11px;color:#9e9e9e;margin:12px 0 4px;">Was soll der Code herausgeben?</div>'
+                  + '<div style="max-height:240px;overflow:auto;background:#252528;border:1px solid #3a3a3a;'
+                  +   'border-radius:4px;padding:4px 8px;">' + list + '</div>'
+                  + '<div style="display:flex;gap:8px;align-items:center;margin-top:12px;">'
+                  +   '<span style="font-size:11px;color:#9e9e9e;">Gültig:</span>'
+                  +   '<select id="cn-exp" style="flex:1;background:#1b1b1e;color:#fff;border:1px solid #555;'
+                  +     'border-radius:4px;padding:7px;font-size:12px;">'
+                  +     '<option value="30">30 Tage</option>'
+                  +     '<option value="180">ein halbes Jahr</option>'
+                  +     '<option value="365" selected>ein Jahr</option>'
+                  +     '<option value="0">ohne Ablauf</option>'
+                  +   '</select>'
+                  + '</div>'
+                  + '<div style="display:flex;gap:8px;margin-top:12px;">'
+                  +   '<button id="cn-go" style="flex:1;background:#4527a0;color:#fff;border:none;'
+                  +     'border-radius:4px;padding:10px;cursor:pointer;font-size:13px;">Code erzeugen</button>'
+                  +   '<button id="cn-back" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+                  +     'padding:10px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
+                  + '</div>'
+                  + '<div style="font-size:11px;color:#9e9e9e;margin-top:12px;line-height:1.6;">'
+                  +   'Nur Lesen: der Code kann nichts in deiner Umgebung ändern. Achte darauf, dass '
+                  +   'in Namen und Aufgabentexten keine personenbezogenen Angaben stehen.</div>';
+
+                box.querySelector('#cn-back').onclick = renderClass;
+                box.querySelector('#cn-go').onclick = function () {
+                    var items = [];
+                    Array.prototype.forEach.call(box.querySelectorAll('[data-ck]'), function (cb) {
+                        if (cb.checked) items.push({ kind: cb.getAttribute('data-ck'), uid: cb.getAttribute('data-cu') });
+                    });
+                    if (!items.length) { say('Bitte mindestens ein Objekt auswählen.', '#ef9a9a'); return; }
+                    var label = box.querySelector('#cn-label').value.trim();
+                    var days = parseInt(box.querySelector('#cn-exp').value, 10) || 0;
+                    run(C.classCreate(label, items, days), 'Erzeuge Code …', function (r) {
+                        renderClassCode(r.code, label);
+                    });
+                };
+            });
+        }
+
+        /** Code gross, als Link und als QR-Code. */
+        function renderClassCode(code, label) {
+            var url = classUrl(code);
+            box.innerHTML =
+                '<div style="font-size:12px;color:#9e9e9e;margin-bottom:10px;">Klassencode'
+              +   (label ? ' für <b>' + esc(label) + '</b>' : '') + ':</div>'
+              + '<div style="text-align:center;background:#252528;border:1px solid #3a3a3a;border-radius:6px;'
+              +   'padding:14px;font-family:monospace;font-size:30px;letter-spacing:3px;color:#b39ddb;">'
+              +   esc(code) + '</div>'
+              + '<input id="cc-url" readonly value="' + esc(url) + '" '
+              +   'style="width:100%;box-sizing:border-box;margin-top:10px;background:#1b1b1e;color:#8bc34a;'
+              +   'border:1px solid #555;border-radius:4px;padding:8px;font-family:monospace;font-size:12px;">'
+              + '<div id="cc-qr" style="margin:14px auto 0;width:176px;background:#fff;padding:8px;'
+              +   'border-radius:4px;box-sizing:border-box;"></div>'
+              + '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'
+              +   '<button id="cc-copy" style="flex:1;min-width:110px;background:#2e7d32;color:#fff;border:none;'
+              +     'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Link kopieren</button>'
+              +   '<button id="cc-ret" style="background:#3a3a3a;color:#ccc;border:none;border-radius:4px;'
+              +     'padding:9px 14px;cursor:pointer;font-size:12px;">Zur&uuml;ck</button>'
+              + '</div>'
+              + '<div style="font-size:11px;color:#9e9e9e;margin-top:12px;line-height:1.6;">'
+              +   'Der Code lässt sich vorlesen, an die Tafel schreiben oder abfotografieren. '
+              +   'Wer ihn erneut einlöst, bekommt den aktuellen Stand.</div>';
+            try {
+                if (typeof QRCode === 'function') new QRCode(box.querySelector('#cc-qr'), { text: url, width: 160, height: 160 });
+            } catch (_) {}
+            box.querySelector('#cc-copy').onclick = function () {
+                box.querySelector('#cc-url').select();
+                try { navigator.clipboard.writeText(url); say('Link kopiert.', '#8bc34a'); }
+                catch (_) { say('Kopieren nicht möglich - bitte markieren.', '#ef9a9a'); }
+            };
+            box.querySelector('#cc-ret').onclick = function () {
+                if (C.isLoggedIn()) renderClass(); else close();
+            };
+        }
+
+        /** Ein einzelnes Objekt uebernehmen - ueber die BESTEHENDEN Import-Pfade,
+         *  aber ohne das Fenster zu schliessen (mehrere hintereinander). */
+        function takeOne(o) {
+            var nm = (o.name || 'Freigabe').replace(/[^a-zA-Z0-9_\-]/g, '-');
+            if (o.kind === 'valitask') {
+                if (!importViaInput('task-upload', nm + '.valitask', o.data)) offerDownload(nm + '.valitask', o.data);
+                return true;
+            }
+            if (o.kind === 'valipack') {
+                if (!importViaInput('pack-upload', nm + '.valipack', o.data)) offerDownload(nm + '.valipack', o.data);
+                return true;
+            }
+            if (o.kind === 'session') return restoreBundle(o.data);
+            offerDownload(nm + '.json', o.data);
+            return true;
+        }
+
+        /** Einloesen. Ohne Anmeldung moeglich - Empfaenger haben oft keine Umgebung. */
+        function renderRedeem(code) {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Code wird geprüft …</div>';
+            C.classRedeem(code).then(function (j) {
+                var items = j.items || [];
+                // Anlagen ersetzen den Arbeitsstand - die kommen nie im Rutsch,
+                // sondern nur einzeln und auf ausdruecklichen Klick.
+                var bulk = items.filter(function (i) { return i.kind !== 'session'; });
+                var rows = items.map(function (i, n) {
+                    return '<tr style="border-top:1px solid #3a3a3a;">'
+                        + '<td style="padding:7px 6px;">' + esc(i.name || '(ohne Namen)')
+                        +   '<div style="font-size:10px;color:#777;">' + esc(kindLabel(i.kind))
+                        +   ' &middot; ' + fmtBytes(i.bytes) + '</div></td>'
+                        + '<td style="padding:7px 6px;text-align:right;white-space:nowrap;">'
+                        +   (i.kind === 'session'
+                              ? '<button data-r1="' + n + '" style="background:#1565c0;color:#fff;border:none;'
+                                + 'border-radius:3px;padding:5px 10px;cursor:pointer;font-size:11px;">Laden</button>'
+                              : '')
+                        + '</td></tr>';
+                }).join('');
+
+                box.innerHTML =
+                    '<div style="font-size:12px;color:#9e9e9e;margin-bottom:8px;">Klassencode '
+                  +   '<span style="font-family:monospace;color:#b39ddb;">' + esc(code) + '</span>'
+                  +   (j.label ? ' &ndash; <b>' + esc(j.label) + '</b>' : '') + '</div>'
+                  + (items.length
+                      ? '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + rows + '</table>'
+                      : '<div style="font-size:12px;color:#ef9a9a;">Dieser Code gibt derzeit nichts heraus.</div>')
+                  + (bulk.length
+                      ? '<button id="rd-all" style="width:100%;margin-top:12px;background:#2e7d32;color:#fff;'
+                        + 'border:none;border-radius:4px;padding:10px;cursor:pointer;font-size:13px;">'
+                        + bulk.length + ' Aufgabe(n)/Paket(e) übernehmen</button>'
+                      : '')
+                  + '<button id="rd-no" style="width:100%;margin-top:8px;background:#3a3a3a;color:#ccc;border:none;'
+                  +   'border-radius:4px;padding:8px;cursor:pointer;font-size:12px;">Schließen</button>'
+                  + '<div style="font-size:11px;color:#9e9e9e;margin-top:12px;line-height:1.6;">'
+                  +   'Du kannst denselben Code jederzeit erneut einlösen &ndash; dann bekommst du den '
+                  +   'aktuellen Stand. Anlagen ersetzen deinen Arbeitsstand und werden deshalb nur '
+                  +   'einzeln geladen.</div>';
+
+                box.querySelector('#rd-no').onclick = close;
+                Array.prototype.forEach.call(box.querySelectorAll('[data-r1]'), function (b) {
+                    b.onclick = function () {
+                        var it = items[parseInt(b.getAttribute('data-r1'), 10)];
+                        run(C.classFetch(code, it.kind, it.uid), 'Hole …', function (r) {
+                            if (takeOne(r.object)) { say('Geladen: ' + r.object.name, '#8bc34a'); close(); }
+                            else say('Einspielen nicht möglich.', '#ef9a9a');
+                        });
+                    };
+                });
+                var all = box.querySelector('#rd-all');
+                if (all) all.onclick = function () { all.disabled = true; takeMany(code, bulk, 0, 0); };
+            }).catch(function (e) {
+                var m = e && e.message;
+                box.innerHTML = '<div style="font-size:12px;color:#ef9a9a;line-height:1.6;">'
+                  + (m === 'code_revoked' ? 'Dieser Klassencode wurde zurückgezogen.'
+                   : m === 'code_expired' ? 'Dieser Klassencode ist abgelaufen.'
+                   : m === 'rate_limited' ? 'Zu viele Versuche. Bitte später erneut.'
+                   : 'Diesen Klassencode gibt es nicht. Bitte Schreibweise prüfen.')
+                  + '</div>';
+            });
+        }
+
+        /** Der Reihe nach holen und einspielen. Nacheinander, weil jeder Import
+         *  ueber die Datei-Eingabefelder laeuft und die sich nicht stapeln. */
+        function takeMany(code, items, i, done) {
+            if (i >= items.length) {
+                say(done + ' von ' + items.length + ' übernommen.', done ? '#8bc34a' : '#ef9a9a');
+                if (C.isLoggedIn()) renderEnv(); else close();
+                return;
+            }
+            say('Hole ' + (i + 1) + ' von ' + items.length + ' …', '#9e9e9e');
+            C.classFetch(code, items[i].kind, items[i].uid).then(function (r) {
+                var ok = takeOne(r.object);
+                setTimeout(function () { takeMany(code, items, i + 1, done + (ok ? 1 : 0)); }, 350);
+            }).catch(function () {
+                setTimeout(function () { takeMany(code, items, i + 1, done); }, 350);
+            });
+        }
+
         /* ---- Anwesenheit: fremde Schreibmarke und Mauszeiger --------------- */
 
         // Farbe und Name werden aus der zufaelligen Geraetekennung abgeleitet -
@@ -67004,6 +67313,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!parseHash()) return;
             if (linkDevice) { useDeviceLink(); return; }
             if (linkShare) { open(); renderShared(linkShare); return; }
+            if (linkClass) { open(); renderRedeem(linkClass); return; }
             if (linkLogin) {
                 open();
                 if (linkLogin.hasPin) { renderLinkPin(linkLogin.code); return; }
@@ -67047,6 +67357,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
             if (linkDevice) { useDeviceLink(); return; }
             if (linkShare) { open(); renderShared(linkShare); return; }
+            if (linkClass) { open(); renderRedeem(linkClass); return; }
             if (!linkLogin) return;
             open();
             if (linkLogin.hasPin) { renderLinkPin(linkLogin.code); return; }

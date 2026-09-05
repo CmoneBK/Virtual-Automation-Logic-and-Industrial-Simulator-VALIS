@@ -143,6 +143,7 @@ die Zusammenfuehrung der Staende passiert im Client).
 | `share.php` | `create` / `list` / `revoke` (Bearer) + `read` (ohne Anmeldung) |
 | `presence.php` | Schreibmarke und Mauszeiger (Bearer-Token) |
 | `library.php` | `list` / `get` (ohne Anmeldung) + `submit` / `mine` / `pending` / `moderate` / `withdraw` / `claim_curator` (Bearer) |
+| `class.php` | `redeem` / `fetch` (ohne Anmeldung) + `create` / `list` / `revoke` (Bearer) |
 | `gc.php` | Wartung, per Cron |
 
 Der Endpunkt `presence.php` schreibt die eigene Position UND liefert die der
@@ -199,3 +200,26 @@ Geraet. `claim_curator` vergleicht den Schluessel aus der Konfiguration
 zeitkonstant (`hash_equals`) und setzt das Kennzeichen einmalig. Der
 Schluessel wird auf dem Server erzeugt und niemals im Repository abgelegt - der
 PHP-Quelltext ist auf GitHub oeffentlich lesbar.
+
+## Klassen-Freigabecodes
+
+Ein Code ist ein Verteilweg in EINE Richtung. `redeem` gibt heraus und nimmt
+nie etwas entgegen; ein herumgereichter Code ist damit niemals Schreibrecht auf
+eine fremde Umgebung.
+
+Gespeichert wird eine LISTE VON VERWEISEN (`items`: kind + obj_uid), kein Abzug
+der Daten. Wer erneut einloest, bekommt den aktuellen Stand - Korrekturen
+erreichen die Lerngruppe ohne neuen Code.
+
+`redeem` liefert nur das Verzeichnis, `fetch` je Objekt die Daten. So bleibt
+die Antwort klein (25 Objekte je Code, bis 2 MiB pro Objekt waeren sonst eine
+Antwort von 50 MiB) und der Client kann den Fortschritt anzeigen. `fetch` gibt
+nur Objekte heraus, die im Code stehen.
+
+Der Code steht im KLARTEXT in der Tabelle. Er muss vorlesbar bleiben und gibt
+nur Lesezugriff auf Objekte, die in derselben Datenbank ohnehin liegen.
+Umgebungscodes sind gehasht - die geben Schreibrecht auf eine ganze Umgebung.
+
+Gezaehlt werden Einloesungen (`redeems`), NICHT wer eingeloest hat. Es entsteht
+bewusst keine Zuordnung Person -> Umgebung; sie waere die Grundlage dafuer, dass
+hier keine personenbezogenen Daten liegen.

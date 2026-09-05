@@ -69,7 +69,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
-`sessions`, `shares` und `library` zeigen.
+`sessions`, `shares`, `library` und `class_codes` zeigen.
 
 > **Bestehende Installationen** brauchen einmalig:
 >
@@ -79,6 +79,7 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-livemode.sql
 >     mysql -u valis -p valis < api/migrate-presence.sql
 >     mysql -u valis -p valis < api/migrate-library.sql
+>     mysql -u valis -p valis < api/migrate-classcodes.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -215,6 +216,43 @@ Ohne Kurator-Recht landet Eingereichtes in `pending` und ist für niemanden
 sichtbar außer für den Einreichenden selbst und für Kuratoren. Kuratoren
 veröffentlichen direkt. Wer keine Moderation will, setzt
 `allow_library_submit` auf `false`: dann füllen nur noch Kuratoren die Bibliothek.
+
+## Klassen-Freigabecodes
+
+Eine Lehrkraft wählt aus ihrer Umgebung Aufgaben, Pakete und Anlagen aus und
+bekommt dafür einen **8-Zeichen-Code** wie `KL7M-QX2A` – vorlesbar, an die Tafel
+schreibbar, als Link `#k=KL7M-QX2A` und als kleiner QR-Code. Lernende lösen ihn
+ein und bekommen die Sachen in ihre eigene Umgebung; **ohne Anmeldung geht es
+auch**, dann landen sie direkt im Arbeitsbereich.
+
+Drei Entwurfsentscheidungen, die den Unterschied ausmachen:
+
+**Der Code ist keine Gruppe.** Er erzeugt keine Zuordnung Person → Umgebung –
+genau die fehlt hier absichtlich und ist die Grundlage dafür, dass serverseitig
+keine personenbezogenen Daten liegen. Gezählt wird nur, **wie oft** eingelöst
+wurde, nicht **von wem**. 23 Einlösungen sagen der Lehrkraft, dass die Verteilung
+geklappt hat; mehr braucht sie dafür nicht.
+
+**Der Code liest, er schreibt nicht.** `redeem` gibt Objekte heraus und nimmt nie
+welche entgegen. Andernfalls wäre der herumgereichte Code eine Schreibberechtigung
+in eine fremde Umgebung.
+
+**Er verweist, statt einzufrieren.** Gespeichert wird eine Liste von Verweisen,
+kein Abzug der Daten. Korrigiert die Lehrkraft morgen einen Tippfehler, bekommt
+ihn beim nächsten Einlösen jede und jeder – ohne neuen Code. Das ist der
+praktische Unterschied zu einem Link auf einen eingefrorenen Stand.
+
+Anlagen (`session`) ersetzen den Arbeitsstand und werden deshalb **nie im Rutsch**
+übernommen, sondern nur einzeln auf ausdrücklichen Klick. Aufgaben und Pakete
+kommen gesammelt, nacheinander über dieselben Importwege wie eine geöffnete Datei.
+
+Der Code steht als **Klartext** in der Datenbank, anders als Umgebungscodes. Er
+muss in der nächsten Stunde noch vorlesbar sein, und er schützt nichts, was in
+derselben Datenbank nicht ohnehin steht – er gibt ausschließlich Lesezugriff auf
+eine feste Objektliste. Umgebungscodes sind gehasht, weil sie Schreibrecht auf
+eine ganze Umgebung geben: anderer Schutzbedarf, andere Entscheidung.
+
+`gc.php` räumt abgelaufene und widerrufene Codes nach 30 Tagen Schonfrist ab.
 
 ## Sicherheits- und Datenschutz-Design
 
@@ -407,7 +445,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
-`sessions`, `shares` and `library`.
+`sessions`, `shares`, `library` and `class_codes`.
 
 > **Existing installations** need this once:
 >
@@ -417,6 +455,7 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-livemode.sql
 >     mysql -u valis -p valis < api/migrate-presence.sql
 >     mysql -u valis -p valis < api/migrate-library.sql
+>     mysql -u valis -p valis < api/migrate-classcodes.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.
@@ -550,6 +589,40 @@ means nobody can become a curator.
 Without curator rights a submission lands in `pending`, visible only to its author
 and to curators. Curators publish directly. If you do not want to moderate at all,
 set `allow_library_submit` to `false`: then only curators can fill the library.
+
+## Class release codes
+
+A teacher picks tasks, packages and plants from their environment and gets an
+**8-character code** such as `KL7M-QX2A` – readable aloud, writable on a
+blackboard, available as a link `#k=KL7M-QX2A` and as a small QR code. Learners
+redeem it and receive the items in their own environment; **no login is needed**,
+in which case the items land directly in the workspace.
+
+Three design decisions carry the feature:
+
+**The code is not a group.** It creates no person → environment mapping – that
+mapping is deliberately absent and is the basis for the server holding no personal
+data. Only the **number** of redemptions is counted, never **who** redeemed.
+
+**The code reads, it never writes.** `redeem` hands out objects and never accepts
+any. Otherwise a code passed around would be write access to someone else's
+environment.
+
+**It references rather than freezes.** What is stored is a list of references, not
+a copy of the data. Fix a typo tomorrow and everyone gets it on their next
+redemption – no new code needed.
+
+Plants (`session`) replace the workspace and are therefore **never** taken in bulk,
+only individually on an explicit click. Tasks and packages are imported one after
+another through the same paths as an opened file.
+
+The code is stored in **plain text**, unlike environment codes. It has to stay
+readable aloud next week, and it protects nothing that is not in the same database
+anyway – it grants read access to a fixed list of objects. Environment codes are
+hashed because they grant write access to a whole environment: different exposure,
+different decision.
+
+`gc.php` removes expired and revoked codes after a 30-day grace period.
 
 ## Security and data-protection design
 

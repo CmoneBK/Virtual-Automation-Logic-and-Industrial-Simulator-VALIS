@@ -144,6 +144,7 @@ die Zusammenfuehrung der Staende passiert im Client).
 | `presence.php` | Schreibmarke und Mauszeiger (Bearer-Token) |
 | `library.php` | `list` / `get` (ohne Anmeldung) + `submit` / `mine` / `pending` / `moderate` / `withdraw` / `claim_curator` (Bearer) |
 | `class.php` | `redeem` / `fetch` (ohne Anmeldung) + `create` / `list` / `revoke` (Bearer) |
+| `admin.php` | Betriebszahlen, sperren, loeschen (Bearer + `is_admin`) |
 | `gc.php` | Wartung, per Cron |
 
 Der Endpunkt `presence.php` schreibt die eigene Position UND liefert die der
@@ -223,3 +224,26 @@ Umgebungscodes sind gehasht - die geben Schreibrecht auf eine ganze Umgebung.
 Gezaehlt werden Einloesungen (`redeems`), NICHT wer eingeloest hat. Es entsteht
 bewusst keine Zuordnung Person -> Umgebung; sie waere die Grundlage dafuer, dass
 hier keine personenbezogenen Daten liegen.
+
+## Verwaltung
+
+Der Endpunkt bietet BEWUSST keine Aktion an, die in eine fremde Umgebung
+hineinsieht: keine Objektliste, keine Namen, keine Vorschau, kein Export. Aus
+`objects` liest er ausschliesslich `COUNT` und `SUM`. Das ist der
+Unterschied zwischen "wir tun es nicht" und "es geht nicht" - und nur der
+zweite haelt einer Nachfrage stand. Die Testreihe prueft es statisch mit.
+
+Zwei Eingriffe, beide ueber die Umgebungs-ID, beide protokolliert:
+
+* `env_lock` setzt `locked_until` UND loescht Sitzungen und Geraete-Links.
+  `locked_until` blockiert nur die ANMELDUNG - ohne den zweiten Schritt liefe
+  ein bereits angemeldetes Geraet unbehelligt weiter.
+* `env_delete` verlangt `confirm` = `DELETE` und trifft alles in der
+  Umgebung (CASCADE). Die eigene Umgebung ist fuer beides gesperrt.
+
+`admin_log` hat KEINE Fremdschluessel: ein Eintrag muss die geloeschte Umgebung
+ueberleben, sonst raeumte das Loeschen seinen eigenen Nachweis weg.
+
+Das Recht haengt an der Umgebung (`is_admin`), nicht am Geraet. `claim_admin`
+vergleicht den `admin_key` aus der Konfiguration zeitkonstant. Leerer
+Schluessel = niemand wird Verwalter.

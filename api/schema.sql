@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS environments (
   -- Kurator: darf in der Bibliothek freigeben und ablehnen. Wird einmalig
   -- ueber den Kurator-Schluessel aus der Konfiguration gesetzt.
   is_curator    TINYINT(1)      NOT NULL DEFAULT 0,
+  -- Verwalter: sieht Betriebszahlen und kann sperren/loeschen. Sieht
+  -- ausdruecklich NICHT in fremde Umgebungen hinein.
+  is_admin      TINYINT(1)      NOT NULL DEFAULT 0,
   locked_until  DATETIME        NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_code (code_hash),
@@ -157,6 +160,20 @@ CREATE TABLE IF NOT EXISTS class_codes (
   UNIQUE KEY uq_cc_code (code),
   KEY idx_cc_env (env_id),
   CONSTRAINT fk_cc_env FOREIGN KEY (env_id) REFERENCES environments (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Protokoll der Verwaltungs-Eingriffe. BEWUSST OHNE Fremdschluessel: ein
+-- Eintrag muss die geloeschte Umgebung ueberleben - sonst raeumte gerade das
+-- Loeschen seinen eigenen Nachweis weg.
+CREATE TABLE IF NOT EXISTS admin_log (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  actor_env  BIGINT UNSIGNED NULL,
+  action     VARCHAR(32)     NOT NULL,
+  target_env BIGINT UNSIGNED NULL,
+  note       VARCHAR(200)    NOT NULL DEFAULT '',
+  created_at DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_al_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS rate_limits (

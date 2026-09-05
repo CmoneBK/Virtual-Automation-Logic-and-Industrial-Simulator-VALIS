@@ -69,7 +69,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
-`sessions`, `shares`, `library` und `class_codes` zeigen.
+`sessions`, `shares`, `library`, `class_codes` und `admin_log` zeigen.
 
 > **Bestehende Installationen** brauchen einmalig:
 >
@@ -80,6 +80,7 @@ Prüfen: `SHOW TABLES;` muss `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-presence.sql
 >     mysql -u valis -p valis < api/migrate-library.sql
 >     mysql -u valis -p valis < api/migrate-classcodes.sql
+>     mysql -u valis -p valis < api/migrate-admin.sql
 >
 > Ohne die drei Spalten `live_on`, `live_owner`, `live_until` schlägt die
 > Aktion `live` fehl; alles andere läuft unverändert weiter.
@@ -179,6 +180,7 @@ Alle in `config.php`:
 | `login_max_fails` | 10 | Fehlversuche bis zur Sperre |
 | `curator_key` | `''` | Schlüssel, mit dem eine Umgebung Kurator der Bibliothek wird |
 | `allow_library_submit` | `true` | dürfen normale Umgebungen etwas einreichen? |
+| `admin_key` | `''` | Schlüssel für die Verwaltungsansicht |
 
 Bei offener Registrierung ist dein Server eine **offen beschreibbare API**.
 Quota, Rate-Limits und die automatische Löschung sind die Bremsen dafür. Wird sie
@@ -253,6 +255,48 @@ eine feste Objektliste. Umgebungscodes sind gehasht, weil sie Schreibrecht auf
 eine ganze Umgebung geben: anderer Schutzbedarf, andere Entscheidung.
 
 `gc.php` räumt abgelaufene und widerrufene Codes nach 30 Tagen Schonfrist ab.
+
+## Verwaltungsansicht
+
+Unten im Umgebungs-Panel steht ein unscheinbarer Link **Verwaltung**. Wer den
+`admin_key` einmal eingegeben hat, sieht dort den Betrieb dieser Installation.
+Der Schlüssel wird wie der Kurator-Schlüssel auf dem Server erzeugt und liegt nur
+außerhalb des Webroots; das Recht hängt danach an der Umgebung (`is_admin`), nicht
+am Gerät. Ist `admin_key` leer, gibt es keine Verwaltung.
+
+**Was sie zeigt** – Summen über die Installation: Zahl der Umgebungen, aktive der
+letzten 7 und 30 Tage, Neuanlagen, gesperrte, Objekte nach Art, belegter Speicher,
+offene Sitzungen, Bibliotheks-Stapel samt Alter des ältesten wartenden Eintrags,
+aktive Klassencodes und Einlösungen, Treffer der Ratenbremse. Je Umgebung
+ausschließlich **Kennzahlen**: ID, Größe, Objektanzahl je Art, letzter Zugriff,
+Sperrstatus, Fehlanmeldungen.
+
+Liegen viele abgelaufene Sitzungen herum, weist die Ansicht darauf hin, dass
+`gc.php` offenbar nicht per Cron läuft. Das ist der häufigste stille Betriebsfehler.
+
+**Was sie nicht kann:** in eine fremde Umgebung hineinsehen. Keine Objektliste,
+keine Namen, keine Vorschau, kein Export – und zwar nicht als Hausregel, sondern
+weil `admin.php` keine solche Aktion anbietet. Das ist der Unterschied zwischen
+„wir tun es nicht" und „es geht nicht", und nur der zweite hält einer Nachfrage
+stand. Die Testreihe prüft genau das: der Endpunkt darf aus `objects` nur `COUNT`
+und `SUM` lesen, nie `name` oder `data`.
+
+**Zwei Eingriffe**, beide über die Umgebungs-ID, beide in `admin_log` protokolliert:
+
+* **Sperren** setzt `locked_until` **und beendet laufende Sitzungen samt
+  Geräte-Links**. Ohne das zweite liefe ein bereits angemeldetes Gerät
+  unbehelligt weiter – die Sperre wäre wirkungslos.
+* **Löschen** entfernt die Umgebung mit allem darin (CASCADE) und verlangt ein
+  getipptes Bestätigungswort. Die eigene Umgebung lässt sich weder sperren noch
+  löschen.
+
+`admin_log` hat **bewusst keine Fremdschlüssel**: ein Eintrag muss die gelöschte
+Umgebung überleben, sonst räumte gerade das Löschen seinen eigenen Nachweis weg.
+
+> **Grenze, die man kennen sollte:** Eine Lehrkraft-Übersicht über Abgaben lässt
+> sich hieraus *nicht* bauen, und das ist Absicht. Sie bräuchte eine Zuordnung
+> Person → Umgebung – genau die fehlt und ist die Grundlage dafür, dass
+> serverseitig keine personenbezogenen Daten liegen.
 
 ## Sicherheits- und Datenschutz-Design
 
@@ -445,7 +489,7 @@ mysql -u valis -p valis < api/schema.sql
 ```
 
 Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
-`sessions`, `shares`, `library` and `class_codes`.
+`sessions`, `shares`, `library`, `class_codes` and `admin_log`.
 
 > **Existing installations** need this once:
 >
@@ -456,6 +500,7 @@ Verify: `SHOW TABLES;` must list `environments`, `objects`, `rate_limits`,
 >     mysql -u valis -p valis < api/migrate-presence.sql
 >     mysql -u valis -p valis < api/migrate-library.sql
 >     mysql -u valis -p valis < api/migrate-classcodes.sql
+>     mysql -u valis -p valis < api/migrate-admin.sql
 >
 > Without the three columns `live_on`, `live_owner`, `live_until` the `live`
 > action fails; everything else keeps working unchanged.
@@ -554,6 +599,7 @@ All in `config.php`:
 | `login_max_fails` | 10 | failed attempts before lockout |
 | `curator_key` | `''` | key that turns an environment into a library curator |
 | `allow_library_submit` | `true` | may ordinary environments submit entries? |
+| `admin_key` | `''` | key for the administration view |
 
 With open signup your server is a **publicly writable API**. Quotas, rate limits
 and automatic deletion are the brakes. If it gets abused, set
@@ -623,6 +669,46 @@ hashed because they grant write access to a whole environment: different exposur
 different decision.
 
 `gc.php` removes expired and revoked codes after a 30-day grace period.
+
+## Administration view
+
+At the bottom of the environment panel sits an unobtrusive **Verwaltung** link.
+Enter the `admin_key` once and it shows how this installation is running. The key
+is generated on the server like the curator key and lives only outside the web
+root; the right then belongs to the environment (`is_admin`), not the device. An
+empty `admin_key` means there is no administration at all.
+
+**What it shows** – totals across the installation: environments, active in the
+last 7 and 30 days, new ones, locked ones, objects by kind, storage used, open
+sessions, the library queue with the age of the oldest pending entry, active class
+codes and redemptions, rate-limit hits. Per environment strictly **numbers**: id,
+size, object counts per kind, last access, lock status, failed logins.
+
+If many expired sessions are lying around, the view points out that `gc.php` is
+apparently not running via cron – the most common silent operational fault.
+
+**What it cannot do:** look inside someone else's environment. No object list, no
+names, no preview, no export – not as a house rule but because `admin.php` offers
+no such action. That is the difference between "we do not do it" and "it cannot be
+done", and only the second survives a question. The test suite checks exactly
+this: the endpoint may read only `COUNT` and `SUM` from `objects`, never `name` or
+`data`.
+
+**Two interventions**, both by environment id, both recorded in `admin_log`:
+
+* **Lock** sets `locked_until` **and kills running sessions and device links**.
+  Without the latter an already logged-in device would carry on untouched and the
+  lock would be pointless.
+* **Delete** removes the environment with everything in it (CASCADE) and requires
+  a typed confirmation word. Your own environment can be neither locked nor
+  deleted.
+
+`admin_log` deliberately has **no foreign keys**: an entry has to outlive the
+deleted environment, otherwise deletion would tidy away its own record.
+
+> **A limit worth knowing:** a teacher's overview of submissions cannot be built
+> from this, by design. It would need a person → environment mapping – exactly the
+> mapping that is absent and that keeps the server free of personal data.
 
 ## Security and data-protection design
 

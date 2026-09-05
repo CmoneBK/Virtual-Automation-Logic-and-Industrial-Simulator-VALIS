@@ -40,6 +40,12 @@ return [
     // erst nach Freigabe durch einen Kurator sichtbar.
     'allow_library_submit' => true,
 
+    // Verwalter-Schluessel. WIE DER KURATOR-SCHLUESSEL auf dem Server erzeugen
+    // und niemals ins Repository legen. Die Verwaltungsansicht zeigt
+    // Betriebszahlen und kann sperren/loeschen - sie sieht ausdruecklich NICHT
+    // in fremde Umgebungen hinein. Leer lassen = niemand wird Verwalter.
+    'admin_key'            => '',
+
     // Quota je Umgebung
     'quota_bytes'          => 5 * 1024 * 1024,
     'quota_objects'        => 300,

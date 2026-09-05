@@ -85,6 +85,7 @@ function valis_config(bool $required = true): array {
                 // JSON-Antwort. Leerer Kurator-Schluessel = niemand wird Kurator.
                 'curator_key'         => '',
                 'allow_library_submit'=> true,
+                'admin_key'           => '',
             ];
             return $cfg;
         }

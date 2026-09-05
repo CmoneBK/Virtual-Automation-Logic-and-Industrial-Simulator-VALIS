@@ -24717,9 +24717,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Fuer den Mitlese-Modus der gemeinsamen Bearbeitung freigegeben: dort
         // werden dieselben Sperren gesetzt wie bei Aufgaben, statt eine zweite
         // Sperr-Mechanik zu bauen.
-        window._taskApplyBlockAreas   = function (a) { return _taskApplyBlockAreas(a); };
-        window._taskRestoreBlockAreas = function () { return _taskRestoreBlockAreas(); };
-        window._taskIsActive          = function () { return !!activeTask; };
+        //
+        // WICHTIG: bewusst ANDERE Namen. Diese Funktionen stehen auf oberster
+        // Script-Ebene, dort ist `function _taskApplyBlockAreas(){}` dasselbe wie
+        // window._taskApplyBlockAreas. Ein gleichnamiger Wrapper wuerde das
+        // Original ueberschreiben und sich selbst aufrufen - Endlosrekursion,
+        // die auch jede Aufgabe mit blockAreas getroffen haette.
+        window._valisApplyBlockAreas   = function (a) { return _taskApplyBlockAreas(a); };
+        window._valisRestoreBlockAreas = function () { return _taskRestoreBlockAreas(); };
+        window._valisTaskIsActive      = function () { return !!activeTask; };
 
         function _taskApplyBlockAreas(areas) {
             if (!areas) return;
@@ -65756,7 +65762,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function followLock(on) {
             // Eine laufende Aufgabe hat Vorrang - ihre Sperren duerfen wir nicht
             // aufheben, sonst waere die Aufgabe ploetzlich frei bearbeitbar.
-            if (typeof window._taskIsActive === 'function' && window._taskIsActive()) return;
+            if (typeof window._valisTaskIsActive === 'function' && window._valisTaskIsActive()) return;
             try {
                 if (on) {
                     // Der Merker allein genuegt NICHT: Beim Einspielen eines fremden
@@ -65767,11 +65773,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (live.locked && standing) return;
                     // _taskAddBlockOverlay schuetzt nicht gegen Mehrfach-Overlays,
                     // daher vor dem erneuten Sperren sauber aufraeumen.
-                    if (standing) window._taskRestoreBlockAreas();
-                    window._taskApplyBlockAreas(LIVE_BLOCK);
+                    if (standing) window._valisRestoreBlockAreas();
+                    window._valisApplyBlockAreas(LIVE_BLOCK);
                     live.locked = true;
                 } else if (live.locked) {
-                    window._taskRestoreBlockAreas();
+                    window._valisRestoreBlockAreas();
                     live.locked = false;
                 }
             } catch (e) {

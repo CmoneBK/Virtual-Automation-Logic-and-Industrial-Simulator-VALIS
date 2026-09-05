@@ -65840,7 +65840,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             var B = idx(base), M = idx(mine), T = idx(theirs);
             var seen = {}, out = [], id;
-            var order = (theirs || []).concat(mine || []);
+            // Meine Reihenfolge zuerst: bleibt inhaltlich alles gleich, ist auch
+            // die Liste identisch - sonst meldete der Vergleich staendig Aenderung.
+            var order = (mine || []).concat(theirs || []);
             order.forEach(function (x) {
                 if (!x || x.id == null) return;
                 id = String(x.id);
@@ -65860,6 +65862,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
 
         function parseJ(v, fb) { try { return JSON.parse(v); } catch (_) { return fb; } }
+
+        /**
+         * Vergleich zweier JSON-Zeichenketten nach INHALT. Noetig, weil die
+         * zusammengefuehrte Fassung neu serialisiert wird und sich dabei schon in
+         * der Schluesselreihenfolge unterscheiden kann - ein reiner Textvergleich
+         * meldete dann staendig eine Aenderung, obwohl inhaltlich nichts anders ist.
+         */
+        function stableStr(v) {
+            if (v === null || typeof v !== 'object') return JSON.stringify(v);
+            if (Array.isArray(v)) return '[' + v.map(stableStr).join(',') + ']';
+            return '{' + Object.keys(v).sort().map(function (k) {
+                return JSON.stringify(k) + ':' + stableStr(v[k]);
+            }).join(',') + '}';
+        }
+        function sameJson(a, b) {
+            if (a === b) return true;
+            try { return stableStr(JSON.parse(a)) === stableStr(JSON.parse(b)); }
+            catch (_) { return false; }
+        }
 
         /**
          * Fuehrt zwei Arbeitsstaende zusammen. `items` bleibt bewusst lokal:
@@ -66131,9 +66152,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         /** Spielt nur das ein, was sich wirklich geaendert hat. */
         function rtApply(merged, mine) {
-            var heavy = merged.types !== mine.types
-                     || merged.factory !== mine.factory
-                     || merged.plugins !== mine.plugins;
+            // Der vollstaendige Neuaufbau ueber loadSnapshot ist teuer UND setzt die
+            // Schreibmarke ans Ende. Er darf deshalb nur laufen, wenn sich wirklich
+            // mehr als der Code geaendert hat - inhaltlich gepruaeft, nicht als Text.
+            var heavy = !sameJson(merged.types, mine.types)
+                     || !sameJson(merged.factory, mine.factory)
+                     || !sameJson(merged.plugins, mine.plugins);
             if (heavy) { restoreSilently(merged); return; }
             if (merged.code !== mine.code) setCodeKeepCaret(merged.code);
         }
@@ -66446,30 +66470,54 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return { x: r.left + fx * sc, y: r.top + fy * sc };
         }
 
-        /** Zeichenposition -> Bildschirmrechteck, gemessen am Highlight-Spiegel.
-         *  Der ist zeichengenau ausgerichtet, sonst saesse das Syntax-Highlighting
-         *  daneben - deshalb laesst sich daran exakt messen, statt zu schaetzen. */
+        /**
+         * Zeichenposition -> Bildschirmrechteck, gemessen am Highlight-Spiegel.
+         *
+         * WICHTIG: Der Spiegel packt jede Zeile in ein eigenes Block-Element und
+         * verbindet sie OHNE Zeilenumbruch. Sein Textinhalt hat also weniger
+         * Zeichen als der Textbereich - ein roher Offset liefe pro vorangehender
+         * Zeile um ein Zeichen aus dem Tritt. Dazu bringen Marker-Spans (⋯, ≈)
+         * zusaetzlichen Text ein. Deshalb wird ueber Zeile und Spalte gemessen:
+         * die Zeile ueber das Block-Element, die Spalte innerhalb davon.
+         */
         function offsetToRect(offset) {
+            var ta = document.getElementById('code');
             var hl = document.getElementById('highlighting-content');
-            if (!hl || offset < 0) return null;
+            if (!ta || !hl || offset < 0) return null;
+
+            var val = ta.value || '';
+            if (offset > val.length) offset = val.length;
+            var line = 0, lastNl = -1;
+            for (var i = 0; i < offset; i++) {
+                if (val.charCodeAt(i) === 10) { line++; lastNl = i; }
+            }
+            var col = offset - (lastNl + 1);
+
+            var el = hl.children && hl.children[line];
+            if (!el || !el.getBoundingClientRect) return null;
+
             try {
-                var w = document.createTreeWalker(hl, NodeFilter.SHOW_TEXT, null, false);
+                var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
                 var acc = 0, node;
                 while ((node = w.nextNode())) {
                     var len = node.nodeValue.length;
-                    if (acc + len >= offset) {
+                    if (acc + len >= col) {
                         var rg = document.createRange();
-                        var loc = Math.max(0, Math.min(len, offset - acc));
+                        var loc = Math.max(0, Math.min(len, col - acc));
                         rg.setStart(node, loc); rg.setEnd(node, loc);
-                        var rect = rg.getBoundingClientRect();
-                        if (rect && (rect.height || rect.top)) return rect;
-                        return node.parentNode && node.parentNode.getBoundingClientRect
-                             ? node.parentNode.getBoundingClientRect() : null;
+                        var r = rg.getBoundingClientRect();
+                        if (r && (r.height || r.top)) return r;
+                        break;
                     }
                     acc += len;
                 }
             } catch (_) {}
-            return null;
+
+            // Leere Zeile oder Spalte hinter dem Zeilenende: das Zeilenelement
+            // liefert immerhin Hoehe und Zeilenanfang.
+            var er = el.getBoundingClientRect();
+            return { left: er.left, top: er.top, right: er.right,
+                     bottom: er.bottom, height: er.height, width: 0 };
         }
 
         function presLayer() {
@@ -66503,8 +66551,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     var rc = offsetToRect(pr.caret);
                     // Ausserhalb des sichtbaren Editorbereichs nicht zeichnen -
                     // sonst klebte die Marke beim Scrollen ueber anderen Panels.
-                    if (rc && rc.top >= taRect.top - 2 && rc.bottom <= taRect.bottom + 2
-                           && rc.left >= taRect.left - 2 && rc.left <= taRect.right + 2) {
+                    // Senkrecht streng (sonst klebte die Marke ueber anderen Panels),
+                    // waagerecht grosszuegig - Innenabstaende koennen Spalte 0 knapp
+                    // links der Kante liegen lassen.
+                    if (rc && rc.top >= taRect.top - 4 && rc.bottom <= taRect.bottom + 4
+                           && rc.left >= taRect.left - 24 && rc.left <= taRect.right + 4) {
                         var h = rc.height || 16;
                         var car = document.createElement('div');
                         car.style.cssText = 'position:fixed;width:2px;border-radius:1px;'
@@ -66593,6 +66644,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Beim Scrollen im Editor wandern die fremden Marken mit.
             var taScroll = document.getElementById('code');
             if (taScroll) taScroll.addEventListener('scroll', presRender);
+            window.addEventListener('resize', presRender);
         } catch (_) {}
 
         /* ---- Zugangs-Link ------------------------------------------------- */

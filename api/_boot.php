@@ -80,6 +80,11 @@ function valis_config(bool $required = true): array {
                 'inactive_delete_days'=> 365,
                 'signup_per_ip_day'   => 20,
                 'login_max_fails'     => 10,
+                // Neuere Schluessel: bestehende config.php-Dateien kennen sie
+                // nicht, ohne Vorgabe gaebe es eine Warnung mitten in der
+                // JSON-Antwort. Leerer Kurator-Schluessel = niemand wird Kurator.
+                'curator_key'         => '',
+                'allow_library_submit'=> true,
             ];
             return $cfg;
         }

@@ -65753,22 +65753,115 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             finally { window.confirm = orig; }
         }
 
+        // Das Banner ist zugleich die Bedienung: ein Klick uebernimmt bzw. gibt den
+        // Stift ab, und es laesst sich frei verschieben, damit es nichts verdeckt.
+        // Ziehen und Klicken werden ueber eine kleine Wegschwelle unterschieden.
+        var lbDrag = null, lbMoved = false, lbHintTimer = null;
+
+        function lbPosKey() { return skey('valisCloudLivePos'); }
+        function lbApplyPos(el) {
+            var pos = null;
+            try { pos = JSON.parse(localStorage.getItem(lbPosKey()) || 'null'); } catch (_) {}
+            if (pos && typeof pos.x === 'number') {
+                // Nach Fensterwechsel darf es nicht ausserhalb liegen.
+                var x = Math.max(0, Math.min((window.innerWidth || 1200) - 60, pos.x));
+                var y = Math.max(0, Math.min((window.innerHeight || 800) - 24, pos.y));
+                el.style.left = x + 'px'; el.style.top = y + 'px';
+                el.style.transform = 'none';
+                el.style.borderRadius = '6px';
+            } else {
+                el.style.left = '50%'; el.style.top = '0';
+                el.style.transform = 'translateX(-50%)';
+                el.style.borderRadius = '0 0 6px 6px';
+            }
+        }
+        function lbSavePos(el) {
+            try {
+                localStorage.setItem(lbPosKey(), JSON.stringify({
+                    x: parseInt(el.style.left, 10) || 0,
+                    y: parseInt(el.style.top, 10) || 0
+                }));
+            } catch (_) {}
+        }
+
+        function lbOnClick(ev) {
+            if (lbMoved) { lbMoved = false; return; }   // war ein Verschieben
+            if (ev && ev.target && ev.target.id === 'valis-live-more') {
+                open(); renderLive(live.kind, live.uid, live.name);
+                return;
+            }
+            if (!live.uid) return;
+            if (live.mine) {
+                C.live(live.kind, live.uid, 'release', deviceId())
+                 .then(function () { startLive(live.kind, live.uid, live.name, false); })
+                 .catch(function () {});
+            } else {
+                C.live(live.kind, live.uid, 'claim', deviceId()).then(function (st) {
+                    if (st && st.mine) startLive(live.kind, live.uid, live.name, true);
+                    else liveHint('Noch vergeben – warte kurz');
+                }).catch(function () {});
+            }
+        }
+
+        function liveHint(msg) {
+            var t = document.getElementById('valis-live-text');
+            if (!t) return;
+            t.textContent = '⏳ ' + msg;
+            if (lbHintTimer) clearTimeout(lbHintTimer);
+            lbHintTimer = setTimeout(liveTick, 1800);   // naechster Takt setzt den Text neu
+        }
+
         function liveBanner(text, color) {
             var el = document.getElementById('valis-live-banner');
             if (!text) { if (el && el.parentNode) el.parentNode.removeChild(el); return; }
             if (!el) {
                 el = document.createElement('div');
                 el.id = 'valis-live-banner';
-                el.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);'
-                    + 'z-index:10001;padding:5px 16px;border-radius:0 0 6px 6px;color:#fff;'
-                    + 'font:600 12px "Segoe UI",Tahoma,sans-serif;cursor:pointer;'
-                    + 'box-shadow:0 2px 10px rgba(0,0,0,.45);';
-                el.title = 'Gemeinsame Bearbeitung – klicken zum Öffnen';
-                el.onclick = function () { open(); renderLive(live.kind, live.uid, live.name); };
+                el.style.cssText = 'position:fixed;z-index:10001;padding:5px 10px 5px 14px;'
+                    + 'color:#fff;font:600 12px "Segoe UI",Tahoma,sans-serif;cursor:pointer;'
+                    + 'box-shadow:0 2px 10px rgba(0,0,0,.45);user-select:none;'
+                    + 'display:flex;align-items:center;gap:10px;white-space:nowrap;';
+                el.innerHTML = '<span id="valis-live-text"></span>'
+                             + '<span id="valis-live-more" title="Gemeinsame Bearbeitung öffnen" '
+                             + 'style="opacity:.75;padding:0 2px;">⋯</span>';
+                el.onclick = lbOnClick;
+                el.onmousedown = function (ev) {
+                    if (ev.button !== 0) return;
+                    var r = el.getBoundingClientRect();
+                    lbDrag = { dx: ev.clientX - r.left, dy: ev.clientY - r.top,
+                               sx: ev.clientX, sy: ev.clientY };
+                    lbMoved = false;
+                    ev.preventDefault();
+                };
+                document.addEventListener('mousemove', function (ev) {
+                    if (!lbDrag) return;
+                    if (!lbMoved &&
+                        Math.abs(ev.clientX - lbDrag.sx) + Math.abs(ev.clientY - lbDrag.sy) < 4) return;
+                    lbMoved = true;
+                    var b = document.getElementById('valis-live-banner');
+                    if (!b) return;
+                    b.style.transform = 'none';
+                    b.style.borderRadius = '6px';
+                    b.style.left = Math.max(0, Math.min((window.innerWidth || 1200) - 60,
+                                    ev.clientX - lbDrag.dx)) + 'px';
+                    b.style.top  = Math.max(0, Math.min((window.innerHeight || 800) - 24,
+                                    ev.clientY - lbDrag.dy)) + 'px';
+                });
+                document.addEventListener('mouseup', function () {
+                    if (!lbDrag) return;
+                    lbDrag = null;
+                    var b = document.getElementById('valis-live-banner');
+                    if (lbMoved && b) lbSavePos(b);
+                });
                 document.body.appendChild(el);
+                lbApplyPos(el);
             }
-            el.textContent = text;
+            var t = document.getElementById('valis-live-text');
+            if (t) t.textContent = text;
             el.style.background = color;
+            el.title = live.mine
+                ? 'Klicken: Stift abgeben · Ziehen zum Verschieben'
+                : 'Klicken: Stift übernehmen · Ziehen zum Verschieben';
         }
 
         function pushIfChanged(serverVersion) {
@@ -65803,13 +65896,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!live.on) { stopLive(); say('Gemeinsame Bearbeitung wurde beendet.', '#9e9e9e'); return; }
                 if (live.mine) {
                     followLock(false);
-                    liveBanner('✏️ Du hast den Stift – ' + (live.name || 'Gemeinsame Sitzung'), '#2e7d32');
+                    liveBanner('✏️ Du hast den Stift – klicken zum Abgeben', '#2e7d32');
                     pushIfChanged(st.version);
                 } else {
                     followLock(true);
                     liveBanner(st.taken
-                        ? '👀 Du liest mit – jemand anders hat den Stift'
-                        : '👀 Gemeinsam – der Stift ist frei', st.taken ? '#1565c0' : '#6d4c41');
+                        ? '👀 Du liest mit – klicken, um den Stift anzufordern'
+                        : '✋ Stift ist frei – klicken zum Übernehmen',
+                        st.taken ? '#1565c0' : '#6d4c41');
                     if (st.version > live.lastVer) pullNow();
                 }
             }).catch(function (e) {

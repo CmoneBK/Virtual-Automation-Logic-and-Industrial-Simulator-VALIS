@@ -64696,6 +64696,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         var SNAP_KEY = 'valis_snapshots';
         var KIND = 'session';
+
+        // Der Live-Stand hat in jeder Umgebung eine FESTE Kennung. Frueher zeigte
+        // ein Verweis im Browser auf "den zuletzt gespeicherten Stand": jedes Geraet
+        // hatte damit seinen eigenen, und jedes Speichern ueberschrieb ihn - mehrere
+        // Staende nebeneinander waren so gar nicht moeglich. Mit einer festen Kennung
+        // treffen alle Geraete denselben mitlaufenden Stand, und alles andere ist per
+        // Definition ein eigenstaendiger Stand, den nichts automatisch anfasst.
+        var LIVE_UID  = 'live-session';
+        var LIVE_NAME = 'Live-Stand';
+
+        // Altlast aufraeumen. Das Objekt, auf das die alten Schluessel zeigten,
+        // bleibt erhalten - es ist ab jetzt ein eigenstaendiger Stand.
+        try {
+            localStorage.removeItem('valisCloudSessionUid');
+            localStorage.removeItem('valisCloudSessionVer');
+        } catch (_) {}
         var modal = null, box = null, status = null, busy = false;
 
 
@@ -64999,6 +65015,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 var rows = (j.objects || []).map(function (o) {
                     return '<tr style="border-top:1px solid #3a3a3a;">'
                         + '<td style="padding:7px 6px;">' + esc(o.name || '(ohne Namen)')
+                        + (o.uid === LIVE_UID
+                            ? ' <span title="Wird beim Speichern überschrieben" '
+                              + 'style="background:#2e7d32;color:#fff;border-radius:3px;padding:1px 5px;'
+                              + 'font-size:9px;vertical-align:middle;">LIVE</span>' : '')
                         +   '<div style="font-size:10px;color:#777;">' + esc(o.kind) + ' &middot; v' + o.version
                         +   ' &middot; ' + fmtBytes(o.bytes) + '</div></td>'
                         + '<td style="padding:7px 6px;font-size:11px;color:#9e9e9e;white-space:nowrap;">'
@@ -65157,36 +65177,67 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         /* ---- Speichern / Laden / Konflikt --------------------------------- */
 
-        function currentUid() {
-            try { return localStorage.getItem('valisCloudSessionUid') || ''; } catch (_) { return ''; }
+        // Vom Live-Stand merken wir uns nur die zuletzt gesehene Version - je
+        // Umgebung, sonst zeigte sie nach einem Wechsel auf die falsche.
+        function liveVer() {
+            try { return parseInt(localStorage.getItem(skey('valisCloudLiveVer')) || '0', 10) || 0; }
+            catch (_) { return 0; }
         }
-        function setCurrent(uid, version) {
-            try {
-                localStorage.setItem('valisCloudSessionUid', uid);
-                localStorage.setItem('valisCloudSessionVer', String(version));
-            } catch (_) {}
-        }
-        function currentVer() {
-            try { return parseInt(localStorage.getItem('valisCloudSessionVer') || '0', 10) || 0; } catch (_) { return 0; }
+        function setLiveVer(v) {
+            try { localStorage.setItem(skey('valisCloudLiveVer'), String(v)); } catch (_) {}
         }
 
+        /** Speichern mit Wahl: mitlaufender Live-Stand oder eigenstaendiger Stand. */
         function saveCurrent() {
             var bundle = captureBundle();
             if (!bundle) { say('Arbeitsstand konnte nicht gelesen werden.', '#ef9a9a'); return; }
-            var name = prompt('Name für diesen Stand:', 'Stand vom ' + new Date().toLocaleString());
-            if (name === null) return;
-            var uid = currentUid(), base = currentVer();
-            if (!uid) { uid = C.newUid(); base = 0; }
-            put(uid, name, bundle, base);
+
+            var W = 'width:100%;text-align:left;color:#fff;border:none;border-radius:4px;'
+                  + 'padding:11px 13px;cursor:pointer;font-size:13px;margin-bottom:8px;';
+            box.innerHTML =
+                '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">Aktuellen Stand speichern</div>'
+              + '<div style="font-size:11px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+              +   'Wohin soll der Arbeitsstand?</div>'
+              + '<button id="sv-live" style="background:#2e7d32;' + W + '">'
+              +   '<b>' + LIVE_NAME + ' aktualisieren</b>'
+              +   '<div style="font-size:11px;opacity:.85;margin-top:3px;">Der mitlaufende Stand dieser '
+              +   'Umgebung &ndash; einer je Umgebung, auf allen Geräten derselbe. Wird beim nächsten '
+              +   'Mal wieder überschrieben.</div></button>'
+              + '<button id="sv-keep" style="background:#1565c0;' + W + '">'
+              +   '<b>Als eigenen Stand ablegen</b>'
+              +   '<div style="font-size:11px;opacity:.85;margin-top:3px;">Bekommt einen Namen und bleibt '
+              +   'so, wie er ist &ndash; nichts überschreibt ihn später. Für Zwischenstände, auf die du '
+              +   'zurück willst.</div></button>'
+              + '<button id="sv-no" style="width:100%;background:#3a3a3a;color:#ccc;border:none;'
+              +   'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Abbrechen</button>';
+
+            box.querySelector('#sv-live').onclick = function () {
+                put(LIVE_UID, LIVE_NAME, bundle, liveVer());
+            };
+            box.querySelector('#sv-keep').onclick = function () {
+                var name = prompt('Name für diesen Stand:', 'Stand vom ' + new Date().toLocaleString());
+                if (name === null || !name.trim()) return;
+                put(C.newUid(), name.trim(), bundle, 0);
+            };
+            box.querySelector('#sv-no').onclick = renderEnv;
         }
-        function put(uid, name, bundle, base) {
+
+        function put(uid, name, bundle, base, retried) {
             run(C.put(KIND, uid, name, bundle, base), 'Speichere …', function (j) {
-                setCurrent(j.uid, j.version);
+                if (uid === LIVE_UID) setLiveVer(j.version);
                 say('Gespeichert (v' + j.version + ').', '#8bc34a');
                 renderEnv();
             }, function (e) {
                 if (e && e.message === 'conflict' && e.data && e.data.server) {
-                    conflict(uid, name, bundle, e.data.server);
+                    var srv = e.data.server;
+                    // Inhaltsgleich, nur die Version war uns unbekannt - etwa beim
+                    // ersten Speichern auf einem weiteren Geraet. Das ist kein
+                    // Konflikt, sondern fehlende Buchfuehrung: einmal nachfassen.
+                    if (!retried && sameJson(JSON.stringify(srv.data), JSON.stringify(bundle))) {
+                        put(uid, name, bundle, srv.version, true);
+                        return true;
+                    }
+                    conflict(uid, name, bundle, srv);
                     return true;
                 }
                 return false;
@@ -65223,7 +65274,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             box.querySelector('#cf-srv').onclick = function () {
                 keepAsSnapshot('Mein Stand (Konflikt)', mine);
-                setCurrent(uid, server.version);
+                if (uid === LIVE_UID) setLiveVer(server.version);
                 if (restoreBundle(server.data)) { say('Serverstand geladen.', '#8bc34a'); }
                 renderEnv();
             };
@@ -65237,7 +65288,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function loadObject(kind, uid) {
             run(C.get(kind, uid), 'Lade …', function (o) {
                 if (restoreBundle(o.data)) {
-                    setCurrent(o.uid, o.version);
+                    // Einen eigenstaendigen Stand zu laden macht ihn NICHT zum Ziel
+                    // des naechsten Speicherns - sonst waere er beim ersten Klick
+                    // ueberschrieben und damit nicht mehr das, was er sein soll.
+                    if (o.uid === LIVE_UID) setLiveVer(o.version);
                     say('Geladen: ' + (o.name || o.uid) + ' (v' + o.version + ').', '#8bc34a');
                     close();
                 } else {

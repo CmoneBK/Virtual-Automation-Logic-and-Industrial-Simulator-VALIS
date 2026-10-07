@@ -24985,6 +24985,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window.confirm = function () { return true; };
             try { window.toggleEpneuMode(); } catch (e) {} finally { window.confirm = oc; }
         }
+        // Button-Optik zum aktuellen Modus. Beim Laden aus einem Link laeuft der
+        // Init-Zweig nicht, der das sonst erledigt — ohne das stuende dort "SPS"
+        // auch im E-Pneu-Modus.
+        function _syncEpneuButton() {
+            const b = document.getElementById('btn-epneu-mode');
+            if (!b) return;
+            b.textContent = window.epneuMode ? '⚡ E-Pneu' : '⚡ SPS';
+            b.style.background = window.epneuMode ? '#0288d1' : '#455a64';
+            b.style.color = window.epneuMode ? '#fff' : '#ccc';
+        }
         let _taskPrevEpneuMode = null;
         let _taskModeEnforced = false;
         function _taskApplyForceMode(mode) {
@@ -26935,6 +26945,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #444;padding-top:12px;">
                     <button onclick="window._taskEditorSave()" style="background:#2e7d32;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:bold;">💾 Lokal speichern</button>
                     <button onclick="window._taskEditorExport()" style="background:#1565c0;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">📤 Als .valitask exportieren</button>
+                    <button onclick="window._taskEditorCopyLink()" title="Kopiert einen Link, der VALIS öffnet und diese Aufgabe sofort startet (#task=…). Die Aufgabe steckt komplett im Link — ohne Datei, ohne Server." style="background:#00838f;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">🔗 Als Link kopieren</button>
                     <button onclick="window._taskEditorClose()" style="background:#555;color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;">✖ Schließen</button>
                 </div>`;
             // Initial-Render: erste Stage in die Editor-Felder laden + Tabs zeigen
@@ -27012,6 +27023,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let task = _taskCleanInternal(_taskCollectFromEditor());
             if (!task.name) { alert('Bitte einen Aufgabennamen eingeben.'); return; }
             _exportTask(task);
+        };
+
+        window._taskEditorCopyLink = function() {
+            let task = _taskCleanInternal(_taskCollectFromEditor());
+            if (!task.name) { alert('Bitte einen Aufgabennamen eingeben.'); return; }
+            task.type = 'valitask';
+            const url = window.location.href.split('#')[0] + '#task=' + LZString.compressToEncodedURIComponent(JSON.stringify(task));
+            const ok = function () { _showToast('🔗 Link zur Aufgabe kopiert (' + url.length + ' Zeichen).'); };
+            const fallback = function () { prompt('Link zur Aufgabe:', url); };
+            try {
+                if (navigator.clipboard) navigator.clipboard.writeText(url).then(ok, fallback);
+                else fallback();
+            } catch (e) { fallback(); }
         };
 
         // ── KI-Prompt: komplette Aufgabe per KI erstellen ───────────────────
@@ -42140,7 +42164,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 factory: getFactoryStateObj(),
                 plugins: activePlugins,
                 userPlugins: userPlugins,
-                circuitEditor: (window.cedExportState ? window.cedExportState() : null)
+                circuitEditor: (window.cedExportState ? window.cedExportState() : null),
+                mode: window.epneuMode ? 'epneu' : 'sps'
             };
             let jsonString = JSON.stringify(saveData);
             textArea.value = JSON.stringify(saveData, null, 2);
@@ -42203,7 +42228,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const saveData = {
                 version: '1.0', layout: currentLayout, code: textarea.value,
                 types: componentTypes, keyBindings: window.inputKeyBindings,
-                factory: getFactoryStateObj(), plugins: activePlugins, userPlugins: userPlugins
+                factory: getFactoryStateObj(), plugins: activePlugins, userPlugins: userPlugins,
+                mode: window.epneuMode ? 'epneu' : 'sps'
             };
             let compressed = '';
             try { compressed = LZString.compressToEncodedURIComponent(JSON.stringify(saveData)); } catch(e) {}
@@ -43015,7 +43041,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const saveData = {
                 version: '1.0', layout: currentLayout, code: textarea.value,
                 types: componentTypes, keyBindings: window.inputKeyBindings,
-                factory: getFactoryStateObj(), plugins: activePlugins, userPlugins: userPlugins
+                factory: getFactoryStateObj(), plugins: activePlugins, userPlugins: userPlugins,
+                mode: window.epneuMode ? 'epneu' : 'sps'
             };
             let compressed = '';
             try { compressed = LZString.compressToEncodedURIComponent(JSON.stringify(saveData)); } catch(e) {}
@@ -43375,6 +43402,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (data.types !== undefined) componentTypes = data.types;
                     localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
+                    // Modus (E-Pneu/SPS) aus dem Link: aeltere Links ohne `mode`
+                    // lassen die gespeicherte Wahl unangetastet.
+                    if (data.mode === 'epneu' || data.mode === 'sps') _taskSetEpneuMode(data.mode === 'epneu');
+                    _syncEpneuButton();
                     // 🌟 NEU: Plugin-Konfiguration aus dem Link laden
                     if (data.userPlugins) {
                         Object.entries(data.userPlugins).forEach(([k, code]) => {
@@ -44661,6 +44692,31 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // ================================================================
 
         // INITIALISIERUNG
+        // 0. Aufgaben-Link (#task=…): eine .valitask, LZ-komprimiert wie #state.
+        //    Wird lokal gespeichert (steht danach in „Aufgaben") und gestartet,
+        //    sobald die Seite fertig ist. So kann eine Webseite mit einem Klick
+        //    in eine vorbereitete Aufgabe fuehren, ohne Datei und ohne Klassencode.
+        (function () {
+            if (!(window.location.hash || '').startsWith('#task=')) return;
+            let task = null;
+            try {
+                const json = LZString.decompressFromEncodedURIComponent(window.location.hash.substring(6));
+                task = JSON.parse(json);
+            } catch (e) { task = null; }
+            history.replaceState(null, null, ' ');
+            if (!task || task.type !== 'valitask') {
+                alert('Der Aufgaben-Link ist ungültig oder beschädigt.');
+                return;
+            }
+            if (!task.id) task.id = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+            window._valisTaskFromLink = true;
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    try { _saveTaskLocally(task); } catch (e) {}
+                    try { window._startTask(task); } catch (e) { console.error('Aufgabe aus Link:', e); }
+                }, 300);
+            });
+        })();
         // 1. Zuerst prüfen, ob wir von einem Link kommen
         if (!checkUrlForState()) {
             // 2. Wenn kein Link da war, normal aus dem Browser-Speicher laden
@@ -54568,7 +54624,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _hubAdopt();
                 let seen = null;
                 try { seen = localStorage.getItem('valisHubSeen'); } catch (_) {}
-                if (seen !== '1') { try { window.openHub(); } catch (_) {} }
+                // Wer über einen Aufgaben-Link kommt, will die Aufgabe sehen –
+                // das Lernzentrum öffnet dann erst beim nächsten Besuch.
+                if (seen !== '1' && !window._valisTaskFromLink) { try { window.openHub(); } catch (_) {} }
             }
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', hubOnReady);

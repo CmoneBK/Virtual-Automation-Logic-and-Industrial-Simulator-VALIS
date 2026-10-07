@@ -78,7 +78,8 @@ Die Symbolleiste über dem IEC-Stromlaufplan bietet mehrere Schalter zur Anpassu
 * **Dynamisches Layout:** Öffnen Sie bis zu 3 Ansichten gleichzeitig (Logik, Schaltplan, 2D Anlage). Verschieben Sie die Zwischenräume (Splitter) stufenlos oder wählen Sie eines von 6 Layouts: **◫ Nebeneinander**, **⬒ Untereinander**, oder vier Raster-Varianten mit der 2D-Anlage unten, oben, rechts oder links.
 * **Auto-Save & Projektdateien:** Der Editor speichert kontinuierlich im `localStorage`. Projekte (inkl. Code, Bauteilzuweisungen und der kompletten 2D-Matrix) können als `.valisave`-Datei exportiert/importiert oder als Raw-JSON kopiert werden. Alte Speicherstände sind aufwärtskompatibel.
 * **Multi-Monitor Support (Pop-Outs):** Koppeln Sie beliebige Fenster (Logik, Schaltplan, Anlage oder Oszilloskop) als eigenständige Browser-Fenster ab, um auf mehreren Bildschirmen zu arbeiten. Alles bleibt in Echtzeit synchronisiert.
-* **Deep Links & QR Codes:** Teilen Sie Ihre komplette Anlage inkl. Code als einfachen Link. Die integrierte LZString-Komprimierung erzeugt winzige URLs und scanbare QR-Codes direkt im Tool.
+* **Deep Links & QR Codes:** Teilen Sie Ihre komplette Anlage inkl. Code als einfachen Link. Die integrierte LZString-Komprimierung erzeugt winzige URLs und scanbare QR-Codes direkt im Tool. Der Link nimmt auch den Modus (E-Pneu/SPS) mit.
+* **Aufgaben-Links (`#task=`):** Im Aufgaben-Editor kopiert „🔗 Als Link kopieren“ einen Link, der VALIS öffnet und die Aufgabe sofort startet – ohne Datei und ohne Server. Die Aufgabe landet dabei auch in der lokalen Aufgabenliste.
 * **KI-Prompt Generator:** Ein integrierter Assistent, der maßgeschneiderte Prompts für ChatGPT/Claude/Gemini erstellt, um textuelle Aufgabenstellungen sofort in VALIS-kompatiblen Code übersetzen zu lassen.
 
 ## 🚀 Schnellstart
@@ -232,7 +233,8 @@ The toolbar above the IEC circuit diagram offers several toggles to customize th
 * **Customizable Layout:** Open up to 3 views simultaneously (Logic, Circuit, Factory). Resize panels dynamically using draggable splitters, or choose from 6 layouts: **◫ Side-by-side**, **⬒ Stacked**, or four grid variants with the factory at the bottom, top, right, or left.
 * **Auto-Save & Project Files:** Never lose your work. The editor auto-saves to `localStorage`. You can also export/import your entire project (code, components, and 2D layout) as `.valisave` files or copy-paste raw JSON. The save system is fully backwards-compatible.
 * **Multi-Monitor Support (Pop-Outs):** Detach any panel (Logic, Circuit, Factory, or Oscilloscope) into its own native browser window to utilize multiple monitors. The engine maintains real-time synchronization across all screens.
-* **Deep Linking & QR Codes:** Share your exact factory and code state via URL. The built-in LZString compression generates tiny, shareable links and crisp QR Codes directly in the app.
+* **Deep Linking & QR Codes:** Share your exact factory and code state via URL. The built-in LZString compression generates tiny, shareable links and crisp QR Codes directly in the app. The link also carries the mode (E-Pneu/PLC).
+* **Task links (`#task=`):** In the task editor, “🔗 Copy as link” copies a link that opens VALIS and starts the task right away – no file, no server. The task is also added to the local task list.
 * **AI Prompt Generator:** Built-in tool to generate perfect prompts for ChatGPT/Claude/Gemini to translate textual automation scenarios directly into VALIS-compatible JSON code.
 
 ## 🚀 Quick Start

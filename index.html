@@ -21677,6 +21677,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return graph.nodes.get(id) ? graph.nodes.get(id).color : '#f58231';            
             };
             const usedAsSource = new Set(graph.edges.map(e => e.sourceId));
+            // Gatter, die nicht als eigenes Hilfsrelais gezeichnet, sondern als
+            // Kontaktbaum im Strang ihres Verbrauchers eingebettet werden — sie
+            // bekommen auch keine -KF-Nummer (keine Lücken in der Zählung).
+            // Direkt: alle Gatter. Klassisch: die Rücksetz-Logik eines Speichers
+            // (R-Eingang RS/SR, z. B. Stopp || Not-Halt) → Öffner in Reihe vor der Spule.
+            const inlineGates = new Set();
+            graph.nodes.forEach(n => { if (n.type === 'GATE' && window.configEconMode) inlineGates.add(n.id); });
+            for (let _chg = !window.configEconMode; _chg; ) {
+                _chg = false;
+                graph.nodes.forEach(n => {
+                    if (n.type !== 'GATE' || inlineGates.has(n.id)) return;
+                    const outs = graph.edges.filter(e => e.sourceId === n.id);
+                    if (outs.length && outs.every(e => {
+                        const t = graph.nodes.get(e.targetId);
+                        return t && (((t.type === 'RS' || t.type === 'SR') && e.targetPin === 'R') || (t.type === 'GATE' && inlineGates.has(t.id)));
+                    })) { inlineGates.add(n.id); _chg = true; }
+                });
+            }
+            const isInlineGate = (id) => inlineGates.has(id);
             let preRungsToDraw = [];
             inputsList.forEach(i => {
                 let cType = componentTypes[i] || 'taster';
@@ -21691,13 +21710,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     contactTypeMap[i] = 'relais';
                     preRungsToDraw.push({ id: i, cType: cType, kfName: kfName, deviceName: deviceName });
                 } else if (usedAsSource.has(i)) {
-                    symMap[i] = `-SF${sfCount++}` + (window.configDetails >= 1 ? ` (${i})` : '');
+                    // Rollentaster/Positionsschalter = -BG (DIN EN 81346-2), bleibt aber
+                    // ein mechanischer Kontakt direkt im Strompfad (kein Hilfsrelais).
+                    let dev = cType === 'mech_sensor' ? `-BG${bgCount++}` : `-SF${sfCount++}`;
+                    symMap[i] = dev + (window.configDetails >= 1 ? ` (${i})` : '');
                     contactTypeMap[i] = cType.replace('_nc', '');
                 }
             });
             let sortedNodes = Array.from(graph.nodes.values()).sort((a,b) => a.level - b.level);
             sortedNodes.forEach(n => {
                 if (n.type === 'GATE') { 
+                    contactTypeMap[n.id] = 'relais';
+                    if (isInlineGate(n.id)) return; // nicht gezeichnet → keine -KF-Nummer
                     let inEdges = graph.edges.filter(e => e.targetId === n.id);
                     let exprParts = inEdges.map(e => {
                         let baseName = symMap[e.sourceId] ? symMap[e.sourceId].split(' ')[0] : e.sourceId;
@@ -22163,7 +22187,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
             function calcPinW(edge) {
-                if (window.configEconMode && edge && graph.nodes.get(edge.sourceId) && graph.nodes.get(edge.sourceId).type === 'GATE') return getTreeW(edge.sourceId);
+                if (edge && isInlineGate(edge.sourceId)) return getTreeW(edge.sourceId);
                 return 90;
             }
             // Berechnet die benötigte Vertikalhöhe eines Baums im Wirtschaftlich-Modus (60px/Blatt)
@@ -22177,10 +22201,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // Gibt die benötigte Pin-Höhe zurück (im Econ-Modus bei GATE-Quellen getTreeH+30, sonst Standardwert)
             function calcPinH(edge, defaultH = 140) {
-                if (window.configEconMode && edge) {
-                    let src = graph.nodes.get(edge.sourceId);
-                    if (src && src.type === 'GATE') return getTreeH(edge.sourceId) + 30;
-                }
+                if (edge && isInlineGate(edge.sourceId)) return getTreeH(edge.sourceId) + 30;
                 return defaultH;
             }
             function drawInputPin(edge, cx, yStart, yEnd, pNum, baseCond = "true", forceInvertNC = false) {
@@ -22200,7 +22221,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 let sourceNode = graph.nodes.get(edge.sourceId);
                 let col = getNodeColor(edge.sourceId);
-                if (window.configEconMode && sourceNode && sourceNode.type === 'GATE') {
+                if (sourceNode && isInlineGate(edge.sourceId)) {
                     let totalW = getTreeW(edge.sourceId);
                     setPower(drawLine(cx, yStart, cx, yStart + 15, 2, edge.sourceId, col), baseCond);
                     // forceInvertNC bei FF-Reset → De Morgan auf den GATE-Subtree
@@ -22257,13 +22278,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const contactZoneH = Math.max(260, _maxAndIn * 65); // 65 px Mindestabstand je Kontakt
             let extraY = contactZoneH - 260; // zusätzliche Pixel gegenüber dem Basiswert
             // RS-Flipflops: S- und R-Eingang teilen dieselbe X-Spalte → kombinierten Baum berücksichtigen
-            if (window.configEconMode) {
+            if (inlineGates.size) {
                 graph.nodes.forEach(n => {
                     if (n.type === 'RS') {
                         let ie = graph.edges.filter(e => e.targetId === n.id);
                         let sE = ie.find(e => e.targetPin === 'S'), rE = ie.find(e => e.targetPin === 'R');
-                        let sh = (sE && graph.nodes.get(sE.sourceId)?.type === 'GATE') ? getTreeH(sE.sourceId) + 30 : 140;
-                        let rh = (rE && graph.nodes.get(rE.sourceId)?.type === 'GATE') ? getTreeH(rE.sourceId) + 30 : 200;
+                        let sh = (sE && isInlineGate(sE.sourceId)) ? getTreeH(sE.sourceId) + 30 : 140;
+                        let rh = (rE && isInlineGate(rE.sourceId)) ? getTreeH(rE.sourceId) + 30 : 200;
                         let jY = Math.max(230, 90 + sh);
                         let rEndY = Math.max(430, jY + rh);
                         extraY = Math.max(extraY, rEndY - 430);
@@ -22360,7 +22381,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 let _rungStartX = currX; // für Drop-Zone
                 if (node.type === 'GATE') {
-                    if (window.configEconMode) return; 
+                    if (isInlineGate(node.id)) return; 
                     let p = pathCounter++;
                     drawText(currX, yTop - 25, p.toString(), true);
                     if (node.label === '&') {
@@ -55428,8 +55449,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const varNormPrefix = {};       // SPS-Variable → reines Norm-Prefix (z.B. "-SF1")
                 function _nextSF(varForLabel) {
                     if (varNormLabel[varForLabel]) return varNormLabel[varForLabel];
-                    NORM.sf++;
-                    const prefix = '-SF' + NORM.sf;
+                    // Rollentaster/Positionsschalter (mech_sensor) = -BG (DIN EN 81346-2)
+                    let prefix;
+                    if (_ct(varForLabel) === 'mech_sensor') { NORM.bg++; prefix = '-BG' + NORM.bg; }
+                    else { NORM.sf++; prefix = '-SF' + NORM.sf; }
                     varNormPrefix[varForLabel] = prefix;
                     return (varNormLabel[varForLabel] = prefix + ' (' + varForLabel + ')');
                 }
@@ -57949,7 +57972,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _normPrefixForType(type) {
                 if (!type) return null;
                 if (type.indexOf('sensor_') === 0) return 'BG';
-                if (['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','mech_sensor','light_curtain'].includes(type)) return 'SF';
+                if (type === 'mech_sensor') return 'BG'; // Positionsschalter (DIN EN 81346-2)
+                if (['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','light_curtain'].includes(type)) return 'SF';
                 if (['relais','relay_no','relay_nc'].includes(type)) return 'KF';
                 if (['led','stacklight','display','hmi_lamp'].includes(type)) return 'P';
                 if (['motor','fan'].includes(type)) return 'M';

@@ -27387,8 +27387,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
+                // Nicht während einer Aufgabe und nicht, solange Bauteile der Anlage
+                // noch an verwaiste Variablen gebunden sind: Dann sind die Variablen
+                // gewollt (Aufgaben-Vorgaben, vorbereitete Anlage) und müssen ein
+                // geleertes Code-Feld überleben.
                 if (parsed.inputs.length === 0 && parsed.outputs.length === 0 && !code.trim()) {
-                    if (typeof window._resetStickyVars === 'function') window._resetStickyVars();
+                    const _gebunden = [...(window._committedOrphans || [])].some(n =>
+                        typeof window._findFactoryBindingsForVar === 'function'
+                        && window._findFactoryBindingsForVar(n).length > 0);
+                    if (!activeTask && !_gebunden && typeof window._resetStickyVars === 'function') window._resetStickyVars();
                 }
                 // Sticky-Pool aktualisieren (registriert Code-Variablen, startet Debounce).
                 if (typeof window._updateStickyAndRefresh === 'function') window._updateStickyAndRefresh();

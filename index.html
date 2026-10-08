@@ -24573,6 +24573,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { _taskRestoreHideAreas();          } catch(e){}
             try { _taskRestoreForceMode();          } catch(e){}
             try { _taskRestoreFestoConfig();        } catch(e){}
+            try { _taskRestoreAutoCleanup();        } catch(e){}
+            // Vor dem Preset: Aufgaben bringen Bauteile mit Variablen-Bindung mit,
+            // deren Variablen erst noch in den Code geschrieben werden. Das
+            // Auto-Aufräumen würde sie vorher als „verwaist" entfernen.
+            try { _taskApplyAutoCleanup(taskObj);   } catch(e){}
             if (taskObj.preset) {
                 let presetData = {
                     code: taskObj.preset.code || '',
@@ -25014,6 +25019,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (eb && eb.dataset.taskModeLock) { delete eb.dataset.taskModeLock; eb.style.pointerEvents = ''; eb.style.opacity = ''; eb.style.cursor = ''; }
         }
 
+        // ── Aufgaben: Auto-Aufräumen verwaister Variablen ───────────────────────
+        // Während einer Aufgabe ist das Auto-Aufräumen aus, sofern die Aufgabe nicht
+        // ausdrücklich autoCleanup: true setzt. Die Einstellung des Nutzers
+        // (localStorage) bleibt unberührt und gilt nach der Aufgabe wieder.
+        window._taskPrevAutoCleanup = null;
+        function _taskApplyAutoCleanup(task) {
+            if (!task || task.autoCleanup === true) return;
+            window._taskPrevAutoCleanup = !!window._stickyAutoCleanup;
+            window._stickyAutoCleanup = false;
+            const ac = document.getElementById('settings-auto-cleanup');
+            if (ac) ac.checked = false;
+        }
+        function _taskRestoreAutoCleanup() {
+            if (window._taskPrevAutoCleanup === null) return;
+            window._stickyAutoCleanup = window._taskPrevAutoCleanup;
+            window._taskPrevAutoCleanup = null;
+            const ac = document.getElementById('settings-auto-cleanup');
+            if (ac) ac.checked = !!window._stickyAutoCleanup;
+        }
+
         // ── Aufgaben: FESTO-Modus-Vorgaben ──────────────────────────────────────
         // Freier Aufbau vorschalten/erzwingen, Schritt-/Trainings-/Stromfluss-Toggle
         // sperren. Erzwingen über Umhüllen der window-Setter (überlebt Re-Render/
@@ -25290,6 +25315,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             _taskRestoreHideAreas();
             _taskRestoreForceMode();
             _taskRestoreFestoConfig();
+            _taskRestoreAutoCleanup();
             activeTask = null;
             taskSolved = false;
             // Tipp-/Check-State zurücksetzen
@@ -40676,6 +40702,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
         window._setStickyAutoCleanup = function(on) {
             window._stickyAutoCleanup = !!on;
+            // Wer während einer Aufgabe selbst umschaltet, hat entschieden: nach
+            // der Aufgabe nicht auf den alten Wert zurückstellen.
+            window._taskPrevAutoCleanup = null;
             try { localStorage.setItem('valisStickyAutoCleanup', on ? '1' : '0'); } catch(_e) {}
             // UI-Sync: harte Checkbox je nach Auto-Modus enabled/disabled + visuell
             // klar (Opacity der Zeile). Beim Ausschalten von Auto wird die Hart-

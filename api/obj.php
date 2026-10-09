@@ -302,6 +302,32 @@ if ($act === 'live') {
     ]);
 }
 
+// ------------------------------------- Laufende gemeinsame Bearbeitungen
+/**
+ * Welche Staende dieser Umgebung werden gerade gemeinsam bearbeitet?
+ *
+ * Ein Geraet, das per Zugangs-Link neu dazukommt, weiss davon nichts - der
+ * Merker liegt im localStorage des Geraets, das die Bearbeitung gestartet hat.
+ * Ohne diese Abfrage blieb der Neue einfach draussen. Bewusst ohne `data`:
+ * der Aufruf laeuft im Takt und soll billig bleiben.
+ */
+if ($act === 'live_list') {
+    $st = db()->prepare(
+        'SELECT kind, obj_uid, name, live_mode FROM objects
+         WHERE env_id = ? AND live_on = 1 AND deleted_at IS NULL
+         ORDER BY updated_at DESC LIMIT 20'
+    );
+    $st->execute([$envId]);
+    json_out(['ok' => true, 'live' => array_map(static function (array $r): array {
+        return [
+            'kind' => $r['kind'],
+            'uid'  => $r['obj_uid'],
+            'name' => $r['name'],
+            'mode' => (string)$r['live_mode'],
+        ];
+    }, $st->fetchAll())]);
+}
+
 // ----------------------------------------------------------- Aenderungen holen
 /**
  * Liefert die seit `since` geaenderten Objekte - absichtlich OHNE `data`.

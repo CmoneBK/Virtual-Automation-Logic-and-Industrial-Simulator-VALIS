@@ -64775,6 +64775,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 action: 'live', kind: kind, uid: uid, op: op, device: device, mode: mode || ''
             });
         };
+        /** Staende dieser Umgebung, an denen gerade gemeinsam gearbeitet wird. */
+        C.liveList = function () { return req('obj.php', { action: 'live_list' }); };
         /** Uebernimmt ein per Geräte-Link empfangenes Token als eigene Sitzung. */
         C.adoptToken = function (token, env) { writeTok(token); writeEnv(env || ''); };
 
@@ -66216,12 +66218,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                      base: null };
         var rtBusy = false, rtConflictAt = 0;
 
+        // Je TAB eine eigene Kennung, nicht je Browser. Frueher lag sie im
+        // localStorage: Zwei Tabs im selben Browser (typisch beim Ausprobieren
+        // eines Zugangs-Links) galten dann als dasselbe Geraet - beide hielten
+        // "den" Stift, schrieben gleichzeitig und sahen die Marke des anderen
+        // nicht. Der sessionStorage ueberlebt ein Neuladen des Tabs, sodass der
+        // Stift nach F5 weiterhin diesem Tab gehoert.
+        var tabDev = '';
         function deviceId() {
+            if (tabDev) return tabDev;
             try {
-                var k = skey('valisCloudDevice'), v = localStorage.getItem(k);
-                if (!v) { v = C.newUid().replace(/-/g, '').slice(0, 24); localStorage.setItem(k, v); }
-                return v;
-            } catch (_) { return 'dev000000000000'; }
+                var k = skey('valisCloudDevice'), v = sessionStorage.getItem(k);
+                if (!v) { v = C.newUid().replace(/-/g, '').slice(0, 24); sessionStorage.setItem(k, v); }
+                tabDev = v;
+            } catch (_) { tabDev = C.newUid().replace(/-/g, '').slice(0, 24); }
+            return tabDev;
         }
         function liveRemember() {
             try {
@@ -66305,6 +66316,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         function lbOnClick(ev) {
             if (lbMoved) { lbMoved = false; return; }   // war ein Verschieben
+            if (!live.uid && liveOffer) {               // Einladung annehmen
+                var o = liveOffer; liveOffer = null;
+                joinLive(o.kind, o.uid, o.name, o.mode);
+                return;
+            }
             if (ev && ev.target && ev.target.id === 'valis-live-more') {
                 open(); renderLive(live.kind, live.uid, live.name);
                 return;
@@ -66528,7 +66544,52 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
         }
 
+        /* ---- Beitreten ----------------------------------------------------- */
+
+        // Ein Geraet, das per Zugangs-Link dazukommt, wusste bisher nichts von der
+        // laufenden Bearbeitung: Der Merker liegt im localStorage des Geraets, das
+        // sie gestartet hat. Im Fenster "Zusammen" gab es fuer Mitleser keinen
+        // Einstieg (Echtzeit: gar keinen Knopf, Stift: nur "uebernehmen", das bei
+        // vergebenem Stift ins Leere lief). Jetzt fragt jedes angemeldete Geraet
+        // nach und bietet den Einstieg an.
+        var liveOffer = null, discoverTimer = null;
+
+        /** Laufender gemeinsamer Bearbeitung beitreten - als Mitleser bzw. in Echtzeit. */
+        function joinLive(kind, uid, name, mode) {
+            liveOffer = null;
+            // Der eigene Stand wird gleich vom gemeinsamen ersetzt. Weicht er ab,
+            // vorher als Snapshot sichern - nichts geht still verloren.
+            var mine = captureBundle();
+            return C.get(kind, uid).then(function (o) {
+                if (mine && o && o.data && !sameJson(JSON.stringify(mine), JSON.stringify(o.data))) {
+                    keepAsSnapshot('Mein Stand vor „' + (name || 'Gemeinsam') + '“', mine);
+                }
+            }).catch(function () {}).then(function () {
+                startLive(kind, uid, name, false, mode || 'pen');
+            });
+        }
+
+        /** Laeuft in dieser Umgebung eine gemeinsame Bearbeitung? Dann anbieten. */
+        function liveDiscover() {
+            if (live.uid || !C.available || !C.isLoggedIn() || document.hidden) return;
+            C.liveList().then(function (j) {
+                if (live.uid) return;
+                var o = (j.live || []).filter(function (x) { return x.kind === 'session'; })[0];
+                if (!o) {
+                    if (liveOffer) { liveOffer = null; liveBanner('', ''); }
+                    return;
+                }
+                liveOffer = { kind: o.kind, uid: o.uid, name: o.name, mode: o.mode };
+                liveBanner('👥 Gemeinsame Bearbeitung läuft – klicken zum Mitmachen', '#4527a0');
+            }).catch(function () {});   // alter Server ohne live_list: wie bisher
+        }
+        function startDiscover() {
+            if (!discoverTimer) discoverTimer = setInterval(liveDiscover, 8000);
+            liveDiscover();
+        }
+
         function startLive(kind, uid, name, mine, mode) {
+            liveOffer = null;
             live.kind = kind; live.uid = uid; live.name = name || '';
             live.mine = !!mine; live.lastVer = 0;
             if (mode) live.mode = mode;
@@ -66557,6 +66618,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Status wird geladen …</div>';
             C.live(kind, uid, 'status', deviceId()).then(function (st) {
                 var aktiv = !!st.on, meins = !!st.mine, belegt = !!st.taken;
+                // Laeuft die Bearbeitung schon (von einem anderen Geraet gestartet),
+                // ist das Oeffnen dieses Fensters der Einstieg.
+                if (aktiv && live.uid !== uid) joinLive(kind, uid, name, st.mode || 'pen');
                 var rt = (st.mode === 'rt');
                 var lage = !aktiv ? 'Aus – nur du arbeitest an diesem Stand.'
                          : rt     ? 'Echtzeit: Alle bearbeiten gleichzeitig, die Stände werden zusammengeführt.'
@@ -67788,6 +67852,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 var lv = JSON.parse(localStorage.getItem(skey('valisCloudLive')) || 'null');
                 if (lv && lv.uid) startLive(lv.kind || 'session', lv.uid, lv.name, false);
             } catch (_) {}
+            startDiscover();
             render();
         }
 
@@ -67840,6 +67905,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (lv && lv.uid) startLive(lv.kind || 'session', lv.uid, lv.name, false);
                 } catch (_) {}
             }
+            // Laeuft immer mit: wer sich erst spaeter per Code anmeldet, soll die
+            // Einladung ebenso sehen. Ohne Anmeldung kehrt die Abfrage sofort um.
+            startDiscover();
 
             if (linkDevice) { useDeviceLink(); return; }
             if (linkShare) { open(); renderShared(linkShare); return; }

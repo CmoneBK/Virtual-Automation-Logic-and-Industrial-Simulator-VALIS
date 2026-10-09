@@ -2900,8 +2900,8 @@
                         <button id="btn-toggle-nh-aux" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleNothaltAuxRelay()" title="Not-Halte als eigenständige Hilfsrelais-Stränge zeichnen (klassisch SF→KF). Standard: AUS — Not-Halt erscheint als normaler Kontakt direkt im Strang.">🛡 Not-Halt-Relais: AUS</button>
 						<button id="btn-toggle-econ" class="btn-export" title="Schaltplan-Darstellungs-Modus durchschalten:&#10;• Relais (Klassisch) — jedes Logik-Gatter wird als Hilfsrelais mit Spule + Kontakt gezeichnet (Industrie-Standard)&#10;• Direkt (Wirtschaftlich) — Kontakte sitzen direkt im Lastpfad, kein zusätzliches Hilfsrelais (spart Bauteile)&#10;• Pneumatik — Druckluft-Symbolik&#10;• Elektronisch — Halbleiter-Logik" style="background-color: #555; border: 1px solid #333;" onclick="toggleEconMode()" data-i18n="iec_mode_relay">💼 Modus: Relais (Klassisch)</button>
                         <button id="btn-toggle-colors" class="btn-export" title="Bunte Pfade — jeder Logik-Strang bekommt im Schaltplan eine stabile Farbe (synchron zu „Bunte Linien" im Logikplan). Erleichtert das visuelle Trennen paralleler Stränge. Die FESTO-Aufbau-Kabel übernehmen diese Farben automatisch, wenn dort „Bunte Kabel" aktiv ist." style="background-color: #555; border: 1px solid #333;" onclick="toggleCircuitColors()" data-i18n="iec_colors_off">🌈 Bunte Pfade: AUS</button>
-                        <button id="btn-toggle-wech" class="btn-export" title="Wechslernummerierung an Kontakten — schreibt die Pin-Nummer des Wechslers (z. B. 13/14, 21/22, 23/24) ans Kontakt-Symbol. Hilft beim 1:1-Übertragen vom Schaltplan auf die FESTO-Hardware." style="background-color: #555; border: 1px solid #333;" onclick="toggleWechsler()" data-i18n="iec_wech_off">🔀 Wechslernummerierung: AUS</button>
-                        <button id="btn-toggle-seq" class="btn-export" title="Fortlaufende Nummerierung der Strompfade — nummeriert jeden Strang oben (1, 2, 3, …) für eindeutigen Referenz-Bezug. Industrie-Standard für Dokumentation und Wartung." style="background-color: #555; border: 1px solid #333;" onclick="toggleSeqNum()" data-i18n="iec_seq_off">🔢 Fortlaufende Nrn: AUS</button>
+                        <button id="btn-toggle-wech" class="btn-export" title="Wechslernummerierung an Kontakten — nummeriert Kontakte wie Wechsler (Öffner 11/12, Schließer 11/14 statt 13/14). NUR RELAIS: nur Relaiskontakte, Taster und Sensoren bleiben 11/12 bzw. 13/14. Hilft beim 1:1-Übertragen vom Schaltplan auf die FESTO-Hardware. Die Einstellung bleibt nach dem Neuladen erhalten." style="background-color: #555; border: 1px solid #333;" onclick="toggleWechsler()" data-i18n="iec_wech_off">🔀 Wechslernummerierung: AUS</button>
+                        <button id="btn-toggle-seq" class="btn-export" title="Fortlaufende Kontaktnummern — zählt die Kontaktsätze je Bauteil durch: erster Kontakt 13/14 (Öffner 11/12), zweiter 23/24 (Öffner 21/22), dritter 33/34 … AUS: jeder Kontakt trägt 13/14 bzw. 11/12. Die Einstellung bleibt nach dem Neuladen erhalten." style="background-color: #555; border: 1px solid #333;" onclick="toggleSeqNum()" data-i18n="iec_seq_off">🔢 Fortlaufende Nrn: AUS</button>
                         <button id="btn-toggle-dual" class="btn-export" title="Getrennte Stromkreise — trennt Steuer- (24V DC) von Lastkreis (230V AC) visuell durch eigene Sammelschienen. Industrie-typische Darstellung. Achtung: 230V ist NUR didaktisch — am realen FESTO-Lehrkasten arbeitet niemand mit 230V (rote Warnung wird eingeblendet)." style="background-color: #555; border: 1px solid #333;" onclick="toggleDualCircuit()" data-i18n="iec_dual_off">⚡ Getrennte Stromkreise: AUS</button>
                         <button id="btn-toggle-details" class="btn-export" title="Detail-Stufe der Bauteil-Beschriftung durchschalten: ALLE (Variablen + IEC-Norm-Label wie -SF1, -KF1) → REDUZIERT (nur IEC-Label) → AUS (nackte Symbole). Für Einsteiger ALLE, für professionelle Pläne REDUZIERT/AUS." style="background-color: #911eb4; border: 1px solid #333;" onclick="toggleDetails()" data-i18n="iec_det_all">🏷️ Details: ALLE</button>
                     </div>
@@ -19866,6 +19866,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return false;
         };
         window.configSeqNum = false;
+        // Wechsler- und Kontaktnummerierung bleiben über das Neuladen erhalten.
+        try {
+            const _w = localStorage.getItem('valisConfigWechsler');
+            if (_w === 'relays' || _w === 'on') window.configWechsler = _w;
+            window.configSeqNum = localStorage.getItem('valisConfigSeqNum') === '1';
+        } catch(_) {}
+        window._syncSchematicNumberingButtons = function() {
+            const doc = getCircDoc();
+            const wb = doc.getElementById('btn-toggle-wech');
+            if (wb) {
+                const m = (window.configWechsler === true) ? 'on' : (window.configWechsler || 'off');
+                const colorMap = { off: '#555', relays: '#7e57c2', on: '#911eb4' };
+                const keyMap   = { off: 'iec_wech_off', relays: 'iec_wech_relays', on: 'iec_wech_on' };
+                wb.style.backgroundColor = colorMap[m] || '#555';
+                wb.setAttribute('data-i18n', keyMap[m] || 'iec_wech_off');
+                if (typeof t === 'function') wb.textContent = t(keyMap[m] || 'iec_wech_off');
+            }
+            const sb = doc.getElementById('btn-toggle-seq');
+            if (sb) {
+                const key = window.configSeqNum ? 'iec_seq_on' : 'iec_seq_off';
+                sb.style.backgroundColor = window.configSeqNum ? '#911eb4' : '#555';
+                sb.setAttribute('data-i18n', key);
+                if (typeof t === 'function') sb.textContent = t(key);
+            }
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { window._syncSchematicNumberingButtons(); });
+        } else {
+            window._syncSchematicNumberingButtons();
+        }
         window.configDualCircuit = false;
         window.configDetails = 2; // 0 = Aus, 1 = E/A, 2 = Alle
         // 🌟 HELFER: Sucht immer im abgekoppelten Fenster, falls es offen ist!
@@ -20005,6 +20035,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             else if (cur === 'on' || cur === true) next = 'off';
             else next = 'relays';  // 'off', false, undefined → relays
             window.configWechsler = next;
+            try { localStorage.setItem('valisConfigWechsler', next); } catch(_) {}
             const btn = getCircDoc().getElementById('btn-toggle-wech');
             if(btn){
                 const colorMap = { off: '#555', relays: '#7e57c2', on: '#911eb4' };
@@ -20019,6 +20050,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
         window.toggleSeqNum = function() {
             window.configSeqNum = !window.configSeqNum;
+            try { localStorage.setItem('valisConfigSeqNum', window.configSeqNum ? '1' : '0'); } catch(_) {}
             const btn = getCircDoc().getElementById('btn-toggle-seq');
             if(btn){
                 btn.style.backgroundColor = window.configSeqNum ? '#911eb4' : '#555';

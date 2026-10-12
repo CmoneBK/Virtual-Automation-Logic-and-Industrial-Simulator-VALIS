@@ -22001,15 +22001,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 movingGroup.style.transformOrigin = `${x}px ${y + 5}px`; 
                 if (!isNC) movingGroup.classList.add('open');
                 movingGroup.appendChild(createSvgElement('line', { x1: x, y1: y - 7, x2: x, y2: y + 5, 'stroke-width': 2 }));
-                if (type === 'ton') {
-                    let arc = isNC ? `M ${x} ${y-2} C ${x+7} ${y-5}, ${x+7} ${y+1}, ${x} ${y+4}` : `M ${x} ${y-2} C ${x-7} ${y-5}, ${x-7} ${y+1}, ${x} ${y+4}`;
+                // Bogen ("Fallschirm") des verzögerten Schaltglieds nach DIN EN
+                // 60617-7: verzögert ist die Bewegung zum Bogenmittelpunkt hin.
+                // Der Antrieb dreht das Kontaktstück beim Ansprechen nach rechts
+                // (NO -25° -> 0°, NC 15° -> 55°), beim Schließer WIE beim Öffner.
+                // Deshalb hängt die Bogenseite nur von der Verzögerungsart ab,
+                // nicht von NO/NC: TON (und TP) Bogen links, TOF Bogen rechts -
+                // wie tbkSchaltzeichen.kontakt({verzoegert}) im Lehrmaterial.
+                if (type === 'ton' || type === 'tof' || type === 'tp') {
+                    const side = (type === 'tof') ? 1 : -1;
+                    const arc = `M ${x} ${y-2} C ${x + side*7} ${y-5}, ${x + side*7} ${y+1}, ${x} ${y+4}`;
                     movingGroup.appendChild(createSvgElement('path', { d: arc, fill: 'none', 'stroke-width': 1.5 }));
-                } else if (type === 'tof') {
-                    let arc = isNC ? `M ${x} ${y-2} C ${x-7} ${y-5}, ${x-7} ${y+1}, ${x} ${y+4}` : `M ${x} ${y-2} C ${x+7} ${y-5}, ${x+7} ${y+1}, ${x} ${y+4}`;
-                    movingGroup.appendChild(createSvgElement('path', { d: arc, fill: 'none', 'stroke-width': 1.5 }));
-                } else if (type === 'tp') {
-                    movingGroup.appendChild(createSvgElement('path', { d: `M ${x} ${y-2} C ${x-6} ${y-5}, ${x-6} ${y+1}, ${x} ${y+4}`, fill: 'none', 'stroke-width': 1.5 }));
-                    movingGroup.appendChild(createSvgElement('path', { d: `M ${x} ${y-2} C ${x+6} ${y-5}, ${x+6} ${y+1}, ${x} ${y+4}`, fill: 'none', 'stroke-width': 1.5 }));
                 }
                 g.appendChild(movingGroup);               
                 if (isNC) g.appendChild(createSvgElement('line', {x1: x, y1: y - 5, x2: x + 8, y2: y - 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static'}));

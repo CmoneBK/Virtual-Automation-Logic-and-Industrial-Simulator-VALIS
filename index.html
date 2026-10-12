@@ -2943,7 +2943,7 @@
                                 <select id="circ-pal-coiltype">
                                     <option value="relais" data-i18n="type_led">Relais (-KF)</option>
                                     <option value="valve" data-i18n="type_valve">Ventil (-MB)</option>
-                                    <option value="motor" data-i18n="type_motor">Motor (-M)</option>
+                                    <option value="motor" data-i18n="type_motor">Motor (-MA)</option>
                                     <option value="led" data-i18n="type_led">LED (-P)</option>
                                     <option value="siren" data-i18n="type_siren">Sirene (-H)</option>
                                     <option value="heater" data-i18n="type_heater">Heizung (-E)</option>
@@ -3062,9 +3062,9 @@
                         <div class="ced-pal-item" draggable="true" data-ctype="relay_no">    <span class="ced-pal-mini" data-mini="relay_no"></span><span>Hilfs-NO</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="relay_nc">    <span class="ced-pal-mini" data-mini="relay_nc"></span><span>Hilfs-NC</span></div>
                         <div class="ced-pal-cat">Spulen / Ausgänge</div>
-                        <div class="ced-pal-item" draggable="true" data-ctype="relais">     <span class="ced-pal-mini" data-mini="relais"></span><span>Relais (-K)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="relais">     <span class="ced-pal-mini" data-mini="relais"></span><span>Relais (-KF)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="valve">      <span class="ced-pal-mini" data-mini="valve"></span><span>Ventil (-Y)</span></div>
-                        <div class="ced-pal-item" draggable="true" data-ctype="motor">      <span class="ced-pal-mini" data-mini="motor"></span><span>Motor (-M)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="motor">      <span class="ced-pal-mini" data-mini="motor"></span><span>Motor (-MA)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="led">        <span class="ced-pal-mini" data-mini="led"></span><span>LED (-P)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="siren">      <span class="ced-pal-mini" data-mini="siren"></span><span>Sirene (-H)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="heater">     <span class="ced-pal-mini" data-mini="heater"></span><span>Heizung (-E)</span></div>
@@ -5618,8 +5618,8 @@ const aktiv = resolveLinked(obj, spsState);
                 "type_light_curtain": "Lichtgitter (NC)",
                 "type_led": "LED (-P)",
                 "type_valve": "Magnetventil (-MB)",
-                "type_contactor": "Schütz (-K)",
-                "type_motor": "Motor (-M)",
+                "type_contactor": "Schütz (-QA)",
+                "type_motor": "Motor (-MA)",
                 "type_heater": "Heizung (-E)",
                 "type_siren": "Sirene (-H)",
                 "plug_bohrspindel_name": "Bohrspindel",
@@ -5976,8 +5976,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "type_light_curtain": "Light Curtain (NC)",
                 "type_led": "LED (-P)",
                 "type_valve": "Solenoid Valve (-MB)",
-                "type_contactor": "Contactor (-K)",
-                "type_motor": "Motor (-M)",
+                "type_contactor": "Contactor (-QA)",
+                "type_motor": "Motor (-MA)",
                 "type_heater": "Heater (-E)",
                 "type_siren": "Siren (-H)",
                 "plug_bohrspindel_name": "Drill Spindle",
@@ -9363,7 +9363,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             const _SENSOR = new Set(['sensor_ind','sensor_kap','sensor_mag','sensor_opt','sensor_reed']);
             const _MECH   = new Set(['mech_sensor','light_curtain']);
             const map = {};
-            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0 };
+            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0, qa:0 };
             const ins  = Array.isArray(globalInputs)  ? globalInputs  : [];
             const outs = Array.isArray(globalOutputs) ? globalOutputs : [];
             ins.forEach(n => {
@@ -9374,7 +9374,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             outs.forEach(n => {
                 const t = (typeof componentTypes !== 'undefined' && componentTypes[n]) || 'led';
                 if      (t === 'led')    { NORM.p++;  map[n] = 'PF' + NORM.p; }
-                else if (t === 'motor')  { NORM.m++;  map[n] = 'M'  + NORM.m; }
+                else if (t === 'motor')  { NORM.m++;  map[n] = 'MA' + NORM.m; }
+                else if (t === 'contactor') { NORM.qa++; map[n] = 'QA' + NORM.qa; }
                 else if (t === 'valve')  { NORM.mb++; map[n] = 'MB' + NORM.mb; }
                 else if (t === 'siren')  { NORM.h++;  map[n] = 'H'  + NORM.h; }
                 else if (t === 'heater') { NORM.e++;  map[n] = 'E'  + NORM.e; }
@@ -21136,7 +21137,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             );
 
             // IEC-Norm-Labels berechnen — Konvention wie im cedGenerateFromCode.
-            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0 };
+            const NORM = { sf:0, bg:0, p:0, kf:0, m:0, mb:0, h:0, e:0, qa:0 };
             const iecLabels = {};
             physIn.forEach(n => {
                 const t = componentTypes[n] || 'taster';
@@ -21149,7 +21150,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             physOut.forEach(n => {
                 const t = componentTypes[n] || 'led';
                 if      (t === 'led')    { NORM.p++;  iecLabels[n] = '-PF' + NORM.p; }
-                else if (t === 'motor')  { NORM.m++;  iecLabels[n] = '-M'  + NORM.m; }
+                else if (t === 'motor')  { NORM.m++;  iecLabels[n] = '-MA' + NORM.m; }
+                else if (t === 'contactor') { NORM.qa++; iecLabels[n] = '-QA' + NORM.qa; }
                 else if (t === 'valve')  { NORM.mb++; iecLabels[n] = '-MB' + NORM.mb; }
                 else if (t === 'siren')  { NORM.h++;  iecLabels[n] = '-H'  + NORM.h; }
                 else if (t === 'heater') { NORM.e++;  iecLabels[n] = '-E'  + NORM.e; }
@@ -21846,8 +21848,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let prefix = "";
                         if (cType === 'valve') prefix = `-MB${mbCount++}`;
                         else if (cType === 'siren') prefix = `-H${hCount++}`;
-                        else if (cType === 'motor') prefix = `-M${window.mCount++ || (window.mCount=1, window.mCount++)}`;
-                        else if (cType === 'contactor') prefix = `-K${window.kCount++ || (window.kCount=1, window.kCount++)}`;
+                        else if (cType === 'motor') prefix = `-MA${mCount++}`; // Motor: DIN EN 81346-2 Klasse M, Unterklasse A (Antrieb) — pro Zeichnung lückenlos
+                        else if (cType === 'contactor') prefix = `-QA${kCount++}`; // Schütz: Klasse Q, Unterklasse A (Leistung schalten) — Hilfs-/Zeitrelais bleiben -KF
                         else if (cType === 'heater') prefix = `-E${eCount++}`; 
                         else prefix = `-PF${pCount++}`;
                         symMap[n.id] = prefix + (window.configDetails >= 1 ? ` (${n.label})` : '');
@@ -26311,8 +26313,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             ['light_curtain','Lichtgitter (NC)'],
             ['sensor_ind','Sensor Induktiv'],['sensor_opt','Sensor Optisch'],['sensor_kap','Sensor Kapazitiv'],
             ['sensor_mag','Sensor Magnetisch'],['sensor_reed','Reed-Kontakt'],['mech_sensor','Positions-Schalter'],
-            ['led','LED / Lampe'],['valve','Ventil (MB)'],['contactor','Schütz (K)'],
-            ['motor','Motor (M)'],['heater','Heizung (E)'],['siren','Signalhorn (H)'],
+            ['led','LED / Lampe'],['valve','Ventil (MB)'],['contactor','Schütz (QA)'],
+            ['motor','Motor (MA)'],['heater','Heizung (E)'],['siren','Signalhorn (H)'],
             ['relais','Relais / Hilfsrelais (-KF)'],
         ];
 
@@ -46378,7 +46380,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 add(inp('circ-add-out', t('circ_add_out_lbl'), 'text', '', 'z.B. MOTOR_1'));
                 add(sel('circ-add-coil-type', 'Bauteil-Typ (Ausgang):',
                     ['led','valve','contactor','motor','heater','siren','relais'].map(ct => {
-                        const labels = { led:'LED / Lampe', valve:'Ventil (MB)', contactor:'Schütz (K)', motor:'Motor (M)', heater:'Heizung (E)', siren:'Signalhorn (H)', relais:'Relais / Hilfsrelais (-KF)' };
+                        const labels = { led:'LED / Lampe', valve:'Ventil (MB)', contactor:'Schütz (QA)', motor:'Motor (MA)', heater:'Heizung (E)', siren:'Signalhorn (H)', relais:'Relais / Hilfsrelais (-KF)' };
                         return `<option value="${ct}">${labels[ct]||ct}</option>`;
                     }).join('')
                 ));
@@ -50293,7 +50295,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#simulator-container', pos: 'right',
                             title: '🎛 Sim-Panel',
-                            text: 'Links siehst du <b>START</b> als Eingang, rechts <b>LAMPE</b> als Ausgang. VALIS hat die beiden Variablen aus dem Code automatisch erkannt.<br><br>🔧 <b>Bauteil-Typ (wichtig für später):</b> VALIS macht standardmäßig aus jedem Eingang einen <b>Taster (Schließer)</b> und aus jedem Ausgang eine <b>LED/Lampe</b>. Soll deine Variable etwas anderes sein — z. B. ein Schalter, Sensor, Not-Halt, Motor, Schütz oder eine Sirene — klickst du direkt im Sim-Panel auf die Variable und wählst den passenden Typ. Das hat zwei Auswirkungen:<br>• Der <b>Schaltplan</b> wird mit dem richtigen Schaltbild gezeichnet (z. B. Öffner-Kontakt für einen Not-Halt, Motor-Symbol -M statt LED).<br>• In der <b>2D-Anlage</b> kannst du die Variable nur Bauteilen zuweisen, deren Typ dazu passt — ein Eingang vom Typ „Sensor" lässt sich nicht an einen Taster hängen und umgekehrt.<br><br>Für diese Lektion bleiben wir bei den Defaults: START als Taster, LAMPE als LED.',
+                            text: 'Links siehst du <b>START</b> als Eingang, rechts <b>LAMPE</b> als Ausgang. VALIS hat die beiden Variablen aus dem Code automatisch erkannt.<br><br>🔧 <b>Bauteil-Typ (wichtig für später):</b> VALIS macht standardmäßig aus jedem Eingang einen <b>Taster (Schließer)</b> und aus jedem Ausgang eine <b>LED/Lampe</b>. Soll deine Variable etwas anderes sein — z. B. ein Schalter, Sensor, Not-Halt, Motor, Schütz oder eine Sirene — klickst du direkt im Sim-Panel auf die Variable und wählst den passenden Typ. Das hat zwei Auswirkungen:<br>• Der <b>Schaltplan</b> wird mit dem richtigen Schaltbild gezeichnet (z. B. Öffner-Kontakt für einen Not-Halt, Motor-Symbol -MA statt LED).<br>• In der <b>2D-Anlage</b> kannst du die Variable nur Bauteilen zuweisen, deren Typ dazu passt — ein Eingang vom Typ „Sensor" lässt sich nicht an einen Taster hängen und umgekehrt.<br><br>Für diese Lektion bleiben wir bei den Defaults: START als Taster, LAMPE als LED.',
                             before: () => _ensurePanel('fbs-wrapper')
                         },
                         {
@@ -50339,7 +50341,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#simulator-container', pos: 'right',
                             title: '🎛 Sim-Panel: LÜFTER auf Motor umstellen',
-                            text: 'Aus Lektion G1 kennst du: VALIS macht aus jedem Ausgang standardmäßig eine <b>LED</b>. Für unseren <b>LÜFTER</b> stimmt das aber nicht — ein Lüfter wird in echten Anlagen von einem <b>Motor</b> angetrieben (das Lüfter-Rad sitzt auf der Motorwelle).<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel rechts unten findest du <code>LÜFTER</code> als Ausgang. Klicke auf das Typ-Dropdown daneben und wähle <b>Motor (-M)</b> statt LED.<br><br>Das hat zwei Konsequenzen:<br>• Der <b>Schaltplan</b> zeichnet jetzt das richtige Motor-Symbol <code>-M</code> (Kreis mit „M") statt einer LED.<br>• In der <b>2D-Anlage</b> kannst du dem LÜFTER nachher nur Motor-Bauteile zuweisen (z. B. einen echten Lüfter, eine Förderband-Rolle, …) — keine Lampen.',
+                            text: 'Aus Lektion G1 kennst du: VALIS macht aus jedem Ausgang standardmäßig eine <b>LED</b>. Für unseren <b>LÜFTER</b> stimmt das aber nicht — ein Lüfter wird in echten Anlagen von einem <b>Motor</b> angetrieben (das Lüfter-Rad sitzt auf der Motorwelle).<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel rechts unten findest du <code>LÜFTER</code> als Ausgang. Klicke auf das Typ-Dropdown daneben und wähle <b>Motor (-MA)</b> statt LED.<br><br>Das hat zwei Konsequenzen:<br>• Der <b>Schaltplan</b> zeichnet jetzt das richtige Motor-Symbol <code>-MA</code> (Kreis mit „M") statt einer LED.<br>• In der <b>2D-Anlage</b> kannst du dem LÜFTER nachher nur Motor-Bauteile zuweisen (z. B. einen echten Lüfter, eine Förderband-Rolle, …) — keine Lampen.',
                             before: () => _ensurePanel('fbs-wrapper')
                         },
                         {
@@ -50353,7 +50355,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             title: '⚡ Schaltplan: Relais & Reihenschaltung',
                             text: 'Im Schaltplan ist UND eine <b>Reihenschaltung</b>: START-Kontakt und FREIGABE-Kontakt sitzen hintereinander im selben Strompfad. Strom fließt nur, wenn <b>beide</b> Kontakte gleichzeitig geschlossen sind — die elektrische Entsprechung des UND-Gatters.<br><br>🔌 <b>Was du zusätzlich siehst — ein Relais:</b> VALIS zeichnet den Schaltplan standardmäßig im Modus <b>Relais (Klassisch)</b>. Dabei wird jedes Gatter aus dem Logikplan mit einem <b>Hilfsrelais</b> (Bezeichnung <code>-KFn</code>) umgesetzt — so wie es in echten Industrie-Schaltschränken Standard ist.<br><br>Ein <b>Relais</b> ist ein elektromagnetischer Schalter. Es besteht aus zwei Teilen:<br>• eine <b>Spule</b> (das Rechteck oben) — wird sie bestromt, baut sie ein Magnetfeld auf,<br>• ein oder mehrere <b>Kontakte</b> in anderen Strompfaden — diese werden vom Magnetfeld der Spule angezogen und schalten dort z. B. einen Motor oder eine Lampe ein.<br><br>👀 <b>So sieht das im Inneren aus</b> (vereinfachte Animation): links wird die Spule pulsierend erregt, der Anker rechts wird angezogen, und unten schließt der Wechslerkontakt 13/14 — derselbe, der gleich auch im Schaltplan-Symbol auftaucht.'
                                 + _relayMechanicSvg()
-                                + 'Hier siehst du also <b>zwei Strompfade</b>: Der erste enthält die Reihenschaltung START + FREIGABE und steuert die Spule des Relais. Der zweite enthält einen Kontakt desselben Relais, der erst dann durchschaltet und den Motor (LÜFTER, dargestellt als <code>-M</code>) einschaltet, wenn die Spule angezogen hat.<br><br>🔎 <b>Woran erkennst du, dass Spule und Kontakt zusammengehören?</b> An der <b>selben Bezeichnung</b> (z. B. <code>-KF1</code>): die Spule trägt sie, und jeder ihrer Kontakte trägt sie ebenfalls. Im Schaltplan stehen sie auf verschiedenen Seiten — <b>in der Realität sind sie aber ein und dasselbe Bauteil</b>. Spule und Kontakte sitzen mechanisch gekoppelt in einem einzigen Relais-Gehäuse; der Schaltplan zeichnet sie nur deshalb getrennt, weil sie in unterschiedlichen Strompfaden mitwirken.<br><br>🔧 <b>Alternative: Modus „Direkt"</b> — Über die Toolbar oben (<b>⚡ Elektro-Optionen</b>, dann auf den Button <b>💼 Modus: Relais (Klassisch)</b> klicken) lässt sich der Schaltplan auf <b>Direkt (Wirtschaftlich)</b> umstellen. Dann zeichnet VALIS dieselbe Logik ohne Zwischen-Relais — die Reihenschaltung steuert den Motor direkt. Kompakter, aber weniger nah an realer Industrie-Verdrahtung.',
+                                + 'Hier siehst du also <b>zwei Strompfade</b>: Der erste enthält die Reihenschaltung START + FREIGABE und steuert die Spule des Relais. Der zweite enthält einen Kontakt desselben Relais, der erst dann durchschaltet und den Motor (LÜFTER, dargestellt als <code>-MA</code>) einschaltet, wenn die Spule angezogen hat.<br><br>🔎 <b>Woran erkennst du, dass Spule und Kontakt zusammengehören?</b> An der <b>selben Bezeichnung</b> (z. B. <code>-KF1</code>): die Spule trägt sie, und jeder ihrer Kontakte trägt sie ebenfalls. Im Schaltplan stehen sie auf verschiedenen Seiten — <b>in der Realität sind sie aber ein und dasselbe Bauteil</b>. Spule und Kontakte sitzen mechanisch gekoppelt in einem einzigen Relais-Gehäuse; der Schaltplan zeichnet sie nur deshalb getrennt, weil sie in unterschiedlichen Strompfaden mitwirken.<br><br>🔧 <b>Alternative: Modus „Direkt"</b> — Über die Toolbar oben (<b>⚡ Elektro-Optionen</b>, dann auf den Button <b>💼 Modus: Relais (Klassisch)</b> klicken) lässt sich der Schaltplan auf <b>Direkt (Wirtschaftlich)</b> umstellen. Dann zeichnet VALIS dieselbe Logik ohne Zwischen-Relais — die Reihenschaltung steuert den Motor direkt. Kompakter, aber weniger nah an realer Industrie-Verdrahtung.',
                             before: () => _ensurePanel('circuit-wrapper')
                         },
                         {
@@ -50432,7 +50434,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#simulator-container', pos: 'right',
                             title: '🎛 Sim-Panel: NOT_AUS auf Not-Halt umstellen',
-                            text: '⚡ <b>Du bist im E-Pneumatik-Modus</b> (oben links am Header-Button <code>⚡ E-Pneu</code> erkennbar — VALIS hat ihn für diese Lektion automatisch aktiviert). In diesem Modus stehen Variablen <i>direkt</i> für den physischen Zustand: NOT_AUS = an heißt „Taster gedrückt", NOT_AUS = aus heißt „Taster nicht gedrückt". Genau wie ein realer Elektriker es lesen würde.<br><br>VALIS hat START und NOT_AUS standardmäßig als <b>Taster</b> angelegt. Für START stimmt das, aber NOT_AUS soll ein echter <b>Not-Halt-Taster</b> sein — die typische rote Pilztaste mit Öffner-Kontakt, die in echten Maschinen den Stromkreis bei Gefahr unterbricht.<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel auf das Typ-Dropdown neben NOT_AUS klicken und <b>Not-Halt (Öffner)</b> wählen. Auch MOTOR könntest du auf <b>Motor (-M)</b> umstellen — für diese Lektion behalten wir aber die Standard-LED, damit der Fokus auf der Negation bleibt.<br><br>📐 <b>Folgen der Umstellung:</b><br>• Der <b>Schaltplan</b> zeichnet automatisch das richtige Symbol — einen <b>Öffner-Kontakt</b> mit rotem Pilz-Symbol davor.<br>• Die <b>2D-Anlage</b> erlaubt für NOT_AUS nur noch Not-Halt-Bauteile (verhindert Verwechslung mit normalen Tastern).',
+                            text: '⚡ <b>Du bist im E-Pneumatik-Modus</b> (oben links am Header-Button <code>⚡ E-Pneu</code> erkennbar — VALIS hat ihn für diese Lektion automatisch aktiviert). In diesem Modus stehen Variablen <i>direkt</i> für den physischen Zustand: NOT_AUS = an heißt „Taster gedrückt", NOT_AUS = aus heißt „Taster nicht gedrückt". Genau wie ein realer Elektriker es lesen würde.<br><br>VALIS hat START und NOT_AUS standardmäßig als <b>Taster</b> angelegt. Für START stimmt das, aber NOT_AUS soll ein echter <b>Not-Halt-Taster</b> sein — die typische rote Pilztaste mit Öffner-Kontakt, die in echten Maschinen den Stromkreis bei Gefahr unterbricht.<br><br>🔧 <b>Was du tun musst:</b> Im Sim-Panel auf das Typ-Dropdown neben NOT_AUS klicken und <b>Not-Halt (Öffner)</b> wählen. Auch MOTOR könntest du auf <b>Motor (-MA)</b> umstellen — für diese Lektion behalten wir aber die Standard-LED, damit der Fokus auf der Negation bleibt.<br><br>📐 <b>Folgen der Umstellung:</b><br>• Der <b>Schaltplan</b> zeichnet automatisch das richtige Symbol — einen <b>Öffner-Kontakt</b> mit rotem Pilz-Symbol davor.<br>• Die <b>2D-Anlage</b> erlaubt für NOT_AUS nur noch Not-Halt-Bauteile (verhindert Verwechslung mit normalen Tastern).',
                             before: () => _ensurePanel('fbs-wrapper')
                         },
                         {
@@ -50500,7 +50502,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#circuit-wrapper', pos: 'left',
                             title: '⚡ Schaltplan: Selbsthaltung des Hilfsrelais',
-                            text: 'Im Schaltplan zeichnet VALIS die Rückkopplung als <b>klassische Selbsthalte-Schaltung</b> (Modus „Relais (Klassisch)" aus Lektion G2):<br><br>📐 <b>Was du siehst:</b><br>• Ein Hilfsrelais <code>-KFn</code> (das ist unser MOTOR — VALIS hat ihn ja als Hilfsrelais erkannt, siehe Sim-Panel-Schritt).<br>• <b>Parallel zum START-Kontakt</b> sitzt ein <b>Kontakt desselben Relais</b> — das ist die Hardware-Umsetzung der Rück-Schleife. Sobald die Spule einmal angezogen hat, schließt der Hilfskontakt und überbrückt START.<br>• <b>In Reihe</b> dazu sitzt der STOP-Kontakt als Öffner — er kann die Selbsthaltung unterbrechen.<br><br>🔁 <b>Lese-Schema:</b> START schließt → Spule zieht an → Hilfskontakt parallel zu START schließt → auch nach Loslassen von START bleibt die Spule an. STOP drücken → Öffner unterbricht → Spule fällt ab → Hilfskontakt öffnet → Selbsthaltung ist weg.<br><br>🛑 <b>Kein echter Verbraucher im Schaltplan:</b> Du siehst hier <b>nur das Hilfsrelais selbst</b> — kein Motor-Symbol, keine Lampe. Das ist korrekt: solange MOTOR ein Hilfsrelais ist, gibt es keinen „realen" Ausgang, der angeschlossen werden könnte. In der Praxis würdest du dann <i>einen zweiten Kontakt</i> des Hilfsrelais nehmen und damit z. B. ein Motor-Schütz <code>-K1</code> ansteuern — das ist aber genau das, was wir im zweiten Durchgang mit dem RS-Glied sauber lösen.<br><br>Im nächsten Schritt testen wir das Verhalten am LED-Indikator neben „Hilfsrelais" im Sim-Panel.',
+                            text: 'Im Schaltplan zeichnet VALIS die Rückkopplung als <b>klassische Selbsthalte-Schaltung</b> (Modus „Relais (Klassisch)" aus Lektion G2):<br><br>📐 <b>Was du siehst:</b><br>• Ein Hilfsrelais <code>-KFn</code> (das ist unser MOTOR — VALIS hat ihn ja als Hilfsrelais erkannt, siehe Sim-Panel-Schritt).<br>• <b>Parallel zum START-Kontakt</b> sitzt ein <b>Kontakt desselben Relais</b> — das ist die Hardware-Umsetzung der Rück-Schleife. Sobald die Spule einmal angezogen hat, schließt der Hilfskontakt und überbrückt START.<br>• <b>In Reihe</b> dazu sitzt der STOP-Kontakt als Öffner — er kann die Selbsthaltung unterbrechen.<br><br>🔁 <b>Lese-Schema:</b> START schließt → Spule zieht an → Hilfskontakt parallel zu START schließt → auch nach Loslassen von START bleibt die Spule an. STOP drücken → Öffner unterbricht → Spule fällt ab → Hilfskontakt öffnet → Selbsthaltung ist weg.<br><br>🛑 <b>Kein echter Verbraucher im Schaltplan:</b> Du siehst hier <b>nur das Hilfsrelais selbst</b> — kein Motor-Symbol, keine Lampe. Das ist korrekt: solange MOTOR ein Hilfsrelais ist, gibt es keinen „realen" Ausgang, der angeschlossen werden könnte. In der Praxis würdest du dann <i>einen zweiten Kontakt</i> des Hilfsrelais nehmen und damit z. B. ein Motor-Schütz <code>-QA1</code> ansteuern — das ist aber genau das, was wir im zweiten Durchgang mit dem RS-Glied sauber lösen.<br><br>Im nächsten Schritt testen wir das Verhalten am LED-Indikator neben „Hilfsrelais" im Sim-Panel.',
                             before: () => _ensurePanel('circuit-wrapper')
                         },
                         {
@@ -50542,7 +50544,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         {
                             target: '#circuit-wrapper', pos: 'left',
                             title: '⚡ Schaltplan: jetzt explizit gekennzeichnetes RS-Glied',
-                            text: 'Im Schaltplan ändert sich die Darstellung sichtbar: jetzt steht dort ein <b>explizit beschriftetes RS-Glied</b> als eigener Block mit S-, R- und Q-Anschlüssen und der RS-Glied-Nummer. Der Block übernimmt die ganze Speicher-Logik — keine sichtbare Parallel-Verdrahtung von Hilfskontakten mehr.<br><br>📐 <b>Lese-Schema neu:</b><br>• START-Kontakt steuert den <b>S-Eingang</b> des RS-Glieds.<br>• STOP-Kontakt steuert den <b>R-Eingang</b>.<br>• Der <b>Q-Ausgang</b> treibt den Motor <code>-M</code>.<br><br>Vergleiche mit dem vorigen Schritt: dieselbe Funktion, andere Darstellung. Das vorherige Bild (Hilfsrelais mit Parallel-Kontakt zum START) war die <b>Hardware-Umsetzung</b> mit Diskret-Relais. Dieser Block ist die <b>logische Speicher-Funktion</b> als eigenes Symbol — wie in jedem modernen SPS-Schaltplan üblich.<br><br>Beide Darstellungen sind „richtig", sie zeigen nur unterschiedliche Abstraktions-Ebenen.',
+                            text: 'Im Schaltplan ändert sich die Darstellung sichtbar: jetzt steht dort ein <b>explizit beschriftetes RS-Glied</b> als eigener Block mit S-, R- und Q-Anschlüssen und der RS-Glied-Nummer. Der Block übernimmt die ganze Speicher-Logik — keine sichtbare Parallel-Verdrahtung von Hilfskontakten mehr.<br><br>📐 <b>Lese-Schema neu:</b><br>• START-Kontakt steuert den <b>S-Eingang</b> des RS-Glieds.<br>• STOP-Kontakt steuert den <b>R-Eingang</b>.<br>• Der <b>Q-Ausgang</b> treibt den Motor <code>-MA</code>.<br><br>Vergleiche mit dem vorigen Schritt: dieselbe Funktion, andere Darstellung. Das vorherige Bild (Hilfsrelais mit Parallel-Kontakt zum START) war die <b>Hardware-Umsetzung</b> mit Diskret-Relais. Dieser Block ist die <b>logische Speicher-Funktion</b> als eigenes Symbol — wie in jedem modernen SPS-Schaltplan üblich.<br><br>Beide Darstellungen sind „richtig", sie zeigen nur unterschiedliche Abstraktions-Ebenen.',
                             before: () => _ensurePanel('circuit-wrapper')
                         },
                         {
@@ -54848,9 +54850,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 relay_no:      { kind:'aux',     nc:false, w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NO' },
                 relay_nc:      { kind:'aux',     nc:true,  w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NC' },
                 // Spulen
-                relais:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'K',  label:'Relais (-K)' },
+                relais:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'K',  label:'Relais (-KF)' },
                 valve:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'Y',  label:'Ventil (-Y)' },
-                motor:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'M',  label:'Motor (-M)' },
+                motor:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'M',  label:'Motor (-MA)' },
                 led:           { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'PF', label:'LED (-PF)' },
                 siren:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'H',  label:'Sirene (-H)' },
                 heater:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'E',  label:'Heizung (-E)' },
@@ -55582,7 +55584,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 function _coilNormLabelFor(coilType, varForLabel) {
                     let prefix;
                     if (coilType === 'led')         { NORM.p++;  prefix = '-PF' + NORM.p;  }
-                    else if (coilType === 'motor')  { NORM.m++;  prefix = '-M'  + NORM.m;  }
+                    else if (coilType === 'motor')  { NORM.m++;  prefix = '-MA' + NORM.m;  }
                     else if (coilType === 'siren')  { NORM.h++;  prefix = '-H'  + NORM.h;  }
                     else if (coilType === 'heater') { NORM.e++;  prefix = '-E'  + NORM.e;  }
                     else if (coilType === 'valve')  { NORM.mb++; prefix = '-MB' + NORM.mb; }
@@ -58104,11 +58106,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','light_curtain'].includes(type)) return 'SJ';
                 if (['relais','relay_no','relay_nc'].includes(type)) return 'KF';
                 if (['led','stacklight','display','hmi_lamp'].includes(type)) return 'PF';
-                if (['motor','fan'].includes(type)) return 'M';
+                if (['motor','fan'].includes(type)) return 'MA';
                 if (['valve','valve_pneu'].includes(type)) return 'MB';
                 if (type === 'siren')   return 'H';
                 if (type === 'heater')  return 'E';
-                if (type === 'contactor') return 'K';
+                if (type === 'contactor') return 'QA';
                 if (['timer_ton','timer_tof','timer_tp'].includes(type)) return 'KF'; // Zeitrelais (DIN EN 81346-2: Klasse K, wie im Auto-Schaltplan); alte Pläne behalten ihr gespeichertes -KTn
                 return null;
             }

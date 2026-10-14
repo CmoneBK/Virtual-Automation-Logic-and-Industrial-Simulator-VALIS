@@ -904,6 +904,8 @@
             border: 1px solid #0277bd;
         }
         .sps-addr-chip:hover { background: #0277bd; }
+        .sps-addr-chip.sps-addr-merker { background: #6a1b9a; }
+        .sps-addr-chip.sps-addr-merker:hover { background: #8e24aa; }
         .switch-row.is-orphan .sps-addr-chip,
         .led-row.is-orphan .sps-addr-chip { opacity: 0.55; }
         /* Anschluss-Sicht aktiv: Auto-Schaltplan-Optionen, die hier keine
@@ -2738,6 +2740,7 @@
                             <ul style="margin: 3px 0 0 0; padding-left: 20px;">
                                 <li><span class="legend-code rs">S1</span> / <span class="legend-code rs">S1_RS</span> &amp; <span class="legend-code rs">R1</span> / <span class="legend-code rs">R1_RS</span> ➔ <span data-i18n="leg_ff_rs"><b>RS (Rücksetzdominant):</b> Standard für Sicherheit. Ausgang ist <span class="legend-code rs">Q1</span> bzw. <span class="legend-code rs">Q1_RS</span>.</span></li>
                                 <li><span class="legend-code rs">S1_SR</span> &amp; <span class="legend-code rs">R1_SR</span> ➔ <span data-i18n="leg_ff_sr"><b>SR (Setzdominant):</b> Setzen hat Vorrang. Ausgang ist <span class="legend-code rs">Q1_SR</span>.</span></li>
+                                <li><span class="legend-code rs" title="Klicken zum Einfügen" onclick="insertSymbol('RS(SETZEN, RUECKSETZEN)')">X := RS(…, …)</span> / <span class="legend-code rs" title="Klicken zum Einfügen" onclick="insertSymbol('SR(SETZEN, RUECKSETZEN)')">SR(…, …)</span> ➔ <span data-i18n="leg_ff_short"><b>Kurzform mit eigenem Namen:</b> <span class="legend-code rs">ANLAGE_EIN := RS(START_TASTER, STOP_TASTER)</span> — erst Setzen, dann Rücksetzen. Die Nummer vergibt VALIS selbst.</span></li>
                             </ul>
                         </div>
                         <div>
@@ -5591,6 +5594,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "leg_ff_desc": "Der Ausgang (Q) wird automatisch generiert. Nummern sind beliebig hochzählbar.",
                 "leg_ff_rs": "<b>RS (Rücksetzdominant):</b> Standard für Sicherheit. Ausgang ist <span class=\"legend-code rs\">Q1</span> bzw. <span class=\"legend-code rs\">Q1_RS</span>.",
                 "leg_ff_sr": "<b>SR (Setzdominant):</b> Setzen hat Vorrang. Ausgang ist <span class=\"legend-code rs\">Q1_SR</span>.",
+                "leg_ff_short": "<b>Kurzform mit eigenem Namen:</b> <span class=\"legend-code rs\">ANLAGE_EIN := RS(START_TASTER, STOP_TASTER)</span> — erst Setzen, dann Rücksetzen. Die Nummer vergibt VALIS selbst.",
                 "leg_timer_title": "⏱️ Zeitglieder (Timers)",
                 "leg_timer_desc": "Format: <code>OUT := FUNKTION(Signal, Sekunden)</code>",
                 "leg_timer_ton": "<b>Einschaltverzögert:</b> Schaltet erst ein, wenn IN für 2.5s anliegt.",
@@ -5626,6 +5630,9 @@ const aktiv = resolveLinked(obj, spsState);
                 "lbl_sr_out": "SR-Ausgang",
                 "lbl_rs_out": "RS-Ausgang",
                 "lbl_aux_relay": "Hilfsrelais",
+                "lbl_merker": "Merker",
+                "sim_merker": "Merker",
+                "sim_merker_hint": "Merker sind SPS-interne Speicherbits (M0.0, M0.1 …): Zwischenergebnisse und gespeicherte Zustände ohne eigene Klemme. Sie tauchen deshalb nicht im Anschlussplan auf.",
                 "btn_pushbutton": "TASTER",
 				// Schaltplan Optionen
                 "iec_options": "⚡ Elektro-Optionen",
@@ -5855,6 +5862,7 @@ Deine Aufgabe ist es, eine textuelle Beschreibung einer Steuerung (Szenario) exa
 Wenn ein Zustand gespeichert werden soll, verwende diese festen Variablen-Namen:
 - Rücksetz-dominant (Standard): Nutze S1 (Setzen) und R1 (Rücksetzen). Der Ausgang ist Q1. (Zahlen hochzählen für weitere Flip-Flops: S2, R2 -> Q2).
 - Setz-dominant: Nutze S1_SR und R1_SR. Der Ausgang ist Q1_SR.
+- Kurzform mit sprechendem Namen (gleichwertig): ANLAGE_EIN := RS(SETZEN, RUECKSETZEN) bzw. SR(...) für setz-dominant. RS(...)/SR(...) muss allein rechts stehen.
 ### ERLAUBTE HARDWARE-TYPEN (Für das "types" Mapping):
 Eingänge (Sensoren/Schalter):
 - "taster" (Schließer/NO Taster)
@@ -5949,6 +5957,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "leg_ff_desc": "The output (Q) is generated automatically. Numbers can be incremented arbitrarily.",
                 "leg_ff_rs": "<b>RS (Reset-dominant):</b> Standard for safety. Output is <span class=\"legend-code rs\">Q1</span> resp. <span class=\"legend-code rs\">Q1_RS</span>.",
                 "leg_ff_sr": "<b>SR (Set-dominant):</b> Setting has priority. Output is <span class=\"legend-code rs\">Q1_SR</span>.",
+                "leg_ff_short": "<b>Short form with your own name:</b> <span class=\"legend-code rs\">PLANT_ON := RS(START_BUTTON, STOP_BUTTON)</span> — set first, then reset. VALIS picks the number itself.",
                 "leg_timer_title": "⏱️ Timers",
                 "leg_timer_desc": "Format: <code>OUT := FUNCTION(Signal, Seconds)</code>",
                 "leg_timer_ton": "<b>On-Delay:</b> Switches on only after IN is active for 2.5s.",
@@ -5984,6 +5993,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "lbl_sr_out": "SR Output",
                 "lbl_rs_out": "RS Output",
                 "lbl_aux_relay": "Aux Relay",
+                "lbl_merker": "Memory bit",
+                "sim_merker": "Memory bits (Merker)",
+                "sim_merker_hint": "Memory bits are internal PLC flags (M0.0, M0.1 …): intermediate results and stored states without a terminal. That is why they do not appear in the connection diagram.",
                 "btn_pushbutton": "PUSHBTN",
 				// Circuit Diagram Options
                 "iec_options": "⚡ Electrical Options",
@@ -6212,6 +6224,7 @@ Your task is to translate a textual description of a control system (scenario) e
 ### FLIP-FLOPS (MEMORY ELEMENTS):
 If a state needs to be stored, use these fixed variable names:
 - Reset-dominant (Default): Use S1 (Set) and R1 (Reset). The output is Q1. (Increment numbers for additional flip-flops: S2, R2 -> Q2).
+- Short form with a descriptive name (equivalent): PLANT_ON := RS(SET, RESET), or SR(...) for set-dominant. RS(...)/SR(...) must be the whole right-hand side.
 - Set-dominant: Use S1_SR and R1_SR. The output is Q1_SR.
 ### ALLOWED HARDWARE TYPES (For the "types" mapping):
 Inputs (Sensors/Switches):
@@ -8507,7 +8520,22 @@ You must output exactly this JSON format. The logic code goes as a single string
         // intern und bekommen KEINE Adresse. Auto-Vergabe ist sticky pro
         // Variable; manuelles Editing via _editSpsAddress mit Format-Check
         // und Duplikat-Schutz.
-        window._spsAddrPrefix = function(role) { return role === 'in' ? 'E' : 'A'; };
+        // Merker (role 'mem'): SPS-interne Speicherbits ohne Klemme — Q-Pins der
+        // RS/SR-Glieder und Hilfsvariablen, die im Programm weiterverwendet werden.
+        // Sie bekommen im SPS-Modus Merker-Adressen M0.0, M0.1, …
+        // Ist die Variable im SPS-Modus ein Merker? Gleiche Regel wie im Sim-Panel:
+        // Q-Pin eines RS/SR-Glieds oder ein Ergebnis, das im Programm weiter-
+        // verwendet wird (Quelle einer Verbindung im Logikplan). Im E-Pneu-Modus
+        // gibt es keine Merker — dort sind das echte Hilfsrelais.
+        window._isMerkerVar = function(name) {
+            if (window.epneuMode || !name) return false;
+            if (/^Q\d+(_(?:SR|RS))?$/i.test(name)) return true;
+            const g = (typeof currentGraph !== 'undefined') ? currentGraph : null;
+            if (!g || !g.edges) return false;
+            if (!(globalOutputs || []).includes(name)) return false;
+            return g.edges.some(e => e.sourceId === name);
+        };
+        window._spsAddrPrefix = function(role) { return role === 'in' ? 'E' : (role === 'mem' ? 'M' : 'A'); };
         window._nextFreeSpsAddress = function(role) {
             const prefix = window._spsAddrPrefix(role);
             const used = new Set();
@@ -8523,7 +8551,10 @@ You must output exactly this JSON format. The logic code goes as a single string
             return `${prefix}99.7`;
         };
         window._ensureSpsAddress = function(name, role) {
-            if (spsAddresses[name]) return spsAddresses[name];
+            // Passt der Adressbereich nicht mehr zur Rolle (z. B. eine Variable war
+            // ein Ausgang A0.3 und ist jetzt ein Merker), wird neu vergeben.
+            const _have = spsAddresses[name];
+            if (_have && _have.startsWith(window._spsAddrPrefix(role))) return _have;
             const addr = window._nextFreeSpsAddress(role);
             spsAddresses[name] = addr;
             try { localStorage.setItem('valisSpsAddresses', JSON.stringify(spsAddresses)); } catch(_) {}
@@ -8599,10 +8630,68 @@ You must output exactly this JSON format. The logic code goes as a single string
             const v = parseFloat(m[1]);
             return (m[2] && m[2].toLowerCase() === 'ms') ? v / 1000 : v;
         }
+        // Speicher-Kurzform: `NAME := RS(SETZEN, RUECKSETZEN)` bzw. `SR(...)`.
+        // Ersetzt die drei Zeilen `S<n> := …`, `R<n> := …`, `NAME := Q<n>` durch
+        // eine Zeile mit sprechendem Namen. Intern bleibt alles beim gewohnten
+        // S/R/Q-Glied: Diese Funktion liefert die Zeilen so, wie der Rest von VALIS
+        // sie kennt, jeweils mit der Nummer der Original-Zeile (für Fehleranzeige,
+        // Sprung zur Definition usw.). Die Nummer <n> wird automatisch vergeben und
+        // kollidiert nie mit S/R/Q-Nummern, die schon im Code stehen.
+        // RS = Rücksetzen hat Vorrang, SR = Setzen hat Vorrang (wie S1 / S1_SR).
+        function _splitTopLevelArgs(str) {
+            const out = []; let depth = 0, cur = '';
+            for (const ch of str) {
+                if (ch === '(') depth++;
+                else if (ch === ')') depth--;
+                if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+                cur += ch;
+            }
+            out.push(cur);
+            return out.map(s => s.trim());
+        }
+        function _matchSpeicherKurzform(line) {
+            const clean = String(line || '').split('//')[0].trim();
+            const m = clean.match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*:=\s*(RS|SR)\s*\((.*)\)\s*$/i);
+            if (!m) return null;
+            const args = _splitTopLevelArgs(m[3]);
+            if (args.length !== 2 || !args[0] || !args[1]) return null;
+            return { lhs: m[1], type: m[2].toUpperCase(), setExpr: args[0], resetExpr: args[1] };
+        }
+        function _expandSpeicherKurzform(lines) {
+            const hits = lines.map(_matchSpeicherKurzform);
+            if (!hits.some(Boolean)) return { lines: lines.map((text, idx) => ({ text, idx })), generatedQ: new Set() };
+            const taken = new Set();
+            lines.forEach((l, i) => {
+                if (hits[i]) return;
+                const noComm = String(l).split('//')[0];
+                (noComm.match(/\b[SRQ](\d+)(?:_(?:SR|RS))?\b/gi) || []).forEach(t => taken.add(parseInt(t.slice(1), 10)));
+            });
+            let next = 1;
+            const out = [];
+            const generatedQ = new Set();
+            lines.forEach((text, idx) => {
+                const h = hits[idx];
+                if (!h) { out.push({ text, idx }); return; }
+                while (taken.has(next)) next++;
+                const n = next++;
+                const suf = h.type === 'SR' ? '_SR' : '';
+                out.push({ text: `S${n}${suf} := ${h.setExpr}`, idx });
+                out.push({ text: `R${n}${suf} := ${h.resetExpr}`, idx });
+                out.push({ text: `${h.lhs} := Q${n}${suf}`, idx });
+                generatedQ.add(`Q${n}${suf}`);
+            });
+            return { lines: out, generatedQ };
+        }
+        window._matchSpeicherKurzform = _matchSpeicherKurzform;
+        window._expandSpeicherKurzform = _expandSpeicherKurzform;
         function parseToGraph(text) {
             const graph = new LogicGraph();
             graph.targetGateCounters = {}; // 🌟 NEU: Lokaler Counter pro Variable (Macht Gatter-IDs immun gegen F5-Disco!)
-            const lines = text.split('\n');
+            // Speicher-Kurzform `X := RS(a, b)` vorab in S/R/Q-Zeilen auflösen;
+            // _lineOrig[i] ist die Original-Zeilennummer jeder (ggf. erzeugten) Zeile.
+            const _kurz = _expandSpeicherKurzform(text.split('\n'));
+            const lines = _kurz.lines.map(l => l.text);
+            const _lineOrig = _kurz.lines.map(l => l.idx);
             let jsCompiledCode = "";
             const definedOutputs = new Set();
             const duplicateOutputs = new Set();
@@ -8716,7 +8805,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                 return evaluateFlat(parsed);
             }
             const errorLines = new Set();
-            lines.forEach((line, lineIdx) => {
+            lines.forEach((line, _expIdx) => {
+                const lineIdx = _lineOrig[_expIdx];
                 const _savedJs = jsCompiledCode;
                 try {
                 let cleanLine = line.split('//')[0].trim();
@@ -9119,7 +9209,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Marker-Erkennung (// NETZWERK n: Titel) gebraucht.
             graph._sourceText = text;
             // FIX: Filtere die neuen GATE_ Variablen aus der UI-Liste heraus!
-            return { graph, jsCompiledCode, inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
+            return { graph, jsCompiledCode, generatedQ: _kurz.generatedQ, inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
         }
 
         // ==========================================================
@@ -16653,6 +16743,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         (mm, name) => '<span class="token rs" data-var="' + name.toUpperCase() + '">' + mm + '</span>');
                 }
                 t = t.replace(/\b(TON|TOF|TP|CTU|INPUT|SCHRITTKETTE|STEP|TRANS|END)\b/gi, '<span class="token func">$1</span>');
+                // Speicher-Kurzform RS(…)/SR(…) — nur als Funktionsaufruf, nicht der
+                // Suffix in S1_SR (der steckt schon im RS-Pin-Token).
+                t = t.replace(/(^|[^_A-Za-z0-9])(RS|SR)(?=\s*<span class="token paren">\()/g, '$1<span class="token func">$2</span>');
                 t = t.replace(/\b(FALSE|TRUE)\b/gi, '<span class="token const">$1</span>');
                 if (inSK) {
                     // Übergangspfeil als eigener visueller Token (analog zu Zuweisung).
@@ -16798,10 +16891,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             'TOF':   { title:'Timer: Ausschaltverzögert', syntax:'OUT := TOF(IN, Sekunden)', desc:'OUT bleibt nach Abfall von IN noch die angegebene Zeit wahr. Klassischer Nachlauf.', example:'LUEFTER := TOF(OFEN_AN, 60.0)' },
             'TP':    { title:'Timer: Impuls', syntax:'OUT := TP(IN, Sekunden)', desc:'Ein kurzer Wechsel von IN auf wahr erzeugt einen festen Impuls der angegebenen Länge.', example:'HUPE := TP(START_TASTER, 0.5)' },
             'CTU':   { title:'Vorwärtszähler', syntax:'OUT := CTU(Zähl_Signal, Reset, Limit)', desc:'Zählt jede steigende Flanke (0→1) des Zähl-Signals. OUT wird wahr, sobald der Stand das Limit erreicht. Reset setzt zurück.', example:'VOLL := CTU(LICHTSCHRANKE, RESET_TASTER, 10)' },
-            'RS':    { title:'RS-Selbsthaltung (rücksetzdominant)', syntax:'S1 := SET_TERM\nR1 := RESET_TERM\nLAMPE := Q1', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt RESET (Sicherheits-Default). Die Nummer hinter S/R/Q ist beliebig, muss aber zusammenpassen.',
+            'RS':    { title:'RS-Selbsthaltung (rücksetzdominant)', syntax:'S1 := SET_TERM\nR1 := RESET_TERM\nLAMPE := Q1\n\n// Kurzform mit eigenem Namen:\nMERKER := RS(SET_TERM, RESET_TERM)', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt RESET (Sicherheits-Default). Die Nummer hinter S/R/Q ist beliebig, muss aber zusammenpassen. In der Kurzform RS(…, …) vergibt VALIS die Nummer selbst.',
                        scenario:'Selbsthaltung: „einrastet"/„eingerastet"/„selbsthaltend", „bleibt aktiv nach Loslassen"\nBedienung: „Ein-/Aus-Taster", „Start- und Stop-Taster", „Zwei-Taster-Bedienung", „drücken zum Starten — anderer Knopf zum Stoppen"\nModi & Zustände: „Hand-/Automatik-Modus", „Modus aktivieren/umschalten", „Betriebsart wählen", „Schritt 1 → Schritt 2", „Phase aktiv", „Zustand merken", „Wartungsmodus", „bleibt im Modus, bis …"\nSicherheit: „Not-Halt schaltet alles aus", „Stop hat Vorrang", „Sicherheits-Aus dominiert"\nQuittierung & Alarme: „Fehler merken bis quittiert", „Alarm bleibt aktiv bis Reset", „Quittierung erforderlich"\nVerriegelung & Anlauf: „Tür verriegelt bis Freigabe", „Anlaufschutz", „läuft weiter, bis abgeschaltet wird"\n\nStandard-Selbsthaltung — Stop/Reset gewinnt im Konflikt. Im Zweifel diese Form verwenden.',
                        example:'// SET-Term, RESET-Term, Q als Ausgang\nS1 := START_TASTER\nR1 := STOP_TASTER || NOTAUS\nLAMPE := Q1' },
-            'SR':    { title:'SR-Selbsthaltung (setzdominant)', syntax:'S1_SR := SET_TERM\nR1_SR := RESET_TERM\nLAMPE := Q1_SR', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt SET (Start hat Vorrang). Das Suffix _SR macht es setzdominant; ohne Suffix ist es RS.',
+            'SR':    { title:'SR-Selbsthaltung (setzdominant)', syntax:'S1_SR := SET_TERM\nR1_SR := RESET_TERM\nLAMPE := Q1_SR\n\n// Kurzform mit eigenem Namen:\nMERKER := SR(SET_TERM, RESET_TERM)', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt SET (Start hat Vorrang). Das Suffix _SR macht es setzdominant; ohne Suffix ist es RS. In der Kurzform SR(…, …) vergibt VALIS die Nummer selbst.',
                        scenario:'Setzpriorität: „Start hat Vorrang", „Einschalten dominiert", „muss trotz Reset einschalten", „Setzpriorität gegenüber Reset"\nSpezialfälle: „Alarm springt an, auch wenn gleichzeitig quittiert wird", „Auslösung MUSS durchkommen", „Sicherheits-Einschaltung (z.B. Lüfter bei Übertemperatur)", „Zwangsstart trotz Stop-Befehl"\n\nEher selten in der Industriepraxis — nur wo das Einschalten zwingend gegen einen anhaltenden Reset durchgreifen soll. Im Zweifel das normale RS-Glied verwenden (sicherer).',
                        example:'S1_SR := START_TASTER\nR1_SR := STOP_TASTER\nLAMPE := Q1_SR' },
             'TRUE':  { title:'Konstante TRUE', syntax:'TRUE', desc:'Logisch wahr (immer aktiv).', example:'IMMER_AN := TRUE' },
@@ -17807,6 +17900,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             });
 
+            // === 4b2. Speicher-Kurzform RS(…)/SR(…) falsch benutzt ===
+            lineInfos.forEach(li => {
+                if (!li.rhs || !/\b(RS|SR)\s*\(/i.test(li.rhs)) return;
+                if (window._matchSpeicherKurzform(li.codePart)) return;
+                const fm = li.rhs.match(/\b(RS|SR)\s*\(/i);
+                const fn = fm[1].toUpperCase();
+                const whole = new RegExp('^' + fn + '\\s*\\(.*\\)$', 'i').test(li.rhs);
+                // Direkt setzen (auch wenn der Parser die Zeile schon markiert hat):
+                // Die allgemeine Parser-Erklärung kennt die Kurzform nicht.
+                set.add(li.idx);
+                window._customErrorExplanations.set(li.idx, {
+                    title: whole ? fn + '(…) braucht genau zwei Angaben' : fn + '(…) muss allein rechts stehen',
+                    why: whole
+                        ? '`' + fn + '(SETZEN, RUECKSETZEN)` speichert einen Zustand: Die erste Angabe schaltet ein, die zweite schaltet aus. Durch ein Komma getrennt — nicht mehr und nicht weniger.'
+                        : 'Das Speicherglied `' + fn + '(…)` muss die GESAMTE rechte Seite einer Zuweisung sein. Mit `&&`/`||` davor oder dahinter kann VALIS den Speicher nicht zuordnen.',
+                    hint: whole
+                        ? (fn === 'RS' ? 'RS: Rücksetzen hat Vorrang (sichere Variante, z. B. für Stopp).' : 'SR: Setzen hat Vorrang.') + ' Die alte Schreibweise mit S1/R1/Q1 geht weiterhin.'
+                        : 'Lege den Speicher in einem eigenen Merker ab und verknüpfe danach den Merker mit den anderen Bedingungen.',
+                    fix: whole
+                        ? (li.lhs || 'ANLAGE_EIN') + ' := ' + fn + '(START_TASTER, STOP_TASTER)'
+                        : 'MERKER_' + fn + ' := ' + fn + '(SETZEN, RUECKSETZEN)\n' + (li.lhs || 'AUSGANG') + ' := MERKER_' + fn + ' && …'
+                });
+            });
+
             // === 4c. Per-Line Selbst-Referenz (auch für S/R/Q-Pins) ===
             // Die Zyklus-DFS unten überspringt S/R-Pin-Zuweisungen, aber `S1 := ... && S1`
             // ist trotzdem unsinnig — der SET-Eingang darf nicht von sich selbst abhängen.
@@ -18435,7 +18552,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (/^[SR]\d+(_(?:RS|SR))?$/i.test(lhs)) return null;
                 if (/^Q\d+(_(?:RS|SR))?$/i.test(lhs)) return null;
                 // Timer/Counter-Aufrufe können wir nicht zerlegen.
-                if (/\b(TON|TOF|TP|CTU)\s*\(/i.test(rhsRaw)) return null;
+                if (/\b(TON|TOF|TP|CTU|RS|SR)\s*\(/i.test(rhsRaw)) return null;
                 rhsRaw = normalizeOps(rhsRaw);
                 let ast;
                 try { ast = parse(tokenize(rhsRaw)); } catch(_e) { return null; }
@@ -19599,7 +19716,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             simOutputsContainer.innerHTML = `<h3>${window.t('sim_outputs')}${_cleanupBtnHTML}</h3>`;
             // S/R-Pin-Variablen vorab filtern (werden in der UI nicht gezeigt), dann
             // gemäß Sort-Setting ordnen.
-            const _outputsFiltered = outputs.filter(name => !name.match(/^[SR]\d+(_(?:SR|RS))?$/i));
+            // Von der Speicher-Kurzform `X := RS(…)` erzeugte Q-Pins ebenfalls
+            // ausblenden — der Lernende hat sie nie geschrieben, sein Name X steht
+            // ja schon in der Liste.
+            const _genQ = window._generatedQ || new Set();
+            const _outputsFiltered = outputs.filter(name => !name.match(/^[SR]\d+(_(?:SR|RS))?$/i) && !_genQ.has(name));
             const _orderedOutputs = (typeof window._orderSimVars === 'function')
                 ? window._orderSimVars(_outputsFiltered, 'out') : _outputsFiltered;
             const _buildOutputRow = (name) => {
@@ -19611,7 +19732,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${lbl}</span>`;
                 } else if (usedAsSource.has(name)) {
                     componentTypes[name] = 'relais';
-                    selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${window.t('lbl_aux_relay')}</span>`;
+                    // Im SPS-Modus ist das kein Bauteil, sondern ein Merker.
+                    const _auxLbl = window.epneuMode ? window.t('lbl_aux_relay') : window.t('lbl_merker');
+                    selectHTML = `<span class="type-select" style="border: none; background: transparent; color: #888; cursor: default;">${_auxLbl}</span>`;
                 } else {
                     if (!componentTypes[name]) componentTypes[name] = 'led';
                     let cType = componentTypes[name];
@@ -19630,23 +19753,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // SPS-Adressen-Chip — nur im SPS-Modus UND nur für echte physische
                 // Ausgänge. Q-Pins (RS-Glied) und Hilfsrelais (intern als Source
                 // benutzt) bekommen keine A-Adresse, weil sie SPS-intern sind.
+                // Im SPS-Modus bekommen sie stattdessen eine Merker-Adresse (M0.0 …).
                 const _isInternalOut = !!(name.match(/^Q\d+(_(?:SR|RS))?$/i) || usedAsSource.has(name));
-                const _spsAddrOutHTML = (!window.epneuMode && !_isInternalOut)
-                    ? `<span class="sps-addr-chip" onclick="window._editSpsAddress('${name}', 'out')" title="SPS-Adresse — Klick zum Ändern">${window._ensureSpsAddress(name, 'out')}</span>`
-                    : '';
+                const _spsAddrOutHTML = window.epneuMode ? ''
+                    : (_isInternalOut
+                        ? `<span class="sps-addr-chip sps-addr-merker" onclick="window._editSpsAddress('${name}', 'mem')" title="Merker-Adresse (SPS-intern, keine Klemme) — Klick zum Ändern">${window._ensureSpsAddress(name, 'mem')}</span>`
+                        : `<span class="sps-addr-chip" onclick="window._editSpsAddress('${name}', 'out')" title="SPS-Adresse — Klick zum Ändern">${window._ensureSpsAddress(name, 'out')}</span>`);
                 return `<div class="led-row flex-col">
                     <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${_spsAddrOutHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;"><div class="led" id="sim_out_${name}"></div></div>
                 </div>`;
             };
+            // SPS-Modus: Merker (SPS-intern) getrennt unter eigener Überschrift
+            // nach den echten Ausgängen. E-Pneu-Modus: wie bisher eine Liste,
+            // dort sind es echte Hilfsrelais.
+            const _isMerkerRow = (name) => !window.epneuMode
+                && !!(name.match(/^Q\d+(_(?:SR|RS))?$/i) || usedAsSource.has(name));
+            const _physOutputs  = _orderedOutputs.filter(n => !_isMerkerRow(n));
+            const _merkerOutputs = _orderedOutputs.filter(n => _isMerkerRow(n));
             if (window._simGroup) {
-                const groups = window._groupSimVars(_orderedOutputs, 'out');
+                const groups = window._groupSimVars(_physOutputs, 'out');
                 groups.forEach(grp => {
                     simOutputsContainer.innerHTML += `<div class="sim-group-header">${grp.name}</div>`;
                     grp.items.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
                 });
             } else {
-                _orderedOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+                _physOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+            }
+            if (_merkerOutputs.length) {
+                simOutputsContainer.innerHTML += `<div class="sim-group-header sim-merker-header" title="${window.t('sim_merker_hint')}">${window.t('sim_merker')}</div>`;
+                _merkerOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
             }
             // 🔒 Verwaiste (sticky-aber-nicht-im-Code) Variablen anhängen — grau/kursiv,
             // mit „verwaist"-Badge und Trash-Icon. Eingaben oben, Ausgaben unten.
@@ -24165,6 +24301,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ]
                 }
             }
+          },
+          {
+            version:'1.0', type:'valitask',
+            id:'task-merker-anlage-ein-2026',
+            name:'Merker: Den Zustand „Anlage ein“ speichern',
+            description:'Ein Förderband soll mit einem Start-Taster eingeschaltet und mit einem Stopp-Taster ausgeschaltet werden. Der Zustand „Anlage ein“ wird nicht direkt auf einen Ausgang gelegt, sondern in einem MERKER gespeichert: einem SPS-internen Speicherbit ohne eigene Klemme. Im Sim-Panel stehen Merker mit einer M-Adresse (M0.0 …) unter „Merker“.\n\n🎯 AUFGABE:\n1. Speichere „Anlage ein“ im Merker ANLAGE_EIN. START_TASTER setzt, STOPP_TASTER setzt zurück. Stopp hat Vorrang.\n2. Die Lampe LAMPE_BETRIEB zeigt den Merker an.\n3. Das Band MOTOR_BAND läuft, wenn der Merker gesetzt ist UND die Schutztür zu ist (SCHUTZTUER_ZU).\n\nVerwende exakt: START_TASTER, STOPP_TASTER, SCHUTZTUER_ZU, ANLAGE_EIN, LAMPE_BETRIEB, MOTOR_BAND.\n\nStarte danach die Simulation, schließe die Schutztür und drücke den Start-Taster.',
+            hint:'💡 Ein Speicher mit eigenem Namen geht in einer Zeile:\n  ANLAGE_EIN := RS(START_TASTER, STOPP_TASTER)\nRS heißt: Rücksetzen hat Vorrang. Die lange Form mit S1 / R1 / Q1 geht genauso.\n\nDanach verwendest du ANLAGE_EIN wie jede andere Variable, z. B. in einer UND-Verknüpfung mit der Schutztür.',
+            category:'Automatisierungstechnik',
+            difficulty:'leicht',
+            enforceMode:'sps',
+            timeLimit:600,
+            solutionMode:'after_time', solutionMinTime:120, solutionMinDone:2,
+            restrictObjects:'none', allowedObjectTypes:[],
+            blockAreas:{codeEditor:false,ioPanel:false,logikplan:false,schaltplan:false,factory2d:true,factoryNewVars:true},
+            conditions:[
+                {type:'logic_equivalent', refCode:'S1 := START_TASTER\nR1 := STOPP_TASTER\nANLAGE_EIN := Q1\nLAMPE_BETRIEB := ANLAGE_EIN\nMOTOR_BAND := ANLAGE_EIN && SCHUTZTUER_ZU', label:'Speicher und Verknüpfungen stimmen'},
+                {type:'sps_merker', variable:'ANLAGE_EIN', value:true, label:'Merker ANLAGE_EIN ist gesetzt'},
+                {type:'sps_output', variable:'MOTOR_BAND', value:true, label:'Band läuft bei geschlossener Schutztür'}
+            ],
+            preset:{
+                code:'INPUT START_TASTER\nINPUT STOPP_TASTER\nINPUT SCHUTZTUER_ZU\n\n// Merker ANLAGE_EIN: START_TASTER setzt, STOPP_TASTER setzt zurück (Stopp hat Vorrang)\n\n\n// Lampe zeigt den Merker an\n\n\n// Band läuft nur mit Merker UND geschlossener Schutztür\n\n',
+                types:{START_TASTER:'taster', STOPP_TASTER:'taster', SCHUTZTUER_ZU:'schalter', LAMPE_BETRIEB:'led', MOTOR_BAND:'motor'},
+                layout:'grid-sim-top',
+                factory:{ globalViewMode:'top', items:[], pins:[], objects:[] }
+            },
+            solution:{
+                code:'INPUT START_TASTER\nINPUT STOPP_TASTER\nINPUT SCHUTZTUER_ZU\n\n// Merker ANLAGE_EIN: START_TASTER setzt, STOPP_TASTER setzt zurück (Stopp hat Vorrang)\nANLAGE_EIN := RS(START_TASTER, STOPP_TASTER)\n\n// Lampe zeigt den Merker an\nLAMPE_BETRIEB := ANLAGE_EIN\n\n// Band läuft nur mit Merker UND geschlossener Schutztür\nMOTOR_BAND := ANLAGE_EIN && SCHUTZTUER_ZU\n',
+                types:{START_TASTER:'taster', STOPP_TASTER:'taster', SCHUTZTUER_ZU:'schalter', LAMPE_BETRIEB:'led', MOTOR_BAND:'motor'},
+                layout:'grid-sim-top',
+                factory:{ globalViewMode:'top', items:[], pins:[], objects:[] }
+            }
           }
         ];
 
@@ -25302,6 +25469,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             switch(cond.type) {
                 case 'sps_output':      return 'SPS-Ausgang prüfen';
                 case 'sps_input':       return 'SPS-Eingang prüfen';
+                case 'sps_merker':      return 'Merker prüfen';
                 case 'variable_exists': return 'Variable deklarieren';
                 case 'code_contains':   return 'Code-Struktur prüfen';
                 case 'component_type':   return 'Bauteiltyp zuweisen';
@@ -25319,6 +25487,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             switch(cond.type) {
                 case 'sps_output':
                 case 'sps_input':       return `${cond.variable} = ${cond.value ? '1 (aktiv)' : '0 (inaktiv)'}`;
+                case 'sps_merker':      return `Merker ${cond.variable} = ${cond.value ? '1 (gesetzt)' : '0 (rückgesetzt)'}`;
                 case 'variable_exists': return `"${cond.variable}" deklariert`;
                 case 'code_contains':   return `Enthält: ${cond.pattern}`;
                 case 'component_type':   return `${cond.variable} als „${cond.compType}" definiert`;
@@ -25615,7 +25784,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             switch (cond.type) {
                 case 'component_type':
                 case 'sps_output':
-                case 'sps_input': {
+                case 'sps_input':
+                case 'sps_merker': {
                     const row = _findSimRowForVar(cond.variable);
                     if (row) { _pulseElement(row); return true; }
                     // Fallback: Pulse Cond-Item
@@ -25666,6 +25836,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'component_type':
                     case 'sps_output':
                     case 'sps_input':
+                    case 'sps_merker':
                     case 'variable_exists':
                         return !!_findSimRowForVar(cond.variable);
                     case 'logic_equivalent': {
@@ -25951,6 +26122,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'sps_input':
                         if (spsState[cond.variable] !== cond.value) runtimeMissing = 1;
                         break;
+                    case 'sps_merker':
+                        if (!(window._isMerkerVar(cond.variable) && spsState[cond.variable] === cond.value)) runtimeMissing = 1;
+                        break;
                     case 'factory_object':
                         if (!(factoryObjects||[]).some(o => o.type === cond.objectType && o.linkedVar === cond.linkedVar)) runtimeMissing = 1;
                         break;
@@ -26100,6 +26274,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 switch(cond.type) {
                     case 'sps_output':      return spsState[cond.variable] === cond.value;
                     case 'sps_input':       return spsState[cond.variable] === cond.value;
+                    // Merker: Die Variable muss SPS-intern sein (Q-Pin oder im Programm
+                    // weiterverwendet) UND den erwarteten Wert haben.
+                    case 'sps_merker':      return window._isMerkerVar(cond.variable) && spsState[cond.variable] === cond.value;
                     case 'variable_exists': return (globalInputs||[]).includes(cond.variable) || (globalOutputs||[]).includes(cond.variable);
                     case 'code_contains':   return new RegExp(cond.pattern).test(document.getElementById('code').value);
                     case 'component_type':  return (componentTypes[cond.variable] || 'taster') === cond.compType;
@@ -26118,11 +26295,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         try { _rf = new Function('state','deltaMs','timers', _rp.jsCompiledCode); } catch(e) { return _cache(false); }
                         try { _sf = new Function('state','deltaMs','timers', _sp.jsCompiledCode); } catch(e) { return _cache(false); }
                         const _ins = _rp.inputs.filter(i => i !== 'TRUE' && i !== 'FALSE');
-                        const _outs = _rp.outputs;
+                        // Q-Pins (Q1, Q2_SR …) nicht direkt vergleichen: Ihre Nummer ist
+                        // beliebig (bei der Kurzform X := RS(…) vergibt VALIS sie selbst).
+                        // Ihre Wirkung zeigt sich an den benannten Ausgängen/Merkern.
+                        const _isQPin = o => /^Q\d+(_(?:SR|RS))?$/i.test(o);
+                        const _outsNamed = _rp.outputs.filter(o => !_isQPin(o));
+                        const _outs = _outsNamed.length ? _outsNamed : _rp.outputs;
                         if (!_outs.length) return _cache(false);
                         // Collect RS/SR flip-flop block IDs so we can pre-initialize their state
                         const _ffIds = [];
                         _rp.graph.nodes.forEach(n => { if (n.type === 'RS' || n.type === 'SR') _ffIds.push(n.id); });
+                        // Speicherglieder über ihren Namen zuordnen (X := Q1 im Referenz-Code
+                        // ↔ X := Q4 bzw. X := RS(…) im Schüler-Code), damit beide Programme
+                        // mit demselben Speicherzustand starten — unabhängig von der Nummer.
+                        const _ffAlias = (parsed) => {
+                            const m = new Map(); // Name → FF-Block-ID
+                            parsed.graph.edges.forEach(e => {
+                                const src = parsed.graph.nodes.get(e.sourceId);
+                                if (src && (src.type === 'RS' || src.type === 'SR') && !e.inverted) m.set(e.targetId, e.sourceId);
+                            });
+                            return m;
+                        };
+                        const _rAlias = _ffAlias(_rp), _sAlias = _ffAlias(_sp);
+                        const _ffMapStu = new Map(); // Referenz-FF-ID → Schüler-FF-ID
+                        _rAlias.forEach((ffId, name) => {
+                            if (_sAlias.has(name) && !_ffMapStu.has(ffId)) _ffMapStu.set(ffId, _sAlias.get(name));
+                        });
                         const _N = _ins.length;
                         const _NFF = _ffIds.length;
                         const _combos = Math.min(1 << Math.min(_N + _NFF, 18), 4096);
@@ -26131,6 +26329,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             _ins.forEach((inp, i) => { _rs[inp] = !!(_m & (1 << i)); });
                             _ffIds.forEach((ff, i) => { _rs[ff] = !!(_m & (1 << (_N + i))); });
                             const _ss = { TRUE:true, FALSE:false, ..._rs };
+                            _ffMapStu.forEach((stuId, refId) => { _ss[stuId] = _rs[refId]; });
                             const _rt = {}, _st = {};
                             for (let _t = 0; _t < 3; _t++) { _rf(_rs, 0, _rt); _sf(_ss, 0, _st); }
                             for (const _o of _outs) { if (!!_rs[_o] !== !!_ss[_o]) return _cache(false); }
@@ -26276,6 +26475,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Simulation & Verhalten
             { value:'sps_output',      group:'Simulation & Verhalten',label:'Ausgang erhält bei der Simulation einen Wert' },
             { value:'sps_input',       group:'Simulation & Verhalten',label:'Eingang erhält bei der Simulation einen Wert' },
+            { value:'sps_merker',      group:'Simulation & Verhalten',label:'Merker hat bei der Simulation einen Wert' },
             { value:'sim_running',     group:'Simulation & Verhalten',label:'Simulation läuft mindestens X Sekunden' },
             { value:'despawner_count', group:'Simulation & Verhalten',label:'Bestimmte Anzahl Teile verarbeitet (Despawner)' },
             // Aufbau & Zuordnung
@@ -26294,6 +26494,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             logic_equivalent:'Erfüllt, wenn das Programm für alle Eingangskombinationen dieselben Ausgangswerte liefert wie der Referenz-Code — unabhängig von der verwendeten Syntax. VALIS vergleicht dazu die Wahrheitstabellen beider Programme.',
             sps_output:      'Erfüllt, wenn die gewählte Variable während der laufenden Simulation genau den erwarteten Wert (1/0) hat. Gedacht für Ausgänge (z. B. „Motor läuft"). Nur bei aktiver Simulation prüfbar.',
             sps_input:       'Erfüllt, wenn die gewählte Variable während der laufenden Simulation genau den erwarteten Wert (1/0) hat. Gedacht für Eingänge (z. B. „Taster gedrückt"). Nur bei aktiver Simulation prüfbar.',
+            sps_merker:      'Erfüllt, wenn die gewählte Variable ein Merker ist (SPS-intern, ohne Klemme: ein RS/SR-Speicher oder ein Zwischenergebnis, das im Programm weiterverwendet wird — im Sim-Panel mit M-Adresse) UND während der Simulation den erwarteten Wert (1/0) hat. So lässt sich verlangen, dass ein Zustand wie „Anlage ein“ als Merker gespeichert wird statt direkt auf einen Ausgang zu gehen. Nur im SPS-Modus.',
             sim_running:     'Erfüllt, sobald die Simulation für mindestens die angegebene Zeit gelaufen ist (zählt die Sim-Zeit seit Aufgabenstart). Nützlich, um „lauffähig halten" zu verlangen.',
             despawner_count: 'Erfüllt, wenn seit Aufgabenstart mindestens die angegebene Anzahl Werkstücke von einem Despawner (Auswerfer/Ziel) verarbeitet (entfernt) wurde. Nützlich als Funktionsnachweis: Ist die Anlage gesperrt und enthält Despawner, belegt eine erreichte Teile-Zahl, dass die selbst gebaute Steuerungslogik tatsächlich funktioniert.',
             component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
@@ -26420,7 +26621,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         function _buildCondExtra(cond) {
             switch(cond.type) {
-                case 'sps_output': case 'sps_input':
+                case 'sps_output': case 'sps_input': case 'sps_merker':
                     return `<div style="display:flex;gap:6px;">
                         <div style="flex:1;"><label class="task-ed-label">Variable</label><input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. A_MOTOR"></div>
                         <div style="flex:1;"><label class="task-ed-label">Erwarteter Wert</label>
@@ -26646,7 +26847,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const hintEnabled = hintCb ? !!hintCb.checked : true;
                 let cond = { type, label, hintEnabled };
                 switch(type) {
-                    case 'sps_output': case 'sps_input':
+                    case 'sps_output': case 'sps_input': case 'sps_merker':
                         cond.variable = (row.querySelector('.cond-var')||{value:''}).value.trim();
                         let vs = row.querySelector('.cond-val');
                         cond.value = vs ? (vs.value === 'true') : true;
@@ -27202,6 +27403,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 logic_equivalent:'{ "refCode": "A_MOTOR := E_T1 && E_T2\\nA_LAMPE := A_MOTOR" }',
                 sps_output:      '{ "variable": "A_MOTOR", "value": true }',
                 sps_input:       '{ "variable": "E_TASTER", "value": true }',
+                sps_merker:      '{ "variable": "ANLAGE_EIN", "value": true }',
                 sim_running:     '{ "minSeconds": 5 }',
                 despawner_count: '{ "count": 10 }',
                 component_type:  '{ "variable": "A_MOTOR", "compType": "motor" }',
@@ -27255,7 +27457,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 condBlock,
                 '',
                 '=== DATENQUELLE DER BEDINGUNGEN (WICHTIG — sonst unerfuellbar) ===',
-                '  Aus dem CODE (geparst): variable_exists, code_contains, logic_equivalent, sps_output, sps_input, component_type.',
+                '  Aus dem CODE (geparst): variable_exists, code_contains, logic_equivalent, sps_output, sps_input, sps_merker, component_type.',
                 '    Nur erfuellbar, wenn Code im Code-Editor steht. Code darf auch aus Logikplan/Schaltplan-Editor/Schrittketten/FESTO stammen — aber nur, wenn dessen Sync NICHT abgeschaltet ist.',
                 '  Aus 2D-Anlage / Simulation / FESTO: factory_object, despawner_count, sim_running, festo_train.',
                 '  FALLSTRICK "manueller Aufbau": Sperrst du den Code-Editor UND schaltest die Schaltplan-Editor-Sync ab (disableFromCode/disableLiveSync), entsteht aus einer Handzeichnung KEIN Code automatisch — code-basierte Bedingungen bleiben unerfuellt. Dann ENTWEDER Sync anlassen, ODER in der description ausdruecklich sagen, dass der Lerner "Code generieren" druecken muss, ODER nur nicht-code-basierte Bedingungen nutzen.',
@@ -27304,6 +27506,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 '  Zuweisung: :=   UND: &&   ODER: ||   NICHT: ¬   Klammern ( ) fuer Vorrang.   Kommentar: //   Jede Zuweisung in eigener Zeile.',
                 '  Speicher RS (ruecksetzdominant): S1 := <setzen>, R1 := <ruecksetzen>, Ausgang ist Q1 (weitere: S2/R2 -> Q2).',
                 '  Speicher SR (setzdominant): S1_SR := <setzen>, R1_SR := <ruecksetzen>, Ausgang ist Q1_SR.',
+                '  Speicher-Kurzform (gleichwertig, mit sprechendem Namen): ANLAGE_EIN := RS(<setzen>, <ruecksetzen>) bzw. SR(...). Muss allein rechts stehen.',
+                '  Merker = SPS-interne Variable ohne Klemme (z. B. ANLAGE_EIN), die im Programm weiterverwendet wird; VALIS zeigt sie mit Adresse M0.0 … Bedingung sps_merker prueft ihren Wert.',
                 '  WICHTIG bei Selbsthaltungen: im refCode/solution IMMER die RS-/SR-Form (S1/R1 -> Q1) nutzen, NIEMALS die selbstreferenzielle Form (X := (X || ...) && ...). Grund: logic_equivalent prueft die Halte-/Speicherfunktion nur bei echten RS/SR-Gliedern; die selbstreferenzielle Form wird speicherlos ausgewertet, sodass sogar eine Loesung OHNE Selbsthaltung faelschlich durchginge. (Eine im Schaltplan gezeichnete Selbsthaltung wird ohnehin automatisch als RS-Glied erkannt.)',
                 '  Zeitglieder: HILFS := TON(EINGANG, 2.5) (Einschaltverzoegerung), TOF(...) (Ausschaltverzoegerung/Nachlauf), TP(...) (Impuls). Zeit in Sekunden.',
                 '  Zaehler: HILFS := CTU(ZAEHL_SIGNAL, RESET, 5).',
@@ -27505,6 +27709,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 globalInputs = parsed.inputs;
                 globalOutputs = parsed.outputs;
+                window._generatedQ = parsed.generatedQ || new Set();
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
@@ -42475,7 +42680,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // ============================================================
         window.exportSCL = function() {
             const code = textarea.value;
-            const lines = code.split('\n');
+            // Speicher-Kurzform `X := RS(a, b)` in die gewohnten S/R/Q-Zeilen auflösen.
+            const lines = window._expandSpeicherKurzform(code.split('\n')).lines.map(l => l.text);
 
             // Identifier-Pattern: lateinische Buchstaben, ASCII-Ziffern, Underscore
             // UND Umlaute/ß (Variablen wie TOR_ÖFFNEN, MOTOR_GRÖSSE müssen erkannt
@@ -42643,6 +42849,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             allLHS.forEach(v => {
                 if (varInternal.has(v)) return;
                 if (timerInsts.has(v) || counterInsts.has(v)) return;
+                // Merker (SPS-Modus: Variable wird im Programm weiterverwendet)
+                // bleiben FB-intern, auch wenn ihr Typ im Sim-Panel „relais" ist.
+                if (window._isMerkerVar && window._isMerkerVar(v)) { varInternal.add(v); return; }
                 const ct = componentTypes[v];
                 if (outputTypes.has(ct)) { varOutput.add(v); return; }
                 // Timers/Counter-Ausgänge (outVar) → intern
@@ -42847,7 +43056,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // direkte Adresse nötig. Trotzdem in der CSV als Doku-Zeile aufnehmen.
             varInternal.forEach(v => {
                 if (timerInsts.has(v) || counterInsts.has(v)) return;
-                csv += `${tia(v)};Bool;;intern (FB-Merker)\n`;
+                // Merker-Adresse aus VALIS (M0.0 …) als Hinweis im Kommentar — im FB
+                // bleibt der Merker eine statische Variable, daher keine %M-Adresse.
+                const _m = (typeof spsAddresses !== 'undefined' && spsAddresses[v] && /^M/.test(spsAddresses[v])) ? spsAddresses[v] : '';
+                csv += `${tia(v)};Bool;;intern (FB-Merker${_m ? ', in VALIS ' + _m : ''})\n`;
             });
 
             // ============================================================
@@ -46280,10 +46492,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (m) { existingRhs = m[1].trim(); break; }
                     }
                 } catch(e) {}
-                let isSpecialRhs = /\b(TON|TOF|TP|CTU)\s*\(/.test(existingRhs);
+                let isSpecialRhs = /\b(TON|TOF|TP|CTU|RS|SR)\s*\(/.test(existingRhs);
                 if (isSpecialRhs) {
+                    const _isSpeicher = /^\s*(RS|SR)\s*\(/i.test(existingRhs);
                     add(`<div style="padding:8px 10px; background:#1a2a1a; border:1px solid #4caf50; border-radius:4px; color:#81c784; font-size:11px; margin-bottom:8px;">
-                        ✅ Kontakt wird dem <b>Eingang des Timers/Zählers</b> hinzugefügt.</div>`);
+                        ✅ Kontakt wird ${_isSpeicher ? 'der <b>Setz-Bedingung des Speichers</b>' : 'dem <b>Eingang des Timers/Zählers</b>'} hinzugefügt.</div>`);
                 }
                 add(`<div style="margin-bottom:10px;"><label style="color:#aaa; font-size:11px; display:block; margin-bottom:3px;">${t('circ_add_target_lbl')}</label>
                      <input type="text" id="circ-add-target" readonly value="${window.getFbsVariableDisplay ? window.getFbsVariableDisplay(zoneId) : zoneId}"
@@ -52227,7 +52440,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { t: 'Klemme', a: ['Anschlussklemme'], c: 'SPS & Pläne', d: 'Anschlusspunkt an der SPS bzw. im Schaltschrank, an dem ein Signal verdrahtet wird (Eingangs-/Ausgangsklemme).' },
                 { t: 'E/A-Adresse', a: ['Adresse', 'Ex.y', 'Ax.y'], c: 'SPS & Pläne', d: 'Eindeutige Bezeichnung einer Klemme, z. B. E0.0 (Eingang) oder A0.1 (Ausgang) im Siemens-S7-Format.' },
                 { t: 'SPS-Zyklus', a: ['Zyklus', 'Tick', 'Zykluszeit'], c: 'SPS & Pläne', d: 'Ein Durchlauf der SPS: Eingänge lesen → Programm rechnen → Ausgänge schreiben. Wiederholt sich sehr schnell (in VALIS ~20-mal pro Sekunde).' },
-                { t: 'Merker', a: ['Flag', 'M'], c: 'SPS & Pläne', d: 'Interne Hilfsvariable der SPS zum Speichern von Zwischenzuständen — weder Eingang noch Ausgang.' },
+                { t: 'Merker', a: ['Flag', 'M', 'Merkeradresse', 'M0.0'], c: 'SPS & Pläne', d: 'Interne Hilfsvariable der SPS zum Speichern von Zwischenzuständen — weder Eingang noch Ausgang, daher ohne Klemme. Adresse im Siemens-Format z. B. M0.0. In VALIS (SPS-Modus) wird jede Variable, die im Programm weiterverwendet wird, und jeder Speicher (RS/SR) zum Merker; gespeichert z. B. mit ANLAGE_EIN := RS(START_TASTER, STOP_TASTER).' },
                 { t: 'Logikplan', a: ['FUP', 'FBS', 'Funktionsplan'], c: 'SPS & Pläne', d: 'Grafische Darstellung der Logik aus Funktionsbausteinen (UND, ODER, RS …) — in VALIS automatisch aus dem Code erzeugt.' },
                 { t: 'Schaltplan', a: ['Stromlaufplan'], c: 'SPS & Pläne', d: 'Elektrische Darstellung der Verdrahtung mit Kontakten, Spulen und Stromwegen nach Norm (DIN EN 60204).' },
                 { t: 'Schrittkette', a: ['Grafcet', 'Ablaufkette'], c: 'SPS & Pläne', d: 'Ablaufsteuerung, die Schritt für Schritt weiterschaltet; jeder Schritt hat eine Aktion und eine Weiterschaltbedingung.' },
@@ -55267,7 +55480,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
                 const code = textarea.value;
-                const lines = code.split('\n');
+                // Speicher-Kurzform `X := RS(a, b)` in die gewohnten S/R/Q-Zeilen auflösen.
+                const lines = window._expandSpeicherKurzform(code.split('\n')).lines.map(l => l.text);
 
                 // ---- Identifier-Pattern (Umlautunterstützung wie SCL-Export) ----
                 const ID_CHARS = 'A-Za-zÄÖÜäöüß0-9_';

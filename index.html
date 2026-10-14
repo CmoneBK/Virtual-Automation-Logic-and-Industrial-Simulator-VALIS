@@ -56805,6 +56805,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     movingGroup.style.transformOrigin = `${x}px ${y + 5}px`;
                     if (!t.nc) movingGroup.classList.add('open');
                     el('line', {x1:x, y1:y-7, x2:x, y2:y+5, 'stroke-width':2}, movingGroup);
+                    // Hilfskontakt eines Zeitrelais = verzögertes Schaltglied:
+                    // Bogen nach DIN EN 60617-7 wie drawContact() im Auto-Schaltplan
+                    // (TON/TP Bogen links, TOF rechts — bei Schließer und Öffner).
+                    if (t.kind === 'aux' && comp.varName) {
+                        const _tc = ST.components.find(c => c.varName === comp.varName && CTYPES[c.type] && CTYPES[c.type].timer);
+                        if (_tc) {
+                            const side = (CTYPES[_tc.type].timer === 'TOF') ? 1 : -1;
+                            el('path', {d:`M ${x} ${y-2} C ${x + side*7} ${y-5}, ${x + side*7} ${y+1}, ${x} ${y+4}`, fill:'none', 'stroke-width':1.5}, movingGroup);
+                        }
+                    }
                     if (t.nc) el('line', {x1:x, y1:y-5, x2:x+8, y2:y-5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
                     // Treiber-Symbol (gestrichelte Linie + Antrieb) für: Taster, Schalter, Not-Halt, Pos.-Schalter, Schlüssel, Lichtgitter
                     const hasDriverInRegistry = ComponentRegistry && ComponentRegistry[comp.type] && ComponentRegistry[comp.type].iecSymbol;
@@ -56836,10 +56846,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 el('path', {d:`M ${x-12} ${y-0.5} L ${x-9} ${y+2.5} L ${x-12} ${y+5.5}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
                             }
                         }
-                    }
-                    // Aux-Marker (kleines „K" links oben)
-                    if (t.kind === 'aux') {
-                        el('text', {x:x-6, y:y-7, 'font-size':7, fill:'#1976d2', 'text-anchor':'end', 'font-weight':'bold', 'font-family':'sans-serif'}, grp).textContent = 'K';
                     }
                     // Pin-Beschriftungen (z.B. NC=11/12, NO=13/14)
                     const _plC = _pinLabels(comp);
@@ -56887,13 +56893,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         el('polygon', {points:`${vx-7},${y-8} ${vx+7},${y-8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
                         el('polygon', {points:`${vx-7},${y+8} ${vx+7},${y+8} ${vx},${y}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
                     } else if (t.timer) {
-                        // Zeitrelais (IEC): Rechteck mit Funktions-Kürzel (TON/TOF/TP)
-                        // und Verzögerungszeit. Pins oben=IN, unten=OUT wie bei Spulen.
-                        el('line', {x1:x, y1:y-20, x2:x, y2:y-13, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
-                        el('line', {x1:x, y1:y+13, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
-                        el('rect', {x:x-20, y:y-13, width:40, height:26, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
-                        el('text', {x, y:y-2, 'font-size':9, 'font-weight':'bold', 'text-anchor':'middle', 'font-family':'Arial'}, grp).textContent = t.timer;
-                        el('text', {x, y:y+9, 'font-size':8, 'text-anchor':'middle', 'font-family':'Arial', fill:'#555'}, grp).textContent = (comp.timerTime != null ? comp.timerTime : 2) + 's';
+                        // Zeitrelais: Spule mit Kennzeichenfeld nach DIN EN 60617-7,
+                        // exakt wie drawCoil() im Auto-Schaltplan — ansprechverzögert
+                        // (TON) Kreuz + Längsstrich, rückfallverzögert (TOF) schwarzes
+                        // Feld, Impuls (TP) Rechteckimpuls. Die eingestellte Zeit
+                        // steht im freien rechten Teil der Spule.
+                        el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('line', {x1:x, y1:y+10, x2:x, y2:y+20, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                        el('rect', {x:x-20, y:y-10, width:40, height:20, fill:'#fff', stroke:'#000', 'stroke-width':2, class:'circ-component'}, grp);
+                        if (t.timer === 'TON') {
+                            el('line', {x1:x-20, y1:y-10, x2:x-10, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('line', {x1:x-10, y1:y-10, x2:x-20, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('line', {x1:x-10, y1:y-10, x2:x-10, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
+                        } else if (t.timer === 'TOF') {
+                            el('rect', {x:x-20, y:y-10, width:10, height:20, fill:'#000'}, grp);
+                        } else if (t.timer === 'TP') {
+                            el('polyline', {points:`${x-18},${y+5} ${x-15},${y+5} ${x-15},${y-5} ${x-5},${y-5} ${x-5},${y+5} ${x-2},${y+5}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
+                        }
+                        el('text', {x:x+6, y:y+3, 'font-size':8, 'text-anchor':'middle', 'font-family':'Arial', fill:'#333'}, grp).textContent = (comp.timerTime != null ? comp.timerTime : 2) + ' s';
                     } else {
                         // Relais: Standard-Rechteck
                         el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);

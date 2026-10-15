@@ -64933,20 +64933,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 mit Pneumatik-/Hydraulikplan), null ohne Plan
         //   b.verschieben(id, x, y, rotation)   Bauteil in der 2D Factory versetzen
         //   b.verbinden(aId, aPort, bId, bPort, 'pneu'|'hyd')   Schlauch/Leitung stecken
-        //   b.trennen(aId, aPort, bId, bPort)   Schlauch/Leitung abziehen (beide Richtungen)
+        //   b.trennen(aId, aPort, bId, bPort)   Schlauch/Leitung abziehen (beide Richtungen;
+        //                                 automatische Schläuche bleiben als _broken stehen)
         //   b.hinzufuegen(typ, { x, y, var1, var2, farbe }) → id   Bauteil einsetzen
         //   b.entfernen(id)            Bauteil (mit Anbauteilen und Leitungen) entfernen
+        // Ab Version 3:
+        //   b.pneumatikAnbauen(id)     Ventil, Drosseln und Versorgung an einen Zylinder anbauen
+        //                              (wie der Knopf im Zylinder-Fenster; VALIS fragt nach der Ventilart)
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Die Simulation bleibt in VALIS; die Ansicht spiegelt nur.
         function _brueckeObj(id) { return factoryObjects.find(o => o.id === id) || null; }
+        function _brueckeNeuZeichnen() {
+            try {
+                if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
+                if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses();
+                if (typeof _applyHydManualConnections === 'function') _applyHydManualConnections();
+                if (typeof window.drawHydraulicHoses === 'function') window.drawHydraulicHoses();
+            } catch (_) {}
+        }
         function _brueckeGeaendert() {
             fluidGridDirty = true;
             try { if (typeof window.syncFactoryVariables === 'function') window.syncFactoryVariables(); } catch (_) {}
             saveFactoryState();
         }
         window.valisBruecke = {
-            version: 2,
+            version: 3,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65009,26 +65021,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             verbinden: function(aId, aPort, bId, bPort, art) {
                 if (!_brueckeObj(aId) || !_brueckeObj(bId)) return false;
-                this.trennen(aId, aPort, bId, bPort);
+                const gleich = c => (c.aObjId === aId && String(c.aPortId) === String(aPort) && c.bObjId === bId && String(c.bPortId) === String(bPort))
+                    || (c.aObjId === bId && String(c.aPortId) === String(bPort) && c.bObjId === aId && String(c.bPortId) === String(aPort));
+                const liste = art === 'hyd' ? (window.fluidPipeConnections = window.fluidPipeConnections || [])
+                    : (window.pneuConnections = window.pneuConnections || []);
+                // Abgezogener automatischer Schlauch: wieder anstecken statt doppelt anlegen
+                const alt = liste.find(gleich);
+                if (alt) { alt._broken = false; _brueckeNeuZeichnen(); _brueckeGeaendert(); return true; }
                 const c = { aObjId: aId, aPortId: String(aPort), bObjId: bId, bPortId: String(bPort) };
-                if (art === 'hyd') {
-                    window.fluidPipeConnections = window.fluidPipeConnections || [];
-                    window.fluidPipeConnections.push(Object.assign(c, { _sys: 'hyd' }));
-                } else {
-                    window.pneuConnections = window.pneuConnections || [];
-                    window.pneuConnections.push(c);
-                }
+                if (art === 'hyd') c._sys = 'hyd';
+                liste.push(c);
+                _brueckeNeuZeichnen();
                 _brueckeGeaendert();
                 return true;
             },
             trennen: function(aId, aPort, bId, bPort) {
                 const gleich = c => (c.aObjId === aId && String(c.aPortId) === String(aPort) && c.bObjId === bId && String(c.bPortId) === String(bPort))
                     || (c.aObjId === bId && String(c.aPortId) === String(bPort) && c.bObjId === aId && String(c.bPortId) === String(aPort));
-                const vorher = (window.pneuConnections || []).length + (window.fluidPipeConnections || []).length;
-                if (window.pneuConnections) window.pneuConnections = window.pneuConnections.filter(c => !gleich(c));
-                if (window.fluidPipeConnections) window.fluidPipeConnections = window.fluidPipeConnections.filter(c => !gleich(c));
-                const weg = vorher - (window.pneuConnections || []).length - (window.fluidPipeConnections || []).length;
-                if (weg) _brueckeGeaendert();
+                let weg = 0;
+                // Automatisch erzeugte Schläuche bekommen wie beim „Trennen“ in VALIS einen
+                // Grabstein (_broken), sonst legt das Zeichnen sie sofort wieder an.
+                ['pneuConnections', 'fluidPipeConnections'].forEach(k => {
+                    if (!window[k]) return;
+                    window[k] = window[k].filter(c => {
+                        if (!gleich(c) || c._broken) return true;
+                        weg++;
+                        if (c._auto) { c._broken = true; return true; }
+                        return false;
+                    });
+                });
+                if (weg) { _brueckeNeuZeichnen(); _brueckeGeaendert(); }
                 return weg > 0;
             },
             hinzufuegen: function(typ, opt) {
@@ -65047,6 +65069,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!o) return false;
                 deleteObjRecursive(o);
                 _brueckeGeaendert();
+                return true;
+            },
+            pneumatikAnbauen: function(id) {
+                const o = _brueckeObj(id);
+                if (!o || typeof window.generatePneumaticSetup !== 'function') return false;
+                if (o.hasPneumatics) return false;
+                window.generatePneumaticSetup(o);
                 return true;
             }
         };

@@ -62771,6 +62771,190 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window._festoFlowAnimEnabled = !!enabled;
                 _updateFestoCableFlow();
             };
+            // ============ FESTO-Aufbau für die VALIS-Brücke ============
+            // valisBruecke.festo() liefert den Aufbau so, wie dieses Panel ihn
+            // zeichnet: Platinen mit Lage, Buchsen, Anzeigen, Bedienteilen,
+            // Kontakthebeln (Ruhe- und Arbeitsstellung) und Aufdruck (SVG ohne
+            // die beweglichen Teile), dazu die Kabel von Buchse zu Buchse und
+            // die Belegung der Slots mit Variablen. Ist das Panel zu, wird es
+            // kurz unsichtbar gezeichnet (ohne Hinweisfenster), damit eine
+            // eingebettete Ansicht (3D-Werkstatt) es nicht öffnen muss.
+            // Koordinaten in SVG-Einheiten, je Platine ab ihrer linken oberen Ecke.
+            function _festoVersatz(elem, bis) {
+                let x = 0, y = 0, p = elem.parentNode;
+                while (p && p !== bis) {
+                    const tf = p.getAttribute && p.getAttribute('transform');
+                    const m = tf && tf.match(/translate\(\s*([\-\d.]+)\s*[,\s]\s*([\-\d.]+)\s*\)/);
+                    if (m) { x += parseFloat(m[1]); y += parseFloat(m[2]); }
+                    p = p.parentNode;
+                }
+                return { x, y };
+            }
+            const _FESTO_BUCHSENFARBE = { '#c62828': 'rot', '#1565c0': 'blau', '#1c1c1c': 'schwarz' };
+            window._festoAufbauDaten = function() {
+                const doc = _festoDoc();
+                const wrap = doc.getElementById('festo-wrapper');
+                const svg = doc.getElementById('festo-svg');
+                if (!wrap || !svg || typeof window._renderFestoPanel !== 'function') return null;
+                if (wrap.style.display === 'none') {
+                    const alt = wrap.style.cssText;
+                    const spsHinweis = window._showFestoSpsWarning, dualHinweis = window._showFestoDualWarning;
+                    window._showFestoSpsWarning = function() {};
+                    window._showFestoDualWarning = function() {};
+                    wrap.style.cssText = alt + ';display:block;position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                    try { window._renderFestoPanel(); }
+                    catch (e) { console.warn('FESTO-Aufbau für die Brücke:', e); }
+                    finally {
+                        wrap.style.cssText = alt;
+                        window._showFestoSpsWarning = spsHinweis;
+                        window._showFestoDualWarning = dualHinweis;
+                    }
+                } else if (!svg.querySelector('[data-festo-panel-type]')) {
+                    try { window._renderFestoPanel(); } catch (_) {}
+                }
+                const zahl = (e, a) => parseFloat(e.getAttribute(a)) || 0;
+                const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+                const platinen = [];
+                svg.querySelectorAll('[data-festo-panel-type]').forEach(g => {
+                    const tf = /translate\(\s*([\-\d.]+)\s*[,\s]\s*([\-\d.]+)/.exec(g.getAttribute('transform') || '') || [0, 0, 0];
+                    const rahmen = g.querySelector(':scope > rect');
+                    const texte = g.querySelectorAll(':scope > text');
+                    const untertitel = texte[1] ? texte[1].textContent : '';
+                    const p = {
+                        art: g.getAttribute('data-festo-panel-type'), nr: parseInt(g.getAttribute('data-festo-panel-idx')) || 1,
+                        x: parseFloat(tf[1]), y: parseFloat(tf[2]),
+                        b: rahmen ? zahl(rahmen, 'width') : 0, h: rahmen ? zahl(rahmen, 'height') : 0,
+                        titel: texte[0] ? texte[0].textContent : '', untertitel,
+                        bestellnr: (/FESTO\s+(\d+)/.exec(untertitel) || [])[1] || null,
+                        buchsen: [], anzeigen: [], bedien: [], hebel: [], schieber: [], knoepfe: [], aufdruck: ''
+                    };
+                    if (g.getAttribute('data-festo-sensor-type')) p.sensor = g.getAttribute('data-festo-sensor-type');
+                    const lage = (e, x, y) => { const v = _festoVersatz(e, g); return [x + v.x, y + v.y]; };
+                    g.querySelectorAll('[data-festo-socket]').forEach(e => {
+                        const [x, y] = lage(e, zahl(e, 'cx'), zahl(e, 'cy'));
+                        const bu = { id: e.getAttribute('data-festo-socket'), x, y, farbe: _FESTO_BUCHSENFARBE[(e.getAttribute('fill') || '').toLowerCase()] || 'schwarz' };
+                        if (e.getAttribute('data-festo-bus-0v')) bu.auch = e.getAttribute('data-festo-bus-0v');
+                        p.buchsen.push(bu);
+                    });
+                    const punkt = (sel, art) => g.querySelectorAll(sel).forEach(e => {
+                        const [x, y] = lage(e, zahl(e, 'cx'), zahl(e, 'cy'));
+                        p.anzeigen.push({ art, slot: e.getAttribute('data-festo-slot'), x, y });
+                    });
+                    punkt('[data-festo-relais-led]', 'spule');
+                    punkt('[data-festo-magnet-led]', 'magnet');
+                    punkt('[data-festo-sensor-led]', 'sensor');
+                    g.querySelectorAll('[data-festo-led-bulb]').forEach(e => {
+                        const [x, y] = lage(e, zahl(e, 'x') + zahl(e, 'width') / 2, zahl(e, 'y') + zahl(e, 'height') / 2);
+                        p.anzeigen.push({ art: 'leuchte', slot: e.getAttribute('data-festo-slot'), x, y, b: zahl(e, 'width'), h: zahl(e, 'height') });
+                    });
+                    g.querySelectorAll('[data-festo-horn]').forEach(e => {
+                        const l = e.querySelector('line');
+                        if (!l) return;
+                        const [x, y] = lage(l, zahl(l, 'x1'), (zahl(l, 'y1') + zahl(l, 'y2')) / 2);
+                        p.anzeigen.push({ art: 'hupe', slot: e.getAttribute('data-festo-slot'), x, y });
+                    });
+                    g.querySelectorAll('[data-festo-act-group]').forEach(e => {
+                        const a = e.querySelector('[data-festo-actuator]');
+                        if (!a) return;
+                        const schalter = a.getAttribute('data-festo-actuator') === 'switch';
+                        const aus = zahl(a, 'data-festo-off-cy'), an = zahl(a, 'data-festo-on-cy');
+                        const [x, y] = lage(a, zahl(a, 'cx'), schalter ? (aus + an) / 2 : zahl(a, 'cy'));
+                        p.bedien.push(schalter ? { art: 'schalter', slot: e.getAttribute('data-festo-act-group'), x, y, hub: an - aus }
+                            : { art: 'taster', slot: e.getAttribute('data-festo-act-group'), x, y });
+                    });
+                    // Kontakthebel: Drehpunkt, Ende in Ruhe und angezogen/betätigt
+                    // (dieselben Stellungen wie _updateFestoLevers)
+                    const hebel = (e, art, ruhe, aktiv) => {
+                        const v = _festoVersatz(e, g);
+                        p.hebel.push({ art, slot: e.getAttribute('data-festo-slot'), von: [zahl(e, 'x1') + v.x, zahl(e, 'y1') + v.y],
+                            ruhe: [ruhe[0] + v.x, ruhe[1] + v.y], aktiv: [aktiv[0] + v.x, aktiv[1] + v.y] });
+                    };
+                    g.querySelectorAll('[data-festo-lever]').forEach(e => {
+                        const cx = zahl(e, 'data-festo-cx'), cy = zahl(e, 'data-festo-cy');
+                        if (e.getAttribute('data-festo-lever') === 'no') hebel(e, 'schliesser', [cx - 10, cy - 7], [cx, cy - 8]);
+                        else hebel(e, 'oeffner', [cx + 10, cy - 8], [cx + 12, cy - 3]);
+                    });
+                    g.querySelectorAll('[data-festo-relais-lever]').forEach(e => {
+                        const cx = zahl(e, 'data-festo-cx'), my = zahl(e, 'data-festo-mech-y');
+                        hebel(e, 'wechsler', [cx - 10, my - 10], [cx + 10, my - 10]);
+                    });
+                    g.querySelectorAll('[data-festo-zr-lever]').forEach(e => {
+                        const cx = zahl(e, 'data-festo-cx'), my = zahl(e, 'data-festo-mech-y');
+                        if (e.getAttribute('data-festo-zr-mode') === 'nc') hebel(e, 'oeffner', [cx + 10, my - 10], [cx + 12, my - 3]);
+                        else hebel(e, 'schliesser', [cx - 10, my - 7], [cx, my - 10]);
+                    });
+                    g.querySelectorAll('[data-festo-magnet-slider]').forEach(e => {
+                        const v = _festoVersatz(e, g), w = zahl(e, 'width'), h = zahl(e, 'height');
+                        p.schieber.push({ slot: e.getAttribute('data-festo-slot'), y: zahl(e, 'y') + h / 2 + v.y, b: w, h,
+                            ruhe: zahl(e, 'data-festo-slider-x-rest') + w / 2 + v.x, aktiv: zahl(e, 'data-festo-slider-x-active') + w / 2 + v.x });
+                    });
+                    g.querySelectorAll('[data-festo-magnet-slider-duo]').forEach(e => {
+                        const v = _festoVersatz(e, g), w = zahl(e, 'width'), h = zahl(e, 'height');
+                        p.schieber.push({ art: e.getAttribute('data-festo-magnet-slider-duo') === 'triple' ? '5/3' : 'bistabil',
+                            slots: [e.getAttribute('data-festo-slot-m1'), e.getAttribute('data-festo-slot-m2')], y: zahl(e, 'y') + h / 2 + v.y, b: w, h,
+                            ruhe: zahl(e, 'data-festo-slider-x-rest') + w / 2 + v.x,
+                            m1: zahl(e, 'data-festo-slider-x-m1') + w / 2 + v.x, m2: zahl(e, 'data-festo-slider-x-m2') + w / 2 + v.x });
+                    });
+                    // Zeit-Drehregler des Zeitrelais (Knopf r = 17, darunter „… s")
+                    const zeiten = [...g.querySelectorAll(':scope > text')].map(t => /^([\d.]+) s$/.exec(t.textContent)).filter(Boolean);
+                    g.querySelectorAll(':scope > circle[r="17"]').forEach((e, i) => {
+                        const s = zeiten[i] ? parseFloat(zeiten[i][1]) : 1;
+                        p.knoepfe.push({ slot: `Z${p.nr}_S${i + 1}`, x: zahl(e, 'cx'), y: zahl(e, 'cy'), sekunden: s,
+                            anteil: Math.max(0, Math.min(1, (s - 0.5) / 9.5)) });
+                    });
+                    // Aufdruck: die Platine ohne Buchsen, Leuchten, Bedienteile,
+                    // Hebel, Schieber und Drehknöpfe (die baut die Ansicht selbst).
+                    try {
+                        const k = g.cloneNode(true);
+                        k.removeAttribute('transform');
+                        k.querySelectorAll('[data-festo-horn]').forEach(e => e.removeAttribute('class'));
+                        k.querySelectorAll('[data-festo-socket]').forEach(e => {
+                            const ring = e.previousElementSibling;
+                            if (ring && ring.tagName.toLowerCase() === 'circle' && ring.getAttribute('r') === '7.5') ring.remove();
+                            e.remove();
+                        });
+                        k.querySelectorAll('[data-festo-act-group],[data-festo-relais-led],[data-festo-led-bulb],[data-festo-magnet-led],'
+                            + '[data-festo-sensor-led],[data-festo-lever],[data-festo-relais-lever],[data-festo-zr-lever],'
+                            + '[data-festo-magnet-slider],[data-festo-magnet-slider-duo],:scope > circle[r="17"]').forEach(e => e.remove());
+                        const innen = new XMLSerializer().serializeToString(k);
+                        p.aufdruck = `<svg xmlns="${SVGNS}" width="${p.b}" height="${p.h}" viewBox="0 0 ${p.b} ${p.h}">`
+                            + `<style>text{font-family:'Segoe UI',Arial,sans-serif}</style>${innen}</svg>`;
+                    } catch (_) {}
+                    platinen.push(p);
+                });
+                const belegung = {};
+                let kabel = [];
+                if (window.festoFreeBuildMode) {
+                    FB.boards.forEach(b => Object.keys(b.slotVars || {}).forEach(k => {
+                        if (/^S\d+$/.test(k) && b.slotVars[k]) belegung[`${b.prefix}_${k}`] = b.slotVars[k];
+                    }));
+                    kabel = FB.cables.map(c => ({ von: c.a, nach: c.b, farbe: (/_24V_\d+$/.test(c.a) || /_24V_\d+$/.test(c.b)) ? 'rot' : 'blau', strang: null }));
+                } else if (!window._iecAnschlussView || window.epneuMode) {
+                    Object.assign(belegung, window._festoLastAssignments || {});
+                    const bunt = !!window.configFestoColorfulCables;
+                    kabel = (window._festoCablesList || []).filter(c => c.fromKey && c.toKey && !/^__/.test(c.fromKey) && !/^__/.test(c.toKey))
+                        .map(c => {
+                            const k = { von: c.fromKey, nach: c.toKey, farbe: c.color === 'red' ? 'rot' : 'blau', strang: c.strand || null };
+                            if (bunt && c.strand) k.strangFarbe = _festoStrandColor(c.strand);
+                            return k;
+                        });
+                }
+                // Bauteiltyp je Variable (taster, schalter, nothalt …) und die
+                // Eingänge, deren Schaltzeichen ein Öffner ist (betätigt = Signal aus)
+                const typen = {}, oeffner = [];
+                Object.values(belegung).forEach(v => {
+                    const ct = (typeof componentTypes !== 'undefined' && componentTypes[v]) || null;
+                    if (!ct) return;
+                    typen[v] = ct;
+                    if (oeffner.indexOf(v) < 0 && typeof window._variableIsNCInverted === 'function' && window._variableIsNCInverted(ct)) oeffner.push(v);
+                });
+                return {
+                    ansicht: window.festoFreeBuildMode ? 'frei' : ((!window.epneuMode && window._iecAnschlussView) ? 'anschluss' : 'aufbau'),
+                    breite: vb[2] || parseFloat(svg.dataset.baseW) || 0, hoehe: vb[3] || parseFloat(svg.dataset.baseH) || 0,
+                    platinen, kabel, belegung, typen, oeffner,
+                    kennzeichen: Object.assign({}, window._festoIECLabels || {})
+                };
+            };
             // ============ Zoom-Funktionen ============
             // Zoom muss über INLINE-CSS gesetzt werden (nicht SVG-Attribute),
             // weil eine globale Regel `svg { width:100%; height:100% }` sonst
@@ -64942,6 +65126,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                              (wie der Knopf im Zylinder-Fenster; VALIS fragt nach der Ventilart)
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
+        // Ab Version 4 (Elektro-Seite):
+        //   b.festo()                  → FESTO-Aufbau wie im Panel „FESTO“: { ansicht, breite, hoehe,
+        //                                 platinen: [{ art, nr, x, y, b, h, titel, bestellnr, buchsen,
+        //                                 anzeigen, bedien, hebel, schieber, knoepfe, aufdruck (SVG) }],
+        //                                 kabel: [{ von, nach, farbe, strang }], belegung: { slot: VAR },
+        //                                 typen, oeffner, kennzeichen }; der Zustand kommt aus zustand().sps
         // Die Simulation bleibt in VALIS; die Ansicht spiegelt nur.
         function _brueckeObj(id) { return factoryObjects.find(o => o.id === id) || null; }
         function _brueckeNeuZeichnen() {
@@ -64958,7 +65148,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             saveFactoryState();
         }
         window.valisBruecke = {
-            version: 3,
+            version: 4,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65009,6 +65199,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     .circ-static, .circ-moving-contact { fill:none; stroke:#333; stroke-width:1.5px; }`, true);
                 const m = img.match(/src="([^"]+)"/);
                 return m ? { elektro: m[1] } : null;
+            },
+            festo: function() {
+                return typeof window._festoAufbauDaten === 'function' ? window._festoAufbauDaten() : null;
             },
             verschieben: function(id, x, y, rotation) {
                 const o = _brueckeObj(id);

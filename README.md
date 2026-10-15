@@ -165,6 +165,7 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `verschieben(id, x, y, rotation)` | Bauteil in der 2D Factory versetzen (ab Version 2) |
 | `verbinden(aId, aPort, bId, bPort, art)` / `trennen(aId, aPort, bId, bPort)` | Schlauch (`art` `'pneu'`) oder Hydraulikleitung (`'hyd'`) stecken bzw. abziehen (ab Version 2) |
 | `hinzufuegen(typ, { x, y, var1, var2, farbe })` / `entfernen(id)` | Bauteil einsetzen (gibt die `id` zurück) bzw. mit Anbauteilen und Leitungen entfernen (ab Version 2) |
+| `pneumatikAnbauen(id)` | An einen Zylinder ohne Pneumatik Ventil, Drosseln, Kompressor und Wartungseinheit anbauen wie mit dem Knopf im Zylinder-Fenster; VALIS fragt im eigenen Fenster nach der Ventilart (ab Version 3) |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

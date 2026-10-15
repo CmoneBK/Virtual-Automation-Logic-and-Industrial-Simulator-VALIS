@@ -64928,9 +64928,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                   Schalter/Sensoren setzen
         //   b.starten() / b.stoppen()  Simulation an/aus
         //   b.laden(daten)             Anlage aus .valisave-Daten (Objekt oder JSON-Text)
+        // Ab Version 2 (Umbau aus der Ansicht, z. B. 3D-Aufbauwand):
+        //   b.schaltplan()             → { elektro: 'data:image/svg+xml,...' } Schaltplan (IEC,
+        //                                 mit Pneumatik-/Hydraulikplan), null ohne Plan
+        //   b.verschieben(id, x, y, rotation)   Bauteil in der 2D Factory versetzen
+        //   b.verbinden(aId, aPort, bId, bPort, 'pneu'|'hyd')   Schlauch/Leitung stecken
+        //   b.trennen(aId, aPort, bId, bPort)   Schlauch/Leitung abziehen (beide Richtungen)
+        //   b.hinzufuegen(typ, { x, y, var1, var2, farbe }) → id   Bauteil einsetzen
+        //   b.entfernen(id)            Bauteil (mit Anbauteilen und Leitungen) entfernen
+        // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
+        // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Die Simulation bleibt in VALIS; die Ansicht spiegelt nur.
+        function _brueckeObj(id) { return factoryObjects.find(o => o.id === id) || null; }
+        function _brueckeGeaendert() {
+            fluidGridDirty = true;
+            try { if (typeof window.syncFactoryVariables === 'function') window.syncFactoryVariables(); } catch (_) {}
+            saveFactoryState();
+        }
         window.valisBruecke = {
-            version: 1,
+            version: 2,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -64938,14 +64954,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const objekte = {};
                 factoryObjects.forEach(o => {
                     const z = {};
-                    if (o.extension != null) z.extension = o.extension;
+                    for (const k in o) {
+                        const v = o[k], t = typeof v;
+                        if (t === 'number' ? isFinite(v) : t === 'boolean' || (t === 'string' && v.length < 80)) z[k] = v;
+                    }
                     if (o.isActive != null) z.isActive = !!o.isActive;
-                    if (o.valveState != null) z.valveState = o.valveState;
-                    if (o.opening != null) z.opening = o.opening;
-                    if (o.pressure != null) z.pressure = o.pressure;
                     objekte[o.id] = z;
                 });
-                return { laeuft: !!isSimulationActive, sps: Object.assign({}, spsState), objekte: objekte };
+                const teile = factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), w: Math.round(i.width || i.w || 0),
+                    h: Math.round(i.height || i.h || 0), material: i.material || null, shape: i.shape || null,
+                    rotation: Math.round(i.rotation || i.angle || 0), id: i.id || null }));
+                return { laeuft: !!isSimulationActive, sps: Object.assign({}, spsState), objekte: objekte, teile: teile };
             },
             setzeEingang: function(name, betaetigt) {
                 const cType = componentTypes[name] || 'taster';
@@ -64968,6 +64987,67 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const feld = document.getElementById('saveload-text');
                 feld.value = JSON.stringify(daten);
                 window.applyRawCode();
+            },
+            schaltplan: function() {
+                if (typeof circuitSvg === 'undefined' || !circuitSvg || !circuitSvg.querySelector('text')) return null;
+                const img = _svgToDataUrlImg(circuitSvg, `
+                    text { font-family:'Segoe UI',Tahoma,sans-serif; fill:#222; }
+                    .circ-component { fill:#fff; stroke:#333; stroke-width:1.5px; }
+                    .circ-wire { fill:none; stroke:#333; stroke-width:2px; stroke-linecap:round; stroke-linejoin:round; }
+                    .circ-static, .circ-moving-contact { fill:none; stroke:#333; stroke-width:1.5px; }`, true);
+                const m = img.match(/src="([^"]+)"/);
+                return m ? { elektro: m[1] } : null;
+            },
+            verschieben: function(id, x, y, rotation) {
+                const o = _brueckeObj(id);
+                if (!o) return false;
+                o.x = Math.round(x); o.y = Math.round(y);
+                if (rotation != null) o.rotation = Math.round(rotation);
+                updateObjTransform(o);
+                _brueckeGeaendert();
+                return true;
+            },
+            verbinden: function(aId, aPort, bId, bPort, art) {
+                if (!_brueckeObj(aId) || !_brueckeObj(bId)) return false;
+                this.trennen(aId, aPort, bId, bPort);
+                const c = { aObjId: aId, aPortId: String(aPort), bObjId: bId, bPortId: String(bPort) };
+                if (art === 'hyd') {
+                    window.fluidPipeConnections = window.fluidPipeConnections || [];
+                    window.fluidPipeConnections.push(Object.assign(c, { _sys: 'hyd' }));
+                } else {
+                    window.pneuConnections = window.pneuConnections || [];
+                    window.pneuConnections.push(c);
+                }
+                _brueckeGeaendert();
+                return true;
+            },
+            trennen: function(aId, aPort, bId, bPort) {
+                const gleich = c => (c.aObjId === aId && String(c.aPortId) === String(aPort) && c.bObjId === bId && String(c.bPortId) === String(bPort))
+                    || (c.aObjId === bId && String(c.aPortId) === String(bPort) && c.bObjId === aId && String(c.bPortId) === String(aPort));
+                const vorher = (window.pneuConnections || []).length + (window.fluidPipeConnections || []).length;
+                if (window.pneuConnections) window.pneuConnections = window.pneuConnections.filter(c => !gleich(c));
+                if (window.fluidPipeConnections) window.fluidPipeConnections = window.fluidPipeConnections.filter(c => !gleich(c));
+                const weg = vorher - (window.pneuConnections || []).length - (window.fluidPipeConnections || []).length;
+                if (weg) _brueckeGeaendert();
+                return weg > 0;
+            },
+            hinzufuegen: function(typ, opt) {
+                opt = opt || {};
+                const o = createFactoryObject(typ, opt.var1 || '', opt.var2 || '', null, opt.farbe || 'green', opt.intervall || 3);
+                if (!o) return null;
+                if (opt.x != null) o.x = Math.round(opt.x);
+                if (opt.y != null) o.y = Math.round(opt.y);
+                if (opt.rotation != null) o.rotation = Math.round(opt.rotation);
+                updateObjTransform(o);
+                _brueckeGeaendert();
+                return o.id;
+            },
+            entfernen: function(id) {
+                const o = _brueckeObj(id);
+                if (!o) return false;
+                deleteObjRecursive(o);
+                _brueckeGeaendert();
+                return true;
             }
         };
     </script>

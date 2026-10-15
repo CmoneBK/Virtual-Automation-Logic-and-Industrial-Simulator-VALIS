@@ -157,10 +157,14 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | Aufruf | Ergebnis |
 |---|---|
 | `anlage()` | Die 2D-Anlage wie gespeichert: `objects` (Lage, Variablen, `normLabel`, `targetCylinderId` …) und `pneuConnections` |
-| `zustand()` | `{ laeuft, sps: { VAR: bool }, objekte: { id: { extension, isActive, valveState, opening, pressure } } }` |
+| `zustand()` | `{ laeuft, sps: { VAR: bool }, objekte: { id: { extension, isActive, valveState, opening, pressure, … } }, teile: [{ x, y, w, h, material, shape }] }`; ab Version 2 alle einfachen Werte je Bauteil und die Werkstücke |
 | `setzeEingang(name, betaetigt)` | Taster drücken/loslassen, Schalter und Sensoren setzen |
 | `starten()`, `stoppen()` | Simulation an/aus |
 | `laden(daten)` | Anlage aus `.valisave`-Daten (Objekt oder JSON-Text) |
+| `schaltplan()` | `{ elektro: 'data:image/svg+xml,…' }`: der Schaltplan (IEC, mit Pneumatik-/Hydraulikplan) als Bild, `null` ohne Plan (ab Version 2) |
+| `verschieben(id, x, y, rotation)` | Bauteil in der 2D Factory versetzen (ab Version 2) |
+| `verbinden(aId, aPort, bId, bPort, art)` / `trennen(aId, aPort, bId, bPort)` | Schlauch (`art` `'pneu'`) oder Hydraulikleitung (`'hyd'`) stecken bzw. abziehen (ab Version 2) |
+| `hinzufuegen(typ, { x, y, var1, var2, farbe })` / `entfernen(id)` | Bauteil einsetzen (gibt die `id` zurück) bzw. mit Anbauteilen und Leitungen entfernen (ab Version 2) |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

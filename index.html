@@ -64915,6 +64915,61 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
             }
         })();
+        // ============================================================
+        // VALIS-Brücke: Schnittstelle für eingebettete Ansichten
+        // ============================================================
+        // Eine Seite derselben Herkunft, die VALIS in einem iframe zeigt
+        // (z. B. der Pneumatik-Raum der virtuellen Werkstatt auf t-bk.de),
+        // liest hierüber die Anlage und den Zustand und betätigt Eingänge:
+        //   const b = iframe.contentWindow.valisBruecke;
+        //   b.anlage()                 → { objects, pneuConnections, ... } wie gespeichert
+        //   b.zustand()                → { laeuft, sps: {VAR: bool}, objekte: {id: {...}} }
+        //   b.setzeEingang('START', true)   Taster drücken (false = loslassen),
+        //                                   Schalter/Sensoren setzen
+        //   b.starten() / b.stoppen()  Simulation an/aus
+        //   b.laden(daten)             Anlage aus .valisave-Daten (Objekt oder JSON-Text)
+        // Die Simulation bleibt in VALIS; die Ansicht spiegelt nur.
+        window.valisBruecke = {
+            version: 1,
+            anlage: function() {
+                return JSON.parse(JSON.stringify(getFactoryStateObj()));
+            },
+            zustand: function() {
+                const objekte = {};
+                factoryObjects.forEach(o => {
+                    const z = {};
+                    if (o.extension != null) z.extension = o.extension;
+                    if (o.isActive != null) z.isActive = !!o.isActive;
+                    if (o.valveState != null) z.valveState = o.valveState;
+                    if (o.opening != null) z.opening = o.opening;
+                    if (o.pressure != null) z.pressure = o.pressure;
+                    objekte[o.id] = z;
+                });
+                return { laeuft: !!isSimulationActive, sps: Object.assign({}, spsState), objekte: objekte };
+            },
+            setzeEingang: function(name, betaetigt) {
+                const cType = componentTypes[name] || 'taster';
+                if (cType.indexOf('taster') === 0) { window.setTaster(name, !!betaetigt); return; }
+                const isNC = window._variableIsNCInverted(cType);
+                spsState[name] = isNC ? !betaetigt : !!betaetigt;
+                const chk = document.getElementById('sim_in_' + name);
+                if (chk) chk.checked = !!betaetigt;
+                runSimulationTick();
+            },
+            starten: function() { if (!isSimulationActive) window.toggleSimulation(); },
+            stoppen: function() { if (isSimulationActive) window.toggleSimulation(); },
+            laden: function(daten) {
+                if (typeof daten === 'string') daten = JSON.parse(daten);
+                // Ältere oder von Hand gebaute Anlagen ohne Teile-Liste
+                if (daten.factory) {
+                    daten.factory.items = daten.factory.items || [];
+                    daten.factory.objects = daten.factory.objects || [];
+                }
+                const feld = document.getElementById('saveload-text');
+                feld.value = JSON.stringify(daten);
+                window.applyRawCode();
+            }
+        };
     </script>
 
     <!-- 🎬 Aufnahme-Indikator -->

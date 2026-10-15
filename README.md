@@ -150,6 +150,20 @@ SYSTEM_AKTIV := Q1 && Q2_SR
    *(Tipp: Ein Wechsel zwischen Öffner (NC) und Schließer (NO) invertiert automatisch den Ruhezustand der Hardware in den Plänen und der Simulation!)*
 4. Drücken Sie **"Simulation starten"** und bedienen Sie die Schalter im Panel oder interagieren Sie mit der 2D-Anlage. Mit dem **Geschwindigkeits-Slider** (0,1× – 3,0×) stellen Sie die Simulationsgeschwindigkeit ein.
 
+## 🔌 Einbetten: VALIS-Brücke
+
+Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `iframe.contentWindow.valisBruecke` mitlesen und bedienen (genutzt vom Pneumatik-Raum der virtuellen Werkstatt auf t-bk.de). Die Simulation bleibt in VALIS, die einbettende Seite spiegelt nur.
+
+| Aufruf | Ergebnis |
+|---|---|
+| `anlage()` | Die 2D-Anlage wie gespeichert: `objects` (Lage, Variablen, `normLabel`, `targetCylinderId` …) und `pneuConnections` |
+| `zustand()` | `{ laeuft, sps: { VAR: bool }, objekte: { id: { extension, isActive, valveState, opening, pressure } } }` |
+| `setzeEingang(name, betaetigt)` | Taster drücken/loslassen, Schalter und Sensoren setzen |
+| `starten()`, `stoppen()` | Simulation an/aus |
+| `laden(daten)` | Anlage aus `.valisave`-Daten (Objekt oder JSON-Text) |
+
+Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
+
 ## 🛠️ Erstellt mit
 * **HTML5 / CSS3 / Vanilla JavaScript**
 * Eigene OBB-Kinematik-Physikengine

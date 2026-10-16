@@ -65266,6 +65266,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //   b.sensoren3d({ id: true/false | null })   Sensorwerte aus der 3D-Physik für Teile mit pos3d
         //                              (ersetzen die 2D-Erfassung; null = wieder 2D)
         //   b.drossel(id, prozent)     Drossel/Stromregelventil auf 1 … 100 % Öffnung stellen
+        // Ab Version 8:
+        //   raumlage(id, { …, s })     zusätzlich der Maßstab s im Raum (1 = echte Größe)
         //   b.plaene()                 → { logik, elektro } Logikplan und Schaltplan (mit Pneumatik-/
         //                                 Hydraulikplan) als 'data:image/svg+xml,...', auch bei geschlossenem Panel
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
@@ -65341,7 +65343,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 7,
+            version: 8,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65531,6 +65533,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (lage) {
                     const n = v => { v = Number(v); return isFinite(v) ? Math.round(v * 1000) / 1000 : 0; };
                     o.pos3d = { x: n(lage.x), y: n(lage.y), z: n(lage.z), rx: n(lage.rx), ry: n(lage.ry), rz: n(lage.rz), boden: !!lage.boden };
+                    // Maßstab im Raum (ab Version 8): 1 = echte Größe, 0,2 … 5
+                    if (lage.s != null && Number(lage.s) !== 1) o.pos3d.s = Math.max(0.2, Math.min(5, n(lage.s) || 1));
                 } else { delete o.pos3d; delete window._valis3dWerte[id]; }
                 window._valis3dMarke(o);
                 window._valis3dZone();

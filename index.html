@@ -62888,12 +62888,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const wrap = doc.getElementById('festo-wrapper');
                 const svg = doc.getElementById('festo-svg');
                 if (!wrap || !svg || typeof window._renderFestoPanel !== 'function') return null;
-                if (wrap.style.display === 'none') {
+                // Zu ist das Panel auch, wenn eine CSS-Regel es ausblendet (Grid-Layout
+                // ohne .has-festo: display:none !important) oder es keine Größe hat -
+                // dann wäre sein Inhalt veraltet (z. B. nach E-Pneu/SPS-Umschalten).
+                const _festoZu = wrap.style.display === 'none' || doc.defaultView.getComputedStyle(wrap).display === 'none'
+                    || !wrap.offsetWidth || !wrap.offsetHeight;
+                if (_festoZu) {
                     const alt = wrap.style.cssText;
                     const spsHinweis = window._showFestoSpsWarning, dualHinweis = window._showFestoDualWarning;
                     window._showFestoSpsWarning = function() {};
                     window._showFestoDualWarning = function() {};
-                    wrap.style.cssText = alt + ';display:block;position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                    wrap.style.cssText = alt + ';position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                    wrap.style.setProperty('display', 'block', 'important');
                     try { window._renderFestoPanel(); }
                     catch (e) { console.warn('FESTO-Aufbau für die Brücke:', e); }
                     finally {

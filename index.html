@@ -1579,6 +1579,10 @@
         /* Die weißen Namensschilder an Zylindern, Bändern und Sensoren */
         .f2d-label { position: absolute; top: -15px; left: 0; font-size: 10px; font-family: monospace; background: rgba(255,255,255,0.8); padding: 1px 3px; border: 1px solid #ccc; pointer-events: none; white-space: nowrap; z-index: 15; color: #000; transition: opacity 0.2s ease; opacity: 1; }
         .f2d-label-below { top: 100%; margin-top: 3px; left: 50%; }
+        /* Bauteile, die in der 3D-Werkstatt frei im Raum stehen (pos3d) */
+        .f2d-3d-badge { position: absolute; top: -9px; left: -9px; background: #4c1d95; color: #fff; font-size: 9px; font-weight: bold; padding: 1px 3px; border-radius: 3px; border: 1px solid #c4b5fd; z-index: 26; line-height: 12px; cursor: help; white-space: nowrap; }
+        #valis-3d-zone { position: absolute; border: 2px dashed #8b5cf6; background: rgba(139, 92, 246, 0.06); border-radius: 6px; pointer-events: none; z-index: 1; }
+        #valis-3d-zone::after { content: '🧊 3D-ZONE – simuliert in der 3D-Werkstatt'; position: absolute; top: 4px; left: 6px; color: rgba(109, 40, 217, 0.75); font-size: 12px; font-weight: bold; white-space: nowrap; }
         .f2d-key-badge { position: absolute; bottom: -2px; right: -2px; background: rgba(0,0,0,0.78); color: #ffd740; font-family: monospace; font-size: 9px; font-weight: bold; padding: 0 3px; border-radius: 3px; border: 1px solid #555; pointer-events: none; z-index: 25; min-width: 12px; text-align: center; line-height: 14px; }
         /* NEU: Labels im Simulationsmodus ausblenden, bei Hover oder Pin wieder einblenden */
         #factory-wrapper.sim-active .f2d-obj .f2d-label { opacity: 0; }
@@ -40724,6 +40728,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     color: o.color, interval: o.interval, useCollision: o.useCollision, labelPinned: o.labelPinned, muteSound: o.muteSound, locked: o.locked || false,
 					linkedVarX_Plus: o.linkedVarX_Plus, linkedVarX_Minus: o.linkedVarX_Minus, linkedVarY_Plus: o.linkedVarY_Plus, linkedVarY_Minus: o.linkedVarY_Minus, linkedVarGrab: o.linkedVarGrab, linkedVarEnable: o.linkedVarEnable || null, pathSpeed: o.pathSpeed || null, pathSequenceMode: o.pathSequenceMode || null, pathTransition: o.pathTransition || null, cycleCountVar: o.cycleCountVar || null, posX: o.posX, posY: o.posY,
                     showKeyBadge: o.showKeyBadge || false,
+                    pos3d: o.pos3d || null,
                     linkedVarMotor: o.linkedVarMotor || null, linkedVarMotorFW: o.linkedVarMotorFW || null, linkedVarMotorHW: o.linkedVarMotorHW || null, linkedVarAutoMode: o.linkedVarAutoMode || null, linkedVarNormal: o.linkedVarNormal || null, linkedVarCreep: o.linkedVarCreep || null, linkedVarHubOben: o.linkedVarHubOben || null, speedCreep: o.speedCreep !== undefined ? o.speedCreep : null,
                     linkedVarWind: o.linkedVarWind || null, windForce: o.windForce !== undefined ? o.windForce : null, linkedVarWindSensor: o.linkedVarWindSensor || null, linkedVarPendel: o.linkedVarPendel || null, pendelThreshold: o.pendelThreshold || null,
                     groupId: o.groupId || null,
@@ -41797,6 +41802,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let _kbTxt = window.inputKeyBindings && window.inputKeyBindings[newObj.linkedVar]; _b.textContent = _kbTxt ? (_kbTxt === ' ' ? '␣' : _kbTxt.toUpperCase()) : '–';
                         newObj.el.appendChild(_b);
                     }
+                    if (o.pos3d && typeof window._valis3dMarke === 'function') { newObj.pos3d = o.pos3d; window._valis3dMarke(newObj); }
                     if (o.groupId) { newObj.groupId = o.groupId; newObj.el.classList.add('f2d-grouped'); }
                     newObj.x = o.x; newObj.y = o.y; newObj.width = o.width; newObj.rotation = o.rotation;
                     if (o.height) newObj.height = o.height; 
@@ -42005,6 +42011,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (window.pneuConnections)      window.pneuConnections      = window.pneuConnections.filter(_alive);
                 if (window.fluidPipeConnections) window.fluidPipeConnections = window.fluidPipeConnections.filter(_alive);
             } catch(e) { console.error(e); } finally { isLoadingFactory = false; }
+            try { if (typeof window._valis3dZone === 'function') window._valis3dZone(); } catch (_) {}
             // Schaltplan nach dem Laden synchronisieren — sonst zeigt der Pneumatik-/
             // Hydraulik-Bereich beim ersten Seitenaufruf nichts an, weil drawCircuitPlan
             // bereits VOR loadFactoryState() durch updateEditor() lief (ohne Aktoren/Ventile).
@@ -65239,6 +65246,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Ab Version 5:
         //   b.kontextmenue(id)         Rechtsklickmenü eines Bauteils öffnen (blendet die
         //                              2D-Anlage ein, falls sie zu ist) → true/false
+        // Ab Version 6:
+        //   b.raumlage(id, { x, y, z, rx, ry, rz, boden } | null)   Bauteil in der 3D-Werkstatt frei in den
+        //                              Raum stellen (Meter, Grad) bzw. zurück an die Wand; solche Teile
+        //                              stehen in VALIS in der 3D-Zone mit Hinweis-Symbol (anlage(): pos3d)
         //   b.plaene()                 → { logik, elektro } Logikplan und Schaltplan (mit Pneumatik-/
         //                                 Hydraulikplan) als 'data:image/svg+xml,...', auch bei geschlossenem Panel
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
@@ -65264,8 +65275,54 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { if (typeof window.syncFactoryVariables === 'function') window.syncFactoryVariables(); } catch (_) {}
             saveFactoryState();
         }
+        // === 3D-Zone: Bauteile, die in der 3D-Werkstatt frei im Raum stehen ===
+        // obj.pos3d = { x, y, z (m, Raum der VALIS-Wand), rx, ry, rz (Grad), boden (steht auf dem Boden) }.
+        // Solche Teile tragen ein Hinweis-Symbol und stehen in VALIS gesammelt
+        // in der 3D-Zone rechts neben der Anlage: ihre Lage und ihr
+        // Zusammenspiel mit anderen Teilen zählen in der 3D-Werkstatt.
+        window._valis3dMarke = function(o) {
+            if (!o || !o.el) return;
+            let b = o.el.querySelector(':scope > .f2d-3d-badge');
+            if (o.pos3d && !b) {
+                b = document.createElement('div');
+                b.className = 'f2d-3d-badge';
+                b.textContent = '🧊 3D';
+                b.title = 'Steht in der 3D-Werkstatt frei im Raum: Lage und Zusammenspiel mit anderen Teilen werden dort in 3D simuliert';
+                o.el.appendChild(b);
+            } else if (!o.pos3d && b) b.remove();
+            o.el.classList.toggle('f2d-in-3d', !!o.pos3d);
+        };
+        window._valis3dZone = function() {
+            const area = typeof factoryCanvas !== 'undefined' ? factoryCanvas : null;
+            if (!area) return;
+            let zone = document.getElementById('valis-3d-zone');
+            const im3d = factoryObjects.filter(o => o.pos3d && !(o.parent && o.parent.pos3d));
+            if (!im3d.length) { if (zone) zone.remove(); return; }
+            const rest = factoryObjects.filter(o => !o.pos3d && !(o.parent && o.parent.pos3d));
+            let maxX = 0, minY = Infinity;
+            rest.forEach(o => { maxX = Math.max(maxX, o.x + (o.width || 40)); minY = Math.min(minY, o.y); });
+            if (!isFinite(minY)) minY = 40;
+            const x0 = Math.round(maxX + 120), y0 = Math.round(Math.max(20, minY)), RAND = 24, KOPF = 26, HOCH = 600;
+            let x = x0 + RAND, y = y0 + KOPF, spalte = 0, rechts = x0, unten = y0;
+            im3d.sort((a, b) => String(a.id).localeCompare(String(b.id))).forEach(o => {
+                const w = o.width || 40, h = o.height || 40;
+                if (y + h > y0 + HOCH && y > y0 + KOPF) { x += spalte + 30; y = y0 + KOPF; spalte = 0; }
+                const dx = x - o.x, dy = y - o.y;
+                if (dx || dy) {
+                    o.x = x; o.y = y; updateObjTransform(o);
+                    factoryObjects.filter(c => c.parent === o).forEach(c => { c.x += dx; c.y += dy; updateObjTransform(c); });
+                }
+                spalte = Math.max(spalte, w);
+                rechts = Math.max(rechts, x + w); unten = Math.max(unten, y + h);
+                y += h + 30;
+            });
+            if (!zone) { zone = document.createElement('div'); zone.id = 'valis-3d-zone'; }
+            if (zone.parentNode !== area) area.appendChild(zone);
+            zone.style.left = x0 + 'px'; zone.style.top = y0 + 'px';
+            zone.style.width = (rechts - x0 + RAND) + 'px'; zone.style.height = (unten - y0 + RAND) + 'px';
+        };
         window.valisBruecke = {
-            version: 5,
+            version: 6,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65446,6 +65503,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const o = _brueckeObj(id);
                 if (!o) return false;
                 deleteObjRecursive(o);
+                _brueckeGeaendert();
+                return true;
+            },
+            raumlage: function(id, lage) {
+                const o = _brueckeObj(id);
+                if (!o) return false;
+                if (lage) {
+                    const n = v => { v = Number(v); return isFinite(v) ? Math.round(v * 1000) / 1000 : 0; };
+                    o.pos3d = { x: n(lage.x), y: n(lage.y), z: n(lage.z), rx: n(lage.rx), ry: n(lage.ry), rz: n(lage.rz), boden: !!lage.boden };
+                } else delete o.pos3d;
+                window._valis3dMarke(o);
+                window._valis3dZone();
+                _brueckeNeuZeichnen();
                 _brueckeGeaendert();
                 return true;
             },

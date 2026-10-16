@@ -170,6 +170,8 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `kontextmenue(id)` | Öffnet das Rechtsklickmenü des Bauteils in der 2D-Anlage (ab Version 5), wie ein Rechtsklick in VALIS; blendet die 2D-Anlage dafür ein, falls sie zu ist |
 | `plaene()` | Logikplan und Schaltplan (mit Pneumatik-/Hydraulikplan) als SVG-Bild-Adressen `{ logik, elektro }` (ab Version 5), auch wenn ihre Panels zu sind |
 | `raumlage(id, lage)` | Stellt ein Bauteil in der 3D-Werkstatt frei in den Raum (ab Version 6): `lage = { x, y, z, rx, ry, rz, boden }` in Metern und Grad (`boden`: steht auf dem Boden), `null` holt es zurück an die Wand. Solche Teile tragen in VALIS das Symbol „🧊 3D“ und stehen gesammelt in der 3D-Zone rechts neben der Anlage; gespeichert wird die Lage als `pos3d` |
+| `sensoren3d(werte)` | Stufe 2 des freien 3D-Aufbaus (ab Version 7): `werte = { id: true/false }` meldet, was die 3D-Physik an Sensoren und Rollen-Endschaltern im Raum erfasst. Für Teile mit `pos3d` ersetzt der Wert die 2D-Erfassung, `null` (oder `raumlage(id, null)`) schaltet zurück auf 2D |
+| `drossel(id, prozent)` | Stellt ein Drosselrückschlagventil (`throttle`) oder Stromregelventil (`throttle_hyd`) auf 1 … 100 % Öffnung (ab Version 7) |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

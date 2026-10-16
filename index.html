@@ -39289,7 +39289,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             // Rückstau: Timer pausieren wenn Spawn-Position durch ein Teil blockiert ist
                             let _spawnX = obj.x + 5 + (obj.spawnXOffset || 0);
                             let _spawnY = obj.y + 5 + (obj.spawnYOffset || 0);
-                            let _backpressureBlocked = obj.backpressureStop && factoryItems.some(it =>
+                            // Steht der Spawner frei im 3D-Raum (pos3d), legt die 3D-Werkstatt
+                            // das Teil dort ab: kein Rückstau aus der 2D-Anlage.
+                            let _backpressureBlocked = !obj.pos3d && obj.backpressureStop && factoryItems.some(it =>
                                 it.x < _spawnX + 40 && it.x + (it.width || 40) > _spawnX &&
                                 it.y < _spawnY + 40 && it.y + (it.height || 40) > _spawnY
                             );
@@ -39303,8 +39305,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     if (obj.qualityMode === 'always_nok') _spQuality = 'NOK';
                                     else if (obj.qualityMode === 'random') _spQuality = Math.random() < (obj.qualityChance ?? 0.8) ? 'OK' : 'NOK';
                                     else if (obj.qualityMode === 'every_n') _spQuality = (obj._spawnCount % (obj.qualityNth || 3) === 0) ? 'NOK' : 'OK';
+                                    if (obj.pos3d) {
+                                        // Brücke v10: Zähler statt 2D-Teil, die 3D-Werkstatt setzt das Werkstück in den Raum
+                                        obj._spawn3d = (obj._spawn3d || 0) + 1;
+                                    } else {
                                     spawnFactoryItem(obj.type.includes('metall') ? 'metall' : 'kunststoff', obj.x + 5 + (obj.spawnXOffset || 0), obj.y + 5 + (obj.spawnYOffset || 0), obj.spawnSolid, obj.meltTemp, (parseInt(obj.el.style.zIndex) || 10) + (obj.spawnZOffset || 0));
                                     if (factoryItems.length > 0) factoryItems[factoryItems.length - 1].quality = _spQuality;
+                                    }
                                 }
                             }
                         } else {
@@ -65280,6 +65287,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
         //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
         //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
+        // Ab Version 10:
+        //   Spawner mit pos3d legen kein 2D-Teil an, sondern zählen zustand().objekte[id]._spawn3d hoch;
+        //                                 die 3D-Werkstatt setzt das Werkstück im Raum ab
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -65353,7 +65363,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 9,
+            version: 10,
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();

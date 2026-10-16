@@ -62843,6 +62843,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     punkt('[data-festo-relais-led]', 'spule');
                     punkt('[data-festo-magnet-led]', 'magnet');
                     punkt('[data-festo-sensor-led]', 'sensor');
+                    // SPS-Module (Anschluss-Sicht): Ausgangs-LEDs und Eingangs-Ringe
+                    // hängen direkt an einer SPS-Variable statt an einem Slot.
+                    g.querySelectorAll('[data-festo-ans-led-var]').forEach(e => {
+                        const [x, y] = lage(e, zahl(e, 'cx'), zahl(e, 'cy'));
+                        p.anzeigen.push({ art: 'sps', variable: e.getAttribute('data-festo-ans-led-var'), x, y });
+                    });
+                    g.querySelectorAll('[data-festo-ans-in-var]').forEach(e => {
+                        const [x, y] = lage(e, zahl(e, 'cx'), zahl(e, 'cy'));
+                        p.anzeigen.push({ art: 'eingang', variable: e.getAttribute('data-festo-ans-in-var'), x, y });
+                    });
                     g.querySelectorAll('[data-festo-led-bulb]').forEach(e => {
                         const [x, y] = lage(e, zahl(e, 'x') + zahl(e, 'width') / 2, zahl(e, 'y') + zahl(e, 'height') / 2);
                         p.anzeigen.push({ art: 'leuchte', slot: e.getAttribute('data-festo-slot'), x, y, b: zahl(e, 'width'), h: zahl(e, 'height') });
@@ -62915,7 +62925,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         });
                         k.querySelectorAll('[data-festo-act-group],[data-festo-relais-led],[data-festo-led-bulb],[data-festo-magnet-led],'
                             + '[data-festo-sensor-led],[data-festo-lever],[data-festo-relais-lever],[data-festo-zr-lever],'
-                            + '[data-festo-magnet-slider],[data-festo-magnet-slider-duo],:scope > circle[r="17"]').forEach(e => e.remove());
+                            + '[data-festo-magnet-slider],[data-festo-magnet-slider-duo],[data-festo-ans-led-var],[data-festo-ans-in-var],'
+                            + '[data-festo-ans-out-var],:scope > circle[r="17"]').forEach(e => e.remove());
                         const innen = new XMLSerializer().serializeToString(k);
                         p.aufdruck = `<svg xmlns="${SVGNS}" width="${p.b}" height="${p.h}" viewBox="0 0 ${p.b} ${p.h}">`
                             + `<style>text{font-family:'Segoe UI',Arial,sans-serif}</style>${innen}</svg>`;
@@ -62929,12 +62940,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (/^S\d+$/.test(k) && b.slotVars[k]) belegung[`${b.prefix}_${k}`] = b.slotVars[k];
                     }));
                     kabel = FB.cables.map(c => ({ von: c.a, nach: c.b, farbe: (/_24V_\d+$/.test(c.a) || /_24V_\d+$/.test(c.b)) ? 'rot' : 'blau', strang: null }));
-                } else if (!window._iecAnschlussView || window.epneuMode) {
+                } else {
+                    // Aufbau- und Anschluss-Sicht (SPS-Modus) liefern beide ihre
+                    // Vorverkabelung; Signalleitungen der SPS-Module sind schwarz.
                     Object.assign(belegung, window._festoLastAssignments || {});
                     const bunt = !!window.configFestoColorfulCables;
                     kabel = (window._festoCablesList || []).filter(c => c.fromKey && c.toKey && !/^__/.test(c.fromKey) && !/^__/.test(c.toKey))
                         .map(c => {
-                            const k = { von: c.fromKey, nach: c.toKey, farbe: c.color === 'red' ? 'rot' : 'blau', strang: c.strand || null };
+                            const farbe = c.color === 'red' ? 'rot' : (c.color === 'black' ? 'schwarz' : 'blau');
+                            const k = { von: c.fromKey, nach: c.toKey, farbe, strang: c.strand || null };
                             if (bunt && c.strand) k.strangFarbe = _festoStrandColor(c.strand);
                             return k;
                         });

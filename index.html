@@ -62888,12 +62888,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const wrap = doc.getElementById('festo-wrapper');
                 const svg = doc.getElementById('festo-svg');
                 if (!wrap || !svg || typeof window._renderFestoPanel !== 'function') return null;
-                if (wrap.style.display === 'none') {
+                // Zu ist das Panel auch, wenn eine CSS-Regel es ausblendet (Grid-Layout
+                // ohne .has-festo: display:none !important) oder es keine Größe hat -
+                // dann wäre sein Inhalt veraltet (z. B. nach E-Pneu/SPS-Umschalten).
+                const _festoZu = wrap.style.display === 'none' || doc.defaultView.getComputedStyle(wrap).display === 'none'
+                    || !wrap.offsetWidth || !wrap.offsetHeight;
+                if (_festoZu) {
                     const alt = wrap.style.cssText;
                     const spsHinweis = window._showFestoSpsWarning, dualHinweis = window._showFestoDualWarning;
                     window._showFestoSpsWarning = function() {};
                     window._showFestoDualWarning = function() {};
-                    wrap.style.cssText = alt + ';display:block;position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                    wrap.style.cssText = alt + ';position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                    wrap.style.setProperty('display', 'block', 'important');
                     try { window._renderFestoPanel(); }
                     catch (e) { console.warn('FESTO-Aufbau für die Brücke:', e); }
                     finally {
@@ -65230,6 +65236,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Ab Version 3:
         //   b.pneumatikAnbauen(id)     Ventil, Drosseln und Versorgung an einen Zylinder anbauen
         //                              (wie der Knopf im Zylinder-Fenster; VALIS fragt nach der Ventilart)
+        // Ab Version 5:
+        //   b.kontextmenue(id)         Rechtsklickmenü eines Bauteils öffnen (blendet die
+        //                              2D-Anlage ein, falls sie zu ist) → true/false
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -65254,7 +65263,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             saveFactoryState();
         }
         window.valisBruecke = {
-            version: 4,
+            version: 5,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65368,6 +65377,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!o) return false;
                 deleteObjRecursive(o);
                 _brueckeGeaendert();
+                return true;
+            },
+            kontextmenue: function(id) {
+                const o = _brueckeObj(id);
+                if (!o || !o.el || typeof showContextMenu !== 'function') return false;
+                const fw = document.getElementById('factory-wrapper');
+                if (fw && (fw.style.display === 'none' || getComputedStyle(fw).display === 'none') && typeof window.toggleWorkspaceView === 'function') {
+                    window.toggleWorkspaceView('factory-wrapper');
+                }
+                // erst nach dem Einblenden liegt das Bauteil an seinem Platz
+                setTimeout(() => {
+                    try { o.el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {}
+                    const r = o.el.getBoundingClientRect();
+                    contextTarget = o;
+                    showContextMenu(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2), o);
+                }, 120);
                 return true;
             },
             pneumatikAnbauen: function(id) {

@@ -1841,6 +1841,12 @@
             #left-panel { 
                 width: 100% !important; 
                 flex: 0 0 45vh; /* Nimmt 45% der Höhe ein */
+                /* Inhalt scrollt im Panel, statt es über 45vh hinaus zu
+                   strecken - sonst bleibt für die Arbeitsfläche (Logikplan,
+                   Schaltplan …) 0 px Höhe übrig (z. B. VALIS im schmalen
+                   iframe der 3D-Werkstatt). */
+                min-height: 0;
+                overflow-y: auto;
                 border-right: none; 
                 border-bottom: 2px solid #333; 
             }
@@ -43987,6 +43993,63 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { window.cedInit(); } catch(_) {}
             }
         }
+
+        // === Panels, die erst nach dem Rendern Größe bekommen ===
+        // Ist ein Panel beim Zeichnen 0 px groß (VALIS lädt in einem noch
+        // geschlossenen iframe, schmales Layout, Fenster minimiert …), legt
+        // drawGraph/drawCircuitPlan kein svg-pan-zoom an - Pan und Zoom
+        // fehlen dann, bis zufällig neu gezeichnet wird. Der Observer holt
+        // das nach, sobald das Panel sichtbar wird, und passt bei
+        // Größenänderungen die Ansicht an.
+        (function _panelGroesseBeobachten() {
+            if (typeof ResizeObserver === 'undefined') return;
+            const _vorher = {};
+            const _ausgelagert = (id) => window.popOutWindows && window.popOutWindows[id] && !window.popOutWindows[id].closed;
+            const _neuAufbauen = (id) => {
+                if (id === 'fbs-wrapper') {
+                    if (panZoomInstance) { panZoomInstance.resize(); return; }
+                    if (currentGraph && currentGraph.nodes && currentGraph.nodes.size > 0) drawGraph(currentGraph);
+                } else if (id === 'circuit-wrapper') {
+                    if (panZoomCircuitInstance) { panZoomCircuitInstance.resize(); return; }
+                    if (currentGraph) drawCircuitPlan(currentGraph, globalInputs, globalOutputs);
+                } else if (id === 'festo-wrapper' && typeof window._renderFestoPanel === 'function') {
+                    window._festoNeedsFit = true; window._renderFestoPanel();
+                } else if (id === 'circuit-editor-wrapper' && typeof window.cedInit === 'function') {
+                    window.cedInit();
+                } else if (id === 'sk-wrapper' && typeof window._renderSchrittketten === 'function') {
+                    window._renderSchrittketten();
+                }
+            };
+            const ro = new ResizeObserver((eintraege) => {
+                eintraege.forEach(e => {
+                    const id = e.target.id;
+                    if (_ausgelagert(id)) return;
+                    const w = e.target.offsetWidth, h = e.target.offsetHeight;
+                    const war = _vorher[id] || { w: 0, h: 0 };
+                    _vorher[id] = { w, h };
+                    if (w <= 0 || h <= 0) return;
+                    const warSichtbar = war.w > 0 && war.h > 0;
+                    if (!warSichtbar) {
+                        // erst sichtbar geworden: fehlende Instanz anlegen bzw. einpassen
+                        if (id === 'fbs-wrapper' && !panZoomInstance) { _neuAufbauen(id); return; }
+                        if (id === 'circuit-wrapper' && !panZoomCircuitInstance) { _neuAufbauen(id); return; }
+                        if (id !== 'fbs-wrapper' && id !== 'circuit-wrapper') { _neuAufbauen(id); return; }
+                    }
+                    try {
+                        if (id === 'fbs-wrapper' && panZoomInstance) panZoomInstance.resize();
+                        if (id === 'circuit-wrapper' && panZoomCircuitInstance) panZoomCircuitInstance.resize();
+                        if (!warSichtbar) {
+                            const pz = id === 'fbs-wrapper' ? panZoomInstance : panZoomCircuitInstance;
+                            if (pz) { pz.fit(); pz.center(); }
+                        }
+                    } catch (_) {}
+                });
+            });
+            ['fbs-wrapper', 'circuit-wrapper', 'festo-wrapper', 'circuit-editor-wrapper', 'sk-wrapper'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) ro.observe(el);
+            });
+        })();
 
         // === Resizer zwischen zwei Cells im Shared-Window ===
         // Resizer-Drag: bidirektional (row → col-resize verschiebt width,

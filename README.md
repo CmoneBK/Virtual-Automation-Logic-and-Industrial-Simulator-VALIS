@@ -176,6 +176,7 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `duplizieren(id, lage)` | Kopiert ein Bauteil mit allen Einstellungen und Anbauteilen (ab Version 9, wie Strg+C/V). Mit `lage` (wie bei `raumlage`) steht die Kopie gleich im Raum. Gibt die neue `id` zurück |
 | Spawner im Raum | Ab Version 10 legt ein Spawner mit `pos3d` kein Teil in der 2D-Anlage an. Er zählt stattdessen `zustand().objekte[id]._spawn3d` hoch, und die 3D-Werkstatt setzt das Werkstück im Raum ab |
 | `festoModus(m)`, `festoStecken(a, b)`, `festoZiehen(a, b)`, `festoModul(art, sensor)`, `festoModulEntfernen(präfix)`, `festoModulArten()` | FESTO-Aufbau aus der Ansicht frei stecken (ab Version 11): `m` ist `'frei'` (Freier Aufbau), `'training'` (Trainingsmodus, prüft jedes Kabel gegen den Strang) oder `'aufbau'`. Buchsen-Keys wie in `festo().kabel`. `festoStecken` gibt `{ ok, text, fertig }` zurück; Variablennamen werden ohne Rückfrage vorgeschlagen. `festo().training` meldet Strang und offene Kabel |
+| `festoCodeErzeugen()`, `festoLiveSync(an)` | Wie „Code erzeugen“ und der Schalter „Live-Sync“ im Freien Aufbau (ab Version 12). `festoCodeErzeugen` gibt `{ ok, text }` mit der Statusmeldung von VALIS zurück; `festo().frei` meldet `{ liveSync, status }` |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

@@ -61972,6 +61972,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 },
                 module: function() { return FB.boards.map(b => ({ prefix: b.prefix, art: b.type })); },
                 typen: function() { return Object.keys(FB_DIM).map(t => ({ art: t, titel: FB_LABEL[t] })); },
+                code: function() {
+                    window._fbGenerate();
+                    return { ok: /^(⚡[^\n]*\n)?✓/.test(FB.status || ''), text: FB.status || '' };
+                },
+                liveSync: function(an) {
+                    if (an !== undefined) { window._fbSetLiveSync(!!an); _fbRerender(); }
+                    return !!FB.liveSync;
+                },
+                status: function() { return { liveSync: !!FB.liveSync, text: FB.status || '' }; },
             };
             window._fbClearCables = function() {
                 if (!FB.cables.length) { FB.status = 'Keine Kabel vorhanden.'; _fbUpdateStatusUI(); return; }
@@ -63127,6 +63136,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 return {
                     ansicht: window.festoFreeBuildMode ? 'frei' : ((!window.epneuMode && window._iecAnschlussView) ? 'anschluss' : 'aufbau'),
+                    frei: window.festoFreeBuildMode ? window._fbAusSicht.status() : null,
                     training: window._festoTrainModeActive ? (() => {
                         const cl = window._festoCablesList || [], st = window._festoTrainCurrentStrand;
                         const e = (window._festoStrandList || []).find(x => x.id === st);
@@ -65346,6 +65356,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
         //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
         //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
+        // Ab Version 12:
+        //   b.festoCodeErzeugen()      wie „Code erzeugen“ im Freien Aufbau → { ok, text } (text = Status von VALIS)
+        //   b.festoLiveSync(an?)       Live-Sync des Freien Aufbaus setzen/lesen → true/false
+        //   festo().frei               { liveSync, status } im Freien Aufbau, sonst null
         // Ab Version 11 (FESTO-Aufbau in 3D frei stecken):
         //   b.festoModus('frei'|'training'|'aufbau')   Freier Aufbau bzw. Trainingsmodus ein, oder beide aus
         //   b.festoStecken(a, b)       Kabel zwischen zwei Buchsen (Keys wie in festo().kabel) → { ok, text, fertig }
@@ -65431,7 +65445,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 11,
+            version: 12,
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();
@@ -65548,6 +65562,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             festoModul: function(art, sensor) { if (!window.festoFreeBuildMode) window._toggleFestoFreeBuild(true); return window._fbAusSicht.modul(art, sensor); },
             festoModulEntfernen: function(prefix) { return !!window.festoFreeBuildMode && window._fbAusSicht.entfernen(prefix); },
             festoModulArten: function() { return window._fbAusSicht.typen(); },
+            festoCodeErzeugen: function() {
+                if (!window.festoFreeBuildMode) return { ok: false, text: 'Erst „Frei stecken“ wählen' };
+                return window._fbAusSicht.code();
+            },
+            festoLiveSync: function(an) { return window._fbAusSicht.liveSync(an); },
             plaene: function() {
                 // Logikplan und Schaltplan (mit Pneumatik-/Hydraulikplan) als SVG-Bilder,
                 // auch wenn ihre Panels zu sind. Den Logikplan zeichnet VALIS nur

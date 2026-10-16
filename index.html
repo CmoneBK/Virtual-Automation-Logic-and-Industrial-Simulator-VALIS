@@ -43530,6 +43530,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             closeHistoryModal();
         };
 
+        // Vorhandenen Snapshot mit dem aktuellen Stand überschreiben (Name bleibt,
+        // ausser im Namensfeld steht ein neuer). Immer mit Rückfrage.
+        window.overwriteSnapshot = function(id) {
+            const arr = getSnapshots();
+            const i = arr.findIndex(s => s.id === id);
+            if (i < 0) return;
+            const old = arr[i];
+            const nameInput = document.getElementById('snapshot-name');
+            const newName = (nameInput ? nameInput.value.trim() : '') || old.name || '';
+            const label = old.name ? '„' + old.name + '“' : 'vom ' + new Date(old.ts).toLocaleString('de-DE');
+            if (!confirm('Snapshot ' + label + ' mit dem aktuellen Stand überschreiben?\n(Der bisherige Inhalt dieses Snapshots geht verloren)')) return;
+            arr.splice(i, 1);
+            arr.unshift({
+                id: old.id, name: newName, ts: Date.now(),
+                code: textarea.value,
+                types: JSON.stringify(componentTypes),
+                layout: currentLayout,
+                factory: JSON.stringify(getFactoryStateObj()),
+                plugins: JSON.stringify(activePlugins),
+                keyBindings: JSON.stringify(window.inputKeyBindings || {})
+            });
+            putSnapshots(arr);
+            if (nameInput) nameInput.value = '';
+            renderSnapshotList();
+            const ind = document.getElementById('save-indicator');
+            if (ind) { ind.textContent = '📸 Snapshot überschrieben'; ind.style.color = '#4caf50'; ind.style.opacity = '1'; setTimeout(() => { ind.textContent = 'Gespeichert'; ind.style.color = '#3cb44b'; ind.style.opacity = '0.3'; }, 1500); }
+        };
+
         window.deleteSnapshot = function(id) {
             const arr = getSnapshots().filter(s => s.id !== id);
             putSnapshots(arr);
@@ -43584,6 +43612,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     </div>
                     <button onclick="compareSnapshot('${snap.id}')" style="background:#1565c0;color:#fff;border:none;padding:4px 9px;border-radius:3px;cursor:pointer;font-size:11px;white-space:nowrap;">🔍 Vergleich</button>
                     <button onclick="loadSnapshot('${snap.id}')" style="background:#2e7d32;color:#fff;border:none;padding:4px 9px;border-radius:3px;cursor:pointer;font-size:11px;white-space:nowrap;">⏮ Laden</button>
+                    <button onclick="overwriteSnapshot('${snap.id}')" style="background:#8d6e00;color:#fff;border:none;padding:4px 9px;border-radius:3px;cursor:pointer;font-size:11px;white-space:nowrap;" title="Diesen Snapshot mit dem aktuellen Stand überschreiben">💾 Überschreiben</button>
                     <button onclick="deleteSnapshot('${snap.id}')" style="background:#4a1a1a;color:#ef9a9a;border:none;padding:4px 9px;border-radius:3px;cursor:pointer;font-size:11px;white-space:nowrap;" title="Snapshot löschen">🗑</button>
                 </div>`;
             }).join('');
@@ -66060,8 +66089,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
               + '<button id="sv-keep" style="background:#1565c0;' + W + '">'
               +   '<b>Als eigenen Stand ablegen</b>'
               +   '<div style="font-size:11px;opacity:.85;margin-top:3px;">Bekommt einen Namen und bleibt '
-              +   'so, wie er ist &ndash; nichts überschreibt ihn später. Für Zwischenstände, auf die du '
-              +   'zurück willst.</div></button>'
+              +   'so, wie er ist &ndash; überschrieben wird er nur, wenn du ihn ausdrücklich dafür '
+              +   'auswählst. Für Zwischenstände, auf die du zurück willst.</div></button>'
+              + '<button id="sv-over" style="background:#8d6e00;' + W + '">'
+              +   '<b>Einen gespeicherten Stand überschreiben</b>'
+              +   '<div style="font-size:11px;opacity:.85;margin-top:3px;">Du wählst einen deiner '
+              +   'abgelegten Stände aus; er bekommt den aktuellen Arbeitsstand. Vorher wird nachgefragt.'
+              +   '</div></button>'
               + '<button id="sv-no" style="width:100%;background:#3a3a3a;color:#ccc;border:none;'
               +   'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;">Abbrechen</button>';
 
@@ -66073,7 +66107,48 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (name === null || !name.trim()) return;
                 put(C.newUid(), name.trim(), bundle, 0);
             };
+            box.querySelector('#sv-over').onclick = function () { renderOverwrite(bundle); };
             box.querySelector('#sv-no').onclick = renderEnv;
+        }
+
+        /** Liste der eigenen Staende zum Ueberschreiben, jeweils mit Rueckfrage. */
+        function renderOverwrite(bundle) {
+            box.innerHTML = '<div style="color:#9e9e9e;font-size:12px;">Lade …</div>';
+            C.list(KIND).then(function (j) {
+                var objs = (j.objects || []).filter(function (o) {
+                    return o.kind === KIND && o.uid !== LIVE_UID;
+                });
+                var rows = objs.map(function (o, i) {
+                    return '<button data-ov="' + i + '" style="width:100%;text-align:left;background:#2d2d30;'
+                         +   'color:#fff;border:1px solid #444;border-radius:4px;padding:9px 12px;cursor:pointer;'
+                         +   'font-size:13px;margin-bottom:6px;">' + esc(o.name || '(ohne Namen)')
+                         +   '<div style="font-size:10px;color:#9e9e9e;margin-top:2px;">v' + o.version
+                         +   ' &middot; ' + esc(fmtDate(o.updated_at)) + '</div></button>';
+                }).join('');
+                box.innerHTML =
+                    '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">Welchen Stand überschreiben?</div>'
+                  + '<div style="font-size:11px;color:#9e9e9e;line-height:1.6;margin-bottom:12px;">'
+                  +   'Der gewählte Stand bekommt den aktuellen Arbeitsstand. Sein bisheriger Inhalt wird '
+                  +   'zusätzlich als lokaler Snapshot gesichert.</div>'
+                  + (rows || '<div style="color:#777;font-size:12px;padding:14px 0;text-align:center;">'
+                         + 'Noch keine eigenen Stände abgelegt.</div>')
+                  + '<button id="ov-back" style="width:100%;background:#3a3a3a;color:#ccc;border:none;'
+                  +   'border-radius:4px;padding:9px;cursor:pointer;font-size:12px;margin-top:4px;">Zurück</button>';
+                Array.prototype.forEach.call(box.querySelectorAll('[data-ov]'), function (b) {
+                    b.onclick = function () {
+                        var o = objs[+b.getAttribute('data-ov')];
+                        if (!confirm('Den Stand „' + (o.name || '(ohne Namen)') + '“ mit dem aktuellen '
+                                   + 'Arbeitsstand überschreiben?')) return;
+                        // Alten Inhalt vorher lokal sichern, dann mit bekannter Version schreiben.
+                        C.get(KIND, o.uid).then(function (obj) {
+                            if (obj && obj.data) keepAsSnapshot((o.name || 'Stand') + ' (vor dem Überschreiben)', obj.data);
+                        }).catch(function () {}).then(function () {
+                            put(o.uid, o.name || 'Stand', bundle, o.version);
+                        });
+                    };
+                });
+                box.querySelector('#ov-back').onclick = saveCurrent;
+            }).catch(handleErr);
         }
 
         function put(uid, name, bundle, base, retried) {

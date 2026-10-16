@@ -61921,11 +61921,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _fbConnect(FB.sel, key);
             }
             // Zwei Sockel verbinden (aus Klick ODER Drag). Legt ggf. Variablennamen an.
-            function _fbConnect(a, b) {
+            function _fbConnect(a, b, still) {
                 if (!a || !b || a === b) { FB.sel = null; _fbRerender(); return; }
                 const dup = FB.cables.some(c => (c.a===a&&c.b===b) || (c.a===b&&c.b===a));
                 if (!dup) {
-                    _fbAskVar(a); _fbAskVar(b);
+                    _fbAskVar(a, still); _fbAskVar(b, still);
                     FB.cables.push({ id:'c'+(FB.idc++), a, b });
                     FB.status = 'Kabel gelegt.'; FB.verifiedVars = null; _fbSave();
                     _fbMaybeLiveSync();
@@ -61945,6 +61945,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { localStorage.setItem('valisFbMarkIncomplete', FB.markIncomplete ? '1' : '0'); } catch(_) {}
                 _fbRerender();
             };
+            // Für die Brücke (3D-Werkstatt, ab Version 11): Kabel stecken/ziehen und
+            // Module setzen/entfernen ohne Dialoge.
+            window._fbAusSicht = {
+                stecken: function(a, b) {
+                    if (!a || !b || a === b) return { ok: false, text: 'Zwei verschiedene Buchsen wählen' };
+                    const da = FB.cables.some(c => (c.a===a&&c.b===b) || (c.a===b&&c.b===a));
+                    if (da) return { ok: false, text: 'Diese Buchsen sind schon verbunden' };
+                    _fbConnect(a, b, true);
+                    return { ok: true, text: 'Kabel gesteckt' };
+                },
+                ziehen: function(a, b) {
+                    const c = FB.cables.find(c => (c.a===a&&c.b===b) || (c.a===b&&c.b===a));
+                    if (!c) return false;
+                    _fbRemoveCable(c.id); return true;
+                },
+                modul: function(type, sensorType) {
+                    if (!FB_DIM[type]) return null;
+                    window._fbAddModule(type, sensorType);
+                    return FB.boards[FB.boards.length - 1].prefix;
+                },
+                entfernen: function(prefix) {
+                    const b = FB.boards.find(x => x.prefix === prefix);
+                    if (!b) return false;
+                    _fbRemoveBoard(b.id); return true;
+                },
+                module: function() { return FB.boards.map(b => ({ prefix: b.prefix, art: b.type })); },
+                typen: function() { return Object.keys(FB_DIM).map(t => ({ art: t, titel: FB_LABEL[t] })); },
+            };
             window._fbClearCables = function() {
                 if (!FB.cables.length) { FB.status = 'Keine Kabel vorhanden.'; _fbUpdateStatusUI(); return; }
                 const n = FB.cables.length;
@@ -61953,21 +61981,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _fbMaybeLiveSync();
                 _fbRerender();
             };
-            function _fbAskVar(key) {
+            // still = ohne Rückfrage (aus der 3D-Werkstatt): Vorschlag bzw. 2,5 s übernehmen
+            function _fbAskVar(key, still) {
                 if (_fbSocketRail(key)) return;
                 const b = _fbBoardByKey(key); if (!b) return;
                 const e = _fbElemForKey(b, key); if (!e || !e.varKey) return;
                 if (!b.slotVars[e.varKey]) {
                     const used = _fbAllVars(); const pfx = _fbVarPfx(e.cedType);
                     let n = 1, sug; do { sug = pfx + n; n++; } while (used.has(sug.toUpperCase()));
-                    const inp = (typeof window.prompt === 'function') ? window.prompt('Variablenname für dieses Bauteil:', sug) : sug;
+                    const inp = (!still && typeof window.prompt === 'function') ? window.prompt('Variablenname für dieses Bauteil:', sug) : sug;
                     if (inp && inp.trim()) b.slotVars[e.varKey] = inp.trim().replace(/\s+/g, '_');
                 }
                 // Zeitrelais: Verzögerungszeit einmalig pro Slot erfragen (beim Coil-Sockel).
                 if (b.type === 'zeitrelais' && e.timer && b.slotVars[e.varKey]) {
                     b.timerCfg = b.timerCfg || {};
                     if (!b.timerCfg[e.varKey]) {
-                        const t = (typeof window.prompt === 'function') ? window.prompt('Verzögerungszeit [' + e.timer.type.toUpperCase() + '] in Sekunden:', '2.5') : '2.5';
+                        const t = (!still && typeof window.prompt === 'function') ? window.prompt('Verzögerungszeit [' + e.timer.type.toUpperCase() + '] in Sekunden:', '2.5') : '2.5';
                         const tn = parseFloat((t || '').replace(',', '.'));
                         b.timerCfg[e.varKey] = { type: e.timer.type, time: (isFinite(tn) && tn > 0) ? tn : 2.5 };
                     }
@@ -63069,6 +63098,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (/^S\d+$/.test(k) && b.slotVars[k]) belegung[`${b.prefix}_${k}`] = b.slotVars[k];
                     }));
                     kabel = FB.cables.map(c => ({ von: c.a, nach: c.b, farbe: (/_24V_\d+$/.test(c.a) || /_24V_\d+$/.test(c.b)) ? 'rot' : 'blau', strang: null }));
+                } else if (window._festoTrainModeActive) {
+                    // Training: nur die schon richtig gesteckten Kabel
+                    Object.assign(belegung, window._festoLastAssignments || {});
+                    kabel = (window._festoTrainGesteckt || []).filter(c => !/^__/.test(c.von) && !/^__/.test(c.nach))
+                        .map(c => ({ von: c.von, nach: c.nach, farbe: c.farbe === 'red' ? 'rot' : (c.farbe === 'black' ? 'schwarz' : 'blau'), strang: null }));
                 } else {
                     // Aufbau- und Anschluss-Sicht (SPS-Modus) liefern beide ihre
                     // Vorverkabelung; Signalleitungen der SPS-Module sind schwarz.
@@ -63093,6 +63127,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 return {
                     ansicht: window.festoFreeBuildMode ? 'frei' : ((!window.epneuMode && window._iecAnschlussView) ? 'anschluss' : 'aufbau'),
+                    training: window._festoTrainModeActive ? (() => {
+                        const cl = window._festoCablesList || [], st = window._festoTrainCurrentStrand;
+                        const e = (window._festoStrandList || []).find(x => x.id === st);
+                        const need = cl.map((c, i) => ({ c, i })).filter(x => x.c.strand === st);
+                        return { strang: st || null, titel: e ? e.label : (st || ''), offen: need.filter(x => !window._festoTrainPlaced.includes(x.i)).length,
+                            gesamt: cl.length, gesteckt: window._festoTrainPlaced.length };
+                    })() : null,
                     breite: vb[2] || parseFloat(svg.dataset.baseW) || 0, hoehe: vb[3] || parseFloat(svg.dataset.baseH) || 0,
                     platinen, kabel, belegung, typen, oeffner,
                     kennzeichen: Object.assign({}, window._festoIECLabels || {})
@@ -64583,7 +64624,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // weiter zum nächsten Strang.
             window._festoTrainModeActive = false;
             window._festoTrainCurrentStrand = null;   // Strang-ID die gerade aufgebaut wird
-            window._festoTrainPlaced = [];            // korrekt platzierte Kabel-Indizes (in cables-Liste)
+            window._festoTrainPlaced = []; window._festoTrainGesteckt = [];            // korrekt platzierte Kabel-Indizes (in cables-Liste)
             window._festoTrainStrandQueue = [];       // verbleibende Strang-IDs
             // Eigener SVG-Layer für Trainings-Kabel (überschreibt nicht den
             // normalen Cable-Layer).
@@ -65067,6 +65108,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     _trainFeedback('info', 'Kabel an einem Sockel beginnen UND an einem anderen enden.');
                     return;
                 }
+                const erg = _trainStecken(drag.fromKey, drag.fromBusKey, sock.key, sock.busKey);
+                if (erg.fertig) {
+                    _trainShowToast(erg.text);
+                    setTimeout(_trainAdvanceStrand, 900);
+                } else _trainFeedback(erg.ok ? 'ok' : 'err', erg.text);
+            }
+            // Kern des Steckens im Training: prüft das Kabel gegen den Soll-Strang und
+            // legt es bei Treffer ab. → { ok, text, fertig } (auch für die Brücke)
+            function _trainStecken(fromKey, fromBusKey, toKey, toBusKey) {
+                const drag = { fromKey: fromKey, fromBusKey: fromBusKey }, sock = { key: toKey, busKey: toBusKey };
                 // Match auf allen Identitäten testen (primär + busKey-Fallback).
                 // LED-X2-Sockel haben gleichzeitig eine 0V-Bus-Identität —
                 // Kabel zur 0V-Schiene müssen auch hier matchen.
@@ -65080,10 +65131,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (m) { match = m; matchFromId = fId; matchToId = tId; break outer; }
                     }
                 }
-                if (!match) {
-                    _trainFeedback('err', `Dieses Kabel gehört nicht zum Strang.`);
-                    return;
-                }
+                if (!match) return { ok: false, text: 'Dieses Kabel gehört nicht zum Strang.' };
                 // Treffer: Bus-Pins ggf. auf geometrisch optimalen Pin snappen,
                 // damit das Kabel sauber liegt und nicht über die ganze Schiene
                 // läuft. Andere Sockel bleiben exakt wie gezogen.
@@ -65103,6 +65151,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (fromBus) window._festoTrainUsedPins.add(finalFrom);
                 if (toBus)   window._festoTrainUsedPins.add(finalTo);
                 window._festoTrainPlaced.push(match.idx);
+                (window._festoTrainGesteckt = window._festoTrainGesteckt || []).push({ von: finalFrom, nach: finalTo, farbe: match.cable.color });
                 _trainDrawPlacedCable(finalFrom, finalTo, match.cable.color);
                 // Aufgaben-Erfolgsbedingung „FESTO-Aufbau abgeschlossen" live prüfen.
                 if (typeof activeTask !== 'undefined' && activeTask && !taskSolved && window._taskCheckConditions) { try { window._taskCheckConditions(); } catch (e) {} }
@@ -65118,12 +65167,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const lbl = entry ? entry.label : strand;
                     const total = strandList.length;
                     const completed = total - window._festoTrainStrandQueue.length;
-                    _trainShowToast(`✓ Strang ${lbl} komplett · ${completed} / ${total} fertig`);
-                    setTimeout(_trainAdvanceStrand, 900);
-                } else {
-                    _trainFeedback('ok', `Richtig! Noch ${need.length - done} Kabel im Strang.`);
+                    return { ok: true, fertig: true, text: `✓ Strang ${lbl} komplett · ${completed} / ${total} fertig` };
                 }
+                return { ok: true, text: `Richtig! Noch ${need.length - done} Kabel im Strang.` };
             }
+            // Für die Brücke (ab Version 11): Stecken im Training per Buchsen-Key.
+            window._trainAusSicht = function(a, b) {
+                if (!window._festoTrainModeActive) return { ok: false, text: 'Training ist aus' };
+                if (!window._festoTrainCurrentStrand) return { ok: false, text: 'Alle Stränge sind fertig' };
+                const svg = _festoDoc().getElementById('festo-svg');
+                const bus = (k) => { const e = svg && svg.querySelector(`[data-festo-socket="${CSS.escape(k)}"]`); return e ? e.getAttribute('data-festo-bus-0v') : null; };
+                if (!a || !b || a === b) return { ok: false, text: 'Kabel an einer Buchse beginnen und an einer anderen enden.' };
+                const erg = _trainStecken(a, bus(a), b, bus(b));
+                if (erg.fertig) { _trainShowToast(erg.text); _trainAdvanceStrand(); }
+                else _trainFeedback(erg.ok ? 'ok' : 'err', erg.text);
+                return erg;
+            };
             // Setter für die Hinweis-Option — live anwendbar, auch während
             // ein Strang gerade läuft. Auftragtext im Info-Panel wird mit
             // re-rendert, damit die „hellblau markiert"-Aussage zur Realität
@@ -65160,7 +65219,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (cableLayer) cableLayer.style.display = 'none';
                     const placedLayer = document.querySelector('#festo-train-placed-layer');
                     if (placedLayer) while (placedLayer.firstChild) placedLayer.removeChild(placedLayer.firstChild);
-                    window._festoTrainPlaced = [];
+                    window._festoTrainPlaced = []; window._festoTrainGesteckt = [];
                     window._festoTrainUsedPins = new Set();
                     // Strang-Queue: alle Stränge aus strandList in DropDown-Reihenfolge
                     const list = window._festoStrandList || [];
@@ -65185,7 +65244,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const placedLayer = document.querySelector('#festo-train-placed-layer');
                     if (placedLayer) while (placedLayer.firstChild) placedLayer.removeChild(placedLayer.firstChild);
                     window._festoTrainCurrentStrand = null;
-                    window._festoTrainPlaced = [];
+                    window._festoTrainPlaced = []; window._festoTrainGesteckt = [];
                     window._festoTrainUsedPins = new Set();
                     window._festoTrainStrandQueue = [];
                     _trainHighlightStrand();
@@ -65287,6 +65346,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
         //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
         //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
+        // Ab Version 11 (FESTO-Aufbau in 3D frei stecken):
+        //   b.festoModus('frei'|'training'|'aufbau')   Freier Aufbau bzw. Trainingsmodus ein, oder beide aus
+        //   b.festoStecken(a, b)       Kabel zwischen zwei Buchsen (Keys wie in festo().kabel) → { ok, text, fertig }
+        //                                 Freier Aufbau: legt es (Variablen ohne Rückfrage); Training: prüft gegen den Strang
+        //   b.festoZiehen(a, b)        Kabel im Freien Aufbau entfernen → true/false
+        //   b.festoModul(art, sensor)  Modul in den Freien Aufbau (taster, relais, led, sensor, magnet, zeitrelais) → Präfix
+        //   b.festoModulEntfernen(p)   Modul (Präfix wie T1, R2) mit seinen Kabeln entfernen
+        //   b.festoModulArten()        [{ art, titel }]
+        //   festo().training           { strang, titel, offen, gesamt, gesteckt } im Trainingsmodus, sonst null
         // Ab Version 10:
         //   Spawner mit pos3d legen kein 2D-Teil an, sondern zählen zustand().objekte[id]._spawn3d hoch;
         //                                 die 3D-Werkstatt setzt das Werkstück im Raum ab
@@ -65363,7 +65431,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 10,
+            version: 11,
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();
@@ -65462,6 +65530,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             festo: function() {
                 return typeof window._festoAufbauDaten === 'function' ? window._festoAufbauDaten() : null;
             },
+            festoModus: function(modus) {
+                if (modus === 'frei') { if (!window.festoFreeBuildMode) window._toggleFestoFreeBuild(true); }
+                else if (modus === 'training') { if (!window._festoTrainModeActive) window._setFestoTrainMode(true); }
+                else {
+                    if (window.festoFreeBuildMode) window._toggleFestoFreeBuild(false);
+                    if (window._festoTrainModeActive) window._setFestoTrainMode(false);
+                }
+                return window.festoFreeBuildMode ? 'frei' : window._festoTrainModeActive ? 'training' : 'aufbau';
+            },
+            festoStecken: function(a, b) {
+                if (window._festoTrainModeActive) return window._trainAusSicht(a, b);
+                if (window.festoFreeBuildMode) return window._fbAusSicht.stecken(a, b);
+                return { ok: false, text: 'Erst „Frei stecken“ oder „Training“ wählen' };
+            },
+            festoZiehen: function(a, b) { return !!window.festoFreeBuildMode && window._fbAusSicht.ziehen(a, b); },
+            festoModul: function(art, sensor) { if (!window.festoFreeBuildMode) window._toggleFestoFreeBuild(true); return window._fbAusSicht.modul(art, sensor); },
+            festoModulEntfernen: function(prefix) { return !!window.festoFreeBuildMode && window._fbAusSicht.entfernen(prefix); },
+            festoModulArten: function() { return window._fbAusSicht.typen(); },
             plaene: function() {
                 // Logikplan und Schaltplan (mit Pneumatik-/Hydraulikplan) als SVG-Bilder,
                 // auch wenn ihre Panels zu sind. Den Logikplan zeichnet VALIS nur

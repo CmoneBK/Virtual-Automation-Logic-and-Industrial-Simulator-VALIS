@@ -172,6 +172,8 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `raumlage(id, lage)` | Stellt ein Bauteil in der 3D-Werkstatt frei in den Raum (ab Version 6): `lage = { x, y, z, rx, ry, rz, boden, s }` in Metern und Grad (`boden`: steht auf dem Boden, `s`: Maßstab ab Version 8, 1 = echte Größe), `null` holt es zurück an die Wand. Solche Teile tragen in VALIS das Symbol „🧊 3D“ und stehen gesammelt in der 3D-Zone rechts neben der Anlage; gespeichert wird die Lage als `pos3d` |
 | `sensoren3d(werte)` | Stufe 2 des freien 3D-Aufbaus (ab Version 7): `werte = { id: true/false }` meldet, was die 3D-Physik an Sensoren und Rollen-Endschaltern im Raum erfasst. Für Teile mit `pos3d` ersetzt der Wert die 2D-Erfassung, `null` (oder `raumlage(id, null)`) schaltet zurück auf 2D |
 | `drossel(id, prozent)` | Stellt ein Drosselrückschlagventil (`throttle`) oder Stromregelventil (`throttle_hyd`) auf 1 … 100 % Öffnung (ab Version 7) |
+| `rueckgaengig()` / `wiederholen()` | Wie Strg+Z / Strg+Y in der 2D Factory (ab Version 9), auch für Änderungen aus der Ansicht (Umbau, `raumlage`, `drossel`). Gibt `true` zurück, wenn sich etwas geändert hat |
+| `duplizieren(id, lage)` | Kopiert ein Bauteil mit allen Einstellungen und Anbauteilen (ab Version 9, wie Strg+C/V). Mit `lage` (wie bei `raumlage`) steht die Kopie gleich im Raum. Gibt die neue `id` zurück |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

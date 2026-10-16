@@ -65270,6 +65270,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //   raumlage(id, { …, s })     zusätzlich der Maßstab s im Raum (1 = echte Größe)
         //   b.plaene()                 → { logik, elektro } Logikplan und Schaltplan (mit Pneumatik-/
         //                                 Hydraulikplan) als 'data:image/svg+xml,...', auch bei geschlossenem Panel
+        // Ab Version 9:
+        //   b.rueckgaengig() / b.wiederholen()   wie Strg+Z / Strg+Y in der 2D Factory (auch Umbau,
+        //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
+        //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
+        //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -65343,7 +65348,51 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 8,
+            version: 9,
+            rueckgaengig: function() {
+                const vor = historyIndex;
+                undoFactory();
+                return historyIndex !== vor;
+            },
+            wiederholen: function() {
+                const vor = historyIndex;
+                redoFactory();
+                return historyIndex !== vor;
+            },
+            duplizieren: function(id, lage) {
+                if (!_brueckeObj(id)) return null;
+                const st = getFactoryStateObj();
+                const neueId = () => Math.random().toString(36).substr(2, 9);
+                const karte = {};
+                const nimm = (alt) => {
+                    karte[alt] = neueId();
+                    st.objects.filter(c => c.parentId === alt).forEach(c => nimm(c.id));
+                };
+                nimm(id);
+                const kopien = st.objects.filter(c => karte[c.id]).map(c => {
+                    const k = JSON.parse(JSON.stringify(c));
+                    k.id = karte[c.id];
+                    if (k.parentId) k.parentId = karte[k.parentId] || k.parentId;
+                    k.x = (k.x || 0) + 20; k.y = (k.y || 0) + 20;
+                    delete k.normLabel; delete k.originalLabelText; delete k.groupId;
+                    if (c.id === id) {
+                        delete k.pos3d;
+                        if (lage) {
+                            const n = v => { v = Number(v); return isFinite(v) ? Math.round(v * 1000) / 1000 : 0; };
+                            k.pos3d = { x: n(lage.x), y: n(lage.y), z: n(lage.z), rx: n(lage.rx), ry: n(lage.ry), rz: n(lage.rz), boden: !!lage.boden };
+                            if (lage.s != null && Number(lage.s) !== 1) k.pos3d.s = Math.max(0.2, Math.min(5, n(lage.s) || 1));
+                        }
+                    }
+                    return k;
+                });
+                st.objects = st.objects.concat(kopien);
+                localStorage.setItem('logikFactoryState', JSON.stringify(st));
+                loadFactoryState();
+                window._valis3dZone();
+                _brueckeNeuZeichnen();
+                _brueckeGeaendert();
+                return karte[id];
+            },
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },

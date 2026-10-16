@@ -30464,9 +30464,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
                 },
                 animate: function(obj, spsState) {
-                    let isTriggered = false;
+                    // Freier 3D-Aufbau: im Raum entscheidet die 3D-Physik (Brücke sensoren3d)
+                    const aus3d = obj.pos3d && window._valis3dHat && window._valis3dHat(obj);
+                    let isTriggered = aus3d ? !!window._valis3dWerte[obj.id] : false;
                     // Hitbox um den Schalter (Groß genug für seitliches Streifen)
                     let hX = -10, hY = -20, hW = 40, hH = 60;
+                    if (!aus3d) {
                     // 1. Werkstücke
                     factoryItems.forEach(item => {
                         if (isBlockInLocalRect(item, obj, hX, hY, hW, hH)) isTriggered = true;
@@ -30499,6 +30502,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (isBlockInLocalRect(cItem, obj, hX, hY, hW, hH)) isTriggered = true;
                         }
                     });
+                    }
                     // Logik synchronisieren
                     if (spsState[obj.linkedVar] !== isTriggered) { 
                         spsState[obj.linkedVar] = isTriggered; 
@@ -40275,6 +40279,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return true;
                 });
                 factoryObjects.forEach(obj => {
+                    // Freier 3D-Aufbau (Stufe 2): Sensoren, die in der 3D-Werkstatt im Raum
+                    // stehen, meldet die 3D-Physik über die Brücke (sensoren3d) – keine 2D-Erfassung.
+                    if (obj.pos3d && obj.type.startsWith('sensor_') && window._valis3dHat(obj)) {
+                        const an3d = !!window._valis3dWerte[obj.id];
+                        if (spsState[obj.linkedVar] !== an3d) spsState[obj.linkedVar] = an3d;
+                        obj.el.style.borderColor = an3d ? '#fff' : ''; obj.el.style.boxShadow = an3d ? '0 0 10px yellow' : '2px 2px 5px rgba(0,0,0,0.3)';
+                        return;
+                    }
                     // 🌟 HIER IST DER FIX: Die alte Sensor-Logik ignoriert den mechanischen Schalter rigoros!
                     if (obj.type.startsWith('sensor_') && obj.type !== 'sensor_mech') {
                         let isTriggered = false;
@@ -65250,6 +65262,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //   b.raumlage(id, { x, y, z, rx, ry, rz, boden } | null)   Bauteil in der 3D-Werkstatt frei in den
         //                              Raum stellen (Meter, Grad) bzw. zurück an die Wand; solche Teile
         //                              stehen in VALIS in der 3D-Zone mit Hinweis-Symbol (anlage(): pos3d)
+        // Ab Version 7:
+        //   b.sensoren3d({ id: true/false | null })   Sensorwerte aus der 3D-Physik für Teile mit pos3d
+        //                              (ersetzen die 2D-Erfassung; null = wieder 2D)
+        //   b.drossel(id, prozent)     Drossel/Stromregelventil auf 1 … 100 % Öffnung stellen
         //   b.plaene()                 → { logik, elektro } Logikplan und Schaltplan (mit Pneumatik-/
         //                                 Hydraulikplan) als 'data:image/svg+xml,...', auch bei geschlossenem Panel
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
@@ -65321,8 +65337,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             zone.style.left = x0 + 'px'; zone.style.top = y0 + 'px';
             zone.style.width = (rechts - x0 + RAND) + 'px'; zone.style.height = (unten - y0 + RAND) + 'px';
         };
+        // Stufe 2 des freien 3D-Aufbaus: Sensorwerte aus der 3D-Physik, je Objekt-ID
+        window._valis3dWerte = window._valis3dWerte || {};
+        window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 6,
+            version: 7,
             anlage: function() {
                 return JSON.parse(JSON.stringify(getFactoryStateObj()));
             },
@@ -65512,10 +65531,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (lage) {
                     const n = v => { v = Number(v); return isFinite(v) ? Math.round(v * 1000) / 1000 : 0; };
                     o.pos3d = { x: n(lage.x), y: n(lage.y), z: n(lage.z), rx: n(lage.rx), ry: n(lage.ry), rz: n(lage.rz), boden: !!lage.boden };
-                } else delete o.pos3d;
+                } else { delete o.pos3d; delete window._valis3dWerte[id]; }
                 window._valis3dMarke(o);
                 window._valis3dZone();
                 _brueckeNeuZeichnen();
+                _brueckeGeaendert();
+                return true;
+            },
+            // { id: true/false } von der 3D-Physik; null nimmt den Wert zurück (wieder 2D)
+            sensoren3d: function(werte) {
+                Object.keys(werte || {}).forEach(id => {
+                    if (werte[id] === null || werte[id] === undefined) delete window._valis3dWerte[id];
+                    else window._valis3dWerte[id] = !!werte[id];
+                });
+                return true;
+            },
+            // Drossel (pneumatisch oder hydraulisch) auf 1 … 100 % Öffnung stellen
+            drossel: function(id, prozent) {
+                const o = _brueckeObj(id);
+                if (!o || (o.type !== 'throttle' && o.type !== 'throttle_hyd') ) return false;
+                o.opening = Math.max(1, Math.min(100, Math.round(Number(prozent) || 0)));
+                if (o.el) {
+                    o.el.querySelectorAll('.f2d-throttle-val, .f2d-throttle-val-hyd').forEach(v => { v.textContent = o.opening + '%'; });
+                    o.el.querySelectorAll('.f2d-throttle-knob, .f2d-throttle-knob-hyd').forEach(k => { k.style.transform = `rotate(${o.opening * 2.7}deg)`; });
+                }
                 _brueckeGeaendert();
                 return true;
             },

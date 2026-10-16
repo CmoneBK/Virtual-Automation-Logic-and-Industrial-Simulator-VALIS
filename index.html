@@ -65239,6 +65239,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Ab Version 5:
         //   b.kontextmenue(id)         Rechtsklickmenü eines Bauteils öffnen (blendet die
         //                              2D-Anlage ein, falls sie zu ist) → true/false
+        //   b.plaene()                 → { logik, elektro } Logikplan und Schaltplan (mit Pneumatik-/
+        //                                 Hydraulikplan) als 'data:image/svg+xml,...', auch bei geschlossenem Panel
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -65317,6 +65319,74 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             festo: function() {
                 return typeof window._festoAufbauDaten === 'function' ? window._festoAufbauDaten() : null;
+            },
+            plaene: function() {
+                // Logikplan und Schaltplan (mit Pneumatik-/Hydraulikplan) als SVG-Bilder,
+                // auch wenn ihre Panels zu sind. Den Logikplan zeichnet VALIS nur
+                // sichtbar - dann wird er kurz unsichtbar neu gezeichnet, aber nur
+                // nach einer Code-Änderung (sonst gilt das letzte Bild).
+                const fbsCss = `
+                    .fbs-block { fill:#ffffff; stroke-width:2.5px; }
+                    .fbs-text { font-family:'Segoe UI',Tahoma,sans-serif; font-size:13px; fill:#000; font-weight:bold; }
+                    .fbs-pin-text { font-family:'Segoe UI',Tahoma,sans-serif; font-size:10px; fill:#555; }
+                    .fbs-line-halo { display:none; }
+                    .fbs-line { fill:none; stroke-width:2.5px; stroke-linejoin:round; stroke-linecap:round; }
+                    .fbs-io-box { fill:#f0f0f0; stroke-width:2px; }
+                    .fbs-bubble { fill:#fff; stroke-width:2px; }
+                    text { font-family:'Segoe UI',Tahoma,sans-serif; }`;
+                const iecCss = `
+                    text { font-family:'Segoe UI',Tahoma,sans-serif; fill:#222; }
+                    .circ-component { fill:#fff; stroke:#333; stroke-width:1.5px; }
+                    .circ-wire { fill:none; stroke:#333; stroke-width:2px; stroke-linecap:round; stroke-linejoin:round; }
+                    .circ-static, .circ-moving-contact { fill:none; stroke:#333; stroke-width:1.5px; }`;
+                const codeEl = document.getElementById('code');
+                const code = codeEl ? codeEl.value : '';
+                const bild = (svgEl, css, isIec, neuZeichnen) => {
+                    if (!svgEl) return null;
+                    const wrap = svgEl.closest('[id$="-wrapper"]');
+                    const zu = wrap && (getComputedStyle(wrap).display === 'none' || !wrap.offsetWidth || !wrap.offsetHeight);
+                    const alt = wrap ? wrap.style.cssText : '';
+                    if (zu) {
+                        wrap.style.cssText = alt + ';position:fixed;left:-30000px;top:0;width:1400px;height:900px;visibility:hidden;';
+                        wrap.style.setProperty('display', 'flex', 'important');
+                    }
+                    try {
+                        if (zu && neuZeichnen) neuZeichnen();
+                        if (!svgEl.querySelector('text')) return null;
+                        const vp = svgEl.querySelector('.svg-pan-zoom_viewport');
+                        let bb = null;
+                        try { bb = (vp || svgEl).getBBox(); } catch (_) {}
+                        if (!bb || bb.width < 10 || bb.height < 10) return null;
+                        const clone = svgEl.cloneNode(true);
+                        clone.querySelectorAll('[id^="svg-pan-zoom"]').forEach(e => e.remove());
+                        const cvp = clone.querySelector('.svg-pan-zoom_viewport');
+                        // svg-pan-zoom setzt Zoom/Verschiebung als Attribut oder als style.transform
+                        if (cvp) { cvp.removeAttribute('transform'); cvp.style.removeProperty('transform'); }
+                        const p = 40;
+                        clone.setAttribute('viewBox', `${bb.x - p} ${bb.y - p} ${bb.width + 2 * p} ${bb.height + 2 * p}`);
+                        clone.setAttribute('width', bb.width + 2 * p);
+                        clone.setAttribute('height', bb.height + 2 * p);
+                        clone.removeAttribute('style');
+                        if (isIec && typeof _bakeContactTransforms === 'function') _bakeContactTransforms(svgEl, clone);
+                        const st = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+                        st.textContent = css;
+                        clone.insertBefore(st, clone.firstChild);
+                        let str = new XMLSerializer().serializeToString(clone);
+                        if (!/^<svg[^>]+xmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(str)) str = str.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+                        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+                    } catch (e) { return null; }
+                    finally { if (zu) wrap.style.cssText = alt; }
+                };
+                const fbsSvg = typeof customSvg !== 'undefined' ? customSvg : null;
+                const fbsZu = fbsSvg && (() => { const w = fbsSvg.closest('[id$="-wrapper"]'); return w && (getComputedStyle(w).display === 'none' || !w.offsetWidth || !w.offsetHeight); })();
+                let logik;
+                if (fbsZu && window._brueckeLogikCache && window._brueckeLogikCache.code === code) logik = window._brueckeLogikCache.bild;
+                else {
+                    logik = bild(fbsSvg, fbsCss, false, () => { if (currentGraph) drawGraph(currentGraph); });
+                    if (fbsZu) window._brueckeLogikCache = { code, bild: logik };
+                }
+                const elektro = bild(typeof circuitSvg !== 'undefined' ? circuitSvg : null, iecCss, true, null);
+                return (logik || elektro) ? { logik, elektro } : null;
             },
             verschieben: function(id, x, y, rotation) {
                 const o = _brueckeObj(id);

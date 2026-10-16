@@ -61981,6 +61981,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return !!FB.liveSync;
                 },
                 status: function() { return { liveSync: !!FB.liveSync, text: FB.status || '' }; },
+                // Zeit eines Zeitrelais-Slots (z. B. „Z1_S1“) → Variable oder null
+                zeit: function(slot, sek) {
+                    const m = /^([A-Za-z]+\d+)_(S\d+)$/.exec(slot || ''); if (!m) return null;
+                    const b = FB.boards.find(x => x.prefix === m[1] && x.type === 'zeitrelais'); if (!b) return null;
+                    b.timerCfg = b.timerCfg || {};
+                    const alt = b.timerCfg[m[2]] || { type: m[2] === 'S1' ? 'ton' : 'tof' };
+                    b.timerCfg[m[2]] = { type: alt.type, time: sek };
+                    _fbSave();
+                    return (b.slotVars || {})[m[2]] || null;
+                },
             };
             window._fbClearCables = function() {
                 if (!FB.cables.length) { FB.status = 'Keine Kabel vorhanden.'; _fbUpdateStatusUI(); return; }
@@ -65356,6 +65366,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
         //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
         //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
+        // Ab Version 13:
+        //   b.festoZeit(slot, sekunden)  Zeit am Drehknopf eines Zeitrelais (Slot wie „Z1_S1“, 0,5 … 10 s):
+        //                                 schreibt die Zeit in TON/TOF/TP der Variable im Code → { ok, text, sekunden }
         // Ab Version 12:
         //   b.festoCodeErzeugen()      wie „Code erzeugen“ im Freien Aufbau → { ok, text } (text = Status von VALIS)
         //   b.festoLiveSync(an?)       Live-Sync des Freien Aufbaus setzen/lesen → true/false
@@ -65445,7 +65458,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 12,
+            version: 13,
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();
@@ -65567,6 +65580,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return window._fbAusSicht.code();
             },
             festoLiveSync: function(an) { return window._fbAusSicht.liveSync(an); },
+            festoZeit: function(slot, sek) {
+                sek = Math.round(Math.min(10, Math.max(0.5, parseFloat(sek) || 0)) * 2) / 2;
+                let v = null;
+                if (window.festoFreeBuildMode) v = window._fbAusSicht.zeit(slot, sek);
+                else v = (window._festoLastAssignments || {})[slot] || null;
+                if (!v) return { ok: false, text: 'Dieser Zeitknopf gehört zu keiner Variablen', sekunden: sek };
+                const ta = document.getElementById('code');
+                const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const re = new RegExp('^(\\s*' + esc + '\\s*:=\\s*(?:TON|TOF|TP)\\s*\\(.*,\\s*)([\\d.,]+)(\\s*\\)\\s*)$', 'mi');
+                const zahl = String(sek);
+                if (ta && re.test(ta.value)) {
+                    ta.value = ta.value.replace(re, (m, a, t, e) => a + zahl + e);
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    return { ok: true, text: v + ': ' + zahl.replace('.', ',') + ' s', sekunden: sek };
+                }
+                if (window.festoFreeBuildMode) return { ok: true, text: v + ': ' + zahl.replace('.', ',') + ' s (wirkt mit „Code erzeugen“)', sekunden: sek };
+                return { ok: false, text: 'Im Code steht für ' + v + ' kein TON/TOF/TP', sekunden: sek };
+            },
             plaene: function() {
                 // Logikplan und Schaltplan (mit Pneumatik-/Hydraulikplan) als SVG-Bilder,
                 // auch wenn ihre Panels zu sind. Den Logikplan zeichnet VALIS nur

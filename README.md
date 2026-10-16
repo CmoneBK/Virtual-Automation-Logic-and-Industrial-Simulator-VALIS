@@ -174,6 +174,7 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `drossel(id, prozent)` | Stellt ein Drosselrückschlagventil (`throttle`) oder Stromregelventil (`throttle_hyd`) auf 1 … 100 % Öffnung (ab Version 7) |
 | `rueckgaengig()` / `wiederholen()` | Wie Strg+Z / Strg+Y in der 2D Factory (ab Version 9), auch für Änderungen aus der Ansicht (Umbau, `raumlage`, `drossel`). Gibt `true` zurück, wenn sich etwas geändert hat |
 | `duplizieren(id, lage)` | Kopiert ein Bauteil mit allen Einstellungen und Anbauteilen (ab Version 9, wie Strg+C/V). Mit `lage` (wie bei `raumlage`) steht die Kopie gleich im Raum. Gibt die neue `id` zurück |
+| Spawner im Raum | Ab Version 10 legt ein Spawner mit `pos3d` kein Teil in der 2D-Anlage an. Er zählt stattdessen `zustand().objekte[id]._spawn3d` hoch, und die 3D-Werkstatt setzt das Werkstück im Raum ab |
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

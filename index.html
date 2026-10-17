@@ -2892,7 +2892,15 @@
                         <button id="btn-fbs-mergesimple" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsMergeSimple()" title="Nur im Netzwerkmodus: Eine einfache Zuweisung (genau EIN Eingang, keine Logik dazwischen — z. B. BAND := Q1) bekommt kein eigenes Netzwerk, sondern rutscht in das Netzwerk, in dem ihre Quell-Variable ihre Verbindung hat. Ausgänge mit Logik dazwischen (z. B. Q1 && S_METALL) bleiben eigene Netzwerke.">🔗 Einfache Zuweisungen einsortieren: AUS</button>
                     </div>
                     <button id="btn-fbs-networks" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsNetworkMode()" title="Netzwerkmodus — teilt den Logikplan SPS-typisch in nummerierte Netzwerke (pro Output-Zuweisung ein Netzwerk). Jedes Netzwerk ist in sich abgeschlossen: benötigte Eingänge werden pro Netzwerk dupliziert (TIA-Portal-Style). Optional: ein Kommentar `// NETZWERK 1: Sicherheitskreis` im Code überschreibt die Aufteilung und gruppiert mehrere Outputs unter einem Titel.">🗂 Netzwerke: AUS</button>
+                    <button id="btn-fbs-fup" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsFup()" title="FUP-Darstellung nach Norm (IEC 61131-3) — zeichnet das Programm Netzwerk für Netzwerk wie im TIA-Portal oder auf Papier: Operanden mit Betriebsmittelkennzeichen und SPS-Adresse direkt am Eingang, Kästen &amp; / &gt;=1 / RS / SR / TON / CTU, Negation als Kreis, Zuweisung „=“ am Ende. In der Simulation: 1 = grün, 0 = blau gestrichelt. Reine Ansicht — bearbeitet wird im Code oder im normalen Logikplan.">📐 FUP: AUS</button>
                     <button class="panel-info-btn" onclick="showPanelInfo('fbs-wrapper', this)" title="Kontext-Hilfe zu diesem Fenster (Logikplan)">ℹ️</button>
+                </div>
+                <div id="fup-norm-host" style="display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:40;">
+                    <div style="position:sticky; top:0; left:0; display:flex; gap:8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px 'Segoe UI', Arial, sans-serif; color:#455a64; z-index:2;">
+                        <span><b>FUP</b> nach IEC 61131-3 · Ansicht des Codes · in der Simulation: <span style="color:#2e7d32;font-weight:bold;">1 = grün</span>, <span style="color:#1565c0;">0 = blau gestrichelt</span></span>
+                        <button class="btn-export" style="margin-left:auto; background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._saveFupSvg()" title="FUP als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>
+                    </div>
+                    <svg id="fup-norm-svg" xmlns="http://www.w3.org/2000/svg" style="display:block;"></svg>
                 </div>
                 <svg id="custom-svg" xmlns="http://www.w3.org/2000/svg">
                     <g id="svg-halos"></g>
@@ -15276,6 +15284,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
         function drawGraph(graph) {
             currentGraph = graph;
+            if (typeof window._fupRender === 'function') { try { window._fupRender(graph); } catch (e) { console.warn('FUP:', e); } }
             let isFirstRun = !panZoomInstance;
             svgHalos.innerHTML = '';
             svgLines.innerHTML = '';
@@ -21017,6 +21026,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             }
+            if (window.fbsFupMode && typeof window._fupLive === 'function') { try { window._fupLive(); } catch (_) {} }
             // Live-Update für Schrittketten-Panel: aktive Schritte hervorheben.
             if (typeof window._highlightActiveSchrittketten === 'function') {
                 window._highlightActiveSchrittketten();
@@ -69175,6 +69185,461 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return false;
             });
         });
+    })();
+    </script>
+    <script>
+    // =====================================================================
+    // FUP-Darstellung nach Norm (IEC 61131-3 / DIN EN 60617-12)
+    // ---------------------------------------------------------------------
+    // Zusätzliche Ansicht im Logikplan: Schalter „📐 FUP: AN“. Zeichnet den
+    // Code Netzwerk für Netzwerk so, wie man einen Funktionsplan im TIA-Portal
+    // oder auf Papier zeichnet:
+    //   • Operanden stehen direkt an den Eingängen (Name, darüber
+    //     Betriebsmittelkennzeichen und SPS-Adresse) — keine eigenen Kästen.
+    //   • Kästen & / >=1 / RS / SR / TON / TOF / TP / CTU / CMP, Negation als
+    //     Kreis am Eingang.
+    //   • Am Ende ein Zuweisungskasten „=“ mit dem Operanden darüber;
+    //     Speicher (RS/SR) tragen ihren Operanden über dem Kasten.
+    //   • Eine Selbsthaltung erscheint als Operand am Eingang, nicht als
+    //     Rückführleitung. Ein Zwischenergebnis aus einem anderen Netzwerk
+    //     wird ebenso über seinen Namen gelesen.
+    //   • Während der Simulation: Signal 1 = grüne durchgezogene Linie,
+    //     Signal 0 = blau gestrichelt (wie TIA-Online-Ansicht).
+    // Datenquelle ist der fertige Logik-Graph (currentGraph), d. h. der FUP
+    // zeigt immer genau das, was simuliert wird. Er ist reine Ansicht; Bear-
+    // beiten bleibt im Code und im normalen Logikplan.
+    // =====================================================================
+    (function () {
+        const NS = 'http://www.w3.org/2000/svg';
+        const LS_KEY = 'valisFbsFup';
+        let fupOn = false;
+        try { fupOn = localStorage.getItem(LS_KEY) === '1'; } catch (_) {}
+        window.fbsFupMode = fupOn;
+
+        // Maße
+        const PIN_GAP = 30;      // Abstand zweier Eingänge am Kasten
+        const BOX_W = 56;        // Breite & / >=1
+        const BOX_W_FB = 74;     // Breite TON/CTU/RS/CMP
+        const HEAD_H = 22;       // Kopfzeile im Kasten (Symbol)
+        const STUB = 22;         // Leitungsstück vor einem Kasteneingang
+        const OP_W = 150;        // Platz für Operandentext links
+        const GAP_X = 26;        // Abstand Kasten zu nächstem Kasten
+        const NET_HEAD = 34;     // Netzwerk-Kopf
+        const NET_GAP = 18;
+
+        let lastLayout = null;   // { wires:[{el, src, inv}], values:[{el, src}] }
+
+        function doc() { return (typeof _fbsDoc === 'function') ? _fbsDoc() : document; }
+        function el(tag, attrs, parent) {
+            const e = doc().createElementNS(NS, tag);
+            for (const k in attrs) e.setAttribute(k, attrs[k]);
+            if (parent) parent.appendChild(e);
+            return e;
+        }
+        function txt(parent, x, y, s, opt) {
+            opt = opt || {};
+            const t = el('text', {
+                x, y,
+                'font-family': opt.mono ? 'Consolas, monospace' : "'Segoe UI', Arial, sans-serif",
+                'font-size': opt.size || 12,
+                'font-weight': opt.bold ? 'bold' : 'normal',
+                'text-anchor': opt.anchor || 'start',
+                fill: opt.fill || '#111'
+            }, parent);
+            t.textContent = s;
+            return t;
+        }
+
+        // ---------- Operanden-Beschriftung ----------
+        function bmkMap() {
+            try { return (typeof window._getSkBetriebsmittelLabels === 'function') ? window._getSkBetriebsmittelLabels() : {}; }
+            catch (_) { return {}; }
+        }
+        function addrOf(name) {
+            try { return (typeof spsAddresses !== 'undefined' && spsAddresses[name]) ? spsAddresses[name] : ''; }
+            catch (_) { return ''; }
+        }
+        function isIO(name) {
+            const ins = (typeof globalInputs !== 'undefined' && Array.isArray(globalInputs)) ? globalInputs : [];
+            const outs = (typeof globalOutputs !== 'undefined' && Array.isArray(globalOutputs)) ? globalOutputs : [];
+            return ins.includes(name) || outs.includes(name);
+        }
+        function operandInfo(name, bmk) {
+            const a = addrOf(name);
+            let k = bmk[name] || '';
+            // Hilfsrelais/Merker tragen kein Betriebsmittelkennzeichen im FUP
+            if (/^KF/.test(k) && (!isIO(name) || /^M/i.test(a))) k = '';
+            const parts = [];
+            if (k) parts.push('-' + k);
+            if (a) parts.push(/^%/.test(a) ? a : '%' + a);
+            return { name, sub: parts.join('  ') };
+        }
+
+        // ---------- Graph → Bäume ----------
+        function buildModel(graph) {
+            const nodes = graph.nodes;
+            const inEdges = new Map();
+            graph.edges.forEach(e => {
+                if (!inEdges.has(e.targetId)) inEdges.set(e.targetId, []);
+                inEdges.get(e.targetId).push(e);
+            });
+            const text = graph._sourceText || '';
+            const lines = text.split('\n');
+            const lineOf = (id) => {
+                const n = nodes.get(id);
+                if (n && n.sourceLine != null) return n.sourceLine;
+                const re = new RegExp('^\\s*' + id.replace(/[^A-Za-z0-9_]/g, '') + '\\s*(:=|=(?!=)|<-)', 'i');
+                for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) return i;
+                return 1e9;
+            };
+            // Wurzeln = jede Zuweisung (OUTPUT) und jeder Rechen-/Vergleichsbaustein (ARITH)
+            const roots = [];
+            nodes.forEach(n => {
+                if (n._fbsHidden && window.fbsHideHelpers) return;
+                if (n.type === 'OUTPUT' || n.type === 'ARITH') roots.push({ id: n.id, line: lineOf(n.id) });
+            });
+            roots.sort((a, b) => (a.line - b.line) || a.id.localeCompare(b.id));
+            // Besitzer eines Speichers/Zeitglieds = die Zuweisung, die ihn direkt liest
+            const owner = new Map();
+            roots.forEach(r => {
+                const ie = inEdges.get(r.id) || [];
+                if (ie.length === 1 && !ie[0].inverted) {
+                    const src = nodes.get(ie[0].sourceId);
+                    if (src && src.type !== 'GATE' && src.type !== 'OUTPUT' && src.type !== 'PURE_INPUT' && src.type !== 'INPUT' && !owner.has(src.id)) owner.set(src.id, r.id);
+                }
+            });
+            const isVar = (n) => !n || n.type === 'PURE_INPUT' || n.type === 'INPUT' || n.type === 'OUTPUT' || n.type === 'ARITH';
+            const pinOrder = { S: 0, S1: 0, IN: 0, CU: 0, CD: 0, R: 1, R1: 1, PT: 2, PV: 2 };
+            function tree(srcId, rootId, depth) {
+                const n = nodes.get(srcId);
+                if (depth > 40 || isVar(n)) return { kind: 'op', name: srcId, src: srcId };
+                if (n.type !== 'GATE' && owner.has(n.id) && owner.get(n.id) !== rootId)
+                    return { kind: 'op', name: owner.get(n.id), src: owner.get(n.id) };
+                const ie = (inEdges.get(n.id) || []).slice();
+                ie.sort((a, b) => (pinOrder[a.targetPin] ?? 0) - (pinOrder[b.targetPin] ?? 0));
+                return {
+                    kind: 'box', node: n, src: n.id,
+                    ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1) }))
+                };
+            }
+            // Netzwerk-Marker (// NETZWERK n: Titel) wie im normalen Netzwerkmodus
+            const markers = [];
+            const mre = window._fbsNetworkMarkerRe || /^\s*\/\/\s*(?:NETZWERK|NETWORK|NW)\s*(\d+)?\s*[:\-]?\s*(.*?)\s*$/i;
+            lines.forEach((ln, i) => { const m = ln.match(mre); if (m) markers.push({ line: i, title: (m[2] || '').trim() }); });
+            const nets = [];
+            roots.forEach(r => {
+                const n = nodes.get(r.id);
+                let title = '';
+                let group = null;
+                for (let i = markers.length - 1; i >= 0; i--) if (markers[i].line <= r.line) { group = i; title = markers[i].title; break; }
+                // Kommentar am Zeilenende als Netzwerk-Kommentar
+                let comment = '';
+                if (r.line < lines.length) { const c = lines[r.line].split('//')[1]; if (c) comment = c.trim(); }
+                let body;
+                if (n.type === 'ARITH') {
+                    body = { kind: 'assign', target: r.id, inv: false, child: { kind: 'box', node: n, src: r.id, ins: [], arith: true } };
+                } else {
+                    const ie = inEdges.get(r.id) || [];
+                    const e = ie[0];
+                    const child = e ? tree(e.sourceId, r.id, 0) : { kind: 'op', name: 'FALSE', src: 'FALSE' };
+                    if (child.kind === 'box' && (child.node.type === 'RS' || child.node.type === 'SR') && !(e && e.inverted)) {
+                        body = { kind: 'mem', target: r.id, child };
+                    } else {
+                        body = { kind: 'assign', target: r.id, inv: !!(e && e.inverted), child };
+                    }
+                }
+                const last = nets[nets.length - 1];
+                if (group != null && last && last.group === group) last.items.push(body);
+                else nets.push({ group, title, comment, items: [body], firstId: r.id });
+            });
+            return nets;
+        }
+
+        // ---------- Layout ----------
+        // measure(item) → { h, outY } (outY relativ zur Oberkante), Breite über depth
+        function boxSpec(node) {
+            const t = node.type;
+            if (t === 'GATE') return { w: BOX_W, sym: node.label === '&' ? '&' : '>=1', pins: null, outs: ['' ] };
+            if (t === 'RS') return { w: BOX_W_FB, sym: 'RS', pinNames: { S: 'S', R: 'R1' }, outs: ['Q'] };
+            if (t === 'SR') return { w: BOX_W_FB, sym: 'SR', pinNames: { S: 'S1', R: 'R' }, outs: ['Q'] };
+            if (t === 'TON' || t === 'TOF' || t === 'TP') return { w: BOX_W_FB, sym: t, timer: true, outs: ['Q', 'ET'] };
+            if (t === 'CTU' || t === 'CTD') return { w: BOX_W_FB, sym: t, counter: true, outs: ['Q', 'CV'] };
+            return { w: BOX_W_FB + 20, sym: t, outs: ['OUT'] };
+        }
+        function constPin(node) {
+            const m = String(node.label || '').match(/\(([^)]*)\)/);
+            if (!m) return null;
+            if (node.type === 'TON' || node.type === 'TOF' || node.type === 'TP') {
+                const v = m[1].trim().replace(/^T#/i, '');
+                return { pin: 'PT', text: 'T#' + v.replace(/\s+/g, '') };
+            }
+            if (node.type === 'CTU' || node.type === 'CTD') return { pin: 'PV', text: m[1].trim() };
+            return null;
+        }
+        function arithParts(node) {
+            const s = String(node.label || '').replace(/^\s*\w+\s*=\s*/, '');
+            const m = s.match(/^(.+?)\s*(>=|<=|==|<>|!=|>|<)\s*(.+)$/);
+            if (m) {
+                const op = { '==': '==', '!=': '<>', '<>': '<>' }[m[2]] || m[2];
+                return { cmp: true, sym: 'CMP ' + op, a: m[1].trim(), b: m[3].trim() };
+            }
+            return { cmp: false, sym: 'CALC', expr: s };
+        }
+        function prep(item) {
+            // Ergänzt Konstanten-Pins und Rechenbausteine zu einer einheitlichen ins-Liste
+            if (item.kind !== 'box') return;
+            const n = item.node;
+            if (item.arith) {
+                const p = arithParts(n);
+                item.spec = { w: BOX_W_FB + 16, sym: p.sym, outs: ['OUT'] };
+                if (p.cmp) item.ins = [
+                    { pin: 'IN1', inv: false, child: { kind: /^-?\d/.test(p.a) ? 'const' : 'op', name: p.a, src: p.a } },
+                    { pin: 'IN2', inv: false, child: { kind: /^-?\d/.test(p.b) ? 'const' : 'op', name: p.b, src: p.b } }];
+                else item.ins = [{ pin: '', inv: false, child: { kind: 'const', name: p.expr } }];
+            } else {
+                item.spec = boxSpec(n);
+                const c = constPin(n);
+                if (c) item.ins.push({ pin: c.pin, inv: false, child: { kind: 'const', name: c.text } });
+                if (item.spec.pinNames) item.ins.forEach(i => { i.pin = item.spec.pinNames[i.pin] || i.pin; });
+                if (n.type === 'GATE') item.ins.forEach(i => { i.pin = ''; });
+                if (item.spec.counter) item.ins.forEach(i => { if (i.pin === 'R' && n.type === 'CTD') i.pin = 'LD'; });
+            }
+            item.ins.forEach(i => prep(i.child));
+        }
+        function measure(item) {
+            if (item.kind === 'op' || item.kind === 'const') { item.h = 30; item.outY = 24; item.depth = 0; return item; }
+            let cursor = 0, prevPin = -1e9, depth = 0;
+            const pinYs = [];
+            item.ins.forEach((inp) => {
+                const c = measure(inp.child);
+                depth = Math.max(depth, c.depth);
+                let top = cursor;
+                if (top + c.outY < prevPin + PIN_GAP) top = prevPin + PIN_GAP - c.outY;
+                inp._top = top;
+                prevPin = top + c.outY;
+                pinYs.push(prevPin);
+                cursor = top + c.h + 6;
+            });
+            if (!pinYs.length) pinYs.push(0);
+            const outsN = item.spec.outs.length;
+            let boxTop = pinYs[0] - HEAD_H - 4;
+            const boxBottom = Math.max(pinYs[pinYs.length - 1] + 14, pinYs[0] + (outsN - 1) * PIN_GAP + 14);
+            // Platz über dem Kasten für den Operanden eines Speichers
+            const above = item.ownerName ? boxTop - 30 : boxTop;
+            let minTop = above;
+            item.ins.forEach(inp => { minTop = Math.min(minTop, inp._top); });
+            const shift = -minTop;
+            item.ins.forEach(inp => { inp._top += shift; });
+            item.pinYs = pinYs.map(v => v + shift);
+            item.boxTop = boxTop + shift;
+            item.boxBottom = boxBottom + shift;
+            item.outY = item.pinYs[0];
+            let h = item.boxBottom;
+            item.ins.forEach(inp => { h = Math.max(h, inp._top + inp.child.h); });
+            item.h = h;
+            item.depth = depth + 1;
+            return item;
+        }
+        // Zeichnet Element item mit Oberkante y; rechter Rand des Elements (Ausgang) bei xRight.
+        // colX(depth) liefert die linke Kante der Spalte.
+        function draw(g, item, y, xOut, ctx) {
+            if (item.kind === 'op' || item.kind === 'const') {
+                const ly = y + item.outY;
+                const isConst = item.kind === 'const';
+                const info = isConst ? { name: item.name, sub: '' } : operandInfo(item.name, ctx.bmk);
+                const x0 = ctx.left;
+                const line = el('line', { x1: x0 + OP_W - 6, y1: ly, x2: xOut, y2: ly, stroke: '#111', 'stroke-width': 1.6 }, g);
+                if (!isConst) ctx.wires.push({ el: line, src: item.src });
+                txt(g, x0 + OP_W - 10, ly - 4, info.name, { anchor: 'end', bold: !isConst, mono: true, size: 12, fill: isConst ? '#0d47a1' : '#111' });
+                if (info.sub) txt(g, x0 + OP_W - 10, ly - 17, info.sub, { anchor: 'end', size: 10, fill: '#666' });
+                return;
+            }
+            const spec = item.spec;
+            const bx = xOut - spec.w - STUB;
+            const top = y + item.boxTop, bot = y + item.boxBottom;
+            el('rect', { x: bx, y: top, width: spec.w, height: bot - top, fill: '#fff', stroke: '#111', 'stroke-width': 1.6 }, g);
+            txt(g, bx + spec.w / 2, top + 15, spec.sym, { anchor: 'middle', bold: true, size: 13 });
+            if (item.ownerName) {
+                const info = operandInfo(item.ownerName, ctx.bmk);
+                txt(g, bx + spec.w / 2, top - 6, info.name, { anchor: 'middle', bold: true, mono: true, size: 12 });
+                if (info.sub) txt(g, bx + spec.w / 2, top - 19, info.sub, { anchor: 'middle', size: 10, fill: '#666' });
+            }
+            // Ausgänge
+            spec.outs.forEach((o, k) => {
+                const oy = y + item.pinYs[0] + k * PIN_GAP;
+                if (o) txt(g, bx + spec.w - 4, oy + 4, o, { anchor: 'end', size: 10, fill: '#333' });
+                if (k === 0) {
+                    const ln = el('line', { x1: bx + spec.w, y1: oy, x2: xOut, y2: oy, stroke: '#111', 'stroke-width': 1.6 }, g);
+                    ctx.wires.push({ el: ln, src: item.src });
+                } else if (o === 'ET' || o === 'CV') {
+                    const v = txt(g, bx + spec.w + 4, oy + 4, '', { size: 10, mono: true, fill: '#0d47a1' });
+                    ctx.values.push({ el: v, node: item.node, kind: o });
+                }
+            });
+            // Eingänge
+            const childOut = bx - STUB;
+            item.ins.forEach((inp, idx) => {
+                const py = y + item.pinYs[idx];
+                const cy = y + inp._top;
+                // Kind zeichnen (endet bei childOut auf Höhe py)
+                draw(g, inp.child, cy, inp.child.kind === 'box' ? childOut - GAP_X : bx, ctx);
+                if (inp.child.kind === 'box') {
+                    const ln = el('line', { x1: childOut - GAP_X, y1: py, x2: bx, y2: py, stroke: '#111', 'stroke-width': 1.6 }, g);
+                    ctx.wires.push({ el: ln, src: inp.child.src });
+                }
+                if (inp.pin) txt(g, bx + 4, py + 4, inp.pin, { size: 10, fill: '#333' });
+                if (inp.inv) el('circle', { cx: bx - 4, cy: py, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
+            });
+        }
+        function widthOf(item) {
+            if (item.kind !== 'box') return 0;
+            let m = 0;
+            item.ins.forEach(i => { m = Math.max(m, widthOf(i.child)); });
+            return m + item.spec.w + STUB + GAP_X;
+        }
+
+        function render(graph) {
+            const d = doc();
+            const host = d.getElementById('fup-norm-host');
+            if (!host) return;
+            if (!window.fbsFupMode) { host.style.display = 'none'; return; }
+            host.style.display = 'block';
+            const svg = d.getElementById('fup-norm-svg');
+            while (svg.firstChild) svg.removeChild(svg.firstChild);
+            lastLayout = { wires: [], values: [] };
+            if (!graph || !graph.nodes || !graph.nodes.size) {
+                svg.setAttribute('width', 400); svg.setAttribute('height', 80);
+                txt(svg, 20, 40, 'Kein Programm – im Code-Editor eine Zuweisung schreiben, z. B. LAMPE := TASTER', { fill: '#666' });
+                return;
+            }
+            let nets;
+            try { nets = buildModel(graph); } catch (e) { console.warn('FUP:', e); return; }
+            const bmk = bmkMap();
+            if (/^\s*SCHRITTKETTE\b/im.test(graph._sourceText || '')) {
+                const n = el('text', { x: 14, y: 0, 'font-family': "'Segoe UI', Arial, sans-serif", 'font-size': 12, fill: '#6a1b9a' }, svg);
+                n.textContent = 'Hinweis: SCHRITTKETTE-Blöcke zeigt die Ansicht „Schrittkette“ (GRAFCET). Hier steht nur die übrige Logik.';
+                n.setAttribute('y', 14);
+            }
+            const ctx = { bmk, wires: lastLayout.wires, values: lastLayout.values, left: 20 };
+            // Breite: tiefster Baum aller Netzwerke → gleiche Ausgangsspalte überall
+            let maxW = 0;
+            nets.forEach(net => net.items.forEach(it => {
+                prep(it.child);
+                if (it.kind === 'mem') it.child.ownerName = it.target;
+                measure(it.child);
+                maxW = Math.max(maxW, widthOf(it.child) + (it.kind === 'mem' ? 0 : 60));
+            }));
+            const right = ctx.left + OP_W + maxW + 40;
+            let y = /^\s*SCHRITTKETTE\b/im.test(graph._sourceText || '') ? 26 : 14;
+            nets.forEach((net, ni) => {
+                const g = el('g', { class: 'fup-net' }, svg);
+                const headY = y;
+                el('rect', { x: 8, y: headY, width: right + 40, height: 24, fill: '#eceff1', stroke: '#b0bec5' }, g);
+                txt(g, 16, headY + 16, 'Netzwerk ' + (ni + 1) + ':', { bold: true, size: 12 });
+                const title = net.title || (net.items.length === 1 ? net.items[0].target : '');
+                txt(g, 100, headY + 16, title + (net.comment ? '   // ' + net.comment : ''), { size: 12, fill: '#37474f' });
+                y += NET_HEAD;
+                net.items.forEach(it => {
+                    const c = it.child;
+                    const top = y + (c.kind === 'box' ? 10 : 22);
+                    if (it.kind === 'mem') {
+                        draw(g, c, top, right + 50, ctx);
+                    } else {
+                        // Zuweisungskasten „=“
+                        const ax = right;
+                        const ay = top + c.outY;
+                        const aw = 34, ah = 26;
+                        el('rect', { x: ax, y: ay - 13, width: aw, height: ah, fill: '#fff', stroke: '#111', 'stroke-width': 1.6 }, g);
+                        txt(g, ax + aw / 2, ay + 5, '=', { anchor: 'middle', bold: true, size: 15 });
+                        const info = operandInfo(it.target, bmk);
+                        txt(g, ax + aw / 2, ay - 18, info.name, { anchor: 'middle', bold: true, mono: true, size: 12 });
+                        if (info.sub) txt(g, ax + aw / 2, ay - 31, info.sub, { anchor: 'middle', size: 10, fill: '#666' });
+                        if (c.kind === 'box') {
+                            draw(g, c, top, right - 40 - GAP_X, ctx);
+                            const ln = el('line', { x1: right - 40 - GAP_X, y1: ay, x2: ax, y2: ay, stroke: '#111', 'stroke-width': 1.6 }, g);
+                            lastLayout.wires.push({ el: ln, src: c.src });
+                        } else {
+                            draw(g, c, top, ax, ctx);
+                        }
+                        if (it.inv) el('circle', { cx: ax - 4, cy: ay, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
+                    }
+                    y = top + c.h + 14;
+                });
+                y += NET_GAP;
+            });
+            svg.setAttribute('width', right + 60);
+            svg.setAttribute('height', y + 10);
+            svg.style.width = (right + 60) + 'px';
+            svg.style.height = (y + 10) + 'px';
+            svg.style.maxWidth = 'none';
+            svg.setAttribute('viewBox', '0 0 ' + (right + 60) + ' ' + (y + 10));
+            live();
+        }
+
+        function live() {
+            if (!lastLayout || !window.fbsFupMode) return;
+            const active = (typeof isSimulationActive !== 'undefined') && isSimulationActive;
+            const st = (typeof spsState !== 'undefined') ? spsState : {};
+            lastLayout.wires.forEach(w => {
+                if (!active) { w.el.setAttribute('stroke', '#111'); w.el.removeAttribute('stroke-dasharray'); return; }
+                const on = !!st[w.src];
+                w.el.setAttribute('stroke', on ? '#2e7d32' : '#1565c0');
+                if (on) w.el.removeAttribute('stroke-dasharray'); else w.el.setAttribute('stroke-dasharray', '5,3');
+                w.el.setAttribute('stroke-width', on ? 2.4 : 1.6);
+            });
+            lastLayout.values.forEach(v => {
+                if (!active) { v.el.textContent = ''; return; }
+                let s = '';
+                try {
+                    const tm = window.simTimers && window.simTimers[v.node.id];
+                    if (tm && v.kind === 'ET') s = 'T#' + ((Number(tm.et) || 0) / 1000).toFixed(1) + 's';
+                    else if (tm && v.kind === 'CV') s = String(tm.cv != null ? tm.cv : '');
+                } catch (_) {}
+                v.el.textContent = s;
+            });
+        }
+
+        function updateButton() {
+            const b = doc().getElementById('btn-fbs-fup');
+            if (!b) return;
+            b.textContent = window.fbsFupMode ? '📐 FUP: AN' : '📐 FUP: AUS';
+            b.style.backgroundColor = window.fbsFupMode ? '#1976d2' : '#455a64';
+            const cs = doc().getElementById('custom-svg');
+            if (cs) cs.style.visibility = window.fbsFupMode ? 'hidden' : '';
+        }
+        window._toggleFbsFup = function () {
+            window.fbsFupMode = !window.fbsFupMode;
+            try { localStorage.setItem(LS_KEY, window.fbsFupMode ? '1' : '0'); } catch (_) {}
+            updateButton();
+            render(typeof currentGraph !== 'undefined' ? currentGraph : null);
+        };
+        // SVG speichern (z. B. für Arbeitsblätter)
+        window._saveFupSvg = function () {
+            const svg = doc().getElementById('fup-norm-svg');
+            if (!svg) return;
+            const clone = svg.cloneNode(true);
+            clone.setAttribute('xmlns', NS);
+            const bg = doc().createElementNS(NS, 'rect');
+            bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#fff');
+            clone.insertBefore(bg, clone.firstChild);
+            const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'VALIS_FUP.svg';
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        };
+        window._fupRender = render;
+        window._fupLive = live;
+        // Für Tests: das Modell ohne Zeichnen
+        window._fupModel = function () { return buildModel(currentGraph); };
+
+        function init() {
+            updateButton();
+            render(typeof currentGraph !== 'undefined' ? currentGraph : null);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
     })();
     </script>
 </body>

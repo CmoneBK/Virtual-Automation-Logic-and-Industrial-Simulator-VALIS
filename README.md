@@ -186,6 +186,9 @@ Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie be
 * Eigene OBB-Kinematik-Physikengine
 * [svg-pan-zoom](https://github.com/bumbu/svg-pan-zoom) (v3.6.1) für die Canvas-Manipulation.
 
+## ™ Marken
+FESTO und Festo Didactic sind Marken der Festo SE & Co. KG. Der Steckaufbau zeichnet die Lehr-Platinen nach, die an Schulen stehen, damit Schaltpläne dort nachgesteckt werden können; die Bestellnummern dienen nur der Orientierung. VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.
+
 ---
 ---
 
@@ -340,6 +343,9 @@ SYSTEM_ACTIVE := Q1 && Q2_SR
 * **HTML5 / CSS3 / Vanilla JavaScript**
 * Custom OBB Kinematics Physics Engine
 * [svg-pan-zoom](https://github.com/bumbu/svg-pan-zoom) (v3.6.1) for canvas manipulation.
+
+## ™ Trademarks
+FESTO and Festo Didactic are trademarks of Festo SE & Co. KG. The patch board setup redraws the training boards found in schools so circuits can be rebuilt there; order numbers are for orientation only. VALIS is not a Festo product and is not affiliated with Festo.
 
 
 

@@ -99,7 +99,7 @@ if ($act === 'login') {
 
     // Gleichfoermige Antwort: ein unbekannter Code sieht aus wie eine falsche PIN,
     // damit die API nicht zum Orakel fuer gueltige Codes wird.
-    if (!$env) { usleep(random_int(120000, 260000)); fail('bad_credentials', 401); }
+    if (!$env) { usleep(random_int(120000, 260000)); fail('bad_credentials', 403); }
 
     if ($env['locked_until'] !== null && strtotime((string)$env['locked_until']) > time()) {
         fail('locked', 429, ['retry_after' => strtotime((string)$env['locked_until']) - time()]);
@@ -120,7 +120,7 @@ if ($act === 'login') {
                     locked_until = IF(? > 0, DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? SECOND), locked_until)
              WHERE id = ?'
         )->execute([$fails, $lock, $lock, $env['id']]);
-        fail('bad_credentials', 401);
+        fail('bad_credentials', 403);
     }
 
     db()->prepare(

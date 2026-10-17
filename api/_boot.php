@@ -178,16 +178,19 @@ function rate_ok(string $bucket, int $limit, int $windowSeconds): bool {
     return ((int)($st->fetchColumn() ?: 0)) <= $limit;
 }
 
-/** Authentifiziert per Bearer-Token; liefert die env_id. */
+/** Authentifiziert per Bearer-Token; liefert die env_id.
+ *  Abgelehnt wird mit 403, nie mit 401: Auf t-bk.de liegt die Seite neben
+ *  einem Bereich mit Basic-Auth, und eine 401 laesst Chrome dessen Passwort
+ *  vergessen - danach fragt jede gesperrte Seite erneut. */
 function require_env(): int {
     $hdr = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    if (!preg_match('/^Bearer\s+([A-Za-z0-9_\-]{20,120})$/', trim($hdr), $m)) fail('unauthorized', 401);
+    if (!preg_match('/^Bearer\s+([A-Za-z0-9_\-]{20,120})$/', trim($hdr), $m)) fail('unauthorized', 403);
     $st = db()->prepare(
         'SELECT env_id FROM sessions WHERE token_hash = ? AND expires_at > UTC_TIMESTAMP()'
     );
     $st->execute([token_hash($m[1])]);
     $envId = $st->fetchColumn();
-    if ($envId === false) fail('unauthorized', 401);
+    if ($envId === false) fail('unauthorized', 403);
     db()->prepare('UPDATE environments SET last_seen_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$envId]);
     return (int)$envId;
 }

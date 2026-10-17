@@ -11273,14 +11273,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!code) return [];
                 const lines = code.split('\n');
                 const stmts = []; // { lhs, rhs, label, idx }
-                lines.forEach((line, idx) => {
+                // Speicher-Kurzform `SCHRITT_2 := RS(SCHRITT_1 && …, SCHRITT_3)`:
+                // in S/R/Q-Zeilen auflösen (gleiche Nummern wie parseToGraph) und
+                // die Namen durch Q<n> ersetzen. Der Name wird zum Schritt-Label.
+                const _kurz = (typeof window._expandSpeicherKurzform === 'function')
+                    ? window._expandSpeicherKurzform(lines) : null;
+                const _qOfName = new Map();
+                if (_kurz && _kurz.generatedQ.size) {
+                    _kurz.lines.forEach(l => {
+                        const m = l.text.match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*:=\s*(Q\d+)$/);
+                        if (m && _kurz.generatedQ.has(m[2])) _qOfName.set(m[1].toUpperCase(), m[2]);
+                    });
+                }
+                const _nameToQ = (s) => _qOfName.size
+                    ? s.replace(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g, w => _qOfName.get(w.toUpperCase()) || w)
+                    : s;
+                const _srcLines = (_kurz && _qOfName.size) ? _kurz.lines : lines.map((text, idx) => ({ text, idx }));
+                _srcLines.forEach(({ text: line, idx }) => {
                     if (window._isSchrittkettenLine && window._isSchrittkettenLine(idx)) return;
                     const cm = line.indexOf('//');
                     const codePart = cm >= 0 ? line.slice(0, cm) : line;
-                    const label    = cm >= 0 ? line.slice(cm + 2).trim() : '';
+                    let label      = cm >= 0 ? line.slice(cm + 2).trim() : '';
                     const m = codePart.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+?)\s*$/);
                     if (!m) return;
-                    stmts.push({ lhs: m[1], rhs: m[2].trim(), label, idx });
+                    if (_qOfName.has(m[1].toUpperCase())) return; // Alias `NAME := Q<n>`
+                    if (_qOfName.size && /^S\d+$/.test(m[1]) && !label) {
+                        const orig = String(lines[idx] || '').split('//');
+                        const km = orig[0].match(/^\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*:=\s*(?:RS|SR)\s*\(/i);
+                        if (km) label = (orig.length > 1 ? orig.slice(1).join('//').trim() : '') || km[1];
+                    }
+                    stmts.push({ lhs: m[1], rhs: _nameToQ(m[2].trim()), label, idx });
                 });
                 // Chain-Anker: drei Quellen, in Prio-Reihenfolge.
                 //   1) Magic-Comment-Header `// === SCHRITTKETTE <NAME>` (clean)
@@ -11362,6 +11384,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         });
                     }
                     if (stepNums.length < 1) return;
+                    // Der Renderer nummeriert Schritt i als Q<base+i> — darum die
+                    // Schritte aufsteigend ordnen (Anfangsschritt bleibt vorn). Sonst
+                    // vertauscht eine alternative Verzweigung (BFS 1,2,4,3,5) die Marken.
+                    const _init0 = stepNums[0];
+                    stepNums.splice(0, stepNums.length, _init0, ...stepNums.slice(1).sort((a, b) => a - b));
                     // Konsekutivität sicherstellen für stabile Anzeige (z.B. 1..N
                     // oder beliebige Nummern — wir nutzen sie 1:1 weiter).
                     const baseNum = Math.min.apply(null, stepNums);
@@ -11476,19 +11503,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         uniqChildren.forEach(to => {
                             const sToStmt = stmts.find(s => s.lhs === 'S' + to);
                             if (!sToStmt) return;
+                            // Init-Term `¬(Q… || Q…)` des Anfangsschritts gehört nicht
+                            // zur Transitionsbedingung — vorab entfernen.
+                            const sRhs = sToStmt.rhs.replace(RE_INIT_QOR, ' ')
+                                .replace(/^\s*\|\|\s*/, '').replace(/\s*\|\|\s*$/, '').trim();
                             // Suche Term `(Q<from> && (<cond>))` mit balancierter Klammer,
                             // Fallback: `Q<from> && <token>` (Bare-Token, ohne Klammer).
                             let cond = null;
                             const reFullStart = new RegExp('\\(\\s*Q' + from + '\\s*&&\\s*\\(');
-                            const mStart = sToStmt.rhs.match(reFullStart);
+                            const mStart = sRhs.match(reFullStart);
                             if (mStart) {
                                 const innerOpen = mStart.index + mStart[0].length - 1;
-                                const innerClose = balancedClose(sToStmt.rhs, innerOpen);
-                                if (innerClose !== -1) cond = sToStmt.rhs.slice(innerOpen + 1, innerClose).trim();
+                                const innerClose = balancedClose(sRhs, innerOpen);
+                                if (innerClose !== -1) cond = sRhs.slice(innerOpen + 1, innerClose).trim();
                             }
                             if (cond == null) {
                                 const reLoose = new RegExp('Q' + from + '\\s*&&\\s*(.+?)(?:\\)\\s*\\||\\)$|$)');
-                                const mLoose = sToStmt.rhs.match(reLoose);
+                                const mLoose = sRhs.match(reLoose);
                                 if (mLoose) cond = mLoose[1].trim().replace(/\)+$/, '').trim();
                             }
                             const stripped = stripFaultGuard(cond || 'TRUE', from);
@@ -11836,7 +11867,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             'font-family': "'Segoe UI', Tahoma, sans-serif"
                         }, svg);
                         bt.textContent = '🔎 aus RS-Form erkannt — nicht editierbar';
-                        // Convert-Button rechts im Banner. Klick → DSL-Form.
+                        // Convert-Button rechts im Banner. Klick → DSL-Form (nur PRO).
+                        const _proBtn = !(typeof window._isProMode === 'function' && !window._isProMode());
+                        if (_proBtn) {
                         const btn = el('g', {
                             class: 'sk-rs-convert-btn',
                             transform: 'translate(' + (PAD + 290) + ',' + (y + 4) + ')',
@@ -11857,6 +11890,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const tooltip = document.createElementNS(SVG_NS, 'title');
                         tooltip.textContent = 'Aus dem erkannten RS-Glied-Muster die SCHRITTKETTE-DSL erzeugen und im Editor ersetzen.';
                         btn.appendChild(tooltip);
+                        }
                         maxX = Math.max(maxX, PAD + 380);
                         y += 30;
                     }
@@ -12437,6 +12471,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             'font-family': "'Segoe UI', Tahoma, sans-serif"
                         }, svg);
                         bt.textContent = '🔎 aus RS-Form erkannt — nicht editierbar';
+                        // Convert-Button nur im PRO-Modus (DSL-Werkzeug).
+                        if (!(typeof window._isProMode === 'function' && !window._isProMode())) {
                         const btn = el('g', {
                             class: 'sk-rs-convert-btn',
                             transform: 'translate(' + (PAD + 290) + ',' + (y + 4) + ')',
@@ -12457,6 +12493,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const tooltip = document.createElementNS(SVG_NS, 'title');
                         tooltip.textContent = 'Aus dem erkannten RS-Glied-Muster die SCHRITTKETTE-DSL erzeugen und im Editor ersetzen.';
                         btn.appendChild(tooltip);
+                        }
                         maxX = Math.max(maxX, PAD + 380);
                         y += 30;
                     }
@@ -12702,8 +12739,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const btn = $btn();
                 if (!panel || !svg) return;
                 // PRO-Modus aus → alles weg. Renderer komplett ruhig, Top-Bar-
-                // Button verstecken, Panel zumachen.
-                if (typeof window._isProMode === 'function' && !window._isProMode()) {
+                // Button verstecken, Panel zumachen. Ausnahme: eine von Hand
+                // geschriebene RS-Kette (Relais-/Merker-Schrittkette) wird auch
+                // ohne PRO als GRAFCET angezeigt (nur lesen, ohne DSL-Werkzeuge).
+                const _proOn = !(typeof window._isProMode === 'function' && !window._isProMode());
+                let _handRS = [];
+                if (!_proOn && typeof window._recognizeRSChains === 'function') {
+                    const _ta = document.getElementById('code');
+                    try { _handRS = (_ta && window._recognizeRSChains(_ta.value)) || []; } catch(_e) { _handRS = []; }
+                }
+                if (!_proOn && !_handRS.length) {
                     if (btn) btn.style.display = 'none';
                     while (svg.firstChild) svg.removeChild(svg.firstChild);
                     if (panel.style.display !== 'none') panel.style.display = 'none';
@@ -18189,6 +18234,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!li.lhs || !li.rhs) return;
                 // S/R-Pin-Zuweisungen brechen den Zyklus per RS-Glied-Speicher
                 if (/^[SR]\d+(_(?:RS|SR))?$/i.test(li.lhs)) return;
+                // Speicher-Kurzform `X := RS(…, …)` / `SR(…)` ist ebenfalls ein
+                // Speicher — z. B. Schrittketten `SCHRITT_2 := RS(SCHRITT_1 && …, SCHRITT_3)`.
+                if (/^(RS|SR)\s*\(/i.test(String(li.rhs).trim())) return;
                 const idents = li.rhs.match(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g) || [];
                 const clean = idents
                     .map(id => id.toUpperCase())
@@ -69277,6 +69325,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         // ---------- Graph → Bäume ----------
         function buildModel(graph) {
+            // Der Netzwerkmodus des Logikplans hängt geteilte Quellen auf
+            // Geister-Knoten (`__GHOST__…`) um. Der FUP braucht die echte
+            // Quelle: Geister raus, Kanten zurück auf `_origSourceId`.
+            if (typeof _circuitCleanGraph === 'function') graph = _circuitCleanGraph(graph);
             const nodes = graph.nodes;
             const inEdges = new Map();
             graph.edges.forEach(e => {

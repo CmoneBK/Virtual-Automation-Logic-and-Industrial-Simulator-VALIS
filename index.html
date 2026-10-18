@@ -8782,6 +8782,43 @@ You must output exactly this JSON format. The logic code goes as a single string
         }
         window._matchSpeicherKurzform = _matchSpeicherKurzform;
         window._expandSpeicherKurzform = _expandSpeicherKurzform;
+        // Name → Speicherbaustein (`SR_2`/`RS_2`) aus allen Alias-Zeilen `NAME := Q<n>`,
+        // deren Nummer auch eine S- oder R-Zeile hat (Kurzform, DSL oder von Hand).
+        function _speicherBloecke(text) {
+            const zeilen = _expandSpeicherKurzform(String(text || '').split('\n')).lines.map(l => String(l.text).split('//')[0].trim());
+            const pins = new Set();
+            zeilen.forEach(z => { const m = z.match(/^[SR](\d+)(_(?:RS|SR))?\s*:=/i); if (m) pins.add(m[1] + (m[2] ? m[2].toUpperCase() : '')); });
+            const bloecke = new Map();
+            zeilen.forEach(z => {
+                const m = z.match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*:=\s*Q(\d+)(_(?:RS|SR))?$/i);
+                if (!m) return;
+                const suf = m[3] ? m[3].toUpperCase() : '';
+                if (!pins.has(m[2] + suf)) return;
+                bloecke.set(m[1], { block: (suf === '_RS' ? 'RS_' : 'SR_') + m[2], q: 'Q' + m[2] + suf });
+            });
+            return bloecke;
+        }
+        // Vor dem Einsetzen eines neu übersetzten Programms: jeden Speicher wieder auf
+        // den Zustand setzen, den er unter seinem Namen vorher hatte. Namen, die beim
+        // Tippen kurz verschwinden (halbe Zeile), behalten ihren letzten Wert; neue
+        // Namen starten mit 0. Ist keiner der bisherigen Bausteine mehr im Zustand
+        // (Reset, Aufgabe laden), beginnt alles frisch.
+        let _speicherAlt = new Map(), _speicherWerte = new Map();
+        window._speicherZustaendeUebernehmen = function(text) {
+            const neu = _speicherBloecke(text);
+            window._speicherNamen = [...neu.keys()];
+            const frisch = ![..._speicherAlt.values()].some(b => b.block in spsState);
+            if (frisch) { _speicherAlt = neu; _speicherWerte = new Map(); return; }
+            _speicherAlt.forEach((b, name) => { if (b.block in spsState) _speicherWerte.set(name, !!spsState[b.block]); });
+            let anders = neu.size !== _speicherAlt.size;
+            neu.forEach((b, name) => { const a = _speicherAlt.get(name); if (!a || a.block !== b.block) anders = true; });
+            if (anders) {
+                const setzen = [];
+                neu.forEach((b, name) => setzen.push([b, _speicherWerte.has(name) ? _speicherWerte.get(name) : false]));
+                setzen.forEach(([b, v]) => { spsState[b.block] = v; spsState[b.q] = v; });
+            }
+            _speicherAlt = neu;
+        };
         function parseToGraph(text) {
             const graph = new LogicGraph();
             graph.targetGateCounters = {}; // 🌟 NEU: Lokaler Counter pro Variable (Macht Gatter-IDs immun gegen F5-Disco!)
@@ -19789,6 +19826,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             latchedTasters.clear(); // Ensure no latched tasters carry over to new simulation
             const oldState = { ...spsState };
             spsState = {};
+            // Speicherbausteine (SR_n/RS_n) und die Namen der Speicher stehen nicht in
+            // der Ein-/Ausgangsliste, müssen das Neuaufbauen beim Tippen aber
+            // überleben. Sonst fällt jede Schrittkette bei einer Codeänderung während
+            // der Simulation auf den Anfangsschritt zurück.
+            Object.keys(oldState).forEach(k => { if (/^(?:SR|RS)_\d+$/.test(k)) spsState[k] = oldState[k]; });
+            (window._speicherNamen || []).forEach(k => { if (k in oldState) spsState[k] = oldState[k]; });
             const usedAsSource = new Set(graph ? graph.edges.map(e => e.sourceId) : []);
             // Cleanup-Button-HTML — wird in beide Header injiziert. Klick = sanft (ohne
             // Bindungen weg), STRG+Klick = aggressiv (alle verwaisten, Bindungen werden
@@ -27869,6 +27912,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Color-Setting einen Tipp hinterher.
                 currentGraph = parsed.graph;
                 updateHighlighting();
+                // Speicher-Zustände über den Namen mitnehmen: Die Kurzform
+                // `SCHRITT_2 := SR(…)` bekommt ihre S/R/Q-Nummer nach der Reihenfolge
+                // im Code. Fügt man bei laufender Simulation eine Speicherzeile ein,
+                // löscht eine oder tauscht SR↔RS, verschieben sich die Nummern, und der
+                // Zustand von SR_2 gehörte plötzlich zu einem anderen Schritt.
+                if (typeof window._speicherZustaendeUebernehmen === 'function') {
+                    try { window._speicherZustaendeUebernehmen(expansion.code); } catch(e) { console.warn('Speicher-Übernahme:', e); }
+                }
                 // FIX: Wir übergeben deltaMs und den timer-Speicher an die simulierte SPS!
                 try {
                     simulationFunction = new Function('state', 'deltaMs', 'timers', parsed.jsCompiledCode);

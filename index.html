@@ -39961,8 +39961,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 let aRet = aExt - (Math.PI * Math.pow(dRod / 2, 2)); // Ringfläche (Einfahren)
                                 // Druckabfall bei geringerem Kompressordruck (linear genähert)
                                 let pressureFactor = p_supply / 6.0;
+                                // Getrennter Schlauch: Ist die Versorgung oder die Arbeitsleitung
+                                // Ventil 2/4 → Drossel → Zylinder 1/2 abgezogen (_broken), bekommt die
+                                // Kammer keinen Druck → keine Kraft in diese Richtung, Zylinder bleibt stehen.
+                                const _ab = (a, ap, b, bp) => {
+                                    if (!a || !b) return false;
+                                    let m = (window.pneuConnections || []).filter(c =>
+                                        (c.aObjId === a.id && String(c.aPortId) === ap && c.bObjId === b.id && String(c.bPortId) === bp) ||
+                                        (c.aObjId === b.id && String(c.aPortId) === bp && c.bObjId === a.id && String(c.bPortId) === ap));
+                                    return m.length > 0 && m.every(c => c._broken);
+                                };
+                                let _mf = factoryObjects.find(o => o.type === 'manifold');
+                                let _versorgungAb = _ab(comp, '1', _mf, '1') || _ab(_mf, '1', valve, '1');
+                                const _leitungAb = (vp, thr, cp) => _versorgungAb || (thr ? (_ab(valve, vp, thr, '2') || _ab(thr, '1', obj, cp)) : _ab(valve, vp, obj, cp));
                                 if (valve.isTriple && valve.valveState === 'center') {
                                     // 5/3 Sperrmittelstellung: beide Kammern gesperrt → kein Antrieb
+                                    forceExt = false; forceRet = false;
+                                } else if (valve.isActive && _leitungAb('2', tExt, '1')) {
+                                    forceExt = false; forceRet = false;
+                                } else if (!valve.isActive && obj.type !== 'zylinder_single' && _leitungAb('4', tRet, '2')) {
                                     forceExt = false; forceRet = false;
                                 } else if (valve.isActive) {
                                     forceExt = true; // Druckluft strömt in die Ausfahr-Kammer
@@ -49286,11 +49303,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
 
         function _pneuConnect(aObjId, aPortId, bObjId, bPortId) {
-            if (window.pneuConnections.some(c =>
+            let _alt = window.pneuConnections.find(c =>
                 (c.aObjId===aObjId&&c.aPortId===aPortId&&c.bObjId===bObjId&&c.bPortId===bPortId)||
                 (c.aObjId===bObjId&&c.aPortId===bPortId&&c.bObjId===aObjId&&c.bPortId===aPortId)
-            )) return;
-            window.pneuConnections.push({ aObjId, aPortId, bObjId, bPortId });
+            );
+            if (_alt && !_alt._broken) return;
+            // Abgezogenen (automatischen) Schlauch wieder anstecken statt doppelt anlegen
+            if (_alt) _alt._broken = false;
+            else window.pneuConnections.push({ aObjId, aPortId, bObjId, bPortId });
             _applyPneuManualConnections();
             saveFactoryState();
             drawPneumaticHoses();
@@ -49335,6 +49355,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // lief.
             if (endpoints.length === 0) return;
             if (endpoints.length !== 2) {
+                // Abgezogener Schlauch (_broken) an der Drossel: Rolle behalten, damit die
+                // Zylinderbewegung die Arbeitsleitung als getrennt erkennt (statt ungedrosselt zu fahren).
+                if ((conns || []).some(c => c._broken && (c.aObjId === thr.id || c.bObjId === thr.id))) return;
                 thr.targetCylinderId = null; thr.role = null;
                 return;
             }

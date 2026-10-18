@@ -18,8 +18,8 @@ Eine leistungsstarke, browserbasierte Logik-IDE, Schaltplangenerator und 2D-Phys
 
 
 ### 🧠 Logik-Engine & Code-Editor
-* **Native RS- & SR-Flip-Flop Unterstützung:** Der Compiler erkennt Variablen mit `S`, `R` und `Q` (gefolgt von einer Zahl) automatisch und fasst sie in speziellen Speicherbausteinen zusammen. Über die Suffixe `_RS` und `_SR` können Sie explizit zwischen rücksetzdominanten und setzdominanten Gliedern wählen.
-* **Syntax-Hervorhebung:** Benutzerdefiniertes Highlighting für Operatoren, Zuweisungen und RS-Glieder.
+* **Native SR- & RS-Flip-Flop Unterstützung:** Der Compiler erkennt Variablen mit `S`, `R` und `Q` (gefolgt von einer Zahl) automatisch und fasst sie in speziellen Speicherbausteinen zusammen. Über die Suffixe `_SR` und `_RS` können Sie explizit zwischen rücksetzdominanten und setzdominanten Gliedern wählen.
+* **Syntax-Hervorhebung:** Benutzerdefiniertes Highlighting für Operatoren, Zuweisungen und SR-Glieder.
 * **Pulse-Catch / Afterglow:** Extrem kurze Logik-Impulse (die für das menschliche Auge zu schnell wären) erzeugen in den Plänen einen atmosphärischen "Nachleucht"-Effekt (Fade-Out), sodass kein Signal unbemerkt bleibt.
 
 ### 📐 Smart Auto-Routing (3 Ansichten)
@@ -47,7 +47,7 @@ Die Symbolleiste über dem IEC-Stromlaufplan bietet mehrere Schalter zur Anpassu
 * **Schaltplan-Palette (✏️):** Aktivieren Sie den Bearbeitungsmodus im IEC-Stromlaufplan über die ✏️-Schaltfläche in der Symbolleiste. Danach können Sie Elemente aus der Palette per Drag & Drop auf Zonen im Plan ziehen:
   * **Neuer Strang:** Fügt einen komplett neuen Logikstrang (Rung) ein.
   * **Strang erweitern:** Zieht man auf einen bestehenden Strang, öffnet sich ein Dialog zum Hinzufügen in Reihe (AND) oder parallel (OR).
-  * **Verfügbare Elemente:** ⊣⊢ Kontakt (mit Bauteiltyp-Auswahl), ⊣K⊢ Relais-Kontakt (Spiegelung eines Ausgangs-Relais inkl. UND/ODER-Gatter-Ausgänge), ( ) Spule, RS/SR-Glied, TON / TOF / TP (Timer), CTU (Zähler).
+  * **Verfügbare Elemente:** ⊣⊢ Kontakt (mit Bauteiltyp-Auswahl), ⊣K⊢ Relais-Kontakt (Spiegelung eines Ausgangs-Relais inkl. UND/ODER-Gatter-Ausgänge), ( ) Spule, SR/RS-Glied, TON / TOF / TP (Timer), CTU (Zähler).
   * **Klick-to-Fill:** Bei geöffnetem Dialog können Elemente im Plan angeklickt werden, um Variablenfelder automatisch vorzubefüllen.
 
 ### 🏭 2D Anlagen-Physiksimulator (Digitaler Zwilling)
@@ -112,10 +112,13 @@ Der Editor verwendet eine einfache Syntax im Pseudocode-Stil, um Logikgatter und
 * **`//`** : Kommentar (Rest der Zeile wird ignoriert)
 * **`INPUT Variable`**: Deklariert eine Variable explizit als reinen Eingang. Nützlich, um Eingangsvariablen vorzudeklarieren, die noch nicht in einer Zuweisung verwendet werden. Abgeklemmte Variablen werden automatisch in diesen Zustand geparkt (Limbus).
 
-### Spezielle Variablen (RS- & SR-Flip-Flops)
+### Spezielle Variablen (SR- & RS-Flip-Flops)
 Wenn Sie Ihre Variablen mit `S`, `R` und `Q` gefolgt von einer Zahl (z.B. `1`) benennen, gruppiert die Engine diese automatisch in einen **Flip-Flop-Baustein**. Über Suffixe bestimmen Sie das Dominanz-Verhalten:
-* **RS (Rücksetz-dominant, Standard):** `S1` / `S1_RS` und `R1` / `R1_RS` erzeugen ein RS-Glied mit dem Ausgang `Q1` / `Q1_RS`. Liegen beide Signale an, gewinnt das Rücksetzen (Industrieller Sicherheitsstandard).
-* **SR (Setz-dominant):** `S1_SR` und `R1_SR` erzeugen ein SR-Glied mit dem Ausgang `Q1_SR`. Liegen beide Signale an, gewinnt das Setzen.
+* **SR (Rücksetz-dominant, Standard):** `S1` / `S1_SR` und `R1` / `R1_SR` erzeugen ein SR-Glied mit dem Ausgang `Q1` / `Q1_SR`. Liegen beide Signale an, gewinnt das Rücksetzen (Industrieller Sicherheitsstandard).
+* **RS (Setz-dominant):** `S1_RS` und `R1_RS` erzeugen ein RS-Glied mit dem Ausgang `Q1_RS`. Liegen beide Signale an, gewinnt das Setzen.
+* **Kurzform mit eigenem Namen:** `ANLAGE_EIN := SR(START, STOP)` (rücksetzdominant) bzw. `RS(…)` (setzdominant) — erst Setzen, dann Rücksetzen.
+* **Merkregel wie im Tabellenbuch:** Der letzte Buchstabe gewinnt. SR = Rücksetzen dominant (Standard für Sicherheit, Not-Halt), RS = Setzen dominant. Im Logikplan/FUP trägt der dominante Eingang die „1“ wie in IEC 61131-3: SR-Box `S`/`R1`, RS-Box `S1`/`R`.
+* **Umstellung (ältere Stände):** Bis zu dieser Version war die Benennung umgekehrt (`RS(…)`/`_RS` rücksetzdominant, `SR(…)`/`_SR` setzdominant). Gespeicherte Stände, Aufgaben (`.valitask`/`.valipack`), Szenarien, Snapshots und `#state`/`#task`-Links tragen jetzt die Marke `"rssr": 2`. Was ohne diese Marke geladen wird, gilt als alt: VALIS tauscht beim Laden `RS(`↔`SR(` und `_RS`↔`_SR`, damit sich das Programm genauso verhält wie vorher. Der Browser-Speicher (Editor-Code, Aufgabenbibliothek, Snapshots) wird beim ersten Start einmal umgestellt. `S1`/`R1`/`Q1` ohne Suffix ändern sich nicht. Texte (Beschreibungen, Kommentare) werden nicht umgeschrieben; Werkzeuge, die VALIS-Code ohne Marke erzeugen (z. B. Links von Hand), müssen `"rssr": 2` mitgeben.
 
 ### Zeit- und Zählglieder (Timers & Counters)
 Die Engine unterstützt industrielle Standard-Funktionen out-of-the-box:
@@ -134,10 +137,10 @@ S1 := START_BTN
 R1 := STOP_BTN || EMERGENCY_STOP
 
 // Setz-dominantes Flip-Flop
-S2_SR := ZWANGS_START
-R2_SR := ZEITABLAUF
+S2_RS := ZWANGS_START
+R2_RS := ZEITABLAUF
 
-SYSTEM_AKTIV := Q1 && Q2_SR
+SYSTEM_AKTIV := Q1 && Q2_RS
 ```
 
 ## 🎮 UI-Konfiguration & Steuerung
@@ -207,7 +210,7 @@ A powerful, browser-based logic circuit IDE, electrical schematic generator, and
 ## ✨ Features
 
 ### 🧠 Logic Engine & Code Editor
-* **Native RS & SR Flip-Flop Support:** Variables starting with `S`, `R`, and `Q` followed by a number are automatically detected and wrapped into dedicated Flip-Flop logic blocks. You can explicitly create Reset-dominant (RS) or Set-dominant (SR) flip-flops by appending the respective suffixes (`_RS` or `_SR`).
+* **Native SR & RS Flip-Flop Support:** Variables starting with `S`, `R`, and `Q` followed by a number are automatically detected and wrapped into dedicated Flip-Flop logic blocks. You can explicitly create Reset-dominant (SR) or Set-dominant (RS) flip-flops by appending the respective suffixes (`_SR` or `_RS`).
 * **Syntax Highlighting:** Custom, non-blocking text highlighting for operators, assignments, and logic states.
 * **Pulse-Catch / Afterglow:** Extremely fast logical impulses trigger an atmospheric "afterglow" fade-out effect in the visual diagrams, ensuring you never miss a split-second signal.
 
@@ -236,7 +239,7 @@ The toolbar above the IEC circuit diagram offers several toggles to customize th
 * **Circuit Palette (✏️):** Activate the IEC circuit edit mode via the ✏️ button in the toolbar. Drag elements from the palette directly onto drop zones in the diagram:
   * **New Rung:** Inserts a brand-new logic rung.
   * **Extend Rung:** Dropping onto an existing rung opens a dialog to add in-series (AND) or in-parallel (OR).
-  * **Available Elements:** ⊣⊢ Contact (with component type selector), ⊣K⊢ Relay Contact (mirrors any output coil state, including AND/OR gate outputs), ( ) Coil, RS/SR block, TON / TOF / TP (timers), CTU (counter).
+  * **Available Elements:** ⊣⊢ Contact (with component type selector), ⊣K⊢ Relay Contact (mirrors any output coil state, including AND/OR gate outputs), ( ) Coil, SR/RS block, TON / TOF / TP (timers), CTU (counter).
   * **Click-to-Fill:** While a dialog is open, clicking any element in the diagram auto-fills the corresponding variable fields.
 
 ### 🏭 2D Factory Physics Simulator (Digital Twin)
@@ -301,10 +304,13 @@ The editor uses a straightforward, pseudo-code style syntax to define logic gate
 * **`//`** : Comment (remainder of the line is ignored)
 * **`INPUT Variable`**: Explicitly declares a variable as a pure input node. Useful for pre-declaring input variables not yet used in any assignment. Disconnected variables are automatically parked in this state (Limbo).
 
-### Special Variables (RS & SR Flip-Flops)
+### Special Variables (SR & RS Flip-Flops)
 If you name your variables using `S`, `R`, and `Q` followed by a number (e.g., `1`), the engine automatically groups them into a **Flip-Flop block**. You can define priority behavior by adding suffixes:
-* **RS (Reset-dominant, Default):** `S1` / `S1_RS` and `R1` / `R1_RS` create an RS block with the output `Q1` / `Q1_RS`. If both inputs are true simultaneously, Reset wins (Standard for machine safety).
-* **SR (Set-dominant):** `S1_SR` and `R1_SR` create an SR block with the output `Q1_SR`. If both inputs are true simultaneously, Set wins.
+* **SR (Reset-dominant, Default):** `S1` / `S1_SR` and `R1` / `R1_SR` create an SR block with the output `Q1` / `Q1_SR`. If both inputs are true simultaneously, Reset wins (Standard for machine safety).
+* **RS (Set-dominant):** `S1_RS` and `R1_RS` create an RS block with the output `Q1_RS`. If both inputs are true simultaneously, Set wins.
+* **Short form with your own name:** `PLANT_ON := SR(START, STOP)` (reset-dominant) or `RS(…)` (set-dominant) — set first, then reset.
+* **Rule of thumb (as in the German Tabellenbuch):** the last letter wins. SR = reset-dominant (default, emergency stop), RS = set-dominant. In the logic plan/FBD the dominant input carries the "1" as in IEC 61131-3: SR box `S`/`R1`, RS box `S1`/`R`. Note that IEC 61131-3 itself names the blocks the other way round.
+* **Migration of older saves:** up to this version the naming was reversed. Saves, tasks, scenarios, snapshots and `#state`/`#task` links now carry `"rssr": 2`; anything loaded without it is treated as old and gets `RS(`↔`SR(` and `_RS`↔`_SR` swapped so it behaves exactly as before. Browser storage is converted once on first start.
 
 ### Timers & Counters
 The engine natively supports industrial timing and counting functions:
@@ -323,10 +329,10 @@ S1 := START_BTN
 R1 := STOP_BTN || EMERGENCY_STOP
 
 // Set-dominant Flip-Flop
-S2_SR := OVERRIDE_START
-R2_SR := TIMEOUT
+S2_RS := OVERRIDE_START
+R2_RS := TIMEOUT
 
-SYSTEM_ACTIVE := Q1 && Q2_SR
+SYSTEM_ACTIVE := Q1 && Q2_RS
 ```
 
 ## 🎮 UI Configuration & Control

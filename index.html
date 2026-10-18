@@ -21904,7 +21904,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const inE = g.edges.filter(e => e.targetId === v.id);
                 if (inE.length !== 1 || inE[0].inverted) return;
                 const t = g.nodes.get(inE[0].sourceId);
-                if (!t || !['TON', 'TOF', 'TP'].includes(t.type) || t.id !== t.type + '_' + v.id) return;
+                if (!t) return;
+                // Speicher-Kurzform `V := RS(…, …)`: V IST das Relais des Speichers
+                // (z. B. Schrittkette `SCHRITT_2 := RS(…)` → eine Spule -KFn je Schritt,
+                // kein zusätzliches Hilfsrelais hinter dem RS-Glied).
+                const _isKurzRS = (t.type === 'RS' || t.type === 'SR') && window._generatedQ
+                    && window._generatedQ.has('Q' + String(t.id).replace(/^(RS|SR)_/, '') + (t.type === 'SR' ? '_SR' : ''))
+                    && g.edges.filter(e => e.sourceId === t.id).length === 1;
+                if (!_isKurzRS && (!['TON', 'TOF', 'TP'].includes(t.type) || t.id !== t.type + '_' + v.id)) return;
                 if (!g.edges.some(e => e.sourceId === v.id)) return; // nur als Last (z.B. LED) → bleibt eigener Strang
                 alias.set(v.id, t.id);
             });
@@ -22027,7 +22034,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let numMatch = n.id.match(/\d+(_(?:SR|RS))?/);
                         qName = numMatch ? `Q${numMatch[0]}` : n.id;
                     }
-                    if (n._timerVar) {
+                    if (n._timerVar && !isTimer) {
+                        // Speicher-Kurzform `V := RS(…)`: das Relais heißt wie die Variable.
+                        symMap[n.id] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (${n._timerVar})` : '');
+                    } else if (n._timerVar) {
                         // Zeitrelais = Variable: Name + Zeitfunktion als Detail.
                         symMap[n.id] = `-KF${kfCount++}` + (window.configDetails === 2 ? ` (${n._timerVar}, ${qName})` : (window.configDetails >= 1 ? ` (${n._timerVar})` : ''));
                     } else {

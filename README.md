@@ -192,6 +192,9 @@ Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie be
 ## ™ Marken
 FESTO und Festo Didactic sind Marken der Festo SE & Co. KG. Der Steckaufbau zeichnet die Lehr-Platinen nach, die an Schulen stehen, damit Schaltpläne dort nachgesteckt werden können; die Bestellnummern dienen nur der Orientierung. VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.
 
+## 📄 Lizenz
+© 2025–2026 Christoph Mones, **alle Rechte vorbehalten**. VALIS ist kein Open-Source-Projekt: Der Quelltext ist sichtbar, aber nicht frei verwendbar. Kostenlos erlaubt sind Lernen und Unterrichten mit der veröffentlichten Fassung, Material für den eigenen Unterricht und das Selbst-Hosten in der eigenen Schule. Kommerzielle Nutzung, die Aufnahme in Produkte von Verlagen oder anderen Dritten und jede Weitergabe brauchen eine schriftliche Lizenz. Text- und Data-Mining und KI-Training sind vorbehalten. Details in [`LICENSE.md`](LICENSE.md), Fremdbestandteile in [`DRITTANBIETER.md`](DRITTANBIETER.md), Kontakt: kontakt@t-bk.de.
+
 ---
 ---
 
@@ -352,6 +355,9 @@ SYSTEM_ACTIVE := Q1 && Q2_RS
 
 ## ™ Trademarks
 FESTO and Festo Didactic are trademarks of Festo SE & Co. KG. The patch board setup redraws the training boards found in schools so circuits can be rebuilt there; order numbers are for orientation only. VALIS is not a Festo product and is not affiliated with Festo.
+
+## 📄 Licence
+© 2025–2026 Christoph Mones, **all rights reserved**. VALIS is not open source: the source code is visible but not free to use. Free of charge: learning and teaching with the published version, material for your own lessons and self-hosting at your own school. Commercial use, inclusion in products of publishers or other third parties and any redistribution require a written licence. Text and data mining and AI training are reserved. Details in [`LICENSE.md`](LICENSE.md), third-party components in [`DRITTANBIETER.md`](DRITTANBIETER.md), contact: kontakt@t-bk.de.
 
 
 

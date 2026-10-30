@@ -3170,6 +3170,9 @@
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_ton">  <span class="ced-pal-mini" data-mini="timer_ton"></span><span>Zeitrelais TON</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_tof">  <span class="ced-pal-mini" data-mini="timer_tof"></span><span>Zeitrelais TOF</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_tp">   <span class="ced-pal-mini" data-mini="timer_tp"></span><span>Zeitrelais TP</span></div>
+                        <div class="ced-pal-cat">Analog (Komparator)</div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="komparator" title="Relaiskontakt einer Komparatorkarte: schaltet, wenn ein Analogwert eine Schwelle über- oder unterschreitet (Zweipunktregler)."><span class="ced-pal-mini" data-mini="komparator"></span><span>Komparator (NO)</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="komparator_nc" title="Öffner einer Komparatorkarte"><span class="ced-pal-mini" data-mini="komparator_nc"></span><span>Komparator (NC)</span></div>
                         <div class="ced-pal-cat">Verbindung</div>
                         <div class="ced-pal-item" draggable="true" data-ctype="junction">   <span class="ced-pal-mini" data-mini="junction"></span><span>T-Knoten</span></div>
                         <div style="margin-top:14px;padding:6px;background:#1e1e1e;border-radius:3px;color:#888;font-size:10px;line-height:1.4;">
@@ -11394,6 +11397,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const ncContribs   = contribs.filter(c => c.q.kind === 'N' || c.q.kind === 'C');
                     const timerContribs = contribs.filter(c => c.q.kind === 'P' || c.q.kind === 'D' || c.q.kind === 'L');
                     const srContribs  = contribs.filter(c => c.q.kind === 'S' || c.q.kind === 'R');
+                    // 0) Zahlenwert-Aktionen („Sollwert setzen“, z. B. SOLL := 60):
+                    //    der Wert gilt ab dem Schritt und bleibt stehen, bis ein
+                    //    anderer Schritt einen neuen setzt → Auswahl per ?: mit
+                    //    Selbstbezug statt ODER-Verknüpfung.
+                    const _zahlRhs = r => /^-?\d+(?:[.,]\d+)?$/.test(r.trim()) || (/[-+*/]/.test(r) && !/&&|\|\||¬|[<>=]/.test(r));
+                    const _wertTeile = ncContribs.filter(x => x.rhs.trim().toUpperCase() !== 'FALSE');
+                    if (_wertTeile.length && _wertTeile.every(x => _zahlRhs(x.rhs)) && !timerContribs.length && !srContribs.length) {
+                        lines.push(lhs + ' := ' + _wertTeile.map(x => x.qVar + ' ? ' + x.rhs.trim().replace(',', '.')).join(' : ') + ' : ' + lhs + '   // Wert halten bis zum nächsten Setzen');
+                        return;
+                    }
                     // 1) Normal-/Conditional-Aktionen als ODER-Aggregation
                     if (ncContribs.length) {
                         const parts = [];
@@ -11563,6 +11576,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Aktions-Zuweisungen wie `A := TRUE` nicht in den normalen Parser
             // leaken (sonst sähe der User halben Müll im Logikplan, statt klar:
             // „Kette kaputt, Aktionen außer Kraft").
+            // Vergleiche (TEMP > 55) in Übergängen, INTERLOCK und SUPERVISION
+            // werden in Hilfszeilen `_SK_<KETTE>_V<n> := TEMP > 55` ausgelagert:
+            // der Parser erlaubt keinen Vergleich zusammen mit &&/|| in einer Zeile.
+            function _vergleicheAuslagern(lines, kette) {
+                const OPD = '[A-Za-zÄÖÜäöüß_0-9][A-Za-zÄÖÜäöüß_0-9.]*';
+                const ARI = OPD + '(?:\\s*[-+*/]\\s*' + OPD + ')*';
+                const reVgl = new RegExp('(' + ARI + ')\\s*(<=|>=|<>|==|!=|<|>)\\s*(' + ARI + ')', 'g');
+                const helfer = new Map();
+                const out = [];
+                lines.forEach(l => {
+                    const m = l.match(/^(\s*[A-Za-z_][A-Za-z0-9_]*\s*:=\s*)(.*?)(\s*\/\/.*)?$/);
+                    if (!m || !/[<>]|==|!=/.test(m[2]) || !/&&|\|\||¬|\?/.test(m[2])) { out.push(l); return; }
+                    const rhs = m[2].replace(reVgl, (ganz, a, op, b) => {
+                        const key = a.trim() + ' ' + op + ' ' + b.trim();
+                        if (!helfer.has(key)) {
+                            const name = '_SK_' + kette + '_V' + (helfer.size + 1);
+                            helfer.set(key, name);
+                            out.push(name + ' := ' + key + '   // Vergleich aus der Schrittkette');
+                        }
+                        return helfer.get(key);
+                    });
+                    out.push(m[1] + rhs + (m[3] || ''));
+                });
+                return out;
+            }
+
             function expand(code) {
                 const { chains, errors: parseErrs } = parseChains(code);
                 const valErrs = validateChains(chains);
@@ -11587,7 +11626,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (cIdx < sorted.length && i === sorted[cIdx].startLine) {
                         const ch = sorted[cIdx];
                         if (isValid(ch)) {
-                            const gen = generateLines(ch, chainBase.get(ch.name));
+                            const gen = _vergleicheAuslagern(generateLines(ch, chainBase.get(ch.name)), ch.name);
                             gen.forEach(g => { result.push(g); lineMap.push(ch.startLine); });
                         } else {
                             // Ungültige Kette komplett ausblenden — die Aktions-Zeilen
@@ -11689,7 +11728,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function printAsSR(chain, opts) {
                 opts = opts || {};
                 const baseNum = opts.baseNum || 1;
-                const lines = generateLines(chain, baseNum);
+                const lines = _vergleicheAuslagern(generateLines(chain, baseNum), chain.name);
                 const out = [];
                 if (opts.includeMarker || opts.embedDSL) {
                     out.push('// @schrittkette ' + chain.name + ' form=rs');
@@ -17329,9 +17368,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Farben — jetzt immer, damit das Hover-Tooltip (Typ/Live-Wert/
                 // HMI-Bindung) jeden Variablennamen erreichen kann.
                 t = t.replace(/(<\/span>|^)([^<]+?)(?=<span|$)/g, (m, prefix, txt) => {
+                    // HTML-Entities (&gt; &lt; &amp;) nicht als Variable einpacken,
+                    // sonst steht im Editor „TEMP &gt; 55“ statt „TEMP > 55“.
                     const wrapped = txt.replace(
-                        /([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)/g,
-                        (mm, name) => '<span class="token var" data-var="' + name.toUpperCase() + '">' + mm + '</span>'
+                        /(&[a-z]+;)|([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)/g,
+                        (mm, ent, name) => ent ? ent : '<span class="token var" data-var="' + name.toUpperCase() + '">' + mm + '</span>'
                     );
                     return prefix + wrapped;
                 });
@@ -58045,6 +58086,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 sensor_reed:   { kind:'sensor', nc:false, w:30, h:30, cx:15, cy:15, prefix:'B_',  label:'Reed-Kontakt' },
                 mech_sensor:   { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'S_',  label:'Pos.-Schalter' },
                 light_curtain: { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'L_',  label:'Lichtgitter (NC)' },
+                // Komparatorkarte: Analogwert rein, Relaiskontakt raus. Erzeugt
+                // VAR := ZWEIPUNKT(EINGANG, a, b[, HEIZEN|KUEHLEN]) im Code.
+                komparator:    { kind:'contact', nc:false, w:70, h:30, cx:40, cy:15, prefix:'KOMP_', komp:true, label:'Komparator (NO)' },
+                komparator_nc: { kind:'contact', nc:true,  w:70, h:30, cx:40, cy:15, prefix:'KOMP_', komp:true, label:'Komparator (NC)' },
                 // Hilfskontakte (referenzieren eine Spule)
                 relay_no:      { kind:'aux',     nc:false, w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NO' },
                 relay_nc:      { kind:'aux',     nc:true,  w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NC' },
@@ -58635,6 +58680,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const skipped = [];     // [{ lhs, reason }]
                 let hadTimerOrCounter = false;
                 const _timerForAssign = {}; // lhs → { fn:'TON'|'TOF'|'TP', time } (Zeitrelais)
+                const _kompForAssign = {};  // lhs → { kompIn, kompA, kompB, kompRicht } (Komparatorkarte)
 
                 for (let raw of lines) {
                     const line = raw.replace(/\/\/.*/, '').trim();
@@ -58661,6 +58707,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             assigns.push({ lhs: m[1], ast: parseExpr(m[3]) });
                             _timerForAssign[m[1]] = { fn: _fn, time: parseTimerSeconds(m[4]) };
                         } catch(e) { skipped.push({ lhs: m[1], reason: 'Timer-Parse-Fehler: ' + e.message }); }
+                        continue;
+                    }
+                    // Komparator (ZWEIPUNKT): kein eigener Strang, der Ausgang wird
+                    // als Komparator-Kontakt gezeichnet (Analogwert → Relaiskontakt).
+                    m = line.match(new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*ZWEIPUNKT\\s*\\((.*)\\)\\s*$', 'i'));
+                    if (m) {
+                        const a = m[2].split(',').map(s => s.trim());
+                        let r = '';
+                        if (a.length === 4) r = a.pop().toUpperCase().replace('Ü', 'UE');
+                        if (r === 'DIREKT' || r === 'NORMAL') r = 'HEIZEN';
+                        if (r === 'INVERS') r = 'KUEHLEN';
+                        _kompForAssign[m[1]] = { kompIn: a[0] || '', kompA: a[1] || '50', kompB: a[2] || '4', kompRicht: r };
                         continue;
                     }
                     // Zähler (CTU) — im Editor (noch) nicht abbildbar
@@ -58868,6 +58926,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return (typeof componentTypes !== 'undefined' && componentTypes[name]) || '';
                 }
                 function contactTypeFor(name, isNeg) {
+                    if (_kompForAssign[name]) return isNeg ? 'komparator_nc' : 'komparator';
                     // Hardware-treu (entspricht auto-Schaltplan getContactNC):
                     // Das gezeichnete Symbol entspricht dem Ruhe-Zustand des Strangs:
                     //   NC-Symbol = Kontakt im Ruhezustand geschlossen (Strang führt Strom)
@@ -59678,6 +59737,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (_ct2 && _ct2.timer && c.varName && _timerForAssign[c.varName]) {
                         c.timerTime = _timerForAssign[c.varName].time;
                     }
+                    if (_ct2 && _ct2.komp && c.varName && _kompForAssign[c.varName]) Object.assign(c, _kompForAssign[c.varName]);
                 });
 
                 cedRender();
@@ -60014,6 +60074,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     }
                     if (t.nc) el('line', {x1:x, y1:y-5, x2:x+8, y2:y-5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
+                    // Komparator: Wirklinie zum Messglied (Kästchen mit Analogzeichen)
+                    if (t.komp) {
+                        const dashEndX = t.nc ? x + 1 : x - 1;
+                        el('line', {x1:dashEndX, y1:y+2.5, x2:x-24, y2:y+2.5, stroke:'#000', 'stroke-width':1.5, 'stroke-dasharray':'2,2'}, grp);
+                        el('rect', {x:x-38, y:y-5, width:14, height:15, fill:'#fff', stroke:'#000', 'stroke-width':1.5}, grp);
+                        el('text', {x:x-31, y:y+6, 'font-size':10, 'text-anchor':'middle', 'font-family':'Arial', fill:'#000'}, grp).textContent = '≷';
+                        if (comp.kompIn) {
+                            const r = String(comp.kompRicht || '').toUpperCase();
+                            const txt = r === 'HEIZEN' ? `${comp.kompIn} < ${comp.kompA}` : r ? `${comp.kompIn} > ${comp.kompA}` : `${comp.kompIn}: ${comp.kompA}/${comp.kompB}`;
+                            el('text', {x:x-41, y:y+6, 'font-size':8, 'text-anchor':'end', 'font-family':'monospace', fill:'#bf360c'}, grp).textContent = txt;
+                        }
+                    }
                     // Treiber-Symbol (gestrichelte Linie + Antrieb) für: Taster, Schalter, Not-Halt, Pos.-Schalter, Schlüssel, Lichtgitter
                     const hasDriverInRegistry = ComponentRegistry && ComponentRegistry[comp.type] && ComponentRegistry[comp.type].iecSymbol;
                     const drawDriver = (comp.type === 'taster' || comp.type === 'taster_nc' || comp.type === 'schalter' || comp.type === 'schalter_nc' || comp.type === 'nothalt' || hasDriverInRegistry);
@@ -61239,6 +61311,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
                         ${isTimer ? `<br><label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">Verzögerungszeit [s] (${t.timer}):</label>
                         <input id="ced-pop-time" type="number" step="0.1" min="0.1" value="${comp.timerTime != null ? comp.timerTime : 2}" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">` : ''}
+                        ${t.komp ? (() => {
+                            const st = 'width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;';
+                            const lb = txt => `<label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">${txt}</label>`;
+                            const r = String(comp.kompRicht == null ? 'HEIZEN' : comp.kompRicht).toUpperCase();
+                            const q = v => String(v == null ? '' : v).replace(/"/g, '&quot;');
+                            return lb('Eingang (Analogwert):') + `<input id="ced-pop-kin" type="text" value="${q(comp.kompIn)}" placeholder="TEMP" style="${st}">`
+                                + lb('Schaltart:') + `<select id="ced-pop-kart" style="${st}"><option value="HEIZEN"${r === 'HEIZEN' ? ' selected' : ''}>Sollwert ± ½ Hysterese, ein unter Sollwert (Heizen)</option><option value="KUEHLEN"${r === 'KUEHLEN' ? ' selected' : ''}>Sollwert ± ½ Hysterese, ein über Sollwert (Kühlen)</option><option value=""${r === '' ? ' selected' : ''}>Einschaltpunkt / Ausschaltpunkt</option></select>`
+                                + lb('Sollwert bzw. Einschaltpunkt (Zahl oder Variable):') + `<input id="ced-pop-ka" type="text" value="${q(comp.kompA != null ? comp.kompA : 50)}" style="${st}">`
+                                + lb('Hysterese bzw. Ausschaltpunkt:') + `<input id="ced-pop-kb" type="text" value="${q(comp.kompB != null ? comp.kompB : 4)}" style="${st}">`;
+                        })() : ''}
                     `}
                     <div style="margin-top:10px;display:flex;gap:4px;">
                         <button onclick="window._cedConfirmName('${comp.id}')" style="background:#4caf50;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;">OK</button>
@@ -61289,6 +61371,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const newVar  = (varInp && varInp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_ÄÖÜ]/g, '');
                     if (newNorm) comp.normPrefix = newNorm;
                     comp.varName = newVar;
+                    // Komparator: Eingang, Schaltart und Schwellen übernehmen
+                    if (t && t.komp) {
+                        const wert = id2 => { const e = _d().getElementById(id2); return (e && e.value || '').trim(); };
+                        const ident = s => s.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_ÄÖÜ.,-]/g, '').replace(',', '.');
+                        comp.kompIn = ident(wert('ced-pop-kin'));
+                        comp.kompRicht = wert('ced-pop-kart');
+                        comp.kompA = ident(wert('ced-pop-ka')) || '50';
+                        comp.kompB = ident(wert('ced-pop-kb')) || '4';
+                    }
                     // Zeitrelais: Verzögerungszeit übernehmen (Zahl > 0, sonst 2.0).
                     if (t && t.timer) {
                         const timeInp = _d().getElementById('ced-pop-time');
@@ -61321,7 +61412,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (type.indexOf('sensor_') === 0) return 'BG';
                 if (type === 'mech_sensor') return 'BG'; // Positionsschalter (DIN EN 81346-2)
                 if (['taster','taster_nc','schalter','schalter_nc','nothalt','key_switch','light_curtain'].includes(type)) return 'SJ';
-                if (['relais','relay_no','relay_nc'].includes(type)) return 'KF';
+                if (['relais','relay_no','relay_nc','komparator','komparator_nc'].includes(type)) return 'KF';
                 if (['led','stacklight','display','hmi_lamp'].includes(type)) return 'PF';
                 if (['motor','fan'].includes(type)) return 'MA';
                 if (['valve','valve_pneu'].includes(type)) return 'MB';
@@ -61583,6 +61674,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
                     if (!t || !c.varName) return;
+                    if (t.komp) return; // Komparator-Ausgang: Typ ergibt sich aus der ZWEIPUNKT-Zeile
                     if (t.kind === 'contact') {
                         // Hardware-Typ NICHT aus dem Editor-Symbol ableiten, weil
                         // das Symbol jetzt aus Hardware-Typ + Polarität (¬) kombiniert
@@ -61803,6 +61895,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         lines.push('');
                     }
                 });
+                // Komparatorkarten: je Ausgangsvariable eine ZWEIPUNKT-Zeile vorneweg
+                const kompZeilen = [], kompVars = new Set();
+                ST.components.forEach(c => {
+                    const t = CTYPES[c.type];
+                    if (!t || !t.komp || !c.varName || kompVars.has(c.varName)) return;
+                    kompVars.add(c.varName);
+                    if (!c.kompIn) { kompZeilen.push(`// ⚠ Komparator ${c.varName}: Eingang (Analogwert) fehlt — Doppelklick auf den Kontakt`); return; }
+                    const r = String(c.kompRicht == null ? 'HEIZEN' : c.kompRicht).toUpperCase();
+                    kompZeilen.push(`${c.varName} := ZWEIPUNKT(${c.kompIn}, ${c.kompA != null ? c.kompA : 50}, ${c.kompB != null ? c.kompB : 4}${r ? ', ' + r : ''})`);
+                });
+                if (kompZeilen.length) lines.unshift(...kompZeilen, '');
                 if (lines.length === 0) return '// Schaltplan-Editor: Komponenten platzieren und mit L+/L- verdrahten';
                 const result = (warnings.length > 0 ? warnings.join('\n') + '\n\n' : '') + lines.join('\n').trim();
                 return result;

@@ -184,12 +184,26 @@ Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `ifr
 | `hydraulik(id, werte)` | Hydraulik-Einstellungen setzen (ab Version 14): am Aggregat `pressure` (Einstelldruck des Druckbegrenzungsventils), `maxFlow`, `verschleiss`, `tankLiter`; am Zylinder `last` (N), `lastArt` (`'presse'` oder `'gewicht'`), `lastAb` (Hub-%), `dichtung` (%); am Wegeventil `innenLeck` (%); am Rückschlagventil `entsperrbar`, `leck`; am Druckschalter `schaltdruck`, `hysterese`, `oeffner`; am Speicher `volumen` (l), `vordruck` (bar), `entlasten`. Gespeichert in `obj.hyd` |
 | `hydraulikAnbauen(zylId, art, seite)` | Setzt ein Rückschlagventil (`check_valve_hyd`, zwischen Wegeventil und Drossel), einen Druckschalter (`pressure_switch_hyd`) oder ein Manometer (`manometer_hyd`) an Anschluss `'A'`/`'B'` eines Hydraulikzylinders; mit `seite` `'P'` (oder `art` `accumulator_hyd`) an den Verteiler. Gibt die `id` zurück (ab Version 14) |
 | Hydraulik in `zustand()` | Ab Version 14 rechnet VALIS den Druck aus der Last: Aggregat `hydP` (bar), `hydQ`, `hydQdbv` (l/min über das DBV), `hydDbvOffen`, `hydVerlust` (kW), `hydTempC`; Zylinder `hydPA`, `hydPB`, `hydKraft` (N), `hydLast`, `hydV` (mm/s), `hydRolle` (`fahrt`, `ende`, `stau`, `halt`, `feder`, `gesperrt`); Druckschalter `hydSchaltet`, Manometer und Speicher `hydP`, Speicher `hydOelL` |
+| `analog(id, werte)` | Einstellungen eines Analogbauteils setzen (ab Version 15), gespeichert in `obj.ana`: am Messumformer `groesse` (`oeltemp`, `druck`, `weg`, `druck_pneu`, `durchfluss_pneu`, `fuellstand`), `bezug`, `min`, `max`, `signal` (`wert`, `roh`, `ma`, `volt`), `drahtbruch`; am Drucksensor und Durchflusssensor dazu `schaltpunkt`, `hysterese`, `oeffner`, `impulsLiter`; am Sollwertsteller `wert`, `min`, `max`, `schritt`, `einheit`; an der Anzeige `art` (`zeiger`, `balken`), `min`, `max`, `einheit` |
+| `setzeWert(name, zahl)` | Schreibt eine Zahl auf einen Analogeingang ohne messendes Bauteil (ab Version 15) |
 
 ### Hydraulik (ab Version 14)
 
 Das Aggregat ist eine Konstantpumpe mit Druckbegrenzungsventil. Der Druck stellt sich nach der Last ein: Ein Zylinder ohne Last fährt bei wenigen bar, ein belasteter beim Lastdruck p = F / (A · η) mit η = 0,95. Am Anschlag oder bei zu großer Last steigt der Druck bis zum Einstelldruck des DBV, das Öl geht über das DBV in den Tank und wird Wärme (Öltemperatur am Aggregat). Die Kolbengeschwindigkeit kommt aus dem Volumenstrom, v = Q / A, und hängt nicht vom eingestellten Druck ab. Das Stromregelventil hält seinen Volumenstrom fest, der Rest fließt über das DBV.
 
 Dazu kommen Rückschlagventile (entsperrbar oder einfach), Druckschalter mit Schaltdruck und Rückschaltdifferenz, Manometer, Blasenspeicher (Nennvolumen, Gasvorfülldruck, Entlastungsventil; der Speicher hält den Druck auch bei abgeschalteter Pumpe), ein Ausgang für den Pumpenmotor und einstellbare Fehler: Pumpenverschleiß, undichte Kolbendichtung, innere Leckage am Wegeventil und ein undichtes Rückschlagventil. Belastete Zylinder sinken in der Sperrmittelstellung ab, wenn das Wegeventil innen leckt, außer ein entsperrbares Rückschlagventil hält die Last. Im Hydraulikplan stehen DBV, Rückschlagventile, Druckschalter, Manometer, Speicher und die Last als Kraftpfeil.
+
+### Analogwerte (ab Version 15)
+
+Variablen können Zahlen tragen: Typ **Analogeingang** (SPS-Adresse EW64, EW66 …, im TIA-Export `%IW64` und `Int`, in SCL `REAL`) und **Analogausgang** (AW64 …). Bauteile in der 2D-Anlage:
+
+* **Messumformer** (Sensoren ▸ Analog): misst Öltemperatur, Hydraulikdruck, Zylinderweg, Füllstand oder Druckluft und gibt den Wert normiert, als S7-Rohwert 0 … 27648, als 4 … 20 mA oder als 0 … 10 V aus. Fehler „Drahtbruch“ liefert 0 mA.
+* **Drucksensor mit Anzeige** (Pneumatik): 0 … 10 bar, Analogausgang 0 … 10 V, PNP-Schaltausgang mit Schaltpunkt, Hysterese und Öffner/Schließer, Display am Gerät.
+* **Durchflusssensor** (Pneumatik): Luftverbrauch 0 … 50 l/min aus der Kolbenbewegung der Zylinder (Füllvolumen × absoluter Druck), Analogausgang, Schaltausgang und Impulsausgang (ein Impuls je eingestellter Literzahl, z. B. für `CTU`).
+* **Sollwertsteller** (Bedienpult): Drehknopf, in der Simulation ziehen, Mausrad oder Doppelklick.
+* **Anzeige** (Bedienpult): Zeiger- oder Balkeninstrument für eine Zahl.
+
+Im Sim-Panel haben Analogeingänge einen Schieber, Analogausgänge einen Balken. Das Oszilloskop zeichnet Zahlen als Kurve mit eigener Skala; „Analog überlagern“ legt alle Kurven in eine Spur, die Maus zeigt die Werte zu einem Zeitpunkt. Im Anschlussplan stehen Messumformer als Zweileiter-Geber, Sollwertsteller als Potentiometer und Analogausgänge mit 0 … 10 V. Vergleiche (`HOCH := DRUCK > 3`) liefern ein Bit; boolesche Verknüpfung mit `&&` in einer eigenen Zeile.
 
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 

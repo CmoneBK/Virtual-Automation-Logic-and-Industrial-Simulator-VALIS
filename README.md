@@ -221,6 +221,17 @@ Argumente sind Zahlen oder Variablen. `IST` ist in VALIS ein Zuweisungswort, der
 * **Ölkühler** (Hydraulik): kühlt das Öl im Aggregat, Kühlleistung P = Pmax · y · (ϑÖl − ϑKühlmittel) / 25 K mit Totzeit, Bauart Wasser (Proportionalventil) oder Luft (Lüfter). Wärmeeintrag der Maschine (z. B. 4,5 kW) und Umgebungstemperatur sind die Störgrößen, Werte wie im Regelkreis-Rechner. Beispiel: `VENTIL := PID(SOLLT, OELTEMP, 8, 600, 0, KUEHLEN)` mit einem Messumformer „Öltemperatur“.
 * **Proportionalventil** (Pneumatik): fährt einen Zylinder stetig, 0 … 100 % entspricht 0 … 10 V, 50 % (5 V) ist die Mitte. Lageregelung mit einem Messumformer „Weg“: `E := SOLLPOS - POS` und `Y := 50 + 2 * E`.
 
+### Analogkarten im Steckaufbau
+
+Nutzt der Code `ZWEIPUNKT` oder `PID`, oder stehen Analogbauteile in der Anlage, zeigt der Steckaufbau (Programm- und Anschluss-Sicht) unter den Digitalkarten eine eigene Reihe „Analogtechnik“. Die Karten sind eigene Zeichnungen nach den Kenndaten üblicher Lehrsystem-Karten, ohne Herstelleraufdruck:
+
+* **Analoggeber:** Sollwertgeber und Messumformer mit Ausgang 0 … 10 V (Messbereichsanfang = 0 V, Ende = 10 V) und Analogmasse.
+* **Komparatorkarte:** 2 Eingänge ±10 V, je Eingang zwei Komparatoren (A1, A2, B1, B2) mit Sollwert- und Hysterese-Poti, Ausgang Relais-Wechsler 11-12-14. Ein bei Sollwert + ½ Hysterese, aus bei Sollwert − ½ Hysterese. Jeder `ZWEIPUNKT`-Baustein belegt einen Komparator; die Potis zeigen seine Schaltpunkte.
+* **PID-Reglerkarte:** Differenzeingänge w und x mit Übersteuerungs-LED, Vergleicher e, P-, I- und D-Anteil mit Schalter und Beiwert (Poti × Stufe), Stellgröße 0 … 10 V, Messbuchsen und 15-V-Sensorversorgung mit eigener Analogmasse. Doppelklick öffnet das Reglerfenster.
+* **Proportionalverstärker (2 Kanäle):** Sollwert W1 ±10 V aus der Stellgröße des Proportionalventils (50 % = 0 V), Magnetstrom A bei positivem, B bei negativem W1 aus Grund-, Sprung- und Maximalstrom.
+
+Orange Signalleitungen verbinden Geber- und Reglerausgänge mit den Eingängen, die dieselbe Variable lesen. Anzeigen, Relais-LEDs und Wechsler laufen in der Simulation live mit.
+
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 
 ## 🛠️ Erstellt mit

@@ -1947,6 +1947,14 @@
         .f2d-valve-hyd.valve-43:not(.active-ext):not(.active-ret) .f2d-valve-chamber.center { background: #fff3e0; box-shadow: inset 0 0 10px rgba(255,143,0,0.3); color: #e65100; }
         .f2d-valve-hyd .hyd-sol { border-color: #bf360c !important; }
         .f2d-valve-hyd .hyd-sol.energized { background: #ff8f00 !important; border-color: #e65100 !important; box-shadow: 0 0 10px #ff8f00 !important; }
+        .f2d-hyd-teil { position: absolute; z-index: 4; box-sizing: border-box; }
+        .f2d-hyd-wert { position: absolute; left: 50%; transform: translateX(-50%); bottom: -2px; font: bold 9px monospace; color: #ffcc80; background: rgba(62,39,35,0.85); padding: 0 3px; border-radius: 2px; white-space: nowrap; pointer-events: none; }
+        .f2d-druckschalter-hyd .f2d-hyd-wert { bottom: -14px; }
+        .f2d-druckschalter-hyd.active svg rect { fill: #ffe082; }
+        .f2d-druckschalter-hyd.active { filter: drop-shadow(0 0 5px #ff9800); }
+        .f2d-hyd-skala { position: absolute; left: 3px; top: 0; width: 30px; height: 30px; border-radius: 50%; background: #fffde7; border: 2px solid #bf360c; box-sizing: border-box; }
+        .f2d-hyd-zeiger { position: absolute; left: 12px; top: 3px; width: 2px; height: 11px; background: #c62828; transform-origin: 1px 11px; transform: rotate(-120deg); }
+        .f2d-hyd-info { position: absolute; left: 0; top: 100%; margin-top: 2px; font: bold 9px monospace; color: #ffcc80; background: rgba(62,39,35,0.85); padding: 1px 4px; border-radius: 2px; white-space: nowrap; pointer-events: none; }
         .f2d-throttle-hyd { position: absolute; width: 40px; height: 35px; background: #fff8e1; border: 2px solid #bf360c; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 2px; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
         .f2d-throttle-knob-hyd { width: 16px; height: 16px; border-radius: 50%; background: repeating-conic-gradient(#bf360c 0% 10%, #7f0000 10% 20%); border: 2px solid #4e342e; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
         .f2d-throttle-val-hyd { font-size: 9px; font-weight: bold; font-family: monospace; color: #bf360c; margin-top: 3px; }
@@ -3290,6 +3298,10 @@
                             <div onclick="addFactoryDevice('hydraulic_manifold')">🔧 Verteiler</div>
                             <div onclick="addFactoryDevice('valve_hyd')">🔀 Wegeventil (Hydraulik)</div>
                             <div onclick="addFactoryDevice('throttle_hyd')">🔩 Stromregelventil</div>
+                            <div onclick="addFactoryDevice('check_valve_hyd')">⏚ Rückschlagventil (entsperrbar)</div>
+                            <div onclick="addFactoryDevice('pressure_switch_hyd')">📟 Druckschalter</div>
+                            <div onclick="addFactoryDevice('manometer_hyd')">⏲ Manometer</div>
+                            <div onclick="addFactoryDevice('accumulator_hyd')">🫙 Druckspeicher</div>
                         </div>
                     </div>
                     <button class="panel-info-btn" onclick="showPanelInfo('factory-wrapper', this)" title="Kontext-Hilfe zur 2D-Anlage — Werkzeuge & Bauteile (fahre über ein Menü) sowie Profi-Steuerung & Kamera">ℹ️</button>
@@ -23620,6 +23632,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         p1: bx + bw*boxIdx + bw*0.50,  // P (bot)
                         p5: bx + bw*boxIdx + bw*0.80   // S (bot)
                     });
+                    // Hydraulik 4/2 und 4/3: nur ein Tankanschluss T (p3 = p5 = T)
+                    const hyd4 = sys === 'hyd' && (isDouble || isTriple);
+                    const portsX4 = (boxIdx) => ({
+                        p2: bx + bw*boxIdx + bw*0.30,  // A (top)
+                        p4: bx + bw*boxIdx + bw*0.70,  // B (top)
+                        p1: bx + bw*boxIdx + bw*0.30,  // P (bot)
+                        p3: bx + bw*boxIdx + bw*0.70,  // T (bot)
+                        p5: bx + bw*boxIdx + bw*0.70   // T (bot, gleicher Anschluss)
+                    });
                     const portsX3 = (boxIdx) => ({
                         p2: bx + bw*boxIdx + bw*0.50,  // A (top)
                         p1: bx + bw*boxIdx + bw*0.30,  // P (bot)
@@ -23641,7 +23662,28 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     //   • 'rest'  (valve.isActive=false): Port 4 → Versorgung (P→B=4),
                     //     Port 2 → Entlüftung (2→3)  ⇒ GEKREUZTE Strömung (X)
                     const drawState = (boxIdx, state) => {
-                        if (isDouble || isTriple) {
+                        if (hyd4) {
+                            let p = portsX4(boxIdx);
+                            if (state === 'active') {
+                                // P → A, B → T (parallel)
+                                gInner.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p2, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p1, yBotIn, p.p2, yTopIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p4, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p4, yTopIn, p.p3, yBotIn);
+                            } else if (state === 'rest') {
+                                // P → B, A → T (gekreuzt)
+                                gInner.appendChild(createSvgElement('line', {x1: p.p1, y1: yBotIn, x2: p.p4, y2: yTopIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p1, yBotIn, p.p4, yTopIn);
+                                gInner.appendChild(createSvgElement('line', {x1: p.p2, y1: yTopIn, x2: p.p3, y2: yBotIn, stroke:'#000', 'stroke-width':1}));
+                                _drawArrowHead(gInner, p.p2, yTopIn, p.p3, yBotIn);
+                            } else if (state === 'closed') {
+                                // Sperrmittelstellung: P, T, A, B gesperrt
+                                _drawBlockedPort(gInner, p.p1, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p3, yBotIn, false);
+                                _drawBlockedPort(gInner, p.p2, yTopIn, true);
+                                _drawBlockedPort(gInner, p.p4, yTopIn, true);
+                            }
+                        } else if (isDouble || isTriple) {
                             let p = portsX5(boxIdx);
                             if (state === 'active') {
                                 // Parallele Strömung — direkte Pfeile von unten nach oben
@@ -23737,7 +23779,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // seitlichem Versatz und ≥ 6 px vertikaler Abstand zur Box, damit
                     // weder Box-Rand noch Anschluss-Linie überdeckt werden.
                     let rest = isTriple ? 1 : 1;
-                    let restPorts = (isDouble || isTriple) ? portsX5(rest) : portsX3(rest);
+                    let restPorts = hyd4 ? portsX4(rest) : ((isDouble || isTriple) ? portsX5(rest) : portsX3(rest));
                     const _portLabel = (px, py, txt, anchor) => {
                         let t = createSvgElement('text', {
                             x: px + (anchor === 'start' ? 5 : -5), y: py,
@@ -23746,7 +23788,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         });
                         t.textContent = txt; g.appendChild(t);
                     };
-                    if (isDouble || isTriple) {
+                    if (hyd4) {
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
+                        _portLabel(restPorts.p2, by - 10, 'A', 'end');
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p4, y1: yTopIn, x2: restPorts.p4, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
+                        _portLabel(restPorts.p4, by - 10, 'B', 'start');
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p1, y1: yBotIn, x2: restPorts.p1, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        _portLabel(restPorts.p1, by + bh + 14, 'P', 'end');
+                        g.appendChild(createSvgElement('line', {x1: restPorts.p3, y1: yBotIn, x2: restPorts.p3, y2: by + bh + 4, stroke: '#000', 'stroke-width': 1}));
+                        _portLabel(restPorts.p3, by + bh + 14, 'T', 'start');
+                    } else if (isDouble || isTriple) {
                         // Top-Anschlüsse Port 2 (A) und Port 4 (B) — Anker nach AUSSEN (von der Mitte weg),
                         // damit beide Beschriftungen sich nicht überlappen.
                         g.appendChild(createSvgElement('line', {x1: restPorts.p2, y1: yTopIn, x2: restPorts.p2, y2: by - 4, stroke: '#000', 'stroke-width': 1}));
@@ -23777,7 +23828,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Knie-Korridor (kneeY2 = by-18). Bei 3/2 hat ein Anschluss seine
                     // Vertikallinie sonst an cx, daher liegt extDrosselX einheitlich bei cx-18
                     // → die Labels bei x=cx bleiben dadurch frei.
-                    let typeLabel = isTriple ? '5/3' : (isDouble ? '5/2' : '3/2');
+                    let typeLabel = hyd4 ? (isTriple ? '4/3' : '4/2') : (isTriple ? '5/3' : (isDouble ? '5/2' : '3/2'));
                     let tL = createSvgElement('text', {x: bx + totalW/2, y: by - 22, 'font-size': '9', fill: '#0288d1', 'text-anchor': 'middle', 'font-weight': 'bold'});
                     tL.textContent = typeLabel; g.appendChild(tL);
                     if (valve.normLabel) {
@@ -23947,6 +23998,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     g._portAx = portAx;
                     g._portBotY = by + bh + 10;     // Anschluss-Stutzen-Endpunkt (für Schlauchführung)
+                    // Hydraulik: Last als Kraftpfeil gegen das Ausfahren an der Stangenspitze
+                    if (!isPneu && cyl.hyd && Number(cyl.hyd.last) > 0) {
+                        let ly = by + bh/2;
+                        g.appendChild(createSvgElement('line', {x1: rEnd + 26, y1: ly, x2: rEnd + 3, y2: ly, stroke: '#c62828', 'stroke-width': 1.6}));
+                        _drawArrowHead(g, rEnd + 26, ly, rEnd + 3, ly);
+                        let fL = createSvgElement('text', {x: rEnd + 14, y: ly - 5, 'font-size': '8', fill: '#c62828', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        fL.textContent = 'F ' + (Number(cyl.hyd.last) / 1000).toLocaleString('de-DE', {maximumFractionDigits: 1}) + ' kN'; g.appendChild(fL);
+                    }
                     // Norm-Label, Variablen und Maße ÜBER dem Aktor — mit ≥ 6 px Abstand zum Gehäuse
                     if (cyl.pistonD || cyl.stroke) {
                         let dimL = createSvgElement('text', {x: bx + bw/2, y: by - 32, 'font-size': '8', fill: '#666', 'text-anchor': 'middle', 'font-family': 'monospace'});
@@ -24062,6 +24121,65 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     nL.textContent = supplyObj.normLabel || (isPneu ? '-GQA1' : '-GPA1'); g.appendChild(nL);
                     let pL = createSvgElement('text', {x: cx - 6, y: cy + 22, 'font-size': '9', fill: '#666', 'text-anchor': 'middle'});
                     pL.textContent = (supplyObj.pressure || (isPneu ? 6 : 100)) + ' bar'; g.appendChild(pL);
+                    if (!isPneu && supplyObj.linkedVarMotor) {
+                        let vM = createSvgElement('text', {x: mx, y: my - 14, 'font-size': '8', fill: '#0288d1', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                        vM.textContent = supplyObj.linkedVarMotor; g.appendChild(vM);
+                    }
+                };
+
+                // ----- Hydraulik-Zusatzsymbole (DIN ISO 1219-1) -----------------------
+                // Druckbegrenzungsventil: Quadrat, Pfeil seitlich versetzt (in Ruhe zu),
+                // Feder mit Verstellpfeil, Steuerleitung gestrichelt vom Eingang.
+                const _drawDbvSym = (g, cx, cy, pSet) => {
+                    const s = 20, x = cx - s/2, y = cy - s/2;
+                    g.appendChild(createSvgElement('rect', {x, y, width: s, height: s, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('line', {x1: cx + 4, y1: y + s - 2, x2: cx + 4, y2: y + 4, stroke: '#000', 'stroke-width': 1}));
+                    _drawArrowHead(g, cx + 4, y + s - 2, cx + 4, y + 3);
+                    g.appendChild(createSvgElement('line', {x1: cx - 6, y1: y + s, x2: cx - 6, y2: y + s - 6, stroke: '#000', 'stroke-width': 1, 'stroke-dasharray': '2,2'}));
+                    _drawSpring(g, x + s + 1, cy - 3, 9, 6);
+                    g.appendChild(createSvgElement('line', {x1: x + s - 1, y1: cy + 7, x2: x + s + 11, y2: cy - 7, stroke: '#000', 'stroke-width': 0.8}));
+                    let t = createSvgElement('text', {x: x + s + 14, y: cy + 3, 'font-size': '8', fill: '#000', 'font-family': 'monospace'});
+                    t.textContent = (pSet || 100) + ' bar'; g.appendChild(t);
+                    return { inY: y + s, outY: y, x: cx - 6, outX: cx + 4 };
+                };
+                // Rückschlagventil: Kugel auf Kegelsitz; entsperrbar mit Steuerleitung X
+                const _drawCheckSym = (g, cx, cy, rv) => {
+                    g.appendChild(createSvgElement('rect', {x: cx - 9, y: cy - 10, width: 18, height: 20, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('polyline', {points: `${cx-6},${cy-6} ${cx},${cy+2} ${cx+6},${cy-6}`, fill: 'none', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('circle', {cx, cy: cy - 1, r: 3.2, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: cy + 2, x2: cx, y2: cy + 10, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx, y1: cy - 10, x2: cx, y2: cy - 4, stroke: '#000', 'stroke-width': 1}));
+                    if (rv.normLabel) {
+                        let t = createSvgElement('text', {x: cx - 12, y: cy + 3, 'font-size': '8', fill: '#000', 'text-anchor': 'end', 'font-family': 'monospace'});
+                        t.textContent = rv.normLabel; g.appendChild(t);
+                    }
+                };
+                const _drawPSwitchSym = (g, cx, cy, sw, anchor) => {
+                    g.appendChild(createSvgElement('rect', {x: cx - 10, y: cy - 8, width: 20, height: 16, fill: sw.hydSchaltet ? '#ffe082' : '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx - 6, y1: cy + 3, x2: cx - 1, y2: cy + 3, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx - 1, y1: cy + 3, x2: cx + 4, y2: cy - 3, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx + 4, y1: cy + 3, x2: cx + 7, y2: cy + 3, stroke: '#000', 'stroke-width': 1}));
+                    let h = sw.hyd || {};
+                    let t = createSvgElement('text', {x: anchor === 'end' ? cx - 13 : cx + 13, y: cy + 3, 'font-size': '8', fill: '#000', 'text-anchor': anchor || 'start', 'font-family': 'monospace'});
+                    t.textContent = (sw.normLabel || '-BP') + ' ' + (h.schaltdruck || 80) + ' bar' + (sw.linkedVar ? ' ' + sw.linkedVar : ''); g.appendChild(t);
+                };
+                const _drawGaugeSym = (g, cx, cy, m, anchor) => {
+                    g.appendChild(createSvgElement('circle', {cx, cy, r: 7, fill: '#fff', stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('line', {x1: cx - 4, y1: cy + 4, x2: cx + 4, y2: cy - 4, stroke: '#000', 'stroke-width': 1}));
+                    _drawArrowHead(g, cx - 4, cy + 4, cx + 4, cy - 4);
+                    let t = createSvgElement('text', {x: anchor === 'end' ? cx - 10 : cx + 10, y: cy + 3, 'font-size': '8', fill: '#000', 'text-anchor': anchor || 'start', 'font-family': 'monospace'});
+                    t.textContent = (m.normLabel || '-PG') + (isSimulationActive && m.hydP != null ? ' ' + Math.round(m.hydP) + ' bar' : ''); g.appendChild(t);
+                };
+                const _drawAccSym = (g, cx, cy, a) => {
+                    g.appendChild(createSvgElement('rect', {x: cx - 7, y: cy - 14, width: 14, height: 24, rx: 7, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
+                    g.appendChild(createSvgElement('line', {x1: cx - 7, y1: cy - 2, x2: cx + 7, y2: cy - 2, stroke: '#000', 'stroke-width': 1}));
+                    g.appendChild(createSvgElement('path', {d: `M ${cx-3} ${cy-6} L ${cx+3} ${cy-6} L ${cx} ${cy-11} Z`, fill: '#000'}));
+                    let h = a.hyd || {};
+                    let t = createSvgElement('text', {x: cx + 10, y: cy - 4, 'font-size': '8', fill: '#000', 'font-family': 'monospace'});
+                    t.textContent = (a.normLabel || '-CM') + ' ' + (h.volumen || 1) + ' l'; g.appendChild(t);
+                    let t2 = createSvgElement('text', {x: cx + 10, y: cy + 6, 'font-size': '7', fill: '#666', 'font-family': 'monospace'});
+                    t2.textContent = 'p0 ' + (h.vordruck || 60) + ' bar'; g.appendChild(t2);
+                    return cy + 10;
                 };
 
                 // ----- Tank (offenes Reservoir, DIN ISO 1219) ------------------------
@@ -24160,7 +24278,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     //   Aktor (Zylinder/Tor) → Drossel → Wegeventil → P-Schiene → (T-Schiene Hyd) → Versorgung → Tank Hyd
                     const actuatorY    = startY + 70;              // Mitte Aktor
                     const throttleY    = actuatorY + 90;           // Mitte Drossel
-                    const valveCenterY = throttleY + 95;           // Mitte Ventil — etwas Abstand für die gestapelten Labels (Norm / Typ / Magnet-IDs) über der Ventilbox
+                    const _hatRV = !isPneu && factoryObjects.some(o => o.type === 'check_valve_hyd');
+                    const valveCenterY = throttleY + 95 + (_hatRV ? 40 : 0);           // Mitte Ventil — etwas Abstand für die gestapelten Labels (Norm / Typ / Magnet-IDs) über der Ventilbox
                     const railP        = valveCenterY + 50;        // P-Schiene (knapp unter Ventilen)
                     const railT        = isPneu ? railP : (railP + 28);  // T-Schiene (nur Hyd)
                     const supplyY      = (isPneu ? railP : railT) + 36;  // Druckquelle + Wartungseinheit
@@ -24193,6 +24312,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             g.appendChild(createSvgElement('line', {x1: outletX, y1: outletY, x2: outletX + 8, y2: outletY, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                             g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                             _railStartXP = outletX + 8;
+                            // Druckbegrenzungsventil: Abzweig von der Druckleitung zum Tank
+                            let dbvX = outletX + 70, dbvY = supY + 10;
+                            g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: outletY, x2: outletX + 8, y2: dbvY + 18, stroke: SUPPLY_COL, 'stroke-width': 1.2}));
+                            g.appendChild(createSvgElement('line', {x1: outletX + 8, y1: dbvY + 18, x2: dbvX - 6, y2: dbvY + 18, stroke: SUPPLY_COL, 'stroke-width': 1.2}));
+                            g.appendChild(createSvgElement('line', {x1: dbvX - 6, y1: dbvY + 18, x2: dbvX - 6, y2: dbvY + 10, stroke: SUPPLY_COL, 'stroke-width': 1.2}));
+                            _drawDbvSym(g, dbvX, dbvY, supplyObj.pressure || 100);
+                            g.appendChild(createSvgElement('line', {x1: dbvX + 4, y1: dbvY - 10, x2: dbvX + 4, y2: dbvY - 16, stroke: '#000', 'stroke-width': 1.2}));
+                            g.appendChild(createSvgElement('line', {x1: dbvX + 4, y1: dbvY - 16, x2: dbvX + 4, y2: railT, stroke: '#000', 'stroke-width': 1.2, 'stroke-dasharray': '4,2'}));
+                            if (supplyObj.hydDbvOffen && isSimulationActive) {
+                                let dL = createSvgElement('text', {x: dbvX + 16, y: dbvY + 15, 'font-size': '8', fill: '#c62828', 'text-anchor': 'start', 'font-family': 'monospace', 'font-weight': 'bold'});
+                                dL.textContent = 'DBV offen: ' + (supplyObj.hydQdbv || 0).toLocaleString('de-DE', {maximumFractionDigits: 1}) + ' l/min → Wärme'; g.appendChild(dL);
+                            }
+                            // Speicher, Systemmanometer, System-Druckschalter an der P-Schiene
+                            let px = outletX + 8 + 34;
+                            factoryObjects.filter(o => o.type === 'accumulator_hyd').forEach(a => {
+                                let ay = railP - 26;
+                                let bot = _drawAccSym(g, px, ay, a);
+                                g.appendChild(createSvgElement('line', {x1: px, y1: bot, x2: px, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.2}));
+                                px += 70;
+                            });
+                            factoryObjects.filter(o => (o.type === 'manometer_hyd' || o.type === 'pressure_switch_hyd') && (!o.targetCylinderId || o.role === 'P')).forEach(m => {
+                                let my2 = railP - 20;
+                                if (m.type === 'manometer_hyd') _drawGaugeSym(g, px, my2, m, 'start'); else _drawPSwitchSym(g, px, my2, m, 'start');
+                                g.appendChild(createSvgElement('line', {x1: px, y1: my2 + (m.type === 'manometer_hyd' ? 7 : 8), x2: px, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.2}));
+                                px += 80;
+                            });
                         }
                         circuitContent.appendChild(g);
                         // Öltank (Hydraulik) ganz unten, mit Strich von T-Schiene
@@ -24328,6 +24473,38 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: kneeY2b, x2: pX.p4, y2: kneeY2b, stroke: _colV4, 'stroke-width': 1.5}));
                             circuitContent.appendChild(createSvgElement('line', {x1: pX.p4, y1: kneeY2b, x2: pX.p4, y2: portsTopY, stroke: _colV4, 'stroke-width': 1.5}));
                         }
+                        if (!isPneu) {
+                            // Rückschlagventil zwischen Ventil und Drossel, Druckschalter / Manometer an der Zylinderleitung
+                            [['A', extDrosselX, kneeY2, retDrosselX], ['B', retDrosselX, kneeY2b, extDrosselX]].forEach(([s, lx, knee, gegenX]) => {
+                                if (s === 'B' && !isDouble) return;
+                                let rv = factoryObjects.find(o => o.type === 'check_valve_hyd' && o.targetCylinderId === cyl.id && (o.role || 'A') === s);
+                                if (rv) {
+                                    let ry = (throttleBotY + knee) / 2;
+                                    let gR = createSvgElement('g', {}); gR.setAttribute('data-obj-id', rv.id);
+                                    gR.appendChild(createSvgElement('rect', {x: lx - 10, y: ry - 11, width: 20, height: 22, fill: '#fff', stroke: 'none'}));
+                                    _drawCheckSym(gR, lx, ry, rv);
+                                    if ((rv.hyd || {}).entsperrbar !== false && isDouble) {
+                                        gR.appendChild(createSvgElement('polyline', {points: `${lx + (s === 'A' ? 9 : -9)},${ry} ${gegenX},${ry}`, fill: 'none', stroke: '#000', 'stroke-width': 0.8, 'stroke-dasharray': '3,2'}));
+                                        let xL = createSvgElement('text', {x: (lx + gegenX) / 2, y: ry - 3, 'font-size': '7', fill: '#000', 'text-anchor': 'middle', 'font-family': 'monospace'});
+                                        xL.textContent = 'X'; gR.appendChild(xL);
+                                    }
+                                    circuitContent.appendChild(gR);
+                                }
+                                let px = s === 'A' ? (actPortAx != null ? actPortAx : lx) : (actPortBx != null ? actPortBx : lx);
+                                let ky = s === 'A' ? _kneeYa : _kneeYb;
+                                let off = 0;
+                                factoryObjects.filter(o => (o.type === 'pressure_switch_hyd' || o.type === 'manometer_hyd') && o.targetCylinderId === cyl.id && (o.role || 'A') === s).forEach(m => {
+                                    let dx = (s === 'A' ? -1 : 1) * (95 + off);
+                                    let gM = createSvgElement('g', {}); gM.setAttribute('data-obj-id', m.id);
+                                    gM.appendChild(createSvgElement('line', {x1: px, y1: ky, x2: px + dx, y2: ky, stroke: s === 'A' ? _colExt : _colRet, 'stroke-width': 1.2}));
+                                    gM.appendChild(createSvgElement('line', {x1: px + dx, y1: ky, x2: px + dx, y2: ky + 12, stroke: s === 'A' ? _colExt : _colRet, 'stroke-width': 1.2}));
+                                    if (m.type === 'manometer_hyd') _drawGaugeSym(gM, px + dx, ky + 19, m, s === 'A' ? 'end' : 'start');
+                                    else _drawPSwitchSym(gM, px + dx, ky + 20, m, s === 'A' ? 'end' : 'start');
+                                    circuitContent.appendChild(gM);
+                                    off += 34;
+                                });
+                            });
+                        }
                         // Ventil-Port 1 (P) → P-Schiene — immer Versorgungsdruck
                         circuitContent.appendChild(createSvgElement('line', {x1: pX.p1, y1: portsBotY, x2: pX.p1, y2: railP, stroke: SUPPLY_COL, 'stroke-width': 1.5}));
                         // Ventil-Werkanschluss-Drücke SEITLICH neben dem Schlauch:
@@ -24358,7 +24535,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         } else {
                             // Hydraulik: T1, T2 → T-Schiene
                             circuitContent.appendChild(createSvgElement('line', {x1: pX.p3, y1: portsBotY, x2: pX.p3, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
-                            circuitContent.appendChild(createSvgElement('line', {x1: pX.p5, y1: portsBotY, x2: pX.p5, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
+                            if (pX.p5 !== pX.p3) circuitContent.appendChild(createSvgElement('line', {x1: pX.p5, y1: portsBotY, x2: pX.p5, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
                         }
                         curX += colW;
                     });
@@ -29914,7 +30091,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 build: function(obj, el) {
                     obj.width = 110; obj.height = 70; obj.pressure = 100; obj.maxFlow = 20;
                     el.className = 'f2d-obj f2d-hydraulic-unit';
-                    el.innerHTML = `<div class="f2d-hyd-motor"></div><div class="f2d-hyd-gauge"></div><div class="f2d-hyd-tank"></div><span style="font-size:10px;font-weight:bold;color:#ffcc80;">${obj.pressure} bar</span>`;
+                    el.innerHTML = `<div class="f2d-hyd-motor"></div><div class="f2d-hyd-gauge"></div><div class="f2d-hyd-tank"></div><span style="font-size:10px;font-weight:bold;color:#ffcc80;">DBV ${obj.pressure} bar</span>`;
                     obj.useCollision = false;
                 },
                 contextMenu: function(obj, ctxMenu, saveCallback) {
@@ -29931,10 +30108,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     selFT.onchange = e => { obj.fluidType = e.target.value; saveCallback(); };
                     wrapFT.appendChild(selFT); ctxMenu.appendChild(wrapFT);
                     let wrapP = document.createElement('div'); wrapP.style.padding = '5px 15px'; wrapP.onclick = e => e.stopPropagation();
-                    wrapP.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">🛢 Systemdruck (bar)</div>`;
+                    wrapP.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">🛢 Druckbegrenzungsventil: Einstelldruck (bar)</div><div style="color:#777;font-size:9px;margin-bottom:3px;">Höchstdruck der Anlage; der Arbeitsdruck stellt sich nach der Last ein</div>`;
                     let inpP = document.createElement('input'); inpP.type = 'number'; inpP.min = '10'; inpP.max = '350'; inpP.step = '10'; inpP.value = obj.pressure;
                     inpP.style.cssText = "width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;";
-                    inpP.onchange = e => { obj.pressure = parseFloat(e.target.value); let sp = obj.el.querySelector('span'); if (sp) sp.textContent = obj.pressure + ' bar'; saveCallback(); };
+                    inpP.onchange = e => { obj.pressure = parseFloat(e.target.value); let sp = obj.el.querySelector('span'); if (sp) sp.textContent = 'DBV ' + obj.pressure + ' bar'; saveCallback(); };
                     wrapP.appendChild(inpP); ctxMenu.appendChild(wrapP);
                     let wrapF = document.createElement('div'); wrapF.style.padding = '5px 15px'; wrapF.onclick = e => e.stopPropagation();
                     wrapF.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⚙️ Fördervolumen (l/min)</div>`;
@@ -29949,8 +30126,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let valLkH = document.createElement('div'); valLkH.style.cssText = 'color:#fff;font-size:11px;text-align:center;'; valLkH.textContent = (obj.leakRate || 0) + '%';
                     sldLkH.oninput = e => { obj.leakRate = parseInt(e.target.value); valLkH.textContent = obj.leakRate + '%'; saveCallback(); };
                     wrapLkH.appendChild(sldLkH); wrapLkH.appendChild(valLkH); ctxMenu.appendChild(wrapLkH);
+                    if (window._hydAggregatMenue) window._hydAggregatMenue(obj, ctxMenu);
                 },
                 contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                    helpers.addVarSelect('⚡ Pumpenmotor EIN (Ausgang, leer = läuft immer)', obj.linkedVarMotor, 'out', 'linkedVarMotor');
                     helpers.addVarSelect('🔍 Leckage-Sensor (1=OK)', obj.linkedVarLeak, 'in', 'linkedVarLeak');
                     helpers.addVarSelect('⛽ Pumpen-Sensor (1=OK)', obj.linkedVarPump, 'in', 'linkedVarPump');
                 },
@@ -30066,7 +30245,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 getVar2ForRestore: function(savedData) {
                     if (savedData.isTriple) return 'triple';
                     return (savedData.isDouble !== undefined ? savedData.isDouble : !!savedData.linkedVarRet) ? 'double' : 'single';
-                }
+                },
+                contextMenu: function(obj, ctxMenu) { if (window._hydVentilMenue) window._hydVentilMenue(obj, ctxMenu); }
             },
             'throttle_hyd': {
                 directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
@@ -30094,6 +30274,61 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (tv) tv.textContent = savedData.opening + '%';
                     }
                 }
+            },
+            // ===== Hydraulik: Rückschlagventil, Druckschalter, Manometer, Druckspeicher =====
+            // Zuordnung wie bei der Drossel über targetCylinderId + role ('A' / 'B' / 'P'),
+            // die Physik steht in window._hydStep (HYDRAULIK-PHYSIK).
+            'check_valve_hyd': {
+                directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                build: function(obj, el) {
+                    obj.width = 34; obj.height = 34;
+                    el.className = 'f2d-obj f2d-hyd-teil f2d-check-hyd';
+                    el.innerHTML = `<svg width="34" height="34" viewBox="0 0 34 34"><line x1="17" y1="0" x2="17" y2="8" stroke="#bf360c" stroke-width="2"/><polyline points="9,9 17,19 25,9" fill="none" stroke="#bf360c" stroke-width="2"/><circle cx="17" cy="13" r="5" fill="#fff8e1" stroke="#bf360c" stroke-width="2"/><line x1="17" y1="19" x2="17" y2="34" stroke="#bf360c" stroke-width="2"/><line x1="25" y1="17" x2="33" y2="17" stroke="#bf360c" stroke-width="1.5" stroke-dasharray="3,2"/></svg><div class="f2d-v-port" style="top:-6px;left:15px;"></div><div class="f2d-v-port" style="bottom:-6px;left:15px;"></div>`;
+                    let label = document.createElement('div'); label.className = 'f2d-label f2d-norm-label'; label.style.left = '38px'; label.style.top = '8px';
+                    label.textContent = obj.normLabel || 'Rückschlagventil'; el.appendChild(label);
+                    obj.useCollision = false;
+                },
+                contextMenu: function(obj, ctxMenu) { if (window._hydBauteilMenue) window._hydBauteilMenue(obj, ctxMenu); }
+            },
+            'pressure_switch_hyd': {
+                directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                build: function(obj, el, var1) {
+                    obj.width = 40; obj.height = 34;
+                    if (var1) obj.linkedVar = var1;
+                    el.className = 'f2d-obj f2d-hyd-teil f2d-druckschalter-hyd';
+                    el.innerHTML = `<svg width="40" height="22" viewBox="0 0 40 22"><rect x="3" y="2" width="34" height="18" fill="#fff8e1" stroke="#bf360c" stroke-width="2"/><line x1="10" y1="11" x2="17" y2="11" stroke="#bf360c" stroke-width="2"/><polyline points="17,11 23,5" fill="none" stroke="#bf360c" stroke-width="2"/><line x1="25" y1="11" x2="32" y2="11" stroke="#bf360c" stroke-width="2"/></svg><div class="f2d-hyd-wert">0 bar</div><div class="f2d-v-port" style="bottom:-6px;left:18px;"></div>`;
+                    let label = document.createElement('div'); label.className = 'f2d-label f2d-norm-label'; label.style.left = '44px'; label.style.top = '6px';
+                    label.textContent = obj.normLabel || 'Druckschalter'; el.appendChild(label);
+                    obj.useCollision = false;
+                },
+                contextMenu: function(obj, ctxMenu) { if (window._hydBauteilMenue) window._hydBauteilMenue(obj, ctxMenu); },
+                contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                    helpers.addVarSelect('📟 Druckschalter meldet (Eingang)', obj.linkedVar, 'in', 'linkedVar');
+                }
+            },
+            'manometer_hyd': {
+                directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                build: function(obj, el) {
+                    obj.width = 36; obj.height = 40;
+                    el.className = 'f2d-obj f2d-hyd-teil f2d-manometer-hyd';
+                    el.innerHTML = `<div class="f2d-hyd-skala"><div class="f2d-hyd-zeiger"></div></div><div class="f2d-hyd-wert">0 bar</div><div class="f2d-v-port" style="bottom:-6px;left:16px;"></div>`;
+                    let label = document.createElement('div'); label.className = 'f2d-label f2d-norm-label'; label.style.left = '40px'; label.style.top = '6px';
+                    label.textContent = obj.normLabel || 'Manometer'; el.appendChild(label);
+                    obj.useCollision = false;
+                },
+                contextMenu: function(obj, ctxMenu) { if (window._hydBauteilMenue) window._hydBauteilMenue(obj, ctxMenu); }
+            },
+            'accumulator_hyd': {
+                directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                build: function(obj, el) {
+                    obj.width = 30; obj.height = 56;
+                    el.className = 'f2d-obj f2d-hyd-teil f2d-speicher-hyd';
+                    el.innerHTML = `<svg width="30" height="44" viewBox="0 0 30 44"><rect x="4" y="2" width="22" height="38" rx="11" fill="#5d4037" stroke="#bf360c" stroke-width="2"/><line x1="4" y1="18" x2="26" y2="18" stroke="#ffcc80" stroke-width="1.5"/><polygon points="15,6 11,12 19,12" fill="#ffcc80"/></svg><div class="f2d-hyd-wert">0 bar</div><div class="f2d-v-port" style="bottom:-6px;left:13px;"></div>`;
+                    let label = document.createElement('div'); label.className = 'f2d-label f2d-norm-label'; label.style.left = '34px'; label.style.top = '12px';
+                    label.textContent = obj.normLabel || 'Druckspeicher'; el.appendChild(label);
+                    obj.useCollision = false;
+                },
+                contextMenu: function(obj, ctxMenu) { if (window._hydBauteilMenue) window._hydBauteilMenue(obj, ctxMenu); }
             },
             // ===============================================================
             'turntable': {
@@ -38200,6 +38435,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     addDimInput(window.t('ctx_fac_pneu_d1'), 'pistonD');
                     addDimInput(window.t('ctx_fac_pneu_d2'), 'rodD');
                     addDimInput(window.t('ctx_fac_pneu_h'), 'stroke');
+                    if (obj.hasHydraulics && window._hydZylinderMenue) window._hydZylinderMenue(obj, ctxMenu);
                 }
                 if (obj.type.startsWith('zylinder')) {
                 // Reed/Magnet-Sensoren am Zylinder: das Untermenü zeigt beide
@@ -39434,6 +39670,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (_hasFluidAnimatables && typeof window._stepFluidSolver === 'function') {
                 try { window._stepFluidSolver(); } catch(e) { /* solver-Fehler still — Animation darf nicht abbrechen */ }
             }
+            if (_hasFluidAnimatables && !isSimulationActive && typeof window._hydAnzeigen === 'function') {
+                try { window._hydAnzeigen(); } catch(e) {}
+            }
             // Periodischer Schaltplan-Redraw nur, wenn etwas Sichtbares animiert
             // werden kann (Kolben, Leitungsfarbe, Ventil-Schiebung). Sonst entfällt
             // die teure SVG-Neugenerierung komplett.
@@ -39459,6 +39698,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (o.hasPneumatics || o.hasHydraulics) {
                                 _hashParts.push(o.id + ':' + Math.round((o.extension || 0) * 2));
                             }
+                            if (o.type === 'hydraulic_unit') _hashParts.push(o.id + ':' + (o.hydDbvOffen ? 1 : 0) + ':' + Math.round(o.hydQdbv || 0));
+                            if (o.type === 'pressure_switch_hyd') _hashParts.push(o.id + ':' + (o.hydSchaltet ? 1 : 0));
+                            if (o.type === 'manometer_hyd') _hashParts.push(o.id + ':' + Math.round(o.hydP || 0));
                         }
                         if (window.configPneuShowPressures) {
                             // Drücke nur einbeziehen, wenn Anzeige aktiv — sonst
@@ -39551,7 +39793,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 if (obj.type === 'hydraulic_zone') {
                     let insideIds = [];
-                    let hydTypes = ['hydraulic_unit', 'hydraulic_manifold', 'valve_hyd', 'throttle_hyd', 'oil_tank'];
+                    let hydTypes = ['hydraulic_unit', 'hydraulic_manifold', 'valve_hyd', 'throttle_hyd', 'oil_tank', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'];
                     const hydInside = (o, zx, zy) => {
                         let cx = o.x + (o.width || 0) / 2, cy = o.y + (o.height || 30) / 2;
                         return cx >= zx - 5 && cx <= zx + obj.width + 5 && cy >= zy - 5 && cy <= zy + obj.height + 5;
@@ -40185,28 +40427,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     }
                 });
-                // === HYDRAULIK-BUDGET-VORBERECHNUNG ===
-                // Gesamtbedarf aller aktiven Zylinder → Skalierungsfaktor für gemeinsames Fördervolumen
+                // === HYDRAULIK-PHYSIK (Druck aus der Last, DBV, Speicher …) ===
                 window._hydFlowScale = 1.0;
-                {
-                    let _hUnit = factoryObjects.find(o => o.type === 'hydraulic_unit');
-                    if (_hUnit && isSimulationActive) {
-                        let _qM = (_hUnit.maxFlow || 20) * 16666.67 * ((_hUnit.pressure || 100) / 100);
-                        let _qD = 0;
-                        factoryObjects.forEach(c => {
-                            if (!c.hasHydraulics || !c.type.startsWith('zylinder')) return;
-                            let _vv = factoryObjects.find(o => o.type === 'valve_hyd' && o.targetCylinderId === c.id);
-                            if (!_vv || (_vv.isTriple && _vv.valveState === 'center')) return;
-                            let _ex = c.extension || 0;
-                            if (_vv.isActive && _ex >= 99.5) return;
-                            if (!_vv.isActive && _ex <= 0.5) return;
-                            let _tE = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === c.id && o.role === 'ext');
-                            let _tR = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === c.id && o.role === 'ret');
-                            let _op = _vv.isActive ? (_tE ? _tE.opening / 100 : 1.0) : (_tR ? _tR.opening / 100 : 1.0);
-                            _qD += _qM * _op;
-                        });
-                        if (_qD > _qM) window._hydFlowScale = _qM / _qD;
-                    }
+                if (isSimulationActive && typeof window._hydStep === 'function') {
+                    try { window._hydStep(deltaTime * (window.simSpeed || 1)); } catch (e) { console.warn('Hydraulik:', e); }
                 }
                 // =============================================
 
@@ -40315,29 +40539,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                             if (fluidGrid.has(gx+','+gy) && fluidGrid.get(gx+','+gy).mat === 'oil') oilCount++;
                                     hasOil = oilCount > 0;
                                 }
-                                let p_supply = unit.pressure || 100;
-                                let q_max_l_min = unit.maxFlow || 20;
-                                let q_max_mm3_s = q_max_l_min * 16666.67;
-                                let dPiston = obj.pistonD || 20; let dRod = obj.rodD || 8; let stroke = obj.stroke || 100;
-                                let aExt = Math.PI * Math.pow(dPiston / 2, 2);
-                                let aRet = aExt - (Math.PI * Math.pow(dRod / 2, 2));
-                                let pressureFactor = p_supply / 100.0;
-                                if (valve.isTriple && valve.valveState === 'center') {
-                                    forceExt = false; forceRet = false;
-                                } else if (valve.isActive) {
-                                    if (hasOil) {
-                                        forceExt = true;
-                                        let opening = tExt ? (tExt.opening / 100) : 1.0;
-                                        let q_eff = q_max_mm3_s * opening * pressureFactor * (window._hydFlowScale || 1.0);
-                                        baseSpeed = ((q_eff / aExt) / stroke * 100) / 60;
-                                    }
-                                } else {
-                                    forceRet = true;
-                                    let opening = tRet ? (tRet.opening / 100) : (obj.type === 'zylinder_single' && tExt ? (tExt.opening / 100) : 1.0);
-                                    let q_eff = q_max_mm3_s * opening * pressureFactor * (window._hydFlowScale || 1.0);
-                                    baseSpeed = ((q_eff / aRet) / stroke * 100) / 60;
+                                // Geschwindigkeit und Richtung aus der Hydraulik-Physik (v = Q / A,
+                                // Druck aus der Last); siehe window._hydStep.
+                                let stroke = obj.stroke || 100;
+                                let _hs = obj._hydSt;
+                                forceExt = false; forceRet = false;
+                                if (_hs && hasOil && _hs.v > 0) {
+                                    if (_hs.dir > 0) forceExt = true; else if (_hs.dir < 0) forceRet = true;
+                                    baseSpeed = ((_hs.v / stroke) * 100) / 60;
                                 }
-                                // (Volumenstrom wird jetzt akkumulatorbasiert nach deltaExt berechnet)
                             }
                             obj._hydraulicActive = (forceExt && (obj.extension || 0) < 99.5) || (forceRet && (obj.extension || 0) > 0.5);
                         } else {
@@ -41141,6 +41351,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     flapAngle: o.flapAngle, flapAnchor: o.flapAnchor || null,
                     rollerSpeed: o.rollerSpeed,
                     curveAngle: o.curveAngle,
+                    hyd: (o.hyd && typeof o.hyd === 'object' && Object.keys(o.hyd).length) ? JSON.parse(JSON.stringify(o.hyd)) : null,
                     pressure: o.pressure, maxFlow: o.maxFlow, leakRate: o.leakRate || null, linkedVarLeak: o.linkedVarLeak || null, linkedVarPump: o.linkedVarPump || null,
                     fluidType: o.fluidType || null,
                     isTriple: o.isTriple || false,
@@ -42313,7 +42524,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (o.pressure !== undefined) {
                         newObj.pressure = o.pressure;
                         let sp = newObj.el.querySelector('span');
-                        if (sp) sp.textContent = o.pressure + ' bar';
+                        if (sp) sp.textContent = (o.type === 'hydraulic_unit' ? 'DBV ' : '') + o.pressure + ' bar';
                     }
                     if (o.maxFlow !== undefined) newObj.maxFlow = o.maxFlow;
                     if (o.leakRate != null) newObj.leakRate = o.leakRate;
@@ -42325,6 +42536,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (o.pistonD !== undefined) newObj.pistonD = o.pistonD;
                     if (o.rodD !== undefined) newObj.rodD = o.rodD;
                     if (o.stroke !== undefined) newObj.stroke = o.stroke;
+                    // Hydraulik: Last, Fehler, Speicher-, Schalter- und Ventileinstellungen
+                    if (o.hyd && typeof o.hyd === 'object') newObj.hyd = JSON.parse(JSON.stringify(o.hyd));
                     // text_note: Inhalt und Stil wiederherstellen
                     if (newObj.type === 'text_note' && newObj.noteContent) {
                         if (o.noteTextColor) { newObj.noteTextColor = o.noteTextColor; newObj.el.style.color = o.noteTextColor; let tc = newObj.noteToolbar.querySelector('.ntc'); if (tc) tc.value = o.noteTextColor; }
@@ -48948,7 +49161,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let aExt = Math.PI * Math.pow(pistonD / 2, 2);
                 let aRet = aExt - (Math.PI * Math.pow(rodD / 2, 2));
                 let unitPressure = unit.pressure || 100; let unitFlow = unit.maxFlow || 20;
-                let max_Q_mm3_s = unitFlow * 16666.67 * (unitPressure / 100.0);
+                let max_Q_mm3_s = unitFlow * 16666.67;
                 let reqOpenExt = Math.max(1, Math.min(100, Math.round(((target_v_mm_s * aExt) / max_Q_mm3_s) * 100)));
                 let reqOpenRet = Math.max(1, Math.min(100, Math.round(((target_v_mm_s * aRet) / max_Q_mm3_s) * 100)));
                 const applyThrottleVisuals = (t, val) => {
@@ -49134,10 +49347,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let isCylDoubleM = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
                 let tExtM = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ext');
                 let tRetM = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === cyl.id && o.role === 'ret');
-                if (tExtM) { _ensureHydAuto(valve, 'A', tExtM, 'OUT'); _ensureHydAuto(tExtM, 'IN', cyl, 'A'); }
+                const _rvIn = s => factoryObjects.some(o => o.type === 'check_valve_hyd' && o.targetCylinderId === cyl.id && (o.role || 'A') === s);
+                if (_rvIn('A'))  { if (tExtM) _ensureHydAuto(tExtM, 'IN', cyl, 'A'); }
+                else if (tExtM) { _ensureHydAuto(valve, 'A', tExtM, 'OUT'); _ensureHydAuto(tExtM, 'IN', cyl, 'A'); }
                 else       _ensureHydAuto(valve, 'A', cyl, 'A');
                 if (isCylDoubleM) {
-                    if (tRetM) { _ensureHydAuto(valve, 'B', tRetM, 'OUT'); _ensureHydAuto(tRetM, 'IN', cyl, 'B'); }
+                    if (_rvIn('B'))  { if (tRetM) _ensureHydAuto(tRetM, 'IN', cyl, 'B'); }
+                    else if (tRetM) { _ensureHydAuto(valve, 'B', tRetM, 'OUT'); _ensureHydAuto(tRetM, 'IN', cyl, 'B'); }
                     else       _ensureHydAuto(valve, 'B', cyl, 'B');
                 }
                 if (tankObj) {
@@ -49341,6 +49557,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { id:'IN',  label:'A', lx:20, ly:0,  ptype:'work', rot:true },
                 { id:'OUT', label:'B', lx:20, ly:35, ptype:'work', rot:true }
             ];
+            if (obj.type === 'check_valve_hyd') return [
+                { id:'IN',  label:'1', lx:17, ly:34, ptype:'work', rot:true },
+                { id:'OUT', label:'2', lx:17, ly:0,  ptype:'work', rot:true }
+            ];
+            if (obj.type === 'pressure_switch_hyd') return [ { id:'P', label:'P', lx:20, ly:34, ptype:'work', rot:true } ];
+            if (obj.type === 'manometer_hyd')       return [ { id:'P', label:'P', lx:18, ly:40, ptype:'work', rot:true } ];
+            if (obj.type === 'accumulator_hyd')     return [ { id:'P', label:'P', lx:15, ly:56, ptype:'pressure', rot:true } ];
             if (obj.hasHydraulics && obj.type === 'zylinder_single') return [
                 { id:'A', label:'A', lx:14, ly:-10, ptype:'work', rot:true }
             ];
@@ -49398,7 +49621,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
 
         // --- Port-Layer Renderer ---
-        const _HYD_TYPES  = ['hydraulic_unit','oil_tank','hydraulic_manifold','valve_hyd','throttle_hyd'];
+        const _HYD_TYPES  = ['hydraulic_unit','oil_tank','hydraulic_manifold','valve_hyd','throttle_hyd','check_valve_hyd','pressure_switch_hyd','manometer_hyd','accumulator_hyd'];
         const _PNEU_TYPES = ['compressor','manifold','valve_pneu','throttle'];
 
         function _updatePortLayer(system, defsFn, layerId) {
@@ -49707,8 +49930,43 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         }
 
+        // Verbindungen ohne Rückschlagventile: Ventil — RV — Drossel zählt wie Ventil — Drossel,
+        // damit Drossel- und Ventilzuordnung auch mit eingesetztem Rückschlagventil stimmen.
+        function _hydConnsOhneRV() {
+            let conns = (window.hydConnections || []).filter(c => !c._broken);
+            const rvIds = new Set(factoryObjects.filter(o => o.type === 'check_valve_hyd').map(o => o.id));
+            if (!rvIds.size) return conns;
+            const rest = conns.filter(c => !rvIds.has(c.aObjId) && !rvIds.has(c.bObjId));
+            rvIds.forEach(id => {
+                const ende = p => conns.find(c => (c.aObjId === id && c.aPortId === p) || (c.bObjId === id && c.bPortId === p));
+                const a = ende('IN'), b = ende('OUT');
+                if (!a || !b) return;
+                const x = a.aObjId === id ? [a.bObjId, a.bPortId] : [a.aObjId, a.aPortId];
+                const y = b.aObjId === id ? [b.bObjId, b.bPortId] : [b.aObjId, b.aPortId];
+                rest.push({ aObjId: x[0], aPortId: x[1], bObjId: y[0], bPortId: y[1], _sys: 'hyd', _viaRV: id });
+            });
+            return rest;
+        }
+        window._hydConnsOhneRV = _hydConnsOhneRV;
+
         function _applyHydManualConnections() {
+            // Druckschalter / Manometer / Speicher: Zuordnung aus dem gesteckten Schlauch
             for (let conn of (window.hydConnections || [])) {
+                if (conn._broken) continue;
+                let a = factoryObjects.find(o => o.id === conn.aObjId);
+                let b = factoryObjects.find(o => o.id === conn.bObjId);
+                if (!a || !b) continue;
+                [[a, conn.aPortId, b, conn.bPortId], [b, conn.bPortId, a, conn.aPortId]].forEach(([g, gp, z, zp]) => {
+                    if (!['pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'].includes(g.type) || gp !== 'P') return;
+                    if (_isFluidActuator(z.type) && (zp === 'A' || zp === 'B')) { g.targetCylinderId = z.id; g.role = zp; }
+                    else if (z.type === 'hydraulic_manifold' || z.type === 'hydraulic_unit') { g.targetCylinderId = null; g.role = 'P'; }
+                    else if ((z.type === 'throttle_hyd' || z.type === 'check_valve_hyd') && z.targetCylinderId) {
+                        g.targetCylinderId = z.targetCylinderId;
+                        g.role = z.type === 'check_valve_hyd' ? (z.role || 'A') : (z.role === 'ret' ? 'B' : 'A');
+                    }
+                });
+            }
+            for (let conn of _hydConnsOhneRV()) {
                 if (conn._broken) continue;
                 let a = factoryObjects.find(o => o.id === conn.aObjId);
                 let b = factoryObjects.find(o => o.id === conn.bObjId);
@@ -49720,8 +49978,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // Drosseln (Hydraulik) anhand des Verbindungsverlaufs Rolle/targetCylinderId zuordnen
             factoryObjects.filter(o => o.type === 'throttle_hyd').forEach(thr =>
-                _inferThrottleChain(thr, window.hydConnections, 'valve_hyd', ['A','B'], ['A','B'])
+                _inferThrottleChain(thr, _hydConnsOhneRV(), 'valve_hyd', ['A','B'], ['A','B'])
             );
+            // Rückschlagventil: Zylinder und Seite aus dem Leitungsverlauf (Ventil A/B ↔ RV)
+            factoryObjects.filter(o => o.type === 'check_valve_hyd').forEach(rv => {
+                for (let c of (window.hydConnections || [])) {
+                    if (c._broken) continue;
+                    const mein = c.aObjId === rv.id ? 'a' : (c.bObjId === rv.id ? 'b' : null);
+                    if (!mein) continue;
+                    const andId = mein === 'a' ? c.bObjId : c.aObjId, andPort = mein === 'a' ? c.bPortId : c.aPortId;
+                    const and = factoryObjects.find(x => x.id === andId);
+                    if (!and) continue;
+                    if (and.type === 'valve_hyd' && and.targetCylinderId && (andPort === 'A' || andPort === 'B')) { rv.targetCylinderId = and.targetCylinderId; rv.role = andPort; return; }
+                    if (_isFluidActuator(and.type) && (andPort === 'A' || andPort === 'B')) { rv.targetCylinderId = and.id; rv.role = andPort; return; }
+                }
+            });
         }
 
         function _applyPneuManualConnections() {
@@ -49837,7 +50108,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     } else if (isHyd) {
                         if (o.type === 'hydraulic_unit') {
                             _addNode(nodes, o.id+':P'); _addNode(nodes, o.id+':S');
-                            sources[o.id+':P'] = (o.pressure != null ? o.pressure : 100);
+                            sources[o.id+':P'] = (isSimulationActive && o.hydP != null) ? o.hydP : (o.pressure != null ? o.pressure : 100);
                             sources[o.id+':S'] = 0;
                         } else if (o.type === 'oil_tank') {
                             _addNode(nodes, o.id+':S'); _addNode(nodes, o.id+':T');
@@ -49862,6 +50133,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             let opening = (o.opening != null ? o.opening : 100);
                             let g = G_THROTTLE_MAX * Math.pow(opening / 100, 2);
                             _addEdge(edges, o.id+':IN', o.id+':OUT', Math.max(g, 0.001));
+                        } else if (o.type === 'check_valve_hyd') {
+                            _addNode(nodes, o.id+':IN'); _addNode(nodes, o.id+':OUT');
+                            _addEdge(edges, o.id+':IN', o.id+':OUT', G_VALVE_OPEN);
+                        } else if (o.type === 'pressure_switch_hyd' || o.type === 'manometer_hyd' || o.type === 'accumulator_hyd') {
+                            _addNode(nodes, o.id+':P');
                         } else if (o.hasHydraulics && (o.type === 'zylinder_single' || o.type === 'zylinder_double' || o.type === 'gate_pneu')) {
                             _addNode(nodes, o.id+':A');
                             if (o.type !== 'zylinder_single') _addNode(nodes, o.id+':B');
@@ -49975,6 +50251,485 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._stepFluidSolver = function() {
                 window._fluidPressures.pneu = _solveFluidGraph('pneu');
                 window._fluidPressures.hyd  = _solveFluidGraph('hyd');
+                if (typeof window._hydDruckKarte === 'function') window._hydDruckKarte(window._fluidPressures.hyd);
+            };
+        })();
+        // =========================================================
+        // =========================================================
+        // HYDRAULIK-PHYSIK — Druck aus der Last, Druckbegrenzungsventil,
+        // Leckage, Druckspeicher, Rückschlagventil, Druckschalter, Manometer
+        // ---------------------------------------------------------
+        // Konstantpumpe mit Druckbegrenzungsventil (Einstelldruck = Aggregat
+        // obj.pressure). Der Druck stellt sich nach der Last ein: Ein
+        // Zylinder ohne Last fährt bei wenigen bar, ein belasteter beim
+        // Lastdruck p = F / (A · η); am Anschlag oder bei zu großer Last
+        // steigt der Druck bis zum DBV und das Öl geht über das DBV in den
+        // Tank (wird Wärme). Die Geschwindigkeit kommt aus dem Volumenstrom
+        // (v = Q / A), nicht aus dem Druck.
+        //   Stromregelventil: hält Q = Öffnung · Förderstrom fest (primär),
+        //   der Rest geht über das DBV.
+        //   Fehler: Pumpenverschleiß, Kolbendichtung, innere Ventilleckage
+        //   (alle druckabhängig, wärmeres Öl leckt mehr).
+        // Einstellungen je Bauteil in obj.hyd (wird gespeichert), Live-Werte
+        // als einfache Zahlen (hydP, hydPA, hydPB, hydKraft …), die auch
+        // valisBruecke.zustand() weitergibt.
+        // =========================================================
+        (function() {
+            const ETA = 0.95;          // hydraulisch-mechanischer Wirkungsgrad des Zylinders
+            const LMIN = 16666.67;     // 1 l/min in mm³/s
+            const P_REIB = 3;          // bar für Reibung und Leitungen ohne Last
+            const num = (v, d) => (v == null || v === '' || !isFinite(Number(v))) ? d : Number(v);
+            const cfg = o => (o.hyd || (o.hyd = {}));
+            window._hydCfg = cfg;
+            const _isHydAct = c => c && c.hasHydraulics && (c.type === 'zylinder_single' || c.type === 'zylinder_double' || c.type === 'gate_pneu');
+            window._hydIsAktor = _isHydAct;
+            function _flaechen(c) {
+                const dk = num(c.pistonD, 20), ds = num(c.rodD, 8);
+                const aK = Math.PI * dk * dk / 4;
+                const aR = Math.max(1, aK - Math.PI * ds * ds / 4);
+                return { aK, aR: c.type === 'zylinder_single' ? aK : aR };
+            }
+            // Lastkraft in N, positiv = wirkt gegen das Ausfahren.
+            //   'presse'  : Werkstück ab lastAb % Hub (wirkt nur beim Ausfahren und Halten)
+            //   'gewicht' : hängende/gehobene Last über den ganzen Hub
+            function _last(c, dir) {
+                const h = c.hyd || {};
+                const F = Math.max(0, num(h.last, 0));
+                if (!F) return 0;
+                if ((h.lastArt || 'presse') === 'gewicht') return F;
+                if (dir < 0) return 0;
+                return (c.extension || 0) >= num(h.lastAb, 0) - 0.01 ? F : 0;
+            }
+            const _visk = T => Math.max(0.6, 1 + (T - 40) / 40);   // wärmeres Öl leckt mehr
+            const _rund = (v, n) => { const f = Math.pow(10, n || 0); return Math.round(v * f) / f; };
+
+            window._hydStep = function(dt) {
+                const unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
+                if (!unit) return;
+                dt = Math.max(0, Math.min(0.5, num(dt, 0)));
+                const H = cfg(unit);
+                const pDBV = Math.max(1, num(unit.pressure, 100));
+                const Qn = Math.max(0, num(unit.maxFlow, 20)) * LMIN;
+                const pumpe = unit.linkedVarMotor ? !!spsState[unit.linkedVarMotor] : true;
+                const tUmg = num(H.umgebung, 20);
+                if (unit.hydTemp == null) unit.hydTemp = tUmg;
+                const fv = _visk(unit.hydTemp);
+                const w = Math.min(0.95, Math.max(0, num(H.verschleiss, 0) / 100) * fv);
+                const Qp = p => pumpe ? Math.max(0, Qn * (1 - w * p / pDBV)) : 0;
+
+                // ---- Druckspeicher ----
+                const accs = factoryObjects.filter(o => o.type === 'accumulator_hyd');
+                accs.forEach(a => {
+                    const h = cfg(a);
+                    a._V0 = Math.max(0.05, num(h.volumen, 1)) * 1e6;               // mm³
+                    a._p0 = Math.max(1, Math.min(pDBV * 0.95, num(h.vordruck, Math.round(pDBV * 0.6))));
+                    a._vMax = a._V0 * (1 - a._p0 / pDBV);
+                    if (!(a.hydOelMm3 >= 0)) a.hydOelMm3 = 0;
+                    a.hydOelMm3 = Math.min(a.hydOelMm3, Math.max(0, a._vMax));
+                });
+                const pSpeicher = a => a.hydOelMm3 > 1 ? a._p0 * a._V0 / (a._V0 - a.hydOelMm3) : 0;
+                let pAcc = 0; accs.forEach(a => { pAcc = Math.max(pAcc, pSpeicher(a)); });
+                const oelImSpeicher = accs.reduce((s, a) => s + a.hydOelMm3, 0);
+
+                // ---- Zylinder einordnen ----
+                const its = [];
+                // Leckage-Leitwerte als Anteil vom Förderstrom je bar: Q_leck = Qn · k · p.
+                //   Wegeventil innen 100 % → 5 % des Förderstroms bei 100 bar (Spaltverlust)
+                //   Kolbendichtung 100 % → der ganze Förderstrom schon bei 50 bar
+                const K_VENTIL = 0.0005, K_DICHTUNG = 0.02;
+                let leck = 0;
+                factoryObjects.forEach(v => { if (v.type === 'valve_hyd') leck += Math.max(0, num((v.hyd || {}).innenLeck, 0)) / 100 * K_VENTIL * fv; });
+                factoryObjects.filter(_isHydAct).forEach(c => {
+                    const valve = factoryObjects.find(o => o.type === 'valve_hyd' && o.targetCylinderId === c.id);
+                    if (!valve) { c._hydSt = null; return; }
+                    const { aK, aR } = _flaechen(c);
+                    const ext = c.extension || 0;
+                    const single = c.type === 'zylinder_single';
+                    let dir = (valve.isTriple && valve.valveState === 'center') ? 0 : (valve.isActive ? 1 : -1);
+                    const tE = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === c.id && o.role === 'ext');
+                    const tR = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === c.id && o.role === 'ret');
+                    const rv = s => factoryObjects.find(o => o.type === 'check_valve_hyd' && o.targetCylinderId === c.id && (o.role || 'A') === s);
+                    const rvA = rv('A'), rvB = rv('B');
+                    const entsperrt = r => r && cfg(r).entsperrbar !== false;
+                    const dS = single ? 0 : Math.max(0, num((c.hyd || {}).dichtung, 0)) / 100 * K_DICHTUNG * fv;
+                    const it = { c, valve, aK, aR, dir, single, dS, ext, v: 0, pA: 0, pB: 0, rolle: 'halt', Qset: 0, pReq: 0, gedrosselt: false, F: _last(c, dir) };
+                    if (dir > 0) {
+                        // Öl muss aus B heraus: ein einfaches Rückschlagventil in B sperrt
+                        const bZu = !single && rvB && !entsperrt(rvB);
+                        it.pReq = it.F / (aK * ETA) * 10 + P_REIB;
+                        it.gedrosselt = !!tE;
+                        it.Qset = (tE ? num(tE.opening, 100) / 100 : 1) * Qn;
+                        it.rolle = bZu ? 'gesperrt' : (ext >= 99.5 ? 'ende' : 'fahrt');
+                        leck += dS;
+                    } else if (dir < 0 && single) {
+                        // Einfachwirkend: Feder (und ggf. Last) schiebt das Öl über A zurück
+                        const aZu = rvA && !entsperrt(rvA);
+                        it.rolle = aZu ? 'gesperrt' : (ext <= 0.5 ? 'unten' : 'feder');
+                        it.Qset = (tE ? num(tE.opening, 100) / 100 : 1) * Math.max(Qn, 20 * LMIN);
+                    } else if (dir < 0) {
+                        const aZu = rvA && !entsperrt(rvA);
+                        it.pReq = P_REIB;
+                        it.gedrosselt = !!tR;
+                        it.Qset = (tR ? num(tR.opening, 100) / 100 : 1) * Qn;
+                        it.rolle = aZu ? 'gesperrt' : (ext <= 0.5 ? 'ende' : 'fahrt');
+                        leck += dS;
+                    } else {
+                        // Mittelstellung: Last halten; Öl kann nur über Leckage entweichen
+                        const Fh = _last(c, 1);
+                        it.F = Fh;
+                        it.pHalt = Fh > 0 ? Fh / aK * 10 : 0;
+                        let weg = rvA ? Math.max(0, num(cfg(rvA).leck, 0)) / 100 : Math.max(0, num((valve.hyd || {}).innenLeck, 0)) / 100;
+                        it.drift = weg * K_VENTIL * fv;
+                        it.rolle = 'halt';
+                    }
+                    it.rvA = rvA; it.rvB = rvB;
+                    its.push(it);
+                });
+
+                // ---- Höchstdruck: DBV oder Gleichgewicht Pumpe = Leckage ----
+                const leckQ = p => Qn * leck * p;
+                const netto = p => Qp(p) - leckQ(p);
+                let pCap = 0;
+                if (pumpe && Qn > 0) {
+                    const k = w / pDBV + leck;
+                    pCap = k > 0 ? Math.min(pDBV, 1 / k) : pDBV;
+                }
+                const pVerf = Math.max(pCap, pAcc);
+                const mover = its.filter(i => i.rolle === 'fahrt');
+                mover.forEach(i => { if (i.pReq > pVerf) i.rolle = 'stau'; });
+                const fahr = mover.filter(i => i.rolle === 'fahrt');
+                const need = fahr.reduce((s, i) => s + i.Qset, 0);
+                const pMov = fahr.reduce((m, i) => Math.max(m, i.pReq), 0);
+                let pSys = 0, scale = 1, qDbv = 0, qAcc = 0;
+                if (!accs.length) {
+                    if (!fahr.length) { pSys = pCap; qDbv = pCap >= pDBV - 1e-6 ? Math.max(0, netto(pCap)) : 0; }
+                    else if (pCap >= pMov && netto(pCap) >= need) { pSys = pCap; qDbv = pCap >= pDBV - 1e-6 ? netto(pCap) - need : 0; }
+                    else { pSys = pMov; scale = need > 0 ? Math.min(1, Math.max(0, netto(pMov)) / need) : 0; }
+                } else {
+                    let pLine = Math.max(pMov, Math.min(pAcc, pDBV));
+                    if (!fahr.length && pumpe) pLine = Math.max(pLine, pAcc > 0 ? pAcc : Math.min(pCap, accs[0]._p0));
+                    let rest = netto(pLine) - need;
+                    if (rest >= 0) {
+                        const voll = accs.every(a => a.hydOelMm3 >= a._vMax - 1);
+                        if (pumpe && !voll && pLine < pCap - 0.5) qAcc = rest;
+                        else if (pumpe && voll) { pLine = Math.max(pLine, pCap); qDbv = pCap >= pDBV - 1e-6 ? Math.max(0, netto(pCap) - need) : 0; }
+                        else qAcc = rest;
+                    } else if (oelImSpeicher > 1 && pAcc >= pMov) {
+                        qAcc = rest;
+                    } else {
+                        pLine = pMov;
+                        scale = need > 0 ? Math.min(1, Math.max(0, netto(pMov)) / need) : 0;
+                    }
+                    if (!pumpe && !fahr.length) pLine = pAcc;
+                    pSys = pLine;
+                }
+                // Speicher laden / entladen / entlasten
+                if (accs.length && dt > 0) {
+                    const sumV = accs.reduce((s, a) => s + a._V0, 0);
+                    accs.forEach(a => {
+                        a.hydOelMm3 += qAcc * dt * a._V0 / sumV;
+                        if (cfg(a).entlasten) a.hydOelMm3 -= a._V0 * 0.5 * dt;
+                        a.hydOelMm3 = Math.max(0, Math.min(a._vMax, a.hydOelMm3));
+                    });
+                }
+
+                // ---- Ergebnisse je Zylinder ----
+                let verlustDrossel = 0;
+                its.forEach(i => {
+                    const c = i.c;
+                    let v = 0, dirOut = 0, pA = 0, pB = 0, kraft = 0;
+                    if (i.rolle === 'fahrt') {
+                        const pSeite = i.gedrosselt ? i.pReq : Math.max(i.pReq, pSys);
+                        const Q = Math.max(0, i.Qset * scale - Qn * i.dS * pSeite);
+                        v = Q / (i.dir > 0 ? i.aK : i.aR);
+                        dirOut = i.dir;
+                        if (i.dir > 0) pA = pSeite; else pB = pSeite;
+                        kraft = i.F;
+                        if (i.gedrosselt) verlustDrossel += i.Qset * scale * Math.max(0, pSys - i.pReq);
+                    } else if (i.rolle === 'ende' || i.rolle === 'stau' || i.rolle === 'gesperrt') {
+                        if (i.dir > 0) { pA = pSys; kraft = pSys * i.aK * ETA / 10; }
+                        else { pB = pSys; kraft = pSys * i.aR * ETA / 10; }
+                    } else if (i.rolle === 'feder') {
+                        v = i.Qset / i.aK; dirOut = -1;
+                        pA = i.F > 0 ? i.F / i.aK * 10 : 0;
+                    } else if (i.rolle === 'halt') {
+                        pA = i.pHalt || 0;
+                        kraft = i.F;
+                        if (pA > 0 && i.drift > 0 && i.ext > 0.5) { v = Qn * i.drift * pA / i.aK; dirOut = -1; }
+                    }
+                    c._hydSt = { dir: dirOut, v: v, rolle: i.rolle };
+                    c.hydPA = _rund(pA, 1);
+                    c.hydPB = _rund(pB, 1);
+                    c.hydKraft = Math.round(kraft);
+                    c.hydLast = Math.round(i.F);
+                    c.hydV = _rund(v, 2);
+                    c.hydRolle = i.rolle;
+                });
+
+                // ---- Aggregat: Druck, Förderstrom, Verlust, Öltemperatur ----
+                const qDbvL = qDbv / LMIN, leckL = leckQ(pSys) / LMIN;
+                const verlustKW = (qDbvL * pSys + leckL * pSys + verlustDrossel / LMIN) / 600;
+                const tankL = Math.max(5, num(H.tankLiter, 40));
+                const C = tankL * 1.65, kuehl = tankL * 0.004;
+                if (isSimulationActive && dt > 0) unit.hydTemp += dt * (verlustKW - kuehl * (unit.hydTemp - tUmg)) / C;
+                unit.hydP = _rund(pSys, 1);
+                unit.hydPcap = _rund(pCap, 1);
+                unit.hydQ = _rund(Qp(pSys) / LMIN, 2);
+                unit.hydQdbv = _rund(qDbvL, 2);
+                unit.hydLeistung = _rund(Qp(pSys) / LMIN * pSys / 600, 2);
+                unit.hydVerlust = _rund(verlustKW, 2);
+                unit.hydPumpe = pumpe;
+                unit.hydDbvOffen = qDbvL > 0.05;
+                unit.hydTempC = _rund(unit.hydTemp, 1);
+                accs.forEach(a => { a.hydP = _rund(pSpeicher(a), 1); a.hydOelL = _rund(a.hydOelMm3 / 1e6, 3); });
+
+                // ---- Druckschalter und Manometer ----
+                const pAn = (o) => {
+                    if (!o.targetCylinderId || o.role === 'P') return pSys;
+                    const c = factoryObjects.find(x => x.id === o.targetCylinderId);
+                    if (!c) return pSys;
+                    return o.role === 'B' ? (c.hydPB || 0) : (c.hydPA || 0);
+                };
+                factoryObjects.forEach(o => {
+                    if (o.type === 'pressure_switch_hyd') {
+                        const h = cfg(o), p = pAn(o);
+                        const ps = Math.max(1, num(h.schaltdruck, 80));
+                        const hy = Math.max(1, num(h.hysterese, Math.max(2, ps * 0.05)));
+                        if (p >= ps) o.hydSchaltet = true;
+                        else if (p < ps - hy) o.hydSchaltet = false;
+                        else o.hydSchaltet = !!o.hydSchaltet;
+                        o.hydP = _rund(p, 1);
+                        if (o.linkedVar) spsState[o.linkedVar] = h.oeffner ? !o.hydSchaltet : !!o.hydSchaltet;
+                    } else if (o.type === 'manometer_hyd') {
+                        o.hydP = _rund(pAn(o), 1);
+                    }
+                });
+                window._hydAnzeigen();
+            };
+
+            // Live-Werte in der 2D-Ansicht
+            window._hydAnzeigen = function() {
+                factoryObjects.forEach(o => {
+                    if (!o.el) return;
+                    if (o.type === 'hydraulic_unit') {
+                        const sp = o.el.querySelector(':scope > span');
+                        if (sp) sp.textContent = isSimulationActive && o.hydP != null
+                            ? `${Math.round(o.hydP)} bar${o.hydDbvOffen ? ' · DBV' : ''}${o.hydPumpe === false ? ' · AUS' : ''}`
+                            : `DBV ${o.pressure} bar`;
+                    } else if (_isHydAct(o)) {
+                        let inf = o.el.querySelector(':scope > .f2d-hyd-info');
+                        if (!isSimulationActive || o.hydPA == null) { if (inf) inf.remove(); return; }
+                        if (!inf) { inf = document.createElement('div'); inf.className = 'f2d-hyd-info'; o.el.appendChild(inf); }
+                        const p = Math.max(o.hydPA || 0, o.hydPB || 0);
+                        inf.textContent = `${o.hydPB > o.hydPA ? 'pB' : 'pA'} ${Math.round(p)} bar · F ${(o.hydKraft / 1000).toFixed(1).replace('.', ',')} kN`;
+                    } else if (o.type === 'manometer_hyd' || o.type === 'pressure_switch_hyd' || o.type === 'accumulator_hyd') {
+                        const w = o.el.querySelector('.f2d-hyd-wert');
+                        if (w) w.textContent = (o.hydP != null ? Math.round(o.hydP) : 0) + ' bar';
+                        if (o.type === 'pressure_switch_hyd') o.el.classList.toggle('active', !!o.hydSchaltet);
+                        if (o.type === 'manometer_hyd') {
+                            const z = o.el.querySelector('.f2d-hyd-zeiger');
+                            const unit = factoryObjects.find(u => u.type === 'hydraulic_unit');
+                            const max = Math.max(10, (unit && unit.pressure) || 100) * 1.6;
+                            if (z) z.style.transform = `rotate(${-120 + 240 * Math.min(1, (o.hydP || 0) / max)}deg)`;
+                        }
+                    }
+                });
+            };
+
+            // Druckkarte des Solvers mit den Lastdrücken überschreiben (Schaltplan-Farben, Drucklabels)
+            window._hydDruckKarte = function(m) {
+                if (!m || !isSimulationActive) return;
+                const unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
+                const conns = (window.fluidPipeConnections || []).filter(c => c._sys === 'hyd' && !c._broken);
+                const nachbarn = (id, port) => conns.filter(c => (c.aObjId === id && c.aPortId === port) || (c.bObjId === id && c.bPortId === port))
+                    .map(c => c.aObjId === id && c.aPortId === port ? c.bObjId + ':' + c.bPortId : c.aObjId + ':' + c.aPortId);
+                factoryObjects.forEach(o => {
+                    if (_isHydAct(o) && o.hydPA != null) {
+                        [['A', o.hydPA], ['B', o.hydPB]].forEach(([port, p]) => {
+                            if (!((o.id + ':' + port) in m) && port === 'B' && o.type === 'zylinder_single') return;
+                            m[o.id + ':' + port] = p;
+                            nachbarn(o.id, port).forEach(n => { m[n] = p; });
+                        });
+                    } else if ((o.type === 'manometer_hyd' || o.type === 'pressure_switch_hyd' || o.type === 'accumulator_hyd') && o.hydP != null) {
+                        m[o.id + ':P'] = o.hydP;
+                    }
+                });
+                if (unit && unit.hydP != null) m[unit.id + ':P'] = unit.hydP;
+            };
+
+            // ---- Anbauen am Zylinder / am Aggregat ----
+            function _verbinde(a, ap, b, bp) {
+                window.fluidPipeConnections = window.fluidPipeConnections || [];
+                window.fluidPipeConnections.push({ aObjId: a.id, aPortId: ap, bObjId: b.id, bPortId: bp, _sys: 'hyd' });
+            }
+            function _freierAusgang(m) {
+                const belegt = new Set((window.fluidPipeConnections || []).filter(c => c._sys === 'hyd' && (c.aObjId === m.id || c.bObjId === m.id))
+                    .map(c => c.aObjId === m.id ? c.aPortId : c.bPortId));
+                const defs = (window._hydPortDefs(m) || []).filter(p => p.id.startsWith('O'));
+                const frei = defs.find(p => !belegt.has(p.id));
+                if (frei) return frei.id;
+                m.width = (m.width || 200) + 40; if (m.el) m.el.style.width = m.width + 'px';
+                return 'O' + (defs.length + 1);
+            }
+            const KURZ = { check_valve_hyd: '-RM', pressure_switch_hyd: '-BP', manometer_hyd: '-PG', accumulator_hyd: '-CM' };
+            function _naechsteNummer(typ) {
+                let n = 0;
+                factoryObjects.forEach(o => { const m = String(o.normLabel || '').match(/^-[A-Z]+(\d+)$/); if (o.type === typ && m) n = Math.max(n, +m[1]); });
+                return KURZ[typ] + (n + 1);
+            }
+            window._hydAnbauen = function(zielId, art, seite) {
+                const ziel = factoryObjects.find(o => o.id === zielId);
+                const unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
+                if (!ziel && art !== 'accumulator_hyd' && seite !== 'P') return null;
+                const o = createFactoryObject(art, '');
+                o.normLabel = _naechsteNummer(art);
+                const lbl = o.el.querySelector('.f2d-norm-label'); if (lbl) lbl.textContent = o.normLabel;
+                const mfld = factoryObjects.find(m => m.type === 'hydraulic_manifold');
+                if (art === 'accumulator_hyd' || seite === 'P') {
+                    const bezug = mfld || unit;
+                    o.x = (bezug ? bezug.x : 200) + 40 * factoryObjects.filter(x => x.type === art).length + (art === 'accumulator_hyd' ? 20 : 120);
+                    o.y = (bezug ? bezug.y : 900) + 40;
+                    o.role = 'P'; o.targetCylinderId = null;
+                    if (mfld) _verbinde(mfld, _freierAusgang(mfld), o, 'P');
+                } else {
+                    const valve = factoryObjects.find(v => v.type === 'valve_hyd' && v.targetCylinderId === ziel.id);
+                    o.targetCylinderId = ziel.id; o.role = seite === 'B' ? 'B' : 'A';
+                    if (art === 'check_valve_hyd' && valve) {
+                        // zwischen Ventil-Arbeitsanschluss und Drossel (bzw. Zylinder) einsetzen
+                        const vp = o.role;
+                        const k = (window.fluidPipeConnections || []).find(c => c._sys === 'hyd' && !c._broken &&
+                            ((c.aObjId === valve.id && c.aPortId === vp) || (c.bObjId === valve.id && c.bPortId === vp)));
+                        o.x = valve.x + (vp === 'A' ? -45 : 45); o.y = valve.y - 120;
+                        if (k) {
+                            const andereId = k.aObjId === valve.id ? k.bObjId : k.aObjId, anderePort = k.aObjId === valve.id ? k.bPortId : k.aPortId;
+                            window.fluidPipeConnections.splice(window.fluidPipeConnections.indexOf(k), 1);
+                            _verbinde(valve, vp, o, 'IN');
+                            const andere = factoryObjects.find(x => x.id === andereId);
+                            if (andere) _verbinde(o, 'OUT', andere, anderePort);
+                        } else { _verbinde(valve, vp, o, 'IN'); _verbinde(o, 'OUT', ziel, vp); }
+                    } else {
+                        o.x = ziel.x + (o.role === 'A' ? -10 : (ziel.width || 80) - 20) + 30 * factoryObjects.filter(x => x.type === art && x.targetCylinderId === ziel.id).length;
+                        o.y = ziel.y - 70;
+                        _verbinde(o, 'P', ziel, o.role);
+                    }
+                }
+                updateObjTransform(o);
+                if (typeof _applyHydManualConnections === 'function') _applyHydManualConnections();
+                if (typeof window.drawHydraulicHoses === 'function') window.drawHydraulicHoses();
+                saveFactoryState();
+                return o.id;
+            };
+
+            // ---- Kontextmenü-Bausteine ----
+            function _trenner(menu) { const s = document.createElement('div'); s.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; menu.appendChild(s); }
+            function _titel(menu, txt) { const t = document.createElement('div'); t.style.cssText = 'padding:0 10px;color:#ff8f00;font-size:10px;font-weight:bold;'; t.textContent = txt; menu.appendChild(t); }
+            function _zahl(menu, obj, lbl, key, def, min, max, step, hilfe, ziel) {
+                const w = document.createElement('div'); w.style.padding = '2px 15px'; w.onclick = e => e.stopPropagation();
+                w.innerHTML = `<div style="color:#aaa;font-size:9px;margin-bottom:1px;">${lbl}</div>` + (hilfe ? `<div style="color:#777;font-size:9px;margin-bottom:2px;">${hilfe}</div>` : '');
+                const inp = document.createElement('input'); inp.type = 'number'; inp.min = min; inp.max = max; inp.step = step;
+                const quelle = ziel || cfg(obj);
+                inp.value = num(quelle[key], def);
+                inp.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;box-sizing:border-box;';
+                inp.onchange = () => { const v = parseFloat(inp.value); quelle[key] = isFinite(v) ? Math.max(min, Math.min(max, v)) : def; saveFactoryState(); };
+                w.appendChild(inp); menu.appendChild(w);
+            }
+            function _regler(menu, obj, lbl, key, hilfe) {
+                const h = cfg(obj);
+                const w = document.createElement('div'); w.style.padding = '4px 15px'; w.onclick = e => e.stopPropagation();
+                w.innerHTML = `<div style="color:#e57373;font-size:10px;margin-bottom:2px;">${lbl}</div><div style="color:#777;font-size:9px;margin-bottom:4px;">${hilfe}</div>`;
+                const s = document.createElement('input'); s.type = 'range'; s.min = '0'; s.max = '100'; s.step = '1'; s.value = num(h[key], 0); s.style.cssText = 'width:100%;cursor:ew-resize;';
+                const val = document.createElement('div'); val.style.cssText = 'color:#fff;font-size:11px;text-align:center;'; val.textContent = num(h[key], 0) + ' %';
+                s.oninput = () => { h[key] = parseInt(s.value, 10); val.textContent = h[key] + ' %'; saveFactoryState(); };
+                w.appendChild(s); w.appendChild(val); menu.appendChild(w);
+            }
+            function _auswahl(menu, obj, lbl, key, optionen, def, quelle) {
+                const q = quelle || cfg(obj);
+                const w = document.createElement('div'); w.style.padding = '2px 15px'; w.onclick = e => e.stopPropagation();
+                w.innerHTML = `<div style="color:#aaa;font-size:9px;margin-bottom:1px;">${lbl}</div>`;
+                const sel = document.createElement('select'); sel.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                optionen.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if ((q[key] != null ? q[key] : def) === v) o.selected = true; sel.appendChild(o); });
+                sel.onchange = () => { q[key] = sel.value; saveFactoryState(); };
+                w.appendChild(sel); menu.appendChild(w);
+            }
+            function _haken(menu, obj, lbl, key, def) {
+                const h = cfg(obj);
+                const w = document.createElement('label'); w.style.cssText = 'display:flex;gap:6px;align-items:center;padding:3px 15px;color:#ddd;font-size:10px;cursor:pointer;'; w.onclick = e => e.stopPropagation();
+                const c = document.createElement('input'); c.type = 'checkbox'; c.checked = h[key] != null ? !!h[key] : def;
+                c.onchange = () => { h[key] = c.checked; saveFactoryState(); };
+                w.appendChild(c); w.appendChild(document.createTextNode(lbl)); menu.appendChild(w);
+            }
+            function _knopf(menu, txt, fn) {
+                const b = document.createElement('div'); b.className = 'ctx-item'; b.innerHTML = txt;
+                b.onclick = () => { fn(); menu.style.display = 'none'; };
+                menu.appendChild(b);
+            }
+            window._hydAggregatMenue = function(obj, menu) {
+                _zahl(menu, obj, '🔧 Pumpenverschleiß (%) – innere Leckage der Pumpe, wächst mit dem Druck', 'verschleiss', 0, 0, 90, 5);
+                _zahl(menu, obj, '🛢 Tankinhalt (l) – bestimmt, wie schnell das Öl warm wird', 'tankLiter', 40, 5, 2000, 5);
+                _trenner(menu);
+                _knopf(menu, '<strong style="color:#ff8f00;">➕ Druckspeicher an den Verteiler</strong>', () => window._hydAnbauen(obj.id, 'accumulator_hyd', 'P'));
+                _knopf(menu, '<strong style="color:#ff8f00;">➕ Manometer (Systemdruck)</strong>', () => window._hydAnbauen(obj.id, 'manometer_hyd', 'P'));
+                _knopf(menu, '<strong style="color:#ff8f00;">➕ Druckschalter (Systemdruck)</strong>', () => window._hydAnbauen(obj.id, 'pressure_switch_hyd', 'P'));
+            };
+            window._hydZylinderMenue = function(obj, menu) {
+                _trenner(menu);
+                _titel(menu, '🏋 Last am Zylinder');
+                _zahl(menu, obj, 'Lastkraft F (N), wirkt gegen das Ausfahren', 'last', 0, 0, 5000000, 100);
+                _auswahl(menu, obj, 'Art der Last', 'lastArt', [['presse', 'Werkstück (ab Hub-%)'], ['gewicht', 'Gewicht (ganzer Hub)']], 'presse');
+                _zahl(menu, obj, 'Werkstück liegt an ab Hub (%)', 'lastAb', 0, 0, 100, 5);
+                _regler(menu, obj, '🔧 Kolbendichtung undicht (%)', 'dichtung', 'Öl strömt innen von A nach B, unter Druck mehr');
+                _trenner(menu);
+                const seiten = obj.type === 'zylinder_single' ? ['A'] : ['A', 'B'];
+                seiten.forEach(s => {
+                    if (!factoryObjects.some(o => o.type === 'check_valve_hyd' && o.targetCylinderId === obj.id && (o.role || 'A') === s))
+                        _knopf(menu, `<strong style="color:#ff8f00;">➕ Rückschlagventil in ${s} (entsperrbar)</strong>`, () => window._hydAnbauen(obj.id, 'check_valve_hyd', s));
+                    _knopf(menu, `<strong style="color:#ff8f00;">➕ Druckschalter an ${s}</strong>`, () => window._hydAnbauen(obj.id, 'pressure_switch_hyd', s));
+                    _knopf(menu, `<strong style="color:#ff8f00;">➕ Manometer an ${s}</strong>`, () => window._hydAnbauen(obj.id, 'manometer_hyd', s));
+                });
+            };
+            window._hydVentilMenue = function(obj, menu) {
+                _trenner(menu);
+                _regler(menu, obj, '🔧 Innere Leckage (%)', 'innenLeck', 'Spaltverlust am Kolbenschieber: Öl fließt zum Tank, belastete Zylinder sinken in der Mittelstellung ab');
+            };
+            function _zielAuswahl(menu, obj) {
+                const zyl = factoryObjects.filter(_isHydAct);
+                const w = document.createElement('div'); w.style.padding = '2px 15px'; w.onclick = e => e.stopPropagation();
+                w.innerHTML = '<div style="color:#aaa;font-size:9px;margin-bottom:1px;">Misst / wirkt an</div>';
+                const sel = document.createElement('select'); sel.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                const opts = [['P|', 'Systemdruck (Verteiler)']];
+                zyl.forEach(c => { opts.push(['A|' + c.id, (c.normLabel || c.id) + ' Anschluss A']); if (c.type !== 'zylinder_single') opts.push(['B|' + c.id, (c.normLabel || c.id) + ' Anschluss B']); });
+                const jetzt = (obj.targetCylinderId ? (obj.role || 'A') : 'P') + '|' + (obj.targetCylinderId || '');
+                opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === jetzt) o.selected = true; sel.appendChild(o); });
+                sel.onchange = () => { const [r, id] = sel.value.split('|'); obj.role = r; obj.targetCylinderId = id || null; saveFactoryState(); };
+                w.appendChild(sel); menu.appendChild(w);
+            }
+            window._hydBauteilMenue = function(obj, menu) {
+                _trenner(menu);
+                if (obj.type === 'check_valve_hyd') {
+                    const zyl = factoryObjects.filter(_isHydAct);
+                    const w = document.createElement('div'); w.style.padding = '2px 15px'; w.onclick = e => e.stopPropagation();
+                    w.innerHTML = '<div style="color:#aaa;font-size:9px;margin-bottom:1px;">Sitzt in der Leitung</div>';
+                    const sel = document.createElement('select'); sel.style.cssText = 'width:100%;padding:3px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
+                    const opts = [['|', '— keinem Zylinder zugeordnet —']];
+                    zyl.forEach(c => { opts.push(['A|' + c.id, (c.normLabel || c.id) + ' A']); if (c.type !== 'zylinder_single') opts.push(['B|' + c.id, (c.normLabel || c.id) + ' B']); });
+                    const jetzt = (obj.targetCylinderId ? (obj.role || 'A') : '') + '|' + (obj.targetCylinderId || '');
+                    opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === jetzt) o.selected = true; sel.appendChild(o); });
+                    sel.onchange = () => { const [r, id] = sel.value.split('|'); obj.role = r || null; obj.targetCylinderId = id || null; saveFactoryState(); };
+                    w.appendChild(sel); menu.appendChild(w);
+                    _haken(menu, obj, 'entsperrbar (Steuerleitung X von der anderen Seite)', 'entsperrbar', true);
+                    _regler(menu, obj, '🔧 Undicht (%)', 'leck', 'Sitz verschlissen: die Last sinkt trotz Rückschlagventil langsam ab');
+                } else if (obj.type === 'pressure_switch_hyd') {
+                    _zielAuswahl(menu, obj);
+                    _zahl(menu, obj, 'Schaltdruck (bar)', 'schaltdruck', 80, 1, 400, 5);
+                    _zahl(menu, obj, 'Rückschaltdifferenz (bar)', 'hysterese', 5, 1, 100, 1);
+                    _haken(menu, obj, 'Öffner (meldet 0, wenn der Druck erreicht ist)', 'oeffner', false);
+                } else if (obj.type === 'manometer_hyd') {
+                    _zielAuswahl(menu, obj);
+                } else if (obj.type === 'accumulator_hyd') {
+                    _zahl(menu, obj, 'Nennvolumen V0 (l)', 'volumen', 1, 0.1, 100, 0.1);
+                    _zahl(menu, obj, 'Gasvorfülldruck p0 (bar)', 'vordruck', 60, 1, 350, 5);
+                    _haken(menu, obj, 'Entlastungsventil offen (Speicher zum Tank entleeren)', 'entlasten', false);
+                }
             };
         })();
         // =========================================================
@@ -50000,7 +50755,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             function _isHydType(t) {
                 return t === 'valve_hyd' || t === 'throttle_hyd' || t === 'hydraulic_unit' || t === 'oil_tank'
-                    || t === 'hydraulic_manifold' || t === 'manometer_hyd';
+                    || t === 'hydraulic_manifold' || t === 'manometer_hyd' || t === 'check_valve_hyd'
+                    || t === 'pressure_switch_hyd' || t === 'accumulator_hyd';
             }
             function _objsForSys(sys) {
                 if (sys === 'pneu') return factoryObjects.filter(o => _isPneuType(o.type) && (o.hasPneumatics !== false));
@@ -65780,6 +66536,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 raumlage, Drossel aus der Ansicht) → true, wenn sich etwas geändert hat
         //   b.duplizieren(id, lage?)   Bauteil mit allen Einstellungen und Anbauteilen kopieren (wie Strg+C/V),
         //                                 lage wie bei raumlage stellt die Kopie in den Raum → neue id
+        // Ab Version 14 (Hydraulik mit Last und Druck):
+        //   b.hydraulik(id, werte)     Einstellungen setzen, z. B. { pressure: 120 } am Aggregat (DBV),
+        //                                 { last: 20000, lastArt: 'presse', lastAb: 60, dichtung: 30 } am Zylinder,
+        //                                 { schaltdruck: 90 } am Druckschalter, { entlasten: true } am Speicher
+        //   b.hydraulikAnbauen(zylId, art, seite)   Rückschlagventil, Druckschalter, Manometer
+        //                                 (check_valve_hyd, pressure_switch_hyd, manometer_hyd) an A/B oder
+        //                                 Druckspeicher/Manometer am Verteiler (seite 'P') → id
+        //   zustand().objekte: hydP, hydQ, hydQdbv, hydDbvOffen, hydTempC, hydVerlust (Aggregat),
+        //                                 hydPA, hydPB, hydKraft, hydLast, hydV, hydRolle (Zylinder),
+        //                                 hydP, hydSchaltet, hydOelL (Druckschalter, Manometer, Speicher)
         // Ab Version 13:
         //   b.festoZeit(slot, sekunden)  Zeit am Drehknopf eines Zeitrelais (Slot wie „Z1_S1“, 0,5 … 10 s):
         //                                 schreibt die Zeit in TON/TOF/TP der Variable im Code → { ok, text, sekunden }
@@ -65872,7 +66638,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 13,
+            version: 14,
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();
@@ -66165,6 +66931,28 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return true;
             },
             // Drossel (pneumatisch oder hydraulisch) auf 1 … 100 % Öffnung stellen
+            // Ab Version 14: Hydraulik-Einstellungen (Last, Fehler, Schaltdruck, Speicher …) setzen
+            // werte: { pressure, maxFlow } direkt am Bauteil, alles andere landet in obj.hyd
+            hydraulik: function(id, werte) {
+                const o = _brueckeObj(id);
+                if (!o || !werte || typeof werte !== 'object') return false;
+                const h = o.hyd || (o.hyd = {});
+                Object.keys(werte).forEach(k => {
+                    const v = werte[k];
+                    if (k === 'pressure' || k === 'maxFlow') { if (isFinite(Number(v))) o[k] = Number(v); }
+                    else if (v === null) delete h[k];
+                    else if (['number', 'boolean', 'string'].includes(typeof v)) h[k] = v;
+                });
+                if (o.type === 'hydraulic_unit' && o.el) { const sp = o.el.querySelector(':scope > span'); if (sp) sp.textContent = 'DBV ' + o.pressure + ' bar'; }
+                _brueckeGeaendert();
+                return true;
+            },
+            hydraulikAnbauen: function(zylId, art, seite) {
+                if (!['check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'].includes(art)) return null;
+                const id = window._hydAnbauen ? window._hydAnbauen(zylId, art, seite || 'A') : null;
+                if (id) { _brueckeNeuZeichnen(); _brueckeGeaendert(); }
+                return id;
+            },
             drossel: function(id, prozent) {
                 const o = _brueckeObj(id);
                 if (!o || (o.type !== 'throttle' && o.type !== 'throttle_hyd') ) return false;

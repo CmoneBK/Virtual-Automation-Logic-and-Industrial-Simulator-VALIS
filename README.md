@@ -237,6 +237,14 @@ Orange Signalleitungen verbinden Geber- und Reglerausgänge mit den Eingängen, 
 * **Schaltplan-Editor:** Palette „Analog (Komparator)“ mit Schließer und Öffner einer Komparatorkarte. Doppelklick: Eingang (Analogwert), Schaltart (Sollwert ± ½ Hysterese heizen/kühlen oder Einschalt-/Ausschaltpunkt) und die beiden Werte. Der Editor schreibt dafür `VAR := ZWEIPUNKT(EINGANG, a, b[, HEIZEN|KUEHLEN])`; „Aus Code“ macht aus solchen Zeilen wieder Komparator-Kontakte. So passen Analogwerte auch in den Relais-Modus: Messwert rein, Relaiskontakt raus.
 * **Schrittkette:** Übergänge dürfen Vergleiche enthalten (`TEMP > 55 -> S3`, auch `TEMP > 55 && FREIGABE`). VALIS lagert jeden Vergleich in eine Hilfszeile `_SK_<KETTE>_V<n>` aus. Aktionen mit Zahlenwert setzen einen Sollwert (`SOLL := 60` in S2, `SOLL := 40` in S3): der Wert gilt ab dem Schritt und bleibt stehen, bis ein anderer Schritt einen neuen setzt. „Regler ein“ ist eine normale Aktion (`REGLER_EIN := TRUE`), mit der man den Reglerausgang freigibt, z. B. `HEIZUNG := ZP && REGLER_EIN`.
 
+### Aufgaben und Lektion zu Analogwerten
+
+* **Neue Aufgaben-Bedingungen (.valitask, Gruppe „Analogwerte & Regler“):**
+  * `analog_wert`: `{ "variable": "TEMP", "op": ">=", "value": 45, "tol": 1 }`, Vergleich `>=`, `>`, `<=`, `<` oder `≈` (innerhalb `tol`). Wert als Zahl oder Variable.
+  * `analog_band`: `{ "variable": "OELTEMP", "sollwert": 45, "tol": 2, "seconds": 60 }`, die Regelgröße bleibt ohne Unterbrechung `seconds` Sim-Sekunden in Sollwert ± `tol` (Zeitraffer zählt mit). Einmal erreicht, bleibt die Bedingung erfüllt.
+  * `regler_parameter`: `{ "variable": "VENTIL", "kpMin": 4, "kpMax": 12, "tnMin": 200, "tnMax": 900 }`, KP/TN/TV des PID-Bausteins, der die Stellgröße schreibt; Werte aus dem Reglerfenster zählen vor dem Code. Fehlende Grenzen werden nicht geprüft.
+* **Lektion F3 „Regeln mit der SPS“** (Lernzentrum ▸ Fortgeschritten): Regelstrecke und Sollwertsteller werden aufgebaut, PI-Regler, Zeitraffer, Reglerfenster, Zweipunktregler.
+
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 
 ## 🛠️ Erstellt mit

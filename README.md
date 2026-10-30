@@ -232,6 +232,11 @@ Nutzt der Code `ZWEIPUNKT` oder `PID`, oder stehen Analogbauteile in der Anlage,
 
 Orange Signalleitungen verbinden Geber- und Reglerausgänge mit den Eingängen, die dieselbe Variable lesen. Anzeigen, Relais-LEDs und Wechsler laufen in der Simulation live mit.
 
+### Analogwerte im Schaltplan-Editor und in der Schrittkette
+
+* **Schaltplan-Editor:** Palette „Analog (Komparator)“ mit Schließer und Öffner einer Komparatorkarte. Doppelklick: Eingang (Analogwert), Schaltart (Sollwert ± ½ Hysterese heizen/kühlen oder Einschalt-/Ausschaltpunkt) und die beiden Werte. Der Editor schreibt dafür `VAR := ZWEIPUNKT(EINGANG, a, b[, HEIZEN|KUEHLEN])`; „Aus Code“ macht aus solchen Zeilen wieder Komparator-Kontakte. So passen Analogwerte auch in den Relais-Modus: Messwert rein, Relaiskontakt raus.
+* **Schrittkette:** Übergänge dürfen Vergleiche enthalten (`TEMP > 55 -> S3`, auch `TEMP > 55 && FREIGABE`). VALIS lagert jeden Vergleich in eine Hilfszeile `_SK_<KETTE>_V<n>` aus. Aktionen mit Zahlenwert setzen einen Sollwert (`SOLL := 60` in S2, `SOLL := 40` in S3): der Wert gilt ab dem Schritt und bleibt stehen, bis ein anderer Schritt einen neuen setzt. „Regler ein“ ist eine normale Aktion (`REGLER_EIN := TRUE`), mit der man den Reglerausgang freigibt, z. B. `HEIZUNG := ZP && REGLER_EIN`.
+
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 
 ## 🛠️ Erstellt mit

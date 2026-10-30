@@ -2837,10 +2837,10 @@
                             </ul>
                         </div>
                         <div>
-                            <strong style="color: #DCDCAA;">🎛 Regler (Analogwerte)</strong>
+                            <strong style="color: #DCDCAA;" data-i18n="leg_regler_title">🎛 Regler (Analogwerte)</strong>
                             <ul style="margin: 3px 0 0 0; padding-left: 20px;">
-                                <li><code data-glossary="ZWEIPUNKT">OUT := ZWEIPUNKT(ISTWERT, EIN, AUS)</code> ➔ <b>Zweipunktregler:</b> schaltet unter EIN ein und über AUS aus (oder umgekehrt, wenn EIN größer ist). Mit Sollwert: <code>ZWEIPUNKT(ISTWERT, SOLL, HYST, HEIZEN)</code> bzw. <code>KUEHLEN</code>.</li>
-                                <li><code data-glossary="PID">Y := PID(SOLL, ISTWERT, KP, TN, TV)</code> ➔ <b>PID-Regler:</b> Stellgröße 0 … 100 %. TN = 0 ohne I-Anteil, TV = 0 ohne D-Anteil. Sechster Wert <code>KUEHLEN</code> kehrt die Wirkrichtung um. Doppelklick auf den Baustein im Logikplan öffnet das Reglerfenster.</li>
+                                <li><code data-glossary="ZWEIPUNKT">OUT := ZWEIPUNKT(ISTWERT, EIN, AUS)</code> ➔ <span data-i18n="leg_zp"><b>Zweipunktregler:</b> schaltet unter EIN ein und über AUS aus (oder umgekehrt, wenn EIN größer ist). Mit Sollwert: <code>ZWEIPUNKT(ISTWERT, SOLL, HYST, HEIZEN)</code> bzw. <code>KUEHLEN</code>.</span></li>
+                                <li><code data-glossary="PID">Y := PID(SOLL, ISTWERT, KP, TN, TV)</code> ➔ <span data-i18n="leg_pid"><b>PID-Regler:</b> Stellgröße 0 … 100 %. TN = 0 ohne I-Anteil, TV = 0 ohne D-Anteil. Sechster Wert <code>KUEHLEN</code> kehrt die Wirkrichtung um. Doppelklick auf den Baustein im Logikplan öffnet das Reglerfenster.</span></li>
                             </ul>
                         </div>
                     </div>
@@ -5823,6 +5823,9 @@ const aktiv = resolveLinked(obj, spsState);
                 "leg_timer_ton": "<b>Einschaltverzögert:</b> Schaltet erst ein, wenn IN für 2.5s anliegt.",
                 "leg_timer_tof": "<b>Ausschaltverzögert:</b> Bleibt nach Abfall von IN noch 1.5s aktiv.",
                 "leg_timer_tp": "<b>Impuls:</b> Ein kurzer IN-Puls erzeugt ein festes 3.0s Signal.",
+                "leg_regler_title": "🎛 Regler (Analogwerte)",
+                "leg_zp": "<b>Zweipunktregler:</b> schaltet unter EIN ein und über AUS aus (oder umgekehrt, wenn EIN größer ist). Mit Sollwert: <code>ZWEIPUNKT(ISTWERT, SOLL, HYST, HEIZEN)</code> bzw. <code>KUEHLEN</code>.",
+                "leg_pid": "<b>PID-Regler:</b> Stellgröße 0 … 100 %. TN = 0 ohne I-Anteil, TV = 0 ohne D-Anteil. Sechster Wert <code>KUEHLEN</code> kehrt die Wirkrichtung um. Doppelklick auf den Baustein im Logikplan öffnet das Reglerfenster.",
                 "leg_counter_title": "🔢 Zähler (Counters)",
                 "leg_counter_desc": "<b>Vorwärtszähler:</b> Zählt bei jedem Signalwechsel (0 auf 1). Wenn das Limit erreicht ist, schaltet OUT ein.",
 				// Simulation Panel
@@ -6239,6 +6242,9 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "leg_timer_ton": "<b>On-Delay:</b> Switches on only after IN is active for 2.5s.",
                 "leg_timer_tof": "<b>Off-Delay:</b> Remains active for 1.5s after IN drops.",
                 "leg_timer_tp": "<b>Pulse:</b> A short IN pulse creates a fixed 3.0s signal.",
+                "leg_regler_title": "🎛 Controllers (analog values)",
+                "leg_zp": "<b>Two-point controller:</b> switches on below ON and off above OFF (or the other way round if ON is larger). With setpoint: <code>ZWEIPUNKT(ACTUAL, SETPOINT, HYST, HEIZEN)</code> (heating) or <code>KUEHLEN</code> (cooling).",
+                "leg_pid": "<b>PID controller:</b> output 0 … 100 %. TN = 0 without I action, TV = 0 without D action. A sixth value <code>KUEHLEN</code> reverses the direction of action. Double-click the block in the logic diagram to open the controller window.",
                 "leg_counter_title": "🔢 Counters",
                 "leg_counter_desc": "<b>Up-Counter:</b> Counts on every signal change (0 to 1). When the limit is reached, OUT switches on.",
 				// Simulation Panel
@@ -26355,6 +26361,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'sim_running':     return 'Simulation laufen lassen';
                 case 'despawner_count': return 'Teile verarbeiten';
                 case 'festo_train':     return 'Steckaufbau abschließen';
+                case 'analog_wert':     return 'Analogwert erreichen';
+                case 'analog_band':     return 'Regelgröße einregeln';
+                case 'regler_parameter': return 'Regler einstellen';
                 case 'custom_js':       return 'Bedingung erfüllen';
                 default:                return cond.type;
             }
@@ -26373,6 +26382,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'sim_running':     return `≥ ${cond.minSeconds} s`;
                 case 'despawner_count': return `${cond.count} Teile`;
                 case 'festo_train':     return 'FESTO-Trainingsmodus komplett verkabelt';
+                case 'analog_wert':     return `${cond.variable} ${cond.op || '>='} ${cond.value}` + (cond.op === '≈' ? ` ± ${cond.tol || 1}` : '');
+                case 'analog_band':     return `${cond.variable} bleibt ${cond.seconds || 10} s in ${cond.sollwert} ± ${cond.tol || 1}`;
+                case 'regler_parameter': return `${cond.variable}: ` + ['kp', 'tn', 'tv'].filter(k => cond[k + 'Min'] != null || cond[k + 'Max'] != null).map(k => `${k.toUpperCase()} ${cond[k + 'Min'] != null ? cond[k + 'Min'] : '…'} … ${cond[k + 'Max'] != null ? cond[k + 'Max'] : '…'}`).join(', ');
                 case 'custom_js':       return cond.expression || '(JS)';
                 default:                return '';
             }
@@ -27008,6 +27020,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'sim_running':
                         if (taskSimSeconds < cond.minSeconds) runtimeMissing = 1;
                         break;
+                    case 'analog_wert':
+                    case 'analog_band':
+                    case 'regler_parameter':
+                        if (!_checkCondition(cond)) runtimeMissing = 1;
+                        break;
                     case 'despawner_count':
                         if (taskDespawnCount < cond.count) runtimeMissing = 1;
                         break;
@@ -27216,11 +27233,71 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'factory_object':  return factoryObjects.some(o => o.type === cond.objectType && o.linkedVar === cond.linkedVar);
                     case 'festo_train':     return !!(window._festoCablesList && window._festoCablesList.length > 0 && window._festoTrainPlaced && window._festoTrainPlaced.length >= window._festoCablesList.length);
                     case 'sim_running':     return taskSimSeconds >= cond.minSeconds;
+                    case 'analog_wert':     return _taskAnalogWert(cond);
+                    case 'analog_band':     return _taskAnalogBand(cond);
+                    case 'regler_parameter': return _taskReglerParameter(cond);
                     case 'despawner_count': return taskDespawnCount >= cond.count;
                     case 'custom_js':       return !!new Function('spsState','factoryObjects','globalInputs','globalOutputs','taskSimSeconds','return '+cond.expression)(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
                     default: return false;
                 }
             } catch(e) { return false; }
+        }
+
+        // ---- Analogwerte und Regler ----
+        // Zahl oder Variablenname (z. B. Sollwert als Variable)
+        function _taskZahl(v) {
+            if (typeof v === 'number') return v;
+            const s = String(v == null ? '' : v).trim();
+            if (/^-?\d+(?:[.,]\d+)?$/.test(s)) return parseFloat(s.replace(',', '.'));
+            const w = spsState[s.toUpperCase()] !== undefined ? spsState[s.toUpperCase()] : spsState[s];
+            return typeof w === 'number' ? w : (w === true ? 1 : w === false ? 0 : NaN);
+        }
+        function _taskAnalogWert(cond) {
+            if (!isSimulationActive) return false;
+            const x = _taskZahl(cond.variable), w = _taskZahl(cond.value);
+            if (!isFinite(x) || !isFinite(w)) return false;
+            switch (cond.op || '>=') {
+                case '>':  return x > w;
+                case '<':  return x < w;
+                case '<=': return x <= w;
+                case '≈':  return Math.abs(x - w) <= Math.abs(_taskZahl(cond.tol || 1));
+                default:   return x >= w;
+            }
+        }
+        // x bleibt ohne Unterbrechung `seconds` Sim-Sekunden lang in w ± tol.
+        // Einmal erreicht, bleibt die Bedingung für diesen Aufgabenlauf erfüllt.
+        const _taskBandStand = new WeakMap();
+        function _taskAnalogBand(cond) {
+            let st = _taskBandStand.get(cond);
+            if (!st || taskSimSeconds < (st.seit || 0) || taskSimSeconds < (st.zuletzt || 0)) { st = { seit: null, ok: false, zuletzt: 0 }; _taskBandStand.set(cond, st); }
+            st.zuletzt = taskSimSeconds;
+            if (st.ok) return true;
+            if (!isSimulationActive) return false;
+            const x = _taskZahl(cond.variable), w = _taskZahl(cond.sollwert), tol = Math.abs(_taskZahl(cond.tol != null ? cond.tol : 1));
+            if (isFinite(x) && isFinite(w) && Math.abs(x - w) <= tol) {
+                if (st.seit == null) st.seit = taskSimSeconds;
+                if (taskSimSeconds - st.seit >= (parseFloat(cond.seconds) || 10)) st.ok = true;
+            } else st.seit = null;
+            return st.ok;
+        }
+        // KP/TN/TV des PID-Bausteins, der `variable` schreibt (Werte aus dem
+        // Reglerfenster gelten vor denen im Code)
+        function _taskReglerParameter(cond) {
+            const aus = String(cond.variable || '').trim().toUpperCase();
+            if (!aus) return false;
+            const code = (document.getElementById('code') || {}).value || '';
+            const m = code.match(new RegExp('^\\s*' + aus + '\\s*:=\\s*PID\\s*\\(([^)]*)\\)', 'im'));
+            if (!m) return false;
+            const a = m[1].split(',').map(s => s.trim());
+            const ein = (window._reglerEin || {})['PID_' + aus] || {};
+            const wert = (k, i) => typeof ein[k] === 'number' ? ein[k] : _taskZahl(a[i]);
+            const p = { kp: wert('kp', 2), tn: wert('tn', 3), tv: wert('tv', 4) };
+            return ['kp', 'tn', 'tv'].every(k => {
+                const lo = cond[k + 'Min'], hi = cond[k + 'Max'];
+                if (lo == null && hi == null) return true;
+                if (!isFinite(p[k])) return false;
+                return (lo == null || p[k] >= lo) && (hi == null || p[k] <= hi);
+            });
         }
 
         // Liefert die aktuell aktiven Conditions: Stage-Conditions wenn Multi-Stage, sonst Top-Level
@@ -27359,6 +27436,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             { value:'component_type',  group:'Aufbau & Zuordnung',    label:'Variable hat einen bestimmten Bauteiltyp' },
             { value:'factory_object',  group:'Aufbau & Zuordnung',    label:'Fabrikobjekt ist mit Variable verknüpft' },
             { value:'festo_train',     group:'Aufbau & Zuordnung',    label:'Steckaufbau (Trainingsmodus) abgeschlossen' },
+            // Analogwerte & Regler
+            { value:'analog_wert',     group:'Analogwerte & Regler',  label:'Analogwert ist größer/kleiner/etwa gleich' },
+            { value:'analog_band',     group:'Analogwerte & Regler',  label:'Regelgröße bleibt X s im Toleranzband' },
+            { value:'regler_parameter',group:'Analogwerte & Regler',  label:'PID-Regler: KP/TN/TV im Bereich' },
             // Erweitert
             { value:'custom_js',       group:'Erweitert',             label:'Eigener JS-Ausdruck' },
         ];
@@ -27377,6 +27458,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
             factory_object:  'Erfüllt, wenn in der 2D-Anlage ein Objekt des gewählten Bauteils steht, das mit der angegebenen Variable verknüpft ist (Rechtsklick auf das Objekt → Variable zuweisen).',
             festo_train:     'Erfüllt, wenn im Steckaufbau-Panel der Trainingsmodus genutzt und der komplette Aufbau erfolgreich verkabelt wurde — also alle geforderten Kabel korrekt gesteckt sind.',
+            analog_wert:     'Erfüllt, wenn die Zahl-Variable (z. B. ein Analogeingang wie TEMP oder eine Stellgröße Y) während der Simulation den Vergleich erfüllt. Der Vergleichswert darf eine Zahl oder eine Variable sein. „etwa gleich“ heißt: innerhalb der Toleranz.',
+            analog_band:     'Erfüllt, sobald die Regelgröße ohne Unterbrechung die angegebene Zeit (Sim-Sekunden, Zeitraffer zählt mit) im Band Sollwert ± Toleranz bleibt. Verlässt sie das Band, beginnt die Zeit neu. Einmal erreicht, bleibt die Bedingung erfüllt. Sollwert als Zahl oder Variable (z. B. SOLL).',
+            regler_parameter:'Erfüllt, wenn der PID-Baustein, der die angegebene Stellgröße schreibt (Y := PID(…)), KP, TN und TV im verlangten Bereich hat. Werte aus dem Reglerfenster zählen vor den Werten im Code. Leere Grenzen werden nicht geprüft.',
             custom_js:       'Erfüllt, wenn der angegebene JavaScript-Ausdruck true ergibt. Für Sonderfälle. Verfügbar sind u. a.: spsState, factoryObjects, globalInputs, globalOutputs, taskSimSeconds.',
         };
         function _condExplainHtml(type) {
@@ -27546,6 +27630,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return `<label class="task-ed-label">Mindest-Simulationszeit (Sekunden)</label><input class="task-ed-input cond-minsec" type="number" min="0" value="${cond.minSeconds||5}">`;
                 case 'despawner_count':
                     return `<label class="task-ed-label">Anzahl verarbeiteter Teile</label><input class="task-ed-input cond-count" type="number" min="1" value="${cond.count||10}">`;
+                case 'analog_wert': {
+                    const ops = ['>=', '>', '<=', '<', '≈'].map(o => `<option value="${o}" ${(cond.op || '>=') === o ? 'selected' : ''}>${o === '≈' ? '≈ (etwa gleich)' : o}</option>`).join('');
+                    return `<div style="display:flex;gap:6px;">
+                        <div style="flex:2;"><label class="task-ed-label">Variable</label><input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. TEMP"></div>
+                        <div style="flex:1;"><label class="task-ed-label">Vergleich</label><select class="task-ed-input cond-op">${ops}</select></div>
+                        <div style="flex:1;"><label class="task-ed-label">Wert</label><input class="task-ed-input cond-wert" type="text" value="${_escHtml(cond.value != null ? String(cond.value) : '')}" placeholder="z.B. 45"></div>
+                        <div style="flex:1;"><label class="task-ed-label">Toleranz (≈)</label><input class="task-ed-input cond-tol" type="number" step="any" value="${cond.tol != null ? cond.tol : 1}"></div>
+                    </div>`;
+                }
+                case 'analog_band':
+                    return `<div style="display:flex;gap:6px;">
+                        <div style="flex:2;"><label class="task-ed-label">Regelgröße x</label><input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. OELTEMP"></div>
+                        <div style="flex:1;"><label class="task-ed-label">Sollwert w</label><input class="task-ed-input cond-soll" type="text" value="${_escHtml(cond.sollwert != null ? String(cond.sollwert) : '')}" placeholder="45 oder SOLL"></div>
+                        <div style="flex:1;"><label class="task-ed-label">± Toleranz</label><input class="task-ed-input cond-tol" type="number" step="any" value="${cond.tol != null ? cond.tol : 1}"></div>
+                        <div style="flex:1;"><label class="task-ed-label">Dauer (s)</label><input class="task-ed-input cond-sek" type="number" min="1" value="${cond.seconds || 30}"></div>
+                    </div>`;
+                case 'regler_parameter': {
+                    const f = (k, l) => `<div style="flex:1;"><label class="task-ed-label">${l} von … bis</label><div style="display:flex;gap:3px;"><input class="task-ed-input cond-${k}min" type="number" step="any" value="${cond[k + 'Min'] != null ? cond[k + 'Min'] : ''}" placeholder="–"><input class="task-ed-input cond-${k}max" type="number" step="any" value="${cond[k + 'Max'] != null ? cond[k + 'Max'] : ''}" placeholder="–"></div></div>`;
+                    return `<label class="task-ed-label">Stellgröße des PID-Bausteins (Y := PID(…))</label><input class="task-ed-input cond-var" type="text" value="${_escHtml(cond.variable||'')}" placeholder="z.B. VENTIL">
+                        <div style="display:flex;gap:6px;margin-top:6px;">${f('kp', 'KP')}${f('tn', 'TN (s)')}${f('tv', 'TV (s)')}</div>`;
+                }
                 case 'custom_js':
                     return `<label class="task-ed-label">JS-Ausdruck (Rückgabe: boolean)</label><input class="task-ed-input cond-expr" type="text" value="${_escHtml(cond.expression||'')}" placeholder="spsState['A_X']===true">`;
                 default: return '';
@@ -27754,6 +27859,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         cond.minSeconds = parseFloat((row.querySelector('.cond-minsec')||{value:'5'}).value) || 5; break;
                     case 'despawner_count':
                         cond.count = parseInt((row.querySelector('.cond-count')||{value:'10'}).value) || 10; break;
+                    case 'analog_wert': {
+                        cond.variable = (row.querySelector('.cond-var')||{value:''}).value.trim().toUpperCase();
+                        cond.op = (row.querySelector('.cond-op')||{value:'>='}).value;
+                        const w = (row.querySelector('.cond-wert')||{value:''}).value.trim();
+                        cond.value = /^-?\d+(?:[.,]\d+)?$/.test(w) ? parseFloat(w.replace(',', '.')) : w.toUpperCase();
+                        const t = parseFloat((row.querySelector('.cond-tol')||{value:'1'}).value);
+                        cond.tol = isFinite(t) ? t : 1;
+                        break;
+                    }
+                    case 'analog_band': {
+                        cond.variable = (row.querySelector('.cond-var')||{value:''}).value.trim().toUpperCase();
+                        const w = (row.querySelector('.cond-soll')||{value:''}).value.trim();
+                        cond.sollwert = /^-?\d+(?:[.,]\d+)?$/.test(w) ? parseFloat(w.replace(',', '.')) : w.toUpperCase();
+                        const t = parseFloat((row.querySelector('.cond-tol')||{value:'1'}).value);
+                        cond.tol = isFinite(t) ? t : 1;
+                        cond.seconds = parseFloat((row.querySelector('.cond-sek')||{value:'30'}).value) || 30;
+                        break;
+                    }
+                    case 'regler_parameter':
+                        cond.variable = (row.querySelector('.cond-var')||{value:''}).value.trim().toUpperCase();
+                        ['kp', 'tn', 'tv'].forEach(k => {
+                            ['min', 'max'].forEach(g => {
+                                const v = parseFloat((row.querySelector('.cond-' + k + g)||{value:''}).value);
+                                const key = k + (g === 'min' ? 'Min' : 'Max');
+                                if (isFinite(v)) cond[key] = v; else delete cond[key];
+                            });
+                        });
+                        break;
                     case 'custom_js':
                         cond.expression = (row.querySelector('.cond-expr')||{value:''}).value; break;
                 }
@@ -28297,6 +28430,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 component_type:  '{ "variable": "A_MOTOR", "compType": "motor" }',
                 factory_object:  '{ "objectType": "conveyor", "linkedVar": "A_BAND" }',
                 festo_train:     '{ }',
+                analog_wert:     '{ "variable": "TEMP", "op": ">=", "value": 45, "tol": 1 }',
+                analog_band:     '{ "variable": "OELTEMP", "sollwert": 45, "tol": 2, "seconds": 60 }',
+                regler_parameter:'{ "variable": "VENTIL", "kpMin": 4, "kpMax": 12, "tnMin": 200, "tnMax": 900 }',
                 custom_js:       "{ \"expression\": \"spsState['A_X']===true\" }"
             };
             let condBlock = '';
@@ -28349,6 +28485,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 '  Aus dem CODE (geparst): variable_exists, code_contains, logic_equivalent, sps_output, sps_input, sps_merker, component_type.',
                 '    Nur erfuellbar, wenn Code im Code-Editor steht. Code darf auch aus Logikplan/Schaltplan-Editor/Schrittketten/FESTO stammen — aber nur, wenn dessen Sync NICHT abgeschaltet ist.',
                 '  Aus 2D-Anlage / Simulation / FESTO: factory_object, despawner_count, sim_running, festo_train.',
+                '  Analogwerte und Regler (Simulation bzw. Code + Reglerfenster): analog_wert, analog_band (Regelgroesse bleibt seconds Sim-Sekunden in sollwert +- tol), regler_parameter (KP/TN/TV des PID-Bausteins der Stellgroesse variable).',
                 '  FALLSTRICK "manueller Aufbau": Sperrst du den Code-Editor UND schaltest die Schaltplan-Editor-Sync ab (disableFromCode/disableLiveSync), entsteht aus einer Handzeichnung KEIN Code automatisch — code-basierte Bedingungen bleiben unerfuellt. Dann ENTWEDER Sync anlassen, ODER in der description ausdruecklich sagen, dass der Lerner "Code generieren" druecken muss, ODER nur nicht-code-basierte Bedingungen nutzen.',
                 '',
                 '=== VARIABLENNAMEN (WICHTIG) ===',
@@ -54088,6 +54225,71 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             target: null,
                             title: '🎓 Geschafft!',
                             text: 'Du hast den Unterschied zwischen <b>TON</b> und <b>TOF</b> nicht nur theoretisch verstanden, sondern <i>live verglichen</i>:<br><br>• <b>Symbol-Erkennung:</b> TON-Spule trägt <i>X + Längsstrich rechts</i>, TOF-Spule trägt ein <i>schwarz ausgefülltes Rechteck links</i> — Dominanz direkt am IEC-Symbol erkennbar.<br>• <b>Verhalten beim Drücken:</b> TOF sofort, TON verzögert.<br>• <b>Verhalten beim Loslassen:</b> TON sofort, TOF verzögert.<br>• <b>Kurzer Puls:</b> TON filtert weg (zu kurz, um die Zeit zu erreichen), TOF verstärkt (Echo nach dem Loslassen).<br>• <b>Auswahl-Regel:</b> Soll der Effekt verzögert <i>einsetzen</i> → TON. Soll der Effekt verzögert <i>abklingen</i> → TOF.<br><br>📚 <b>Vertiefung:</b> VALIS unterstützt noch zwei weitere Timer-Typen, die du analog einsetzen kannst:<br>• <b>TP</b> (Timer-Pulse) — Eingang HIGH erzeugt einen festen Puls der Länge PT am Ausgang, unabhängig davon wie lange der Eingang bleibt.<br>• <b>CTU</b> (Count-Up) — kein Timer, sondern ein Zähler: Eingangs-Flanken werden gezählt, Ausgang HIGH ab Schwellwert.<br><br>Beide siehst du im 📋 Beispiel „Master-Anlage (Alle Bausteine)" in Aktion — als Ergänzung zur jetzigen Lektion.'
+                        }
+                    ]
+                },
+                {
+                    id: 'regeln_sps',
+                    icon: '🎛',
+                    title: 'F3. Regeln mit der SPS — Zweipunkt und PID',
+                    desc: 'Ein Analogwert soll einem Sollwert folgen. Regelstrecke als Modell, PI-Regler einstellen, Zeitraffer, Reglerfenster und der Zweipunktregler als einfache Alternative.',
+                    category: 'fortgeschritten',
+                    forceTypes: { 'SOLL': 'analog_in', 'XWERT': 'analog_in', 'Y': 'analog_out' },
+                    code: '// Fortgeschritten 3: Regeln mit der SPS\n' +
+                          '// Regelkreis: Sollwert w (SOLL) → Regler → Stellgröße y (Y)\n' +
+                          '//             → Regelstrecke → Regelgröße x (XWERT) → zurück zum Regler\n' +
+                          '//\n' +
+                          '// PI-Regler: KP = 2, TN = 20 s, TV = 0 (ohne D-Anteil)\n' +
+                          'Y := PID(SOLL, XWERT, 2, 20, 0)\n',
+                    steps: [
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '📝 Der Regelbaustein',
+                            text: 'Bisher waren alle Signale <b>0 oder 1</b>. Beim Regeln geht es um <b>Zahlen</b>: eine Temperatur, einen Druck, einen Weg. Die Zeile<br><code>Y := PID(SOLL, XWERT, 2, 20, 0)</code><br>vergleicht den <b>Sollwert w</b> (SOLL) mit der <b>Regelgröße x</b> (XWERT). Die Differenz ist die <b>Regelabweichung e = w − x</b>. Daraus rechnet der Regler die <b>Stellgröße y</b> (0 … 100 %).<br><br>• <b>KP = 2</b>: P-Anteil, y springt sofort um KP · e.<br>• <b>TN = 20 s</b>: I-Anteil, er wächst, solange noch eine Abweichung da ist, und beseitigt sie ganz.<br>• <b>TV = 0</b>: kein D-Anteil.<br><br>⚠️ Nenne die Regelgröße nie <code>IST</code>: das Wort ist in VALIS ein Zuweisungszeichen (wie <code>:=</code>). Nimm z. B. <code>XWERT</code> oder <code>ISTWERT</code>.',
+                            before: () => {
+                                try {
+                                    if (typeof factoryObjects === 'undefined' || typeof createFactoryObject !== 'function') return;
+                                    const setze = (o, x, y) => { if (!o) return; o.x = x; o.y = y; if (o.el) { o.el.style.left = x + 'px'; o.el.style.top = y + 'px'; } };
+                                    if (!factoryObjects.some(o => o.type === 'regelstrecke')) {
+                                        createFactoryObject('regelstrecke', 'Y');
+                                        const r = factoryObjects.find(o => o.type === 'regelstrecke');
+                                        if (r) { r.linkedVarIst = 'XWERT'; Object.assign(window._anaCfg(r), { typ: 'PT1', ks: 1, t1: 20, tt: 2, xmin: 0, xmax: 100 }); setze(r, 260, 200); }
+                                    }
+                                    if (!factoryObjects.some(o => o.type === 'setpoint_pot')) {
+                                        createFactoryObject('setpoint_pot', 'SOLL');
+                                        const p = factoryObjects.find(o => o.type === 'setpoint_pot');
+                                        if (p) { Object.assign(window._anaCfg(p), { wert: 60 }); setze(p, 120, 200); }
+                                    }
+                                    if (typeof window._streckeAnzeigen === 'function') factoryObjects.filter(o => o.type === 'regelstrecke').forEach(o => window._streckeAnzeigen(o));
+                                    if (typeof saveFactoryState === 'function') saveFactoryState();
+                                } catch (_) {}
+                            }
+                        },
+                        {
+                            target: '#factory-wrapper', pos: 'left',
+                            title: '🏭 Regelstrecke und Sollwertsteller',
+                            text: 'In der 2D-Anlage stehen jetzt zwei Bauteile:<br>• Der <b>Sollwertsteller</b> (Drehknopf) liefert SOLL = 60. In der Simulation drehst du ihn mit der Maus (ziehen oder Mausrad).<br>• Die <b>Regelstrecke (Modell)</b> nimmt Y entgegen und liefert XWERT. Sie ist ein <b>PT1-Glied</b> mit Totzeit: x folgt y verzögert (T1 = 20 s, Tt = 2 s), wie eine Temperatur, die sich langsam ändert.<br><br>Mit Rechtsklick auf die Strecke stellst du Typ (P, PT1, PT2, I), Ks, T1, Tt und eine <b>Störgröße z</b> ein. In der Simulation schaltet ein Klick auf die Strecke die Störung zu.<br><br>⏩ <b>Zeitraffer</b> (Seitenmenü „Simulation“ oder Oszilloskop): 10× oder 60× lassen SPS-Zeit und Strecke schneller laufen, die Mechanik der Anlage nicht.',
+                            before: () => _ensurePanel('factory-wrapper')
+                        },
+                        {
+                            target: '#btn-toggle-sim', pos: 'bottom',
+                            title: '▶️ Regelkreis beobachten',
+                            text: 'Starte die Simulation und stell den Zeitraffer auf <b>10×</b>. Beobachte im Sim-Panel oder im Oszilloskop:<br>• Am Anfang ist e groß, y geht fast auf 100 %.<br>• x steigt, e wird kleiner, y geht zurück.<br>• Nach einiger Zeit steht x auf 60. Der I-Anteil hält y genau dort, wo die Strecke ihn braucht.<br><br>Dreh dann den Sollwertsteller auf 40: das ist eine <b>Führungsgröße</b>-Änderung. Danach klick auf die Strecke (Störgröße an): der Regler muss die <b>Störung</b> ausregeln.'
+                        },
+                        {
+                            target: '#simulator-container', pos: 'right',
+                            title: '🎛 Regler einstellen: das Reglerfenster',
+                            text: 'Neben <b>Y</b> im Sim-Panel sitzt der Knopf <b>🎛</b>, und im Logikplan öffnet ein Doppelklick auf den PID-Baustein dasselbe <b>Reglerfenster</b>. Dort verstellst du KP, TN und TV <i>während die Anlage läuft</i> und siehst P-, I- und D-Anteil.<br><br>Probier aus:<br>• <b>TN = 0</b> → nur noch P-Regler: x bleibt unter dem Sollwert stehen (<b>bleibende Regelabweichung</b>).<br>• <b>KP = 8</b> → schneller, aber x schwingt über den Sollwert (<b>Überschwingen</b>).<br>• <b>Hand</b> → du stellst y selbst ein; zurück auf <b>Automatik</b> geht es ohne Sprung (stoßfrei).<br><br>„In den Code übernehmen“ schreibt die gefundenen Werte in die Codezeile.'
+                        },
+                        {
+                            target: '#editor-container', pos: 'right',
+                            title: '🔀 Zweipunktregler: die einfache Alternative',
+                            text: 'Nicht jede Regelung braucht einen PID. Ein <b>Thermostat</b> schaltet nur ein und aus:<br><code>HEIZUNG := ZWEIPUNKT(XWERT, 60, 4, HEIZEN)</code><br>schaltet unter 58 ein und über 62 aus (Sollwert ± ½ Hysterese). Mit <code>KUEHLEN</code> ist es umgekehrt (Lüfter, Ölkühler). Oder mit Ein- und Ausschaltpunkt wie beim Druckschalter eines Kompressors: <code>K1 := ZWEIPUNKT(DRUCK, 6.6, 7.4)</code>.<br><br>Je größer die Hysterese, desto seltener schaltet der Regler, desto größer schwankt aber x. Im Steckaufbau entspricht das der <b>Komparatorkarte</b> mit Relais-Wechsler, im Schaltplan-Editor dem <b>Komparator-Kontakt</b>.'
+                        },
+                        {
+                            target: null,
+                            title: '🎓 Geschafft!',
+                            text: 'Du kennst jetzt den <b>Regelkreis</b> mit Sollwert, Regelgröße, Regelabweichung und Stellgröße, den <b>PID-Regler</b> mit KP, TN und TV, den <b>Zweipunktregler</b> mit Hysterese und das <b>Reglerfenster</b> zum Einstellen.<br><br>Weiter geht es mit einer echten Strecke: Ölkühler am Hydraulikaggregat (<code>VENTIL := PID(SOLLT, OELTEMP, 8, 600, 0, KUEHLEN)</code>) oder Lageregelung eines Zylinders mit Proportionalventil und Wegsensor.'
                         }
                     ]
                 },

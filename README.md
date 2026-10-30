@@ -214,6 +214,13 @@ Zwei Bausteine im Stil von `TON` und `CTU`, jeweils als ganze rechte Seite:
 
 Argumente sind Zahlen oder Variablen. `IST` ist in VALIS ein Zuweisungswort, der Istwert braucht deshalb einen anderen Namen (z. B. `ISTWERT`, `TEMP`). Doppelklick auf den Baustein im Logikplan oder der 🎛-Knopf im Sim-Panel öffnet das **Reglerfenster**: KP, TN, TV live verstellen, Hand/Automatik mit Handwert (stoßfreie Umschaltung), P-, I- und D-Anteil ablesen, Werte in den Code übernehmen. Lüfter und Heizplatte nehmen einen Analogausgang als 0 … 100 % (Drehzahl bzw. Heizleistung), ein Bit wie bisher als aus/voll. Der SCL-Export schreibt beide Regler als SCL aus (PID im Weckalarm-OB mit 100 ms aufrufen).
 
+### Regelstrecken, Ölkühler, Lageregelung
+
+* **Zeitraffer** (Seitenmenü „Simulation“ und Oszilloskop: 1×, 10×, 60×, 300×): SPS-Zeit (Timer, Regler), Öltemperatur und Regelstrecken laufen schneller, die Mechanik der Anlage nicht. So lässt sich eine Öltemperatur-Regelung mit Zeitkonstanten von Minuten in Sekunden beobachten.
+* **Regelstrecke (Modell)** (Sensoren ▸ Analog): Eingang y (0 … 100 %), Ausgang x als Analogeingang. Typ P, PT1, PT2 oder I mit Ks, T1, T2, Totzeit Tt, x0 und einer Störgröße z, die man in der Simulation per Klick zuschaltet. Damit lassen sich Regler einstellen, ohne eine Anlage zu bauen.
+* **Ölkühler** (Hydraulik): kühlt das Öl im Aggregat, Kühlleistung P = Pmax · y · (ϑÖl − ϑKühlmittel) / 25 K mit Totzeit, Bauart Wasser (Proportionalventil) oder Luft (Lüfter). Wärmeeintrag der Maschine (z. B. 4,5 kW) und Umgebungstemperatur sind die Störgrößen, Werte wie im Regelkreis-Rechner. Beispiel: `VENTIL := PID(SOLLT, OELTEMP, 8, 600, 0, KUEHLEN)` mit einem Messumformer „Öltemperatur“.
+* **Proportionalventil** (Pneumatik): fährt einen Zylinder stetig, 0 … 100 % entspricht 0 … 10 V, 50 % (5 V) ist die Mitte. Lageregelung mit einem Messumformer „Weg“: `E := SOLLPOS - POS` und `Y := 50 + 2 * E`.
+
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 
 ## 🛠️ Erstellt mit

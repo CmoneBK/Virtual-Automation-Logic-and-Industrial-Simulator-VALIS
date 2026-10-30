@@ -205,6 +205,15 @@ Variablen können Zahlen tragen: Typ **Analogeingang** (SPS-Adresse EW64, EW66 �
 
 Im Sim-Panel haben Analogeingänge einen Schieber, Analogausgänge einen Balken. Das Oszilloskop zeichnet Zahlen als Kurve mit eigener Skala; „Analog überlagern“ legt alle Kurven in eine Spur, die Maus zeigt die Werte zu einem Zeitpunkt. Im Anschlussplan stehen Messumformer als Zweileiter-Geber, Sollwertsteller als Potentiometer und Analogausgänge mit 0 … 10 V. Vergleiche (`HOCH := DRUCK > 3`) liefern ein Bit; boolesche Verknüpfung mit `&&` in einer eigenen Zeile.
 
+### Regler (Zweipunkt und PID)
+
+Zwei Bausteine im Stil von `TON` und `CTU`, jeweils als ganze rechte Seite:
+
+* `HEIZUNG := ZWEIPUNKT(TEMP, 50, 55)`: ein unter 50, aus über 55, dazwischen bleibt der Zustand (Hysterese). Liegt der Einschaltpunkt über dem Ausschaltpunkt, regelt er fallend (Kühlen). Mit Sollwert: `ZWEIPUNKT(TEMP, 45, 4, KUEHLEN)` schaltet über 47 ein und unter 43 aus, `HEIZEN` umgekehrt.
+* `Y := PID(SOLL, ISTWERT, KP, TN, TV)`: Stellgröße 0 … 100 %, TN und TV in Sekunden, `TN = 0` ohne I-Anteil, `TV = 0` ohne D-Anteil. Ein sechster Wert `KUEHLEN` kehrt die Wirkrichtung um. Abtastzeit 0,1 s Simulationszeit, Begrenzung mit Anti-Windup, D-Anteil mit Verzögerung TV/10.
+
+Argumente sind Zahlen oder Variablen. `IST` ist in VALIS ein Zuweisungswort, der Istwert braucht deshalb einen anderen Namen (z. B. `ISTWERT`, `TEMP`). Doppelklick auf den Baustein im Logikplan oder der 🎛-Knopf im Sim-Panel öffnet das **Reglerfenster**: KP, TN, TV live verstellen, Hand/Automatik mit Handwert (stoßfreie Umschaltung), P-, I- und D-Anteil ablesen, Werte in den Code übernehmen. Lüfter und Heizplatte nehmen einen Analogausgang als 0 … 100 % (Drehzahl bzw. Heizleistung), ein Bit wie bisher als aus/voll. Der SCL-Export schreibt beide Regler als SCL aus (PID im Weckalarm-OB mit 100 ms aufrufen).
+
 Eine Anlage lässt sich auch per Adresse mitgeben: `index.html#state=…` wie beim Teilen-Link.
 
 ## 🛠️ Erstellt mit

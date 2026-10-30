@@ -2820,6 +2820,13 @@
                                 <li><code data-glossary="CTU">OUT := CTU(Zähl_Signal, Reset, Limit)</code> ➔ <span data-i18n="leg_counter_desc"><b>Vorwärtszähler:</b> Zählt bei jedem Signalwechsel (0 auf 1). Wenn das Limit erreicht ist, schaltet OUT ein.</span></li>
                             </ul>
                         </div>
+                        <div>
+                            <strong style="color: #DCDCAA;">🎛 Regler (Analogwerte)</strong>
+                            <ul style="margin: 3px 0 0 0; padding-left: 20px;">
+                                <li><code data-glossary="ZWEIPUNKT">OUT := ZWEIPUNKT(ISTWERT, EIN, AUS)</code> ➔ <b>Zweipunktregler:</b> schaltet unter EIN ein und über AUS aus (oder umgekehrt, wenn EIN größer ist). Mit Sollwert: <code>ZWEIPUNKT(ISTWERT, SOLL, HYST, HEIZEN)</code> bzw. <code>KUEHLEN</code>.</li>
+                                <li><code data-glossary="PID">Y := PID(SOLL, ISTWERT, KP, TN, TV)</code> ➔ <b>PID-Regler:</b> Stellgröße 0 … 100 %. TN = 0 ohne I-Anteil, TV = 0 ohne D-Anteil. Sechster Wert <code>KUEHLEN</code> kehrt die Wirkrichtung um. Doppelklick auf den Baustein im Logikplan öffnet das Reglerfenster.</li>
+                            </ul>
+                        </div>
                     </div>
                 </details>
             </div>
@@ -9331,6 +9338,56 @@ You must output exactly this JSON format. The logic code goes as a single string
                     jsCompiledCode += `        if (cu_${blockId} && !timers['${blockId}'].lastCu) { timers['${blockId}'].cv++; if (timers['${blockId}'].cv >= ${pvVal}) timers['${blockId}'].q = true; }\n    }\n`;
                     jsCompiledCode += `    timers['${blockId}'].lastCu = cu_${blockId};\n    ${_cWriteTarget} = timers['${blockId}'].q;\n`;
                     jsCompiledCode += `    state['${blockId}'] = timers['${blockId}'].q;\n`;
+                    return;
+                }
+                // === Reglerbausteine ZWEIPUNKT und PID ===
+                //   Y := ZWEIPUNKT(X, EIN, AUS)              Ein-/Ausschaltpunkt
+                //   Y := ZWEIPUNKT(X, W, HYST, HEIZEN|KUEHLEN)  Sollwert ± ½ Hysterese
+                //   Y := PID(W, X, KP, TN, TV [, HEIZEN|KUEHLEN])  Stellgröße 0 … 100 %
+                // Argumente: Zahl oder Variable. Gerechnet wird in window._regler
+                // mit der Simulationszeit und fester Abtastzeit (REGLER-Kern).
+                const _reglerMatch = expressionStr.match(/^(ZWEIPUNKT|PID)\s*\((.*)\)\s*$/i);
+                if (_reglerMatch) {
+                    const _rTyp = _reglerMatch[1].toUpperCase();
+                    const _rArgs = _reglerMatch[2].split(',').map(a => a.trim());
+                    const _rVars = [];
+                    const _richt = { HEIZEN: 1, DIREKT: 1, NORMAL: 1, KUEHLEN: -1, 'KÜHLEN': -1, INVERS: -1 };
+                    let _rRicht = null;
+                    if (_rArgs.length && Object.prototype.hasOwnProperty.call(_richt, _rArgs[_rArgs.length - 1].toUpperCase())) _rRicht = _richt[_rArgs.pop().toUpperCase()];
+                    const _rArg = (a) => {
+                        if (/^-?\d+(?:[.,]\d+)?$/.test(a)) return String(parseFloat(a.replace(',', '.')));
+                        const m = a.match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)$/);
+                        if (!m) throw new Error(_rTyp + ': Argument „' + a + '“ muss eine Zahl oder eine Variable sein (Rechnung vorher in eine eigene Zeile).');
+                        if (/^(TRUE|FALSE)$/i.test(m[1])) return /^TRUE$/i.test(m[1]) ? '1' : '0';
+                        _rVars.push(m[1]);
+                        return "(+state['" + m[1] + "']||0)";
+                    };
+                    let _rJs;
+                    const _rId = (_rTyp === 'PID' ? 'PID_' : 'ZP_') + outputStr;
+                    if (_rTyp === 'ZWEIPUNKT') {
+                        if (_rRicht === null && _rArgs.length !== 3) throw new Error('ZWEIPUNKT braucht drei Werte: ZWEIPUNKT(ISTWERT, EIN, AUS) – oder vier mit Sollwert: ZWEIPUNKT(ISTWERT, SOLL, HYSTERESE, HEIZEN).');
+                        if (_rRicht !== null && _rArgs.length !== 3) throw new Error('ZWEIPUNKT mit Wirkrichtung: ZWEIPUNKT(ISTWERT, SOLL, HYSTERESE, HEIZEN) oder … KUEHLEN).');
+                        const a = _rArgs.map(_rArg);
+                        _rJs = `window._regler.zp(timers, '${_rId}', ${a[0]}, ${a[1]}, ${a[2]}, ${_rRicht === null ? 0 : _rRicht})`;
+                    } else {
+                        if (_rArgs.length !== 5) throw new Error('PID braucht fünf Werte: PID(SOLL, ISTWERT, KP, TN, TV). TN = 0 schaltet den I-Anteil ab, TV = 0 den D-Anteil.');
+                        const a = _rArgs.map(_rArg);
+                        _rJs = `window._regler.pid(timers, '${_rId}', ${a[0]}, ${a[1]}, ${a[2]}, ${a[3]}, ${a[4]}, ${_rRicht === null ? 1 : _rRicht}, deltaMs)`;
+                    }
+                    graph.addNode(outputStr, 'ARITH', outputStr + ' = ' + expressionStr);
+                    const _rn = graph.nodes.get(outputStr);
+                    if (_rn) { _rn.regler = _rTyp; _rn.reglerId = _rId; if (_rn.sourceLine == null) _rn.sourceLine = lineIdx; }
+                    if (definedOutputs.has(outputStr)) duplicateOutputs.add(outputStr);
+                    definedOutputs.add(outputStr);
+                    new Set(_rVars).forEach(v => {
+                        graph.addNode(v, 'INPUT', v);
+                        allUsedInputs.add(v);
+                        graph.addEdge(v, outputStr, '', false);
+                    });
+                    // Soll- und Istwert sind Zahlen: noch untypisierte Variablen
+                    // werden Analogeingänge, der PID-Ausgang ein Analogausgang.
+                    if (typeof window._reglerTypen === 'function') window._reglerTypen(_rTyp, outputStr, _rArgs);
+                    jsCompiledCode += `    state['${outputStr}'] = ${_rJs};\n`;
                     return;
                 }
                 // === Arithmetik-Pfad ===
@@ -16072,6 +16129,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         window._setFocusVar(node.id, 'fbs');
                     }
                 });
+                // Reglerbausteine (ZWEIPUNKT, PID): Kennzeichen über dem Kasten,
+                // Doppelklick öffnet das Reglerfenster.
+                if (node.regler && node.reglerId) {
+                    g.style.cursor = 'pointer';
+                    g.addEventListener('dblclick', (e) => { e.stopPropagation(); if (window._reglerFenster) window._reglerFenster(node.reglerId, node.id); });
+                    queueMicrotask(() => {
+                        const ns = "http://www.w3.org/2000/svg";
+                        const bg = document.createElementNS(ns, 'g');
+                        bg.setAttribute('class', 'fbs-regler-marke');
+                        const istPid = node.regler === 'PID';
+                        const br = istPid ? 30 : 36;
+                        const r = document.createElementNS(ns, 'rect');
+                        r.setAttribute('x', 0); r.setAttribute('y', -15); r.setAttribute('width', br); r.setAttribute('height', 13); r.setAttribute('rx', 2);
+                        r.setAttribute('fill', '#00838f'); g.appendChild(bg); bg.appendChild(r);
+                        if (istPid) {
+                            const t = document.createElementNS(ns, 'text');
+                            t.setAttribute('x', br / 2); t.setAttribute('y', -5); t.setAttribute('text-anchor', 'middle');
+                            t.setAttribute('font-size', '9.5px'); t.setAttribute('font-weight', 'bold'); t.setAttribute('fill', '#fff'); t.setAttribute('font-family', 'monospace');
+                            t.textContent = 'PID'; bg.appendChild(t);
+                        } else {
+                            // Hysterese-Kennlinie: Rechteckschleife mit Pfeilen
+                            const pth = document.createElementNS(ns, 'path');
+                            pth.setAttribute('d', 'M4 -5 H14 V-12 H32 M10 -5 V-12 H22');
+                            pth.setAttribute('fill', 'none'); pth.setAttribute('stroke', '#fff'); pth.setAttribute('stroke-width', '1.3');
+                            bg.appendChild(pth);
+                        }
+                        const tip = document.createElementNS(ns, 'title');
+                        tip.textContent = (istPid ? 'PID-Regler' : 'Zweipunktregler') + ' – Doppelklick öffnet das Reglerfenster';
+                        bg.appendChild(tip);
+                    });
+                }
                 if (node.type === 'GATE' || node.type === 'SR' || node.type === 'RS') {
                     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
                     rect.setAttribute("id", `node-block-${node.id}`);
@@ -17202,7 +17290,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     t = t.replace(/\b([SRQ]\d+(?:_(?:RS|SR))?)\b/gi,
                         (mm, name) => '<span class="token rs" data-var="' + name.toUpperCase() + '">' + mm + '</span>');
                 }
-                t = t.replace(/\b(TON|TOF|TP|CTU|INPUT|SCHRITTKETTE|STEP|TRANS|END)\b/gi, '<span class="token func">$1</span>');
+                t = t.replace(/\b(TON|TOF|TP|CTU|PID|ZWEIPUNKT|INPUT|SCHRITTKETTE|STEP|TRANS|END)\b/gi, '<span class="token func">$1</span>');
                 // Speicher-Kurzform SR(…)/RS(…) — nur als Funktionsaufruf, nicht der
                 // Suffix in S1_RS (der steckt schon im SR-Pin-Token).
                 t = t.replace(/(^|[^_A-Za-z0-9])(SR|RS)(?=\s*<span class="token paren">\()/g, '$1<span class="token func">$2</span>');
@@ -17350,6 +17438,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             'TON':   { title:'Timer: Einschaltverzögert', syntax:'OUT := TON(IN, Sekunden)', desc:'OUT wird wahr, wenn IN ununterbrochen für die angegebene Zeit wahr war. Klassischer Anlaufschutz.', example:'WARNLAMPE := TON(MOTOR_AN, 3.0)' },
             'TOF':   { title:'Timer: Ausschaltverzögert', syntax:'OUT := TOF(IN, Sekunden)', desc:'OUT bleibt nach Abfall von IN noch die angegebene Zeit wahr. Klassischer Nachlauf.', example:'LUEFTER := TOF(OFEN_AN, 60.0)' },
             'TP':    { title:'Timer: Impuls', syntax:'OUT := TP(IN, Sekunden)', desc:'Ein kurzer Wechsel von IN auf wahr erzeugt einen festen Impuls der angegebenen Länge.', example:'HUPE := TP(START_TASTER, 0.5)' },
+            'ZWEIPUNKT': { title:'Zweipunktregler', syntax:'OUT := ZWEIPUNKT(ISTWERT, EIN, AUS)  oder  ZWEIPUNKT(ISTWERT, SOLL, HYST, HEIZEN|KUEHLEN)', desc:'Schaltet einen Ausgang ein und aus wie ein Thermostat. Liegt EIN unter AUS (Heizen, Füllen), schaltet er unter EIN ein und über AUS aus; dazwischen bleibt er, wie er ist (Hysterese). Liegt EIN über AUS (Kühlen), umgekehrt.', example:'HEIZUNG := ZWEIPUNKT(TEMP, 50, 55)' },
+            'PID':   { title:'PID-Regler', syntax:'Y := PID(SOLL, ISTWERT, KP, TN, TV)', desc:'Stetiger Regler mit Stellgröße 0 … 100 %. P-Anteil KP · e, I-Anteil mit Nachstellzeit TN (0 = aus), D-Anteil mit Vorhaltzeit TV (0 = aus). Rechnet mit der Simulationszeit (Abtastzeit 0,1 s), begrenzt auf 0 … 100 % mit Anti-Windup. Als sechster Wert kehrt KUEHLEN die Wirkrichtung um (e = IST − SOLL).', example:'VENTIL := PID(SOLL_TEMP, OEL_TEMP, 6, 1800, 0, KUEHLEN)' },
             'CTU':   { title:'Vorwärtszähler', syntax:'OUT := CTU(Zähl_Signal, Reset, Limit)', desc:'Zählt jede steigende Flanke (0→1) des Zähl-Signals. OUT wird wahr, sobald der Stand das Limit erreicht. Reset setzt zurück.', example:'VOLL := CTU(LICHTSCHRANKE, RESET_TASTER, 10)' },
             'SR':    { title:'SR-Selbsthaltung (rücksetzdominant)', syntax:'S1 := SET_TERM\nR1 := RESET_TERM\nLAMPE := Q1\n\n// Kurzform mit eigenem Namen:\nMERKER := SR(SET_TERM, RESET_TERM)', desc:'Speicherglied. SET schaltet ein, RESET schaltet aus. Bei gleichzeitigem SET und RESET gewinnt RESET (Sicherheits-Default). Die Nummer hinter S/R/Q ist beliebig, muss aber zusammenpassen. In der Kurzform SR(…, …) vergibt VALIS die Nummer selbst.',
                        scenario:'Selbsthaltung: „einrastet"/„eingerastet"/„selbsthaltend", „bleibt aktiv nach Loslassen"\nBedienung: „Ein-/Aus-Taster", „Start- und Stop-Taster", „Zwei-Taster-Bedienung", „drücken zum Starten — anderer Knopf zum Stoppen"\nModi & Zustände: „Hand-/Automatik-Modus", „Modus aktivieren/umschalten", „Betriebsart wählen", „Schritt 1 → Schritt 2", „Phase aktiv", „Zustand merken", „Wartungsmodus", „bleibt im Modus, bis …"\nSicherheit: „Not-Halt schaltet alles aus", „Stop hat Vorrang", „Sicherheits-Aus dominiert"\nQuittierung & Alarme: „Fehler merken bis quittiert", „Alarm bleibt aktiv bis Reset", „Quittierung erforderlich"\nVerriegelung & Anlauf: „Tür verriegelt bis Freigabe", „Anlaufschutz", „läuft weiter, bis abgeschaltet wird"\n\nStandard-Selbsthaltung — Stop/Reset gewinnt im Konflikt. Im Zweifel diese Form verwenden.',
@@ -17996,6 +18086,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     fix: null
                 };
             }
+            // Reglerbausteine: ZWEIPUNKT/PID nur als ganze rechte Seite, Argumente
+            // nur Zahl oder Variable.
+            const reglerIn = rhs.match(/\b(ZWEIPUNKT|PID)\s*\(/i);
+            if (reglerIn) {
+                const fn = reglerIn[1].toUpperCase();
+                const ganz = new RegExp('^' + fn + '\\s*\\(.*\\)$', 'i').test(rhs);
+                if (!ganz) {
+                    const start = rhs.search(/\b(ZWEIPUNKT|PID)\s*\(/i);
+                    let depth = 0, endIdx = -1;
+                    for (let i = rhs.indexOf('(', start); i < rhs.length; i++) {
+                        if (rhs[i] === '(') depth++;
+                        else if (rhs[i] === ')') { depth--; if (depth === 0) { endIdx = i; break; } }
+                    }
+                    const block = endIdx > 0 ? rhs.substring(start, endIdx + 1) : rhs.substring(start);
+                    const helper = (lhs.replace(/[^A-Za-z0-9_]/g, '') || 'REGLER') + '_Y';
+                    return {
+                        title: 'Reglerbaustein muss die ganze rechte Seite sein',
+                        why: '`' + fn + '` steht wie `TON` oder `CTU` allein rechts von `:=`. Er lässt sich nicht direkt mit `&&`, `||`, `+` oder einem Vergleich verbinden.',
+                        hint: 'Lege den Reglerausgang in einer eigenen Variable ab und verwende diese Variable weiter.',
+                        fix: helper + ' := ' + block + '\n' + lhs + ' := ' + rhs.replace(block, helper)
+                    };
+                }
+                return {
+                    title: fn === 'PID' ? 'PID-Baustein falsch aufgerufen' : 'Zweipunktregler falsch aufgerufen',
+                    why: fn === 'PID'
+                        ? '`PID(SOLL, ISTWERT, KP, TN, TV)` braucht fünf Werte, jeder eine Zahl oder eine Variable. Optional als sechster Wert `KUEHLEN` (umgekehrte Wirkrichtung). TN = 0 schaltet den I-Anteil ab, TV = 0 den D-Anteil.'
+                        : '`ZWEIPUNKT(ISTWERT, EIN, AUS)` mit Einschalt- und Ausschaltpunkt, oder `ZWEIPUNKT(ISTWERT, SOLL, HYSTERESE, HEIZEN)` bzw. `KUEHLEN`. Jeder Wert ist eine Zahl oder eine Variable.',
+                    hint: 'Rechnungen wie `SOLL + 5` vorher in eine eigene Zeile schreiben. Dezimalzahlen mit Punkt: `0.5`.',
+                    fix: fn === 'PID' ? lhs + ' := PID(SOLL, ISTWERT, 2, 30, 0)' : lhs + ' := ZWEIPUNKT(ISTWERT, 50, 55)'
+                };
+            }
             // Timer/Zähler-Muster: TON/TOF/TP/CTU dürfen NUR die gesamte RHS sein.
             // 1) Timer/Zähler steht ZUERST, dann folgt etwas:
             const timerFirst = rhs.match(/^(TON|TOF|TP|CTU)\s*\(/i);
@@ -18249,7 +18370,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             };
 
-            const reservedRe = /^(TON|TOF|TP|CTU|TRUE|FALSE|AND|OR|UND|ODER|NOT|NICHT|IST|IS|GLEICH|INPUT)$/i;
+            const reservedRe = /^(TON|TOF|TP|CTU|PID|ZWEIPUNKT|HEIZEN|KUEHLEN|TRUE|FALSE|AND|OR|UND|ODER|NOT|NICHT|IST|IS|GLEICH|INPUT)$/i;
             const identRe = /^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/;
             const assignTokenRe = /:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/gi;
             const assignFirstRe = /:=|<-|\bIST\b|\bIS\b|\bGLEICH\b|(?<!:)=/i;
@@ -19015,7 +19136,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (/^[RS]\d+(_(?:SR|RS))?$/i.test(lhs)) return null;
                 if (/^Q\d+(_(?:SR|RS))?$/i.test(lhs)) return null;
                 // Timer/Counter-Aufrufe können wir nicht zerlegen.
-                if (/\b(TON|TOF|TP|CTU|SR|RS)\s*\(/i.test(rhsRaw)) return null;
+                if (/\b(TON|TOF|TP|CTU|SR|RS|PID|ZWEIPUNKT)\s*\(/i.test(rhsRaw)) return null;
                 rhsRaw = normalizeOps(rhsRaw);
                 let ast;
                 try { ast = parse(tokenize(rhsRaw)); } catch(_e) { return null; }
@@ -20232,6 +20353,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _mmOutTitle = _mmOut.length > 0
                     ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
                     : '';
+                // Reglerbaustein auf dieser Variablen: Knopf öffnet das Reglerfenster
+                const _rgGraph = graph || currentGraph;
+                const _rgNode = _rgGraph && _rgGraph.nodes && _rgGraph.nodes.get(name);
+                const _reglerKnopf = () => (_rgNode && _rgNode.regler && _rgNode.reglerId)
+                    ? `<button class="sim-regler-knopf" onclick="window._reglerFenster('${_rgNode.reglerId}', '${name}')" title="Reglerfenster: KP, TN, TV einstellen, Hand/Automatik" style="margin-right:6px;padding:1px 6px;background:#00505a;color:#fff;border:1px solid #00838f;border-radius:3px;cursor:pointer;font-size:11px;">🎛</button>`
+                    : '';
                 const _mmOutHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmOut.length > 0 ? '' : 'display:none;'}" title="${_mmOutTitle}">⚠️</span>`;
                 // SPS-Adressen-Chip — nur im SPS-Modus UND nur für echte physische
                 // Ausgänge. Q-Pins (SR-Glied) und Hilfsrelais (intern als Source
@@ -20244,7 +20371,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         : `<span class="sps-addr-chip" onclick="window._editSpsAddress('${name}', 'out')" title="SPS-Adresse — Klick zum Ändern">${window._ensureSpsAddress(name, 'out')}</span>`);
                 return `<div class="led-row flex-col">
                     <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${_spsAddrOutHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
-                    <div class="flex-row-between" style="justify-content: flex-end;">${componentTypes[name] === 'analog_out'
+                    <div class="flex-row-between" style="justify-content: flex-end;">${_reglerKnopf(name)}${componentTypes[name] === 'analog_out'
                         ? `<div class="sim-ana-ctl"><div class="sim-ana-balken"><div id="sim_aoutb_${name}"></div></div><span class="sim-ana-wert" id="sim_aout_${name}">${window._anaSimText(name, spsState[name])}</span></div>`
                         : `<div class="led" id="sim_out_${name}"></div>`}</div>
                 </div>`;
@@ -31207,15 +31334,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.useCollision = false;
                 },
                 animate: function(obj, spsState) {
-                    let isActive = !!spsState[obj.linkedVar];
+                    // Bool: aus/voll. Zahl (Analogausgang, z. B. PID): Drehzahl
+                    // 0 … 100 % wie an einem Frequenzumrichter.
+                    const _sv = spsState[obj.linkedVar];
+                    const _soll = typeof _sv === 'number' ? Math.max(0, Math.min(1, _sv / 100)) : (_sv ? 1 : 0);
+                    let isActive = _soll > 0.005;
                     // Anlaufzeit-Ramp (läuft jeden Frame)
                     let _st = obj.startupTime || 0;
                     if (obj._speedFactor === undefined) obj._speedFactor = 0;
                     if (isActive) {
-                        obj._speedFactor = _st > 0 ? Math.min(1, obj._speedFactor + timeScale / (60 * _st)) : 1;
+                        obj._speedFactor = _st > 0 ? Math.min(_soll, obj._speedFactor + timeScale / (60 * _st)) : _soll;
+                        if (obj._speedFactor > _soll) obj._speedFactor = _soll;
                     } else {
                         obj._speedFactor = 0;
                     }
+                    obj.anaAnteil = obj._speedFactor;
                     let blade = obj._bladeEl || (obj._bladeEl = obj.el.querySelector('.f2d-fan-blade'));
                     obj.el.classList.toggle('active', obj._speedFactor > 0);
                     if (blade && obj._speedFactor > 0) {
@@ -31765,7 +31898,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.isMetallic = true;
                 },
                 animate: function(obj, spsState) {
-                    let isActive = !!spsState[obj.linkedVar];
+                    // Bool: aus/voll. Zahl (Analogausgang): Heizleistung 0 … 100 %
+                    const _hv = spsState[obj.linkedVar];
+                    obj.anaAnteil = typeof _hv === 'number' ? Math.max(0, Math.min(1, _hv / 100)) : (_hv ? 1 : 0);
+                    let isActive = obj.anaAnteil > 0.005;
+                    obj.el.style.opacity = isActive && obj.anaAnteil < 1 ? String(0.55 + 0.45 * obj.anaAnteil) : '';
                     if (isActive !== obj.isActive) {
                         obj.isActive = isActive;
                         obj.el.classList.toggle('active', isActive);
@@ -31808,7 +31945,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (isActive) {
                         // Hitbox leicht nach oben erweitern (-20px), um aufliegende Blöcke zu erfassen
                         if (isBlockInLocalRect(item, obj, -5, -20, obj.width + 10, obj.height + 30)) {
-                            item.temperature = (item.temperature || 20) + ((obj.heatingPower || 400) * 0.0166 * window.simSpeed * timeScale);
+                            item.temperature = (item.temperature || 20) + ((obj.heatingPower || 400) * (obj.anaAnteil != null ? obj.anaAnteil : 1) * 0.0166 * window.simSpeed * timeScale);
                             item.isHeatedThisFrame = true; // Verhindert sofortiges Auskühlen in der Hauptschleife
                         }
                     }
@@ -37216,7 +37353,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             'mech_sensor': ['mech_sensor'],
             'key_switch': ['key_switch', 'schalter'],
             'light_curtain': ['light_curtain'],
-            'heater': ['heater', 'contactor', 'valve'],
+            'heater': ['heater', 'contactor', 'valve', 'analog_out'],
             'siren': ['siren', 'led'],
             'analog_sensor': ['analog_in'],
             'setpoint_pot': ['analog_in'],
@@ -43648,7 +43785,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // als EINE Variable erkannt werden.
             function extractVars(expr) {
                 return (expr.match(ID_RE_GLOBAL) || []).filter(v =>
-                    !['AND','OR','NOT','TON','TOF','TP','CTU','TRUE','FALSE'].includes(v));
+                    !['AND','OR','NOT','TON','TOF','TP','CTU','TRUE','FALSE','PID','ZWEIPUNKT','HEIZEN','KUEHLEN','KÜHLEN','DIREKT','NORMAL','INVERS'].includes(v.toUpperCase()));
             }
 
             // Kommentare sammeln (letzte Kommentarzeile vor einem Block)
@@ -43852,11 +43989,60 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // 3. Timer- und Zähler-Instanzen
             //   Timer: IEC_TIMER (universal IEC-Typ, S7-1200 V4.1+ und S7-1500 kompatibel).
             //   Aufruf erfolgt unten als Methode: "_T1".TON(IN:=, PT:=);
+            assigns.filter(a => /^PID\s*\(/i.test(a.rhs)).forEach(a => {
+                ['E', 'P', 'I', 'D', 'EALT', 'ROH'].forEach(k => scl += `${I}   ${tia('PID_' + a.lhs)}_${k} : REAL;${k === 'I' ? '   // PID ' + tia(a.lhs) + ': I-Anteil' : ''}\n`);
+            });
             timers.forEach(t => scl += `${I}   "${t.inst}" : IEC_TIMER;\n`);
             counters.forEach(c => scl += `${I}   "${c.inst}" : IEC_COUNTER;\n`);
             if (varInternal.size === 0 && flipFlops.size === 0 && timers.length === 0 && counters.length === 0) scl += `${I}   // (keine internen Variablen)\n`;
             scl += `${I}END_VAR\n\n`;
 
+            // Reglerbausteine (ZWEIPUNKT, PID) als ausgeschriebenes SCL. Der
+            // PID rechnet mit fester Abtastzeit 0,1 s wie in VALIS: den FB in
+            // einem Weckalarm-OB (z. B. OB30, 100 ms) aufrufen.
+            function _sclRegler(a) {
+                const m = String(a.rhs).match(/^(PID|ZWEIPUNKT)\s*\((.*)\)$/i);
+                if (!m) return null;
+                const typ = m[1].toUpperCase();
+                const args = m[2].split(',').map(x => x.trim());
+                let richt = null;
+                const kw = (args[args.length - 1] || '').toUpperCase();
+                if (['HEIZEN', 'DIREKT', 'NORMAL'].includes(kw)) { richt = 1; args.pop(); }
+                else if (['KUEHLEN', 'KÜHLEN', 'INVERS'].includes(kw)) { richt = -1; args.pop(); }
+                const r = x => /^-?\d+$/.test(x) ? x + '.0' : bodyExpr(x);
+                const y = '#' + tia(a.lhs);
+                let o = '';
+                if (typ === 'ZWEIPUNKT') {
+                    const [xx, p1, p2] = args.map(r);
+                    let ein = p1, aus = p2;
+                    if (richt !== null) {
+                        ein = richt > 0 ? `(${p1} - ${p2} / 2.0)` : `(${p1} + ${p2} / 2.0)`;
+                        aus = richt > 0 ? `(${p1} + ${p2} / 2.0)` : `(${p1} - ${p2} / 2.0)`;
+                    }
+                    o += `${I}// Zweipunktregler: ein bei ${ein}, aus bei ${aus}\n`;
+                    o += `${I}IF ${ein} <= ${aus} THEN\n`;
+                    o += `${I}   IF ${xx} < ${ein} THEN ${y} := TRUE; ELSIF ${xx} > ${aus} THEN ${y} := FALSE; END_IF;\n`;
+                    o += `${I}ELSE\n`;
+                    o += `${I}   IF ${xx} > ${ein} THEN ${y} := TRUE; ELSIF ${xx} < ${aus} THEN ${y} := FALSE; END_IF;\n`;
+                    o += `${I}END_IF;\n`;
+                    return o;
+                }
+                const [w, x, kp, tn, tv] = args.map(r);
+                const v = '#' + tia('PID_' + a.lhs) + '_';
+                o += `${I}// PID-Regler, Abtastzeit 0,1 s (FB im Weckalarm-OB mit 100 ms aufrufen)\n`;
+                o += `${I}${v}E := ${richt === -1 ? `${x} - ${w}` : `${w} - ${x}`};\n`;
+                o += `${I}${v}P := ${kp} * ${v}E;\n`;
+                o += `${I}IF ${tv} > 0.0 THEN\n${I}   ${v}D := (${tv} / 10.0 * ${v}D + ${kp} * ${tv} * (${v}E - ${v}EALT)) / (${tv} / 10.0 + 0.1);\n${I}ELSE\n${I}   ${v}D := 0.0;\n${I}END_IF;\n`;
+                o += `${I}IF ${tn} > 0.0 THEN\n`;
+                o += `${I}   ${v}ROH := ${v}P + ${v}I + ${kp} * 0.1 / ${tn} * ${v}E + ${v}D;\n`;
+                o += `${I}   // Anti-Windup: I-Anteil hält an, solange y am Anschlag steht\n`;
+                o += `${I}   IF (${v}ROH <= 100.0 OR ${v}E < 0.0) AND (${v}ROH >= 0.0 OR ${v}E > 0.0) THEN\n`;
+                o += `${I}      ${v}I := ${v}I + ${kp} * 0.1 / ${tn} * ${v}E;\n${I}   END_IF;\n`;
+                o += `${I}ELSE\n${I}   ${v}I := 0.0;\n${I}END_IF;\n`;
+                o += `${I}${y} := LIMIT(MN := 0.0, IN := ${v}P + ${v}I + ${v}D, MX := 100.0);\n`;
+                o += `${I}${v}EALT := ${v}E;\n`;
+                return o;
+            }
             // BEGIN
             scl += `BEGIN\n`;
 
@@ -43925,6 +44111,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 scl += `${I}// ${'='.repeat(58)}\n\n`;
                 assigns.forEach(a => {
                     if (a.comment) scl += `${I}// ${a.comment}\n`;
+                    const rg = _sclRegler(a);
+                    if (rg) { scl += rg; return; }
                     scl += `${I}#${tia(a.lhs)} := ${bodyExpr(a.rhs)};\n`;
                 });
             }
@@ -51687,6 +51875,225 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (v == null) return;
                 const z = parseFloat(String(v).replace(',', '.'));
                 if (isFinite(z)) { window._anaPotiSetzen(o, z); saveFactoryState(); }
+            };
+        })();
+        // =========================================================
+
+        // =========================================================
+        // REGLER — Zweipunktregler und PID-Regler (Code-Bausteine)
+        // ---------------------------------------------------------
+        // Der Parser übersetzt `Y := ZWEIPUNKT(…)` und `Y := PID(…)` in Aufrufe
+        // von window._regler. Gerechnet wird mit der Simulationszeit (deltaMs,
+        // schon mit simSpeed multipliziert) und fester Abtastzeit TA, damit das
+        // Ergebnis nicht von Rechner und Bildrate abhängt. Zustand je Baustein
+        // in timers[id] (wird beim Stopp und beim Tippen geleert).
+        // Live-Einstellungen aus dem Reglerfenster (KP, TN, TV, Hand/Auto,
+        // Handwert) liegen in window._reglerEin[id] und gelten vor den Werten
+        // im Code, bis man sie übernimmt oder zurücksetzt.
+        // =========================================================
+        (function() {
+            const TA = 100; // ms Abtastzeit
+            const zahl = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
+            window._reglerEin = window._reglerEin || {};
+            window._regler = {
+                TA,
+                // art 0: a = Einschaltpunkt, b = Ausschaltpunkt
+                // art 1 (heizen): a = Sollwert, b = Hysterese → ein unter w − h/2, aus über w + h/2
+                // art −1 (kühlen): ein über w + h/2, aus unter w − h/2
+                zp: function(timers, id, x, a, b, art) {
+                    const t = timers[id] || (timers[id] = { q: false });
+                    let ein, aus;
+                    if (art === 0) { ein = a; aus = b; }
+                    else { const h = Math.abs(b) / 2; ein = art > 0 ? a - h : a + h; aus = art > 0 ? a + h : a - h; }
+                    const steigt = ein <= aus; // ein unten, aus oben (Heizen, Füllen)
+                    if (steigt) { if (x < ein) t.q = true; else if (x > aus) t.q = false; }
+                    else { if (x > ein) t.q = true; else if (x < aus) t.q = false; }
+                    const e = window._reglerEin[id];
+                    if (e && e.hand) t.q = !!e.handwert;
+                    t.x = x; t.ein = ein; t.aus = aus; t.typ = 'ZWEIPUNKT';
+                    return t.q;
+                },
+                // Stellungsalgorithmus mit Begrenzung 0 … 100 %, Anti-Windup
+                // (I-Anteil hält an, solange y am Anschlag steht und e weiter
+                // hineindrückt) und D-Anteil mit Verzögerung T1 = TV / 10.
+                pid: function(timers, id, w, x, kp, tn, tv, richtung, dtMs) {
+                    const t = timers[id] || (timers[id] = { i: 0, d: 0, y: 0, eAlt: null, rest: 0, typ: 'PID' });
+                    const e = window._reglerEin[id] || {};
+                    kp = zahl(e.kp, kp); tn = Math.max(0, zahl(e.tn, tn)); tv = Math.max(0, zahl(e.tv, tv));
+                    t.w = w; t.x = x; t.kp = kp; t.tn = tn; t.tv = tv; t.richtung = richtung;
+                    t.rest += Math.max(0, zahl(dtMs, 0));
+                    let n = 0;
+                    const ta = TA / 1000;
+                    while (t.rest >= TA && n < 2000) {
+                        t.rest -= TA; n++;
+                        const ab = richtung * (w - x);
+                        if (t.eAlt == null) t.eAlt = ab;
+                        const p = kp * ab;
+                        let d = 0;
+                        if (tv > 0) { const t1 = tv / 10; d = (t1 * t.d + kp * tv * (ab - t.eAlt)) / (t1 + ta); }
+                        t.d = d;
+                        if (e.hand) {
+                            t.y = Math.max(0, Math.min(100, zahl(e.handwert, t.y)));
+                            t.i = tn > 0 ? t.y - p - d : 0; // stoßfrei zurück auf Automatik
+                        } else {
+                            let i = t.i;
+                            if (tn > 0) {
+                                const iNeu = t.i + kp * ta / tn * ab;
+                                const roh = p + iNeu + d;
+                                if ((roh <= 100 || iNeu < t.i) && (roh >= 0 || iNeu > t.i)) i = iNeu;
+                            } else i = 0;
+                            t.i = i;
+                            t.y = Math.max(0, Math.min(100, p + i + d));
+                        }
+                        t.p = p; t.e = ab; t.eAlt = ab;
+                    }
+                    if (n === 0 && t.eAlt == null) { t.e = richtung * (w - x); t.p = kp * t.e; }
+                    t.hand = !!e.hand;
+                    return Math.round(t.y * 1000) / 1000;
+                }
+            };
+            // ---- Reglerfenster: Regler in Betrieb nehmen ----
+            // KP, TN, TV live verstellen, Hand/Automatik mit Handwert, P-/I-/D-
+            // Anteile ablesen. „In den Code übernehmen“ schreibt KP, TN, TV in
+            // die Codezeile, „Werte aus dem Code“ verwirft die Live-Werte.
+            let _fenster = null, _fensterId = null, _fensterAus = null, _fensterTakt = null;
+            const fmt = (v, n) => (typeof v === 'number' && isFinite(v)) ? (window._anaFmt ? window._anaFmt(v, n) : v.toFixed(n == null ? 2 : n)) : '–';
+            function _codeZeile(aus) {
+                const ta = document.getElementById('code');
+                if (!ta) return null;
+                const zeilen = ta.value.split('\n');
+                const re = new RegExp('^(\\s*' + aus.replace(/[$]/g, '\\$&') + '\\s*:=\\s*)(PID|ZWEIPUNKT)\\s*\\((.*)\\)(\\s*(?://.*)?)$', 'i');
+                for (let i = 0; i < zeilen.length; i++) { const m = zeilen[i].match(re); if (m) return { ta, zeilen, i, m }; }
+                return null;
+            }
+            function _schliessen() {
+                if (_fenster) _fenster.style.display = 'none';
+                if (_fensterTakt) { clearInterval(_fensterTakt); _fensterTakt = null; }
+                _fensterId = null;
+            }
+            window._reglerFensterZu = _schliessen;
+            function _bauen() {
+                const f = document.createElement('div');
+                f.id = 'regler-fenster';
+                f.style.cssText = 'position:fixed;right:24px;top:90px;width:300px;background:#22262b;color:#ddd;border:1px solid #00838f;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6);z-index:3100;font:12px Segoe UI,Tahoma,sans-serif;display:none;';
+                f.innerHTML = `<div class="rf-kopf" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#00505a;border-radius:6px 6px 0 0;cursor:move;user-select:none;"><b class="rf-titel"></b><button class="rf-zu" style="background:none;border:none;color:#fff;font-size:15px;cursor:pointer;">✕</button></div><div class="rf-inhalt" style="padding:8px 10px;"></div>`;
+                document.body.appendChild(f);
+                f.querySelector('.rf-zu').onclick = _schliessen;
+                const kopf = f.querySelector('.rf-kopf');
+                kopf.addEventListener('mousedown', ev => {
+                    if (ev.target.closest('button')) return;
+                    const r = f.getBoundingClientRect(), dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+                    const mv = e2 => { f.style.left = Math.max(0, e2.clientX - dx) + 'px'; f.style.top = Math.max(0, e2.clientY - dy) + 'px'; f.style.right = 'auto'; };
+                    const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+                    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+                });
+                return f;
+            }
+            function _zeile(txt) { const d = document.createElement('div'); d.style.cssText = 'display:flex;align-items:center;gap:6px;margin:4px 0;'; d.innerHTML = `<span style="width:92px;color:#9fb;">${txt}</span>`; return d; }
+            window._reglerFenster = function(id, aus) {
+                if (!id) return;
+                aus = aus || id.replace(/^(PID|ZP)_/, '');
+                _fenster = _fenster || _bauen();
+                _fensterId = id; _fensterAus = aus;
+                const pid = id.startsWith('PID_');
+                const ein = window._reglerEin[id] || (window._reglerEin[id] = {});
+                _fenster.querySelector('.rf-titel').textContent = (pid ? '🎛 PID-Regler ' : '🎛 Zweipunktregler ') + aus;
+                const inh = _fenster.querySelector('.rf-inhalt');
+                inh.innerHTML = '';
+                const live = document.createElement('div');
+                live.className = 'rf-live';
+                live.style.cssText = 'font:11px monospace;background:#15181b;border:1px solid #333;border-radius:4px;padding:6px;margin-bottom:6px;line-height:1.55;white-space:pre;';
+                inh.appendChild(live);
+                const hinweis = document.createElement('div');
+                hinweis.style.cssText = 'color:#888;font-size:10px;margin:2px 0 6px;';
+                if (pid) {
+                    const t = (window.simTimers || {})[id] || {};
+                    const z = _codeZeile(aus);
+                    const codeWerte = z ? z.m[3].split(',').map(x => parseFloat(x)) : [];
+                    const feld = (lbl, key, def, max, step, hint) => {
+                        const d = _zeile(lbl);
+                        const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = max; r.step = step; r.style.flex = '1';
+                        const n = document.createElement('input'); n.type = 'number'; n.min = 0; n.step = step; n.style.cssText = 'width:62px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;';
+                        const wert = () => (typeof ein[key] === 'number' ? ein[key] : (typeof t[key] === 'number' ? t[key] : def));
+                        r.value = n.value = wert();
+                        const setz = v => { v = parseFloat(v); if (!isFinite(v) || v < 0) return; ein[key] = v; r.value = n.value = v; };
+                        r.oninput = () => setz(r.value); n.onchange = () => setz(n.value);
+                        if (hint) d.title = hint;
+                        d.appendChild(r); d.appendChild(n); inh.appendChild(d);
+                    };
+                    feld('KP (%/Einheit)', 'kp', isFinite(codeWerte[2]) ? codeWerte[2] : 1, Math.max(20, (codeWerte[2] || 1) * 3), 0.1, 'Verstärkung: um wie viel % ändert sich y je Einheit Regelabweichung');
+                    feld('TN (s), 0 = aus', 'tn', isFinite(codeWerte[3]) ? codeWerte[3] : 0, Math.max(120, (codeWerte[3] || 0) * 3), 1, 'Nachstellzeit: kleiner = stärkerer I-Anteil');
+                    feld('TV (s), 0 = aus', 'tv', isFinite(codeWerte[4]) ? codeWerte[4] : 0, Math.max(30, (codeWerte[4] || 0) * 3), 0.5, 'Vorhaltzeit: größer = stärkerer D-Anteil');
+                }
+                // Hand/Automatik
+                const hz = _zeile('Betriebsart');
+                const hb = document.createElement('button');
+                hb.style.cssText = 'flex:1;padding:3px;border:1px solid #555;border-radius:3px;cursor:pointer;color:#fff;';
+                const hw = document.createElement('input');
+                const hwz = _zeile(pid ? 'Handwert (%)' : 'Hand: Ausgang');
+                if (pid) { hw.type = 'range'; hw.min = 0; hw.max = 100; hw.step = 1; hw.style.flex = '1'; hw.value = typeof ein.handwert === 'number' ? ein.handwert : 0; }
+                else { hw.type = 'checkbox'; hw.checked = !!ein.handwert; }
+                const hwt = document.createElement('span'); hwt.style.cssText = 'width:40px;text-align:right;font-family:monospace;';
+                const hand = () => {
+                    hb.textContent = ein.hand ? '✋ Hand' : '⚙ Automatik';
+                    hb.style.background = ein.hand ? '#8d6e00' : '#00695c';
+                    hwz.style.opacity = ein.hand ? '1' : '0.45';
+                    hwt.textContent = pid ? (hw.value + ' %') : (hw.checked ? 'ein' : 'aus');
+                };
+                hb.onclick = () => {
+                    if (!ein.hand && pid) { const t = (window.simTimers || {})[id]; if (t && typeof t.y === 'number') { ein.handwert = Math.round(t.y); hw.value = ein.handwert; } }
+                    if (!ein.hand && !pid) { const t = (window.simTimers || {})[id]; ein.handwert = !!(t && t.q); hw.checked = ein.handwert; }
+                    ein.hand = !ein.hand; hand();
+                };
+                hw.oninput = hw.onchange = () => { ein.handwert = pid ? parseFloat(hw.value) : hw.checked; hand(); };
+                hz.appendChild(hb); inh.appendChild(hz);
+                hwz.appendChild(hw); hwz.appendChild(hwt); inh.appendChild(hwz);
+                hand();
+                if (pid) {
+                    const knoepfe = document.createElement('div'); knoepfe.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
+                    const k1 = document.createElement('button'); k1.textContent = '📝 In den Code übernehmen';
+                    const k2 = document.createElement('button'); k2.textContent = '↺ Werte aus dem Code';
+                    [k1, k2].forEach(k => { k.style.cssText = 'flex:1;padding:4px;background:#37474f;color:#fff;border:1px solid #555;border-radius:3px;cursor:pointer;font-size:11px;'; knoepfe.appendChild(k); });
+                    k1.onclick = () => {
+                        const z = _codeZeile(aus);
+                        if (!z) { hinweis.textContent = 'Codezeile nicht gefunden.'; return; }
+                        const args = z.m[3].split(',').map(x => x.trim());
+                        const t = (window.simTimers || {})[id] || {};
+                        const r = v => String(Math.round(v * 1000) / 1000);
+                        ['kp', 'tn', 'tv'].forEach((k, j) => { const v = typeof ein[k] === 'number' ? ein[k] : t[k]; if (typeof v === 'number') args[2 + j] = r(v); });
+                        z.zeilen[z.i] = z.m[1] + z.m[2].toUpperCase() + '(' + args.join(', ') + ')' + (z.m[4] || '');
+                        delete ein.kp; delete ein.tn; delete ein.tv;
+                        z.ta.value = z.zeilen.join('\n');
+                        z.ta.dispatchEvent(new Event('input', { bubbles: true }));
+                        hinweis.textContent = 'Übernommen: ' + z.zeilen[z.i].trim();
+                    };
+                    k2.onclick = () => { delete ein.kp; delete ein.tn; delete ein.tv; window._reglerFenster(id, aus); };
+                    inh.appendChild(knoepfe);
+                }
+                inh.appendChild(hinweis);
+                hinweis.textContent = isSimulationActive ? '' : 'Simulation starten, dann laufen die Werte live.';
+                const zeigen = () => {
+                    if (_fensterId !== id) return;
+                    const t = (window.simTimers || {})[id] || {};
+                    if (pid) {
+                        const p = t.richtung < 0 ? ' (Kühlen: e = x − w)' : '';
+                        live.textContent = `w = ${fmt(t.w)}   x = ${fmt(t.x)}\ne = ${fmt(t.e)}${p}\nP = ${fmt(t.p)}   I = ${fmt(t.i)}   D = ${fmt(t.d)}\ny = ${fmt(t.y, 1)} %` + (t.hand ? '   ✋ Hand' : '');
+                    } else {
+                        live.textContent = `x = ${fmt(t.x)}\nein bei ${t.ein != null && t.ein <= t.aus ? '<' : '>'} ${fmt(t.ein)}   aus bei ${t.ein != null && t.ein <= t.aus ? '>' : '<'} ${fmt(t.aus)}\nAusgang: ${t.q ? 'EIN' : 'aus'}` + (ein.hand ? '   ✋ Hand' : '');
+                    }
+                };
+                zeigen();
+                if (_fensterTakt) clearInterval(_fensterTakt);
+                _fensterTakt = setInterval(zeigen, 200);
+                _fenster.style.display = 'block';
+            };
+            // Variablentypen: Soll-/Istwert als Analogeingang, PID-Ausgang als Analogausgang
+            window._reglerTypen = function(typ, aus, args) {
+                if (typeof componentTypes === 'undefined') return;
+                const name = a => /^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/.test(a || '') && !/^(TRUE|FALSE)$/i.test(a) ? a : null;
+                const ein = typ === 'PID' ? [args[0], args[1]] : [args[0]];
+                ein.map(name).filter(Boolean).forEach(v => { if (!componentTypes[v] || componentTypes[v] === 'taster') componentTypes[v] = 'analog_in'; });
+                if (typ === 'PID' && (!componentTypes[aus] || componentTypes[aus] === 'led')) componentTypes[aus] = 'analog_out';
             };
         })();
         // =========================================================

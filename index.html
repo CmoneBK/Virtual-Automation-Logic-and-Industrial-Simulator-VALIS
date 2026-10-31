@@ -693,6 +693,7 @@
         #code-inspector .ci-desc { color: #ccc; }
         #code-inspector .ci-empty { color: #777; font-style: italic; }
         #code-inspector .ci-sentence { color: #e8e8e8; font-size: 12px; line-height: 1.55; margin: 3px 0 6px; padding: 5px 8px; background: rgba(86,156,214,0.10); border-left: 3px solid #569cd6; border-radius: 2px; }
+        #code-inspector .ci-ana { color: #b39ddb; font-size: 11px; margin-top: 3px; }
         #code-inspector .ci-chips-row { font-size: 10px; color: #999; margin-top: 4px; }
         #code-inspector .ci-chips-label { color: #888; font-style: italic; margin-right: 4px; }
         #code-inspector .ci-chips-row .ci-token { font-size: 10px; padding: 0 5px; margin-right: 4px; }
@@ -18112,6 +18113,427 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return result;
         };
 
+        // ===== Erklärmodus: Zahlen, Analogwerte, Regler und Schrittketten-DSL =====
+        // Der boolesche Erklärer oben kennt nur UND/ODER/NICHT, Timer und SR-Glieder.
+        // Hier kommt ein eigener kleiner Ausdrucks-Parser dazu, der Vergleiche,
+        // Rechnen, ? :, MIN/MAX/ABS/ROUND, .cv/.et, ZWEIPUNKT und PID in Sätze fasst,
+        // sowie die Zeilen einer SCHRITTKETTE … END mit ihrem Zusammenhang
+        // (welcher Schritt, Übergang wohin).
+        (function() {
+            const _boolExplain = window._explainLine;
+            const NUM_FN = { MIN: 1, MAX: 1, ABS: 1, ROUND: 1, FLOOR: 1, CEIL: 1 };
+            let hatKette = false;
+            const fmtZahl = (s) => String(s).replace('.', ',');
+
+            function tokens(src) {
+                const out = []; let i = 0;
+                while (i < src.length) {
+                    const c = src[i];
+                    if (/\s/.test(c)) { i++; continue; }
+                    const m3 = src.slice(i, i + 2);
+                    if (['&&', '||', '==', '!=', '<=', '>=', '<>', '->', ':='].includes(m3)) { out.push({ t: 'op', v: m3 }); i += 2; continue; }
+                    if ('≤≥≠'.includes(c)) { out.push({ t: 'op', v: c === '≤' ? '<=' : c === '≥' ? '>=' : '!=' }); i++; continue; }
+                    if ('+-*/%()<>?:,!¬&|∧∨='.includes(c)) { out.push({ t: 'op', v: c === '∧' ? '&&' : c === '∨' ? '||' : c === '&' ? '&&' : c === '|' ? '||' : c === '¬' ? '!' : c === '=' ? '==' : c }); i++; continue; }
+                    let m = src.slice(i).match(/^\d+(?:[.,]\d+)?/);
+                    if (m) { out.push({ t: 'num', v: m[0].replace(',', '.') }); i += m[0].length; continue; }
+                    m = src.slice(i).match(/^[A-Za-zÄÖÜäöüß_][A-Za-z0-9ÄÖÜäöüß_]*(?:\.[A-Za-z]+)?/);
+                    if (m) {
+                        const u = m[0].toUpperCase();
+                        if (u === 'AND' || u === 'UND') out.push({ t: 'op', v: '&&' });
+                        else if (u === 'OR' || u === 'ODER') out.push({ t: 'op', v: '||' });
+                        else if (u === 'NOT' || u === 'NICHT') out.push({ t: 'op', v: '!' });
+                        else out.push({ t: 'id', v: m[0] });
+                        i += m[0].length; continue;
+                    }
+                    return null;
+                }
+                return out;
+            }
+            function parse(src) {
+                const tk = tokens(src); if (!tk || !tk.length) return null;
+                let p = 0;
+                const peek = () => tk[p] && tk[p].t === 'op' ? tk[p].v : null;
+                const eat = (v) => { if (peek() === v) { p++; return true; } return false; };
+                function ternary() {
+                    const c = or();
+                    if (eat('?')) { const a = ternary(); if (!eat(':')) throw 0; const b = ternary(); return { k: '?', c, a, b }; }
+                    return c;
+                }
+                function or() { let l = and(); while (eat('||')) l = { k: '||', l, r: and() }; return l; }
+                function and() { let l = cmp(); while (eat('&&')) l = { k: '&&', l, r: cmp() }; return l; }
+                function cmp() {
+                    const l = add(); const o = peek();
+                    if (['==', '!=', '<>', '<=', '>=', '<', '>'].includes(o)) { p++; return { k: 'cmp', o: o === '<>' ? '!=' : o, l, r: add() }; }
+                    return l;
+                }
+                function add() { let l = mul(); while (peek() === '+' || peek() === '-') { const o = tk[p++].v; l = { k: 'ar', o, l, r: mul() }; } return l; }
+                function mul() { let l = un(); while (peek() === '*' || peek() === '/' || peek() === '%') { const o = tk[p++].v; l = { k: 'ar', o, l, r: un() }; } return l; }
+                function un() {
+                    if (eat('-')) { const x = un(); return x.k === 'num' ? { k: 'num', v: '-' + x.v } : { k: 'neg', x }; }
+                    if (eat('!')) return { k: 'not', x: un() };
+                    return fac();
+                }
+                function fac() {
+                    const t = tk[p]; if (!t) throw 0;
+                    if (t.t === 'num') { p++; return { k: 'num', v: t.v }; }
+                    if (t.t === 'id') {
+                        p++;
+                        if (eat('(')) {
+                            const args = [];
+                            if (peek() !== ')') { args.push(ternary()); while (eat(',')) args.push(ternary()); }
+                            if (!eat(')')) throw 0;
+                            return { k: 'fn', n: t.v.toUpperCase(), args };
+                        }
+                        const u = t.v.toUpperCase();
+                        if (u === 'TRUE' || u === 'FALSE') return { k: 'const', v: u === 'TRUE' };
+                        if (u === 'AFTER' && tk[p] && tk[p].t === 'num') return { k: 'after', v: tk[p++].v };
+                        return { k: 'id', v: t.v };
+                    }
+                    if (eat('(')) { const x = ternary(); if (!eat(')')) throw 0; return { k: 'par', x }; }
+                    throw 0;
+                }
+                try { const ast = ternary(); return p === tk.length ? ast : null; } catch (e) { return null; }
+            }
+            // Ist der Ausdruck ein Zahlenwert (nicht nur wahr/falsch)?
+            function istZahl(n) {
+                if (!n) return false;
+                switch (n.k) {
+                    case 'num': case 'ar': case 'neg': return true;
+                    case 'fn': return !!NUM_FN[n.n] || n.n === 'PID';
+                    case 'par': return istZahl(n.x);
+                    case '?': return istZahl(n.a) || istZahl(n.b);
+                    case 'id': { const t = (typeof componentTypes !== 'undefined' && componentTypes[n.v]) || ''; return /\.(cv|et|pv)$/i.test(n.v) || t === 'analog_in' || t === 'analog_out'; }
+                }
+                return false;
+            }
+            // Kommt im Ausdruck etwas vor, das der boolesche Erklärer nicht kennt?
+            function brauchtNeu(n) {
+                if (!n) return false;
+                switch (n.k) {
+                    case 'num': case 'ar': case 'neg': case 'cmp': case '?': case 'after': return true;
+                    case 'fn': return !!NUM_FN[n.n] || n.n === 'PID' || n.n === 'ZWEIPUNKT';
+                    case 'id': return /\./.test(n.v) || istZahl(n);
+                    case 'par': case 'not': return brauchtNeu(n.x);
+                    case '||': case '&&': return brauchtNeu(n.l) || brauchtNeu(n.r);
+                }
+                return false;
+            }
+            const VGL = { '==': 'gleich', '!=': 'ungleich', '<': 'kleiner als', '>': 'größer als', '<=': 'kleiner oder gleich', '>=': 'größer oder gleich' };
+            const RECH = { '+': 'plus', '-': 'minus', '*': 'mal', '/': 'geteilt durch' };
+            function name(v) {
+                const m = String(v).match(/^(.+)\.(cv|et|pv)$/i);
+                if (!m) return v;
+                const p = m[2].toLowerCase();
+                return p === 'cv' ? 'Zählerstand von ' + m[1] : p === 'et' ? 'abgelaufene Zeit von ' + m[1] : 'Zielwert von ' + m[1];
+            }
+            // Wert in Worten (Nominativ, für Rechnungen)
+            function wert(n) {
+                if (!n) return '?';
+                switch (n.k) {
+                    case 'num': return fmtZahl(n.v);
+                    case 'id': return name(n.v);
+                    case 'const': return n.v ? '1 (wahr)' : '0 (falsch)';
+                    case 'par': return '(' + wert(n.x) + ')';
+                    case 'neg': return 'minus ' + wert(n.x);
+                    case 'ar': {
+                        if (n.o === '%') return 'Rest von ' + teil(n.l) + ' geteilt durch ' + teil(n.r);
+                        return teil(n.l) + ' ' + RECH[n.o] + ' ' + teil(n.r);
+                    }
+                    case 'fn': {
+                        const a = n.args.map(teil);
+                        if (n.n === 'MIN') return 'Minimum von ' + a[0] + ' und ' + a[1];
+                        if (n.n === 'MAX') return 'Maximum von ' + a[0] + ' und ' + a[1];
+                        if (n.n === 'ABS') return 'Betrag von ' + a[0];
+                        if (n.n === 'ROUND') return a[0] + ' auf eine ganze Zahl gerundet';
+                        if (n.n === 'FLOOR') return a[0] + ' abgerundet';
+                        if (n.n === 'CEIL') return a[0] + ' aufgerundet';
+                        return n.n + '(' + a.join(', ') + ')';
+                    }
+                    case 'cmp': return '1, wenn ' + bed(n) + ', sonst 0';
+                    case 'not': case '&&': case '||': return '1, wenn ' + bed(n) + ', sonst 0';
+                    case '?': return wert(n.a) + ', falls ' + bed(n.c) + ', sonst ' + wert(n.b);
+                    case 'after': return 'AFTER ' + fmtZahl(n.v);
+                }
+                return '?';
+            }
+            // Teilausdruck in einer Rechnung: verschachtelte Rechnungen in Klammern,
+            // damit „A plus B mal 2" eindeutig bleibt.
+            const teil = (n) => (n && (n.k === 'ar' || n.k === 'fn' && NUM_FN[n.n]) ? '(' + wert(n) + ')' : wert(n));
+            const artikel = (t) => (/^(Zählerstand|Zielwert|Rest|Betrag|Minimum|Maximum)\b/.test(t) ? 'der ' + t : /^abgelaufene\b/.test(t) ? 'die ' + t : t);
+            // Bedingung in Worten (Nebensatz ohne „wenn")
+            function bed(n, schritt) {
+                if (!n) return '?';
+                switch (n.k) {
+                    case 'id': {
+                        if (istZahl(n)) return name(n.v) + ' ungleich 0 ist';
+                        const ff = /^([SRQ])(\d+)(?:_(SR|RS))?$/i.exec(n.v);
+                        if (ff && hatKette && ff[1].toUpperCase() === 'Q' && !ff[3]) return n.v + ' (Schritt S' + ff[2] + ' der Schrittkette) aktiv ist';
+                        if (ff) return n.v + ' (' + (ff[1].toUpperCase() === 'Q' ? 'Ausgang' : ff[1].toUpperCase() === 'S' ? 'SET-Eingang' : 'RESET-Eingang') + ' des ' + ((ff[3] || '').toUpperCase() === 'RS' ? 'RS' : 'SR') + '-Gliedes ' + ff[2] + ') aktiv ist';
+                        return n.v + ' aktiv ist';
+                    }
+                    case 'const': return n.v ? 'immer (TRUE)' : 'nie (FALSE)';
+                    case 'num': return fmtZahl(n.v) + ' ungleich 0 ist';
+                    case 'par': return bed(n.x, schritt);
+                    case 'not': {
+                        if (n.x.k === 'id' && !istZahl(n.x)) return n.x.v + ' nicht aktiv ist';
+                        return 'nicht gilt: ' + bed(n.x, schritt);
+                    }
+                    case '&&': case '||': {
+                        const w = n.k === '&&' ? ' und ' : ' oder ';
+                        const s = (x) => ((x.k === '&&' || x.k === '||') && x.k !== n.k ? '(' + bed(x, schritt) + ')' : bed(x, schritt));
+                        return s(n.l) + w + s(n.r);
+                    }
+                    case 'cmp': return artikel(wert(n.l)) + ' ' + VGL[n.o] + ' ' + wert(n.r) + ' ist';
+                    case 'after': return (schritt ? 'Schritt ' + schritt : 'der Schritt') + ' seit mindestens ' + fmtZahl(n.v) + ' s aktiv ist';
+                    case 'fn': {
+                        if (n.n === 'TON' || n.n === 'TOF' || n.n === 'TP' || n.n === 'CTU' || n.n === 'ZWEIPUNKT') return 'der Baustein ' + n.n + '(…) gerade 1 liefert';
+                        return wert(n) + ' ungleich 0 ist';
+                    }
+                    case '?': return 'gilt: ' + wert(n);
+                }
+                return wert(n) + ' ungleich 0 ist';
+            }
+            function richtung(a) {
+                const u = a && a.k === 'id' ? a.v.toUpperCase() : '';
+                if (['HEIZEN', 'DIREKT', 'NORMAL'].includes(u)) return 1;
+                if (['KUEHLEN', 'KÜHLEN', 'INVERS'].includes(u)) return -1;
+                return 0;
+            }
+            function zweipunkt(lhs, args) {
+                const r = richtung(args[args.length - 1]);
+                const x = wert(args[0]);
+                if (r !== 0 && args.length === 4) {
+                    const w = args[1], h = args[2];
+                    let pkt = '';
+                    if (w.k === 'num' && h.k === 'num') {
+                        const hw = Math.abs(+h.v) / 2, wv = +w.v;
+                        const ein = r > 0 ? wv - hw : wv + hw, aus = r > 0 ? wv + hw : wv - hw;
+                        pkt = ' (also ein ' + (r > 0 ? 'unter ' : 'über ') + fmtZahl(+ein.toFixed(3)) + ', aus ' + (r > 0 ? 'über ' : 'unter ') + fmtZahl(+aus.toFixed(3)) + ')';
+                    }
+                    return lhs + ' ist ein Zweipunktregler (schaltet nur EIN oder AUS) für den Istwert ' + x + ', Sollwert ' + wert(w) + ', Schaltdifferenz ' + wert(h) + '. '
+                        + (r > 0 ? 'Wirkrichtung HEIZEN: ' + lhs + ' schaltet ein, wenn ' + x + ' unter Sollwert minus halbe Schaltdifferenz fällt, und aus, wenn ' + x + ' über Sollwert plus halbe Schaltdifferenz steigt'
+                                 : 'Wirkrichtung KÜHLEN: ' + lhs + ' schaltet ein, wenn ' + x + ' über Sollwert plus halbe Schaltdifferenz steigt, und aus, wenn ' + x + ' unter Sollwert minus halbe Schaltdifferenz fällt')
+                        + pkt + '. Dazwischen behält ' + lhs + ' seinen Zustand.';
+                }
+                if (args.length === 3) {
+                    const ein = args[1], aus = args[2];
+                    let fall = '';
+                    if (ein.k === 'num' && aus.k === 'num') {
+                        fall = +ein.v <= +aus.v
+                            ? lhs + ' schaltet ein, sobald ' + x + ' unter ' + fmtZahl(ein.v) + ' fällt, und aus, sobald ' + x + ' über ' + fmtZahl(aus.v) + ' steigt (wie beim Heizen oder Füllen).'
+                            : lhs + ' schaltet ein, sobald ' + x + ' über ' + fmtZahl(ein.v) + ' steigt, und aus, sobald ' + x + ' unter ' + fmtZahl(aus.v) + ' fällt (wie beim Kühlen oder Abpumpen).';
+                    } else {
+                        fall = 'Einschaltpunkt ' + wert(ein) + ', Ausschaltpunkt ' + wert(aus) + '. Liegt der Einschaltpunkt unten, schaltet ' + lhs + ' beim Unterschreiten ein und beim Überschreiten des Ausschaltpunkts aus; liegt er oben, umgekehrt.';
+                    }
+                    return lhs + ' ist ein Zweipunktregler (schaltet nur EIN oder AUS) für den Istwert ' + x + '. ' + fall + ' Zwischen den beiden Punkten behält ' + lhs + ' seinen Zustand.';
+                }
+                return null;
+            }
+            function pid(lhs, args) {
+                const r = richtung(args[args.length - 1]);
+                if (r !== 0) args = args.slice(0, -1);
+                if (args.length !== 5) return null;
+                const [w, x, kp, tn, tv] = args;
+                const null0 = (a) => a.k === 'num' && +a.v === 0;
+                const teile = ['P-Anteil mit KP = ' + wert(kp)];
+                teile.push(null0(tn) ? 'ohne I-Anteil (TN = 0)' : 'I-Anteil mit Nachstellzeit TN = ' + wert(tn) + ' s');
+                teile.push(null0(tv) ? 'ohne D-Anteil (TV = 0)' : 'D-Anteil mit Vorhaltzeit TV = ' + wert(tv) + ' s');
+                const art = null0(tn) && null0(tv) ? 'P-Regler' : null0(tv) ? 'PI-Regler' : null0(tn) ? 'PD-Regler' : 'PID-Regler';
+                return lhs + ' ist die Stellgröße (0 … 100 %) eines ' + art + 's. Sollwert ' + wert(w) + ', Istwert ' + wert(x) + '; ' + teile.join(', ') + '. '
+                    + (r < 0 ? 'Wirkrichtung KÜHLEN: ' + lhs + ' wird größer, wenn der Istwert über dem Sollwert liegt.'
+                             : 'Wirkrichtung HEIZEN: ' + lhs + ' wird größer, wenn der Istwert unter dem Sollwert liegt.')
+                    + ' Doppelklick auf den Baustein im Logikplan öffnet das Reglerfenster.';
+            }
+            function istSelbst(n, lhs) {
+                if (!n) return false;
+                if (n.k === 'id') return n.v === lhs;
+                return ['l', 'r', 'x', 'c', 'a', 'b'].some(k => istSelbst(n[k], lhs)) || (n.args || []).some(a => istSelbst(a, lhs));
+            }
+            // Zuweisung LHS := RHS mit Zahlen/Vergleichen
+            function zuweisung(lhs, ast, schritt) {
+                if (ast.k === 'fn' && ast.n === 'ZWEIPUNKT') return zweipunkt(lhs, ast.args);
+                if (ast.k === 'fn' && ast.n === 'PID') return pid(lhs, ast.args);
+                const selbst = istSelbst(ast, lhs) ? ' Steht ' + lhs + ' auch rechts, zählt dort der Wert aus dem letzten Zyklus.' : '';
+                if (ast.k === '?') {
+                    // Kette A ? x : B ? y : z → Fallliste
+                    const faelle = []; let n = ast;
+                    while (n && n.k === '?') { faelle.push([n.c, n.a]); n = n.b; }
+                    let s = lhs + ' bekommt ';
+                    s += faelle.map(([c, a], i) => (i ? 'sonst ' : '') + wert(a) + ', wenn ' + bed(c, schritt)).join('; ');
+                    s += '; sonst ' + (n && n.k === 'id' && n.v === lhs ? 'behält ' + lhs + ' seinen bisherigen Wert' : wert(n)) + '.';
+                    return s + (n && n.k === 'id' && n.v === lhs ? '' : selbst);
+                }
+                if (istZahl(ast) || ast.k === 'num') {
+                    if (ast.k === 'num') return lhs + ' bekommt fest den Zahlenwert ' + fmtZahl(ast.v) + '.';
+                    return lhs + ' bekommt in jedem Zyklus den Wert: ' + artikel(wert(ast)) + '.' + selbst;
+                }
+                return 'Der Ausgang ' + lhs + ' ist aktiv (1), wenn ' + bed(ast, schritt) + '.' + selbst;
+            }
+            // Analoge Variablen der Zeile mit Bereich/Einheit nennen
+            function analogHinweis(code) {
+                if (typeof componentTypes === 'undefined') return '';
+                const ids = Array.from(new Set((code.match(/[A-Za-zÄÖÜäöüß_][A-Za-z0-9ÄÖÜäöüß_]*/g) || [])));
+                const teile = [];
+                for (const v of ids) {
+                    const t = componentTypes[v];
+                    if (t !== 'analog_in' && t !== 'analog_out') continue;
+                    let s = v + ' = ' + (t === 'analog_in' ? 'Analogeingang' : 'Analogausgang');
+                    try {
+                        const b = typeof window._anaBereich === 'function' ? window._anaBereich(v) : null;
+                        if (b && b.quelle) s += ' (' + fmtZahl(b.min) + ' … ' + fmtZahl(b.max) + (b.einheit ? ' ' + b.einheit : '') + ')';
+                        else if (t === 'analog_out') s += ' (0 … 100 %)';
+                    } catch (_) {}
+                    teile.push(s);
+                }
+                return teile.length ? '   〰️ ' + teile.join(', ') + '.' : '';
+            }
+
+            // ---- Schrittketten-Zusammenhang ermitteln ----
+            function skKontext(text, idx) {
+                const zeilen = String(text || '').split('\n');
+                const ohne = (z) => (z.indexOf('//') >= 0 ? z.slice(0, z.indexOf('//')) : z).trim();
+                let start = -1;
+                for (let i = idx; i >= 0; i--) {
+                    const z = ohne(zeilen[i]);
+                    if (/^END$/i.test(z) && i !== idx) return null;
+                    if (/^SCHRITTKETTE\b/i.test(z)) { start = i; break; }
+                }
+                if (start < 0) return null;
+                const kette = (ohne(zeilen[start]).match(/^SCHRITTKETTE\s+([^\s:]+)/i) || [])[1] || '';
+                const schritte = {}; let erster = null; let schritt = null, bereich = null;
+                for (let i = start + 1; i < zeilen.length; i++) {
+                    const z = ohne(zeilen[i]);
+                    const m = z.match(/^STEP\s+([A-Za-z0-9_]+)\s*(?:\(([^)]*)\))?\s*:?$/i);
+                    if (m) { schritte[m[1]] = m[2] || ''; if (!erster) erster = m[1]; }
+                    if (i <= idx) {
+                        if (m) { schritt = m[1]; bereich = 'step'; }
+                        else if (/^TRANS\s*:?$/i.test(z)) bereich = 'trans';
+                        else if (/^CONTROL\s*:?$/i.test(z)) bereich = 'control';
+                    }
+                    if (/^END$/i.test(z)) break;
+                }
+                return { kette, schritt, bereich, schritte, erster };
+            }
+            const QUAL = {
+                N: (s, a) => a + ', solange ' + s + ' aktiv ist (N = normal).',
+                C: (s, a) => a + ', solange ' + s + ' aktiv ist und die INTERLOCK-Bedingung dieses Schritts erfüllt ist (C = bedingt).',
+                P: (s, a) => a + ' für einen kurzen Impuls (ca. 0,1 s) beim Eintritt in ' + s + ' (P = Puls).',
+                S: (s, a) => a + ' beim Eintritt in ' + s + ' und bleibt gespeichert, bis eine R-Aktion es zurücksetzt (S = setzen).',
+                R: (s, a) => a + ' beim Eintritt in ' + s + ' zurückgesetzt (R = rücksetzen, gewinnt gegen S).'
+            };
+            const CTRL = {
+                INIT_SQ: 'Grundstellung: wenn wahr, werden alle Schritte zurückgesetzt und der Anfangsschritt aktiviert',
+                OFF_SQ: 'Kette AUS: wenn wahr, sind alle Schritte inaktiv (z. B. NOT-HALT)',
+                ACK_EF: 'Quittieren: setzt gespeicherte Überwachungsfehler (SUPERVISION) zurück',
+                MODE_AUTO: 'Betriebsart AUTOMATIK: Übergänge schalten von selbst',
+                MODE_TAP: 'Betriebsart TIPPEN mit Bedingung: Übergang braucht zusätzlich T_PUSH',
+                MODE_TOP: 'Betriebsart TIPPEN ohne Bedingung: nur T_PUSH schaltet weiter',
+                MODE_MAN: 'Betriebsart HAND: nur S_ON/S_OFF wirken',
+                T_PUSH: 'Weiterschalt-Taster für TAP/TOP',
+                S_ON: 'im Handbetrieb den gewählten Schritt einschalten',
+                S_OFF: 'im Handbetrieb den gewählten Schritt ausschalten',
+                S_SEL: 'Schrittnummer für die Handanwahl (Zahl)',
+                OUT_AUTO_ON: 'Meldung: Automatik aktiv', OUT_TAP_ON: 'Meldung: TAP aktiv', OUT_TOP_ON: 'Meldung: TOP aktiv', OUT_MAN_ON: 'Meldung: Handbetrieb aktiv',
+                OUT_ERR_FLT: 'Meldung: Sammelfehler (eine Überwachung hat angesprochen)',
+                OUT_S_NO: 'Ausgabe: Nummer des aktiven Schritts (Zahl)',
+                OUT_CYCLE_COUNT: 'Zähler: abgeschlossene Durchläufe',
+                OUT_FAULT_COUNT: 'Zähler: aufgetretene Fehler'
+            };
+            function skErklaere(line, k) {
+                const z = line.trim();
+                const sName = (s) => s + (k.schritte[s] ? ' (' + k.schritte[s] + ')' : '');
+                let m;
+                if ((m = z.match(/^SCHRITTKETTE\s+([^\s:]+)/i))) return 'Beginn der Schrittkette ' + m[1] + '. Bis END folgen Schritte (STEP) mit ihren Aktionen und Übergängen (TRANS). Es ist immer genau ein Schritt aktiv; ' + (k.erster ? sName(k.erster) + ' ist der Anfangsschritt.' : 'der erste STEP ist der Anfangsschritt.');
+                if (/^END$/i.test(z)) return 'Ende der Schrittkette ' + k.kette + '.';
+                if (/^CONTROL\s*:?$/i.test(z)) return 'CONTROL-Block: verbindet Variablen mit den Bedien-Eingängen und Meldungen der Kette (Grundstellung, Betriebsart, Quittieren, Anzeigen).';
+                if ((m = z.match(/^STEP\s+([A-Za-z0-9_]+)\s*(?:\(([^)]*)\))?/i))) {
+                    return 'Schritt ' + m[1] + (m[2] ? ' „' + m[2] + '“' : '') + (m[1] === k.erster ? ' (Anfangsschritt, aktiv nach dem Start)' : '') + '. Die Aktionen darunter wirken nur, solange dieser Schritt aktiv ist.';
+                }
+                if (/^TRANS\s*:?$/i.test(z)) return 'Übergänge aus Schritt ' + (k.schritt ? sName(k.schritt) : '?') + ': Ist eine der folgenden Bedingungen erfüllt, wird ' + (k.schritt || 'der Schritt') + ' verlassen und der Zielschritt aktiv.';
+                if ((m = z.match(/^(.*?)->\s*([A-Za-z0-9_]+)\s*$/))) {
+                    const ast = parse(m[1]);
+                    let b = ast ? bed(ast, k.schritt) : m[1].trim();
+                    if (ast && ast.k === '||' && k.schritt) b = '(' + b + ')';
+                    return 'Wenn ' + (k.schritt ? sName(k.schritt) + ' aktiv ist und ' : '') + b + ', wechselt die Kette ' + (k.schritt ? 'von ' + k.schritt + ' ' : '') + 'nach ' + sName(m[2]) + '.';
+                }
+                if ((m = z.match(/^INTERLOCK\s*:\s*(.+)$/i))) {
+                    const ast = parse(m[1]);
+                    return 'Verriegelung von ' + (k.schritt || 'diesem Schritt') + ': Die C-Aktionen wirken nur, solange ' + (ast ? bed(ast, k.schritt) : m[1]) + '. Der Schritt selbst bleibt trotzdem aktiv.';
+                }
+                if ((m = z.match(/^SUPERVISION\s*:\s*(.+)$/i))) {
+                    const ast = parse(m[1]);
+                    return 'Überwachung von ' + (k.schritt || 'diesem Schritt') + ': Wenn ' + (ast ? bed(ast, k.schritt) : m[1]) + ', gilt das als Fehler; die Übergänge sind gesperrt und die Kette bleibt stehen.';
+                }
+                if (k.bereich === 'control' && (m = z.match(/^([A-Z_0-9]+)\s*:\s*(.+)$/i))) {
+                    const key = m[1].toUpperCase();
+                    const basis = key.replace(/_S\d+$/, '').replace(/_(S_NO)_S\d+$/, '_$1');
+                    const txt = CTRL[key] || CTRL[basis] || (/^S_SEL_/.test(key) ? 'Handanwahl dieses Schritts' : /^OUT_S_NO_/.test(key) ? 'Meldung: dieser Schritt ist aktiv' : null);
+                    const ast = parse(m[2]);
+                    return key + ' ← ' + m[2].trim() + (txt ? ': ' + txt + '.' : '.') + (ast && ast.k === 'not' ? ' (Hier ist die Variable negiert gebunden.)' : '');
+                }
+                if (k.bereich === 'step' && (m = z.match(/^(?:([NCPSRDL])(?:\s+(\d+(?:[.,]\d+)?))?\s*:\s*)?([A-Za-zÄÖÜäöüß_][A-Za-z0-9ÄÖÜäöüß_]*)\s*:=\s*(.+)$/i))) {
+                    const q = (m[1] || 'N').toUpperCase(), t = m[2], ziel = m[3], ast = parse(m[4]);
+                    const s = k.schritt ? sName(k.schritt) : 'der Schritt';
+                    let aussage;
+                    if (ast && ast.k === 'const') aussage = ziel + (ast.v ? ' ist eingeschaltet' : ' ist ausgeschaltet');
+                    else if (ast && (istZahl(ast) || ast.k === 'num') && (q === 'N' || q === 'C')) return ziel + ' bekommt den Wert ' + wert(ast) + ', sobald ' + s + ' aktiv ist' + (q === 'C' ? ' und die INTERLOCK-Bedingung erfüllt ist' : '') + ', und behält ihn danach, bis ein anderer Schritt einen neuen Wert setzt.';
+                    else if (ast && (istZahl(ast) || ast.k === 'num')) aussage = ziel + ' bekommt den Wert ' + wert(ast);
+                    else aussage = ziel + ' ist eingeschaltet, sofern ' + (ast ? bed(ast, k.schritt) : m[4]);
+                    if (q === 'D') return aussage + ' – aber erst ' + fmtZahl(t || '?') + ' s nach dem Eintritt in ' + s + ', dann solange der Schritt aktiv bleibt (D = verzögert).';
+                    if (q === 'L') return aussage + ' für höchstens ' + fmtZahl(t || '?') + ' s ab dem Eintritt in ' + s + ' (L = begrenzt).';
+                    if (q === 'R') return QUAL.R(s, ziel + ' wird');
+                    if (q === 'S') return QUAL.S(s, ziel + ' wird eingeschaltet');
+                    return (QUAL[q] || QUAL.N)(s, aussage);
+                }
+                return null;
+            }
+
+            window._explainLine = function(rawLine, ctx) {
+                if (!rawLine) return null;
+                let line = String(rawLine), comment = null;
+                const ci = line.indexOf('//');
+                if (ci >= 0) { comment = line.substring(ci + 2).trim(); line = line.substring(0, ci); }
+                const code = line.trim();
+                const mitKommentar = (s) => (s && comment ? s + '   💬 ' + comment : s);
+                hatKette = !!(ctx && /^\s*SCHRITTKETTE\b/im.test(ctx.text || ''));
+                if (code && ctx && ctx.text != null) {
+                    const k = skKontext(ctx.text, ctx.lineIdx);
+                    if (k) { const s = skErklaere(code, k); if (s) return mitKommentar(s + analogHinweis(code)); }
+                }
+                const m = code.match(/^([A-Za-zÄÖÜäöüß_][A-Za-z0-9ÄÖÜäöüß_]*)\s*(?::=|<-|=|\bIST\b|\bGLEICH\b)\s*(.+)$/i);
+                if (m && !/^[SRQ]\d+(?:_(?:SR|RS))?$/i.test(m[1])) {
+                    const ast = parse(m[2]);
+                    if (ast && brauchtNeu(ast)) {
+                        const s = zuweisung(m[1], ast, null);
+                        if (s) return mitKommentar(s + analogHinweis(code));
+                    }
+                }
+                const alt = _boolExplain(rawLine);
+                return alt && code ? alt + analogHinweis(code) : alt;
+            };
+            const G = window._CODE_GLOSSARY || (window._CODE_GLOSSARY = {});
+            Object.assign(G, {
+                'Vergleich': { title: 'Vergleich', syntax: 'A < B   A > B   A <= B   A >= B   A == B   A != B', desc: 'Vergleicht zwei Zahlen (z. B. einen Analogwert mit einer Grenze). Ergebnis ist 1 (wahr) oder 0 (falsch). Vergleich und && / || nicht in derselben Zeile mischen: das Ergebnis erst einer Hilfsvariablen zuweisen.', lhs: 'Ein Merker oder Ausgang, der 1 oder 0 wird.', rhs: 'Zwei Zahlenwerte mit einem Vergleichszeichen dazwischen.', scenario: '„über", „unter", „mindestens", „höchstens", „erreicht", „überschreitet"', example: 'HEISS := OELTEMP > 60\nZU_KALT := OELTEMP < 20' },
+                'Rechnen': { title: 'Rechnen mit Zahlen', syntax: 'A + B   A - B   A * B   A / B   A % B   MIN(A,B)  MAX(A,B)  ABS(A)  ROUND(A)', desc: 'Berechnet einen Zahlenwert. Punkt- vor Strichrechnung, Klammern erlaubt. % ist der Rest einer Division. Steht die Zielvariable auch rechts, wird der Wert aus dem letzten Zyklus benutzt.', lhs: 'Eine Zahlenvariable (z. B. Analogausgang oder Zwischenwert).', rhs: 'Eine Rechnung aus Zahlen und Variablen.', scenario: '„Differenz", „Summe", „Mittelwert", „begrenzen auf", „umrechnen"', example: 'DIFF := SOLLT - OELTEMP\nBEGRENZT := MIN(MAX(Y, 0), 100)' },
+                '? :': { title: 'Auswahl (Bedingung ? Wert1 : Wert2)', syntax: 'X := BED ? WERT1 : WERT2', desc: 'Liefert WERT1, wenn BED wahr ist, sonst WERT2. Lässt sich verketten, z. B. für Sollwerte je Betriebsart. Mit X ganz hinten behält X seinen Wert.', lhs: 'Eine Zahlenvariable.', rhs: 'Bedingung, Fragezeichen, Wert für wahr, Doppelpunkt, Wert für falsch.', scenario: '„je nach", „im Betrieb A gilt … sonst …"', example: 'SOLL := SOMMER ? 60 : WINTER ? 40 : SOLL' },
+                '.cv/.et': { title: 'Zählerstand und Zeit lesen', syntax: 'Z.cv   T.et', desc: '.cv liest den aktuellen Zählerstand eines CTU-Zählers, .et die abgelaufene Zeit eines Timers (in Sekunden). Damit kann man rechnen und vergleichen.', example: 'HALB := Z.cv >= 5' },
+                'SCHRITTKETTE': { title: 'Schrittkette (DSL)', syntax: 'SCHRITTKETTE NAME:\n  STEP S1 (TEXT):\n    AKTOR := TRUE\n  TRANS:\n    BEDINGUNG -> S2\nEND', desc: 'Ablaufsteuerung wie GRAFCET/S7-GRAPH: immer genau ein Schritt aktiv. Aktionen gelten nur im aktiven Schritt (Qualifier N, C, P, D t, L t, S, R), Übergänge mit -> wechseln in den nächsten Schritt; AFTER t ist eine Wartezeit im Schritt. Der Knopf „📘 SK-Doku" erklärt alles ausführlich.', example: 'SCHRITTKETTE PRESSE:\n  STEP S1 (BEREIT):\n  TRANS:\n    START -> S2\n  STEP S2 (PRESSEN):\n    ZYL := TRUE\n  TRANS:\n    UNTEN && AFTER 1.5 -> S1\nEND' }
+            });
+            // Für die Konstrukt-Chips im Erklärpanel
+            window._explainChips = function(code) {
+                const out = [];
+                if (/\b(SCHRITTKETTE|STEP|TRANS)\b|->/.test(code)) out.push('SCHRITTKETTE');
+                if (/\bZWEIPUNKT\s*\(/i.test(code)) out.push('ZWEIPUNKT');
+                if (/\bPID\s*\(/i.test(code)) out.push('PID');
+                if (/<=|>=|==|!=|<>|[≤≥≠<>]/.test(code.replace(/->|<-/g, ' '))) out.push('Vergleich');
+                const ohneMinus = code.replace(/->|<-|:=/g, ' ').replace(/([<>=(,?:]|^)\s*-\s*(?=\d)/g, '$1 ');
+                if (/[+*/%-]|\b(MIN|MAX|ABS|ROUND|FLOOR|CEIL)\s*\(/i.test(ohneMinus)) out.push('Rechnen');
+                if (/\?[^:]*:/.test(code)) out.push('? :');
+                if (/\.(cv|et)\b/i.test(code)) out.push('.cv/.et');
+                return out;
+            };
+        })();
+
         // ===== Fehler-Erklärer für ungültige Zeilen =====
         // Diagnostiziert die häufigsten VALIS-Code-Fehler und produziert eine
         // Erklärung + konkreten Fix-Vorschlag.
@@ -18410,7 +18832,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ci.innerHTML = '';
                 return;
             }
-            const sentence = window._explainLine(line);
+            const sentence = window._explainLine(line, { text: text, lineIdx: lineIdx });
             // Konstrukte für Chip-Reihe
             const codePart = line.indexOf('//') >= 0 ? line.substring(0, line.indexOf('//')) : line;
             const seen = new Set();
@@ -18427,11 +18849,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 [/\bTRUE\b/i, 'TRUE'], [/\bFALSE\b/i, 'FALSE']
             ];
             for (const [re, key] of cPatterns) if (re.test(codePart)) add(key);
+            if (typeof window._explainChips === 'function') window._explainChips(codePart).forEach(add);
             if (line.indexOf('//') >= 0) add('//');
             const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             let html = '<div class="ci-header">📖 Klartext zu Zeile ' + (lineIdx + 1) + '</div>';
             if (sentence) {
-                html += '<div class="ci-sentence">' + esc(sentence) + '</div>';
+                html += '<div class="ci-sentence">' + esc(sentence).replace(/\s{3}〰️ (.*?)(?=\s{3}💬|$)/, '<div class="ci-ana">〰️ $1</div>') + '</div>';
             } else {
                 html += '<div class="ci-empty">(nichts Erklärbares in dieser Zeile)</div>';
             }

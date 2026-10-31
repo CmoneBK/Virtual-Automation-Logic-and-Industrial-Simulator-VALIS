@@ -65797,8 +65797,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Spannungen sind auf den Messbereich der Variablen bezogen
             // (Messbereichsanfang = 0 V, Ende = 10 V). Live-Werte zieht
             // _updateFestoAnalog pro Sim-Tick nach.
-            const ANA_SIG = '#ef6c00';   // Analogsignal-Buchse
-            const ANA_GND = '#78909c';   // Analogmasse (getrennt von 0 V)
+            // Buchsenfarben nach der Farbkodierung des Lernsystems:
+            // Signal schwarz, Analogmasse weiß, 24 V rot, 0 V blau.
+            const ANA_SIG = '#1c1c1c';   // Analogsignal-Buchse (schwarz)
+            const ANA_GND = '#f5f5f5';   // Analogmasse (weiß, getrennt von 0 V)
+            const ANA_KABEL = '#ef6c00'; // Kabel/Markierung der Analogreihe
             const ANA_GEBER = { w: 300, zeile: 58, proKarte: 5 };
             const ANA_KOMP = { w: 440, h: 450 };
             const ANA_PID = { w: 480, h: 450 };
@@ -65930,69 +65933,137 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
 
             // ---- Komparatorkarte: 2 Eingänge, 4 Komparatoren, Relais-Wechsler ----
+            // Aufbau wie die Frontplatte im Lehrsystem: oben/unten Versorgungsleiste
+            // (+24 V rot, 0 V blau), ein Display, Feld A mit Eingang IN A, Einstellknopf
+            // und Ausgängen OUT A1/A2, Feld B mit Eingang IN B, Wahlschalter und
+            // OUT B1/B2. Der Wahlschalter bestimmt, was Display und Knopf zeigen
+            // (IN = Eingangsspannung, S = Schaltpunkt, H = Hysterese).
+            const _kompWahl = {};
+            const KOMP_STELLUNGEN = ['H B2', 'S B2', 'H B1', 'S B1', 'IN B', 'D/E', 'IN A', 'S A1', 'H A1', 'S A2', 'H A2'];
             function drawAnaKomparatorPanel(parent, x, y, idx, kanaele, pos) {
                 // kanaele: [{ v, zps: [zp, zp] }, { v, zps }] — Eingang A und B
-                const W = ANA_KOMP.w, H = ANA_KOMP.h;
-                const g = _anaKoerper(parent, x, y, W, H, `Komparatorkarte ${idx}`, '2 Eingänge ±10 V · 4 Komparatoren · Relais-Wechsler', 'ana_komp', idx);
-                ['A', 'B'].forEach((ab, k) => {
-                    const kanal = kanaele[k] || { v: null, zps: [] };
-                    const by = 52 + k * 196;
-                    if (k > 0) el('line', { x1: 14, y1: by - 8, x2: W - 14, y2: by - 8, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
-                    _anaText(g, 18, by + 10, `Eingang ${ab}`, { 'font-weight': 'bold' });
-                    drawSocket(g, 34, by + 30, ANA_SIG, `KK${idx}_${ab}_E`, `KK${idx}`);
-                    drawSocket(g, 64, by + 30, ANA_GND, `KK${idx}_${ab}_M`, `KK${idx}`);
-                    _anaBelegt(g, 49, by + 54, kanal.v);
-                    const ber = kanal.v ? _anaBer(kanal.v) : { min: 0, max: 10 };
-                    _anaLcd(g, 18, by + 62, 64, () => kanal.v ? _anaZahl(_anaVolt(_anaState()[kanal.v], ber), 2) + ' V' : '– V');
-                    [0, 1].forEach(j => {
-                        const zp = kanal.zps[j];
-                        const id = zp ? zp.id : null;
-                        const cx = 108 + j * 160;
-                        const name = `${ab}${j + 1}`;
-                        _anaText(g, cx, by + 10, `Komparator ${name}`, { 'font-size': 8.5, 'font-weight': 'bold' });
-                        // Einschalt-/Ausschaltpunkt aus dem Regler (live) oder dem Code
-                        const punkte = () => {
-                            const t = id && window.simTimers ? window.simTimers[id] : null;
-                            if (t && typeof t.ein === 'number') return [t.ein, t.aus];
-                            if (!zp) return [0, 0];
-                            const a = _anaArg(zp.args[1] || '0'), b = _anaArg(zp.args[2] || '0');
-                            if (zp.richtung === null) return [a, b];
-                            const hh = Math.abs(b) / 2;
-                            return zp.richtung > 0 ? [a - hh, a + hh] : [a + hh, a - hh];
-                        };
-                        const soll = () => { const [e, a] = punkte(); return _anaVolt((e + a) / 2, ber); };
-                        const hyst = () => { const [e, a] = punkte(); return Math.min(5, 10 * Math.abs(a - e) / ((ber.max - ber.min) || 1)); };
-                        _anaPoti(g, cx + 14, by + 36, 'Sollwert', () => (soll() + 10) / 20, () => zp ? _anaZahl(soll(), 2) + ' V' : '');
-                        _anaPoti(g, cx + 70, by + 36, 'Hysterese', () => hyst() / 5, () => zp ? _anaZahl(hyst(), 2) + ' V' : '');
-                        // Relais mit LED und Wechsler 11-12-14
-                        const ry = by + 92;
-                        el('rect', { x: cx - 4, y: ry, width: 132, height: 86, rx: 4, fill: '#fff', stroke: '#b0bec5', 'stroke-width': 0.8 }, g);
-                        const an = () => !!(id && window.simTimers && window.simTimers[id] && window.simTimers[id].q) && (typeof isSimulationActive === 'undefined' || isSimulationActive);
-                        _anaLed(g, cx + 8, ry + 12, '#ffb300', an);
-                        _anaText(g, cx + 18, ry + 15, `Relais ${name}`, { 'font-size': 8 });
-                        // Wechsler: 11 unten (Wurzel), 12 Öffner links oben, 14 Schließer rechts oben
-                        const k11 = { x: cx + 62, y: ry + 70 }, k12 = { x: cx + 30, y: ry + 34 }, k14 = { x: cx + 94, y: ry + 34 };
-                        el('line', { x1: k12.x, y1: k12.y + 8, x2: k12.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: k14.x, y1: k14.y + 8, x2: k14.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: k11.x, y1: k11.y - 8, x2: k11.x, y2: ry + 58, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        const hebel = el('line', { x1: k11.x, y1: ry + 58, x2: k12.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
-                        _anaLive.push(() => { const q = an(); hebel.setAttribute('x2', q ? k14.x : k12.x); });
+                const W = ANA_KOMP.w, H = ANA_KOMP.h, liveAb = _anaLive.length;
+                const g = _anaKoerper(parent, x, y, W, H, `Komparatorkarte ${idx}`, '2 Eingänge 0 … ±10 V · 4 Komparatoren · Relais-Wechsler', 'ana_komp', idx);
+                const lin = (x1, y1, x2, y2, w) => el('line', { x1, y1, x2, y2, stroke: PALETTE.trace, 'stroke-width': w || 1 }, g);
+                // Versorgungsleisten: je 2 Buchsen außen, 4 verbundene dazwischen
+                const leiste = (ly, farbe, key, txt) => {
+                    lin(40, ly, W - 40, ly, 1.2);
+                    drawSocket(g, 40, ly, farbe, `KK${idx}_${key}`, `KK${idx}`);
+                    drawSocket(g, W - 40, ly, farbe, null, null);
+                    [0, 1, 2, 3].forEach(i => drawSocket(g, 110 + i * 73, ly, PALETTE.socketBlack, null, null));
+                    _anaText(g, 40, ly + (ly < H / 2 ? -11 : 19), txt, { 'text-anchor': 'middle', 'font-size': 7.5, 'font-weight': 'bold', fill: farbe });
+                    _anaText(g, W - 40, ly + (ly < H / 2 ? -11 : 19), txt, { 'text-anchor': 'middle', 'font-size': 7.5, 'font-weight': 'bold', fill: farbe });
+                };
+                leiste(62, PALETTE.socketRed, '24V', '+24 V');
+                leiste(372, PALETTE.socketBlue, '0V', '0 V');
+                // Werte je Komparator
+                const ber = k => (kanaele[k] && kanaele[k].v) ? _anaBer(kanaele[k].v) : { min: 0, max: 10 };
+                const zpVon = n => { const k = n[0] === 'A' ? 0 : 1; return { k, zp: (kanaele[k] || { zps: [] }).zps[+n[1] - 1] }; };
+                const punkte = n => {
+                    const { zp } = zpVon(n);
+                    const t = zp && window.simTimers ? window.simTimers[zp.id] : null;
+                    if (t && typeof t.ein === 'number') return [t.ein, t.aus];
+                    if (!zp) return null;
+                    const a = _anaArg(zp.args[1] || '0'), b = _anaArg(zp.args[2] || '0');
+                    if (zp.richtung === null) return [a, b];
+                    const hh = Math.abs(b) / 2;
+                    return zp.richtung > 0 ? [a - hh, a + hh] : [a + hh, a - hh];
+                };
+                const sollV = n => { const p = punkte(n); return p ? _anaVolt((p[0] + p[1]) / 2, ber(zpVon(n).k)) : null; };
+                const hystV = n => { const p = punkte(n); const b = ber(zpVon(n).k); return p ? Math.min(5, 10 * Math.abs(p[1] - p[0]) / ((b.max - b.min) || 1)) : null; };
+                const einV = k => (kanaele[k] && kanaele[k].v) ? _anaVolt(_anaState()[kanaele[k].v], ber(k)) : null;
+                const wahl = () => _kompWahl[idx] || 'IN A';
+                // [Zeile 1, Zeile 2, Anteil für den Einstellknopf]
+                const anzeige = () => {
+                    const w = wahl(), V = v => v === null ? '– – –' : _anaZahl(v, 2) + ' V';
+                    if (w === 'D/E') return ['Sprache', window.currentLang === 'en' ? 'English' : 'Deutsch', 0.5];
+                    if (w.startsWith('IN')) { const v = einV(w === 'IN A' ? 0 : 1); return [`Eingang ${w.slice(3)}`, V(v), v === null ? 0.5 : (v + 10) / 20]; }
+                    const n = w.slice(2);
+                    const { zp } = zpVon(n);
+                    if (w[0] === 'S') { const v = sollV(n); return [`Schaltpunkt ${n}${zp ? ' · ' + zp.aus : ''}`, V(v), v === null ? 0.5 : (v + 10) / 20]; }
+                    const v = hystV(n); return [`Hysterese ${n}${zp ? ' · ' + zp.aus : ''}`, V(v), v === null ? 0 : v / 5];
+                };
+                // Display
+                el('rect', { x: 96, y: 82, width: W - 192, height: 46, rx: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 1 }, g);
+                el('rect', { x: 104, y: 88, width: W - 208, height: 34, rx: 2, fill: '#1b2a1f' }, g);
+                const z1 = el('text', { x: 112, y: 101, 'font-size': 9.5, fill: '#b9f6ca', 'font-family': 'Consolas, monospace' }, g);
+                const z2 = el('text', { x: W - 112, y: 117, 'text-anchor': 'end', 'font-size': 12, fill: '#b9f6ca', 'font-family': 'Consolas, monospace' }, g);
+                _anaLive.push(() => { const [a, b] = anzeige(); z1.textContent = a; z2.textContent = b; });
+                // Felder A und B
+                const feld = (fy, ab, k) => {
+                    el('rect', { x: 22, y: fy, width: W - 44, height: 104, rx: 6, fill: 'none', stroke: '#37474f', 'stroke-width': 1.6 }, g);
+                    // Eingang: Signal (schwarz) oben, Analogmasse (weiß) unten
+                    drawSocket(g, 46, fy + 22, ANA_SIG, `KK${idx}_${ab}_E`, `KK${idx}`);
+                    drawSocket(g, 46, fy + 82, ANA_GND, `KK${idx}_${ab}_M`, `KK${idx}`);
+                    _anaText(g, 38, fy + 56, `IN ${ab}`, { 'font-size': 8.5, 'font-weight': 'bold' });
+                    _anaBelegt(g, 64, fy + 70, kanaele[k] && kanaele[k].v, 'start');
+                    // Ausgänge: je Relais 12 und 14 oben, 11 unten, LED daneben
+                    _anaText(g, 307, fy + 14, 'OUT', { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                    [1, 2].forEach(j => {
+                        const name = `${ab}${j}`;
+                        const { zp } = zpVon(name);
+                        const bx = 238 + (j - 1) * 104;
+                        const k12 = { x: bx, y: fy + 22 }, k14 = { x: bx + 34, y: fy + 22 }, k11 = { x: bx + 34, y: fy + 82 };
+                        // Wechsler: 12 und 14 enden in kurzen Stummeln, der Hebel von 11
+                        // liegt in Ruhe am Öffner 12 und wechselt beim Schalten auf 14
+                        const sy = fy + 46, py = fy + 64, px = bx + 17;
+                        lin(k12.x, k12.y + 8, k12.x, sy); lin(k12.x, sy, bx + 10, sy);
+                        lin(k14.x, k14.y + 8, k14.x, sy); lin(k14.x, sy, bx + 24, sy);
+                        lin(k11.x, k11.y - 8, k11.x, py); lin(k11.x, py, px, py);
+                        const an = () => !!(zp && window.simTimers && window.simTimers[zp.id] && window.simTimers[zp.id].q) && (typeof isSimulationActive === 'undefined' || isSimulationActive);
+                        const hebel = el('line', { x1: px, y1: py, x2: bx + 10, y2: sy + 2, stroke: PALETTE.trace, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
+                        _anaLive.push(() => { hebel.setAttribute('x2', an() ? bx + 24 : bx + 10); });
                         [[k11, '11'], [k12, '12'], [k14, '14']].forEach(([p, n]) => {
                             drawSocket(g, p.x, p.y, PALETTE.socketBlack, `KK${idx}_${name}_${n}`, `KK${idx}`);
-                            _anaText(g, p.x + (n === '12' ? -12 : 12), p.y + 3, n, { 'text-anchor': 'middle', 'font-size': 8, 'font-family': 'monospace' });
+                            _anaText(g, p.x + (n === '11' ? 13 : 0), p.y + (n === '11' ? 3 : -11), n, { 'text-anchor': 'middle', 'font-size': 7, 'font-family': 'monospace' });
                         });
-                        _anaBelegt(g, cx + 62, ry + 100, zp ? zp.aus : null);
-                        if (zp) {
-                            g.style.cursor = 'pointer';
-                        }
+                        _anaLed(g, bx, fy + 70, '#ffb300', an);
+                        _anaText(g, bx, fy + 86, name, { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                        _anaBelegt(g, bx + 17, fy + 100, zp ? zp.aus : null);
                     });
+                };
+                feld(140, 'A', 0);
+                feld(252, 'B', 1);
+                // Einstellknopf (Feld A) zeigt den gewählten Wert
+                const kx = 150, ky = 192;
+                el('path', { d: `M ${kx - 20} ${ky - 26} A 30 30 0 0 1 ${kx + 20} ${ky - 26}`, fill: 'none', stroke: '#37474f', 'stroke-width': 1.2 }, g);
+                _anaText(g, kx - 26, ky - 22, '−', { 'text-anchor': 'middle', 'font-size': 10 });
+                _anaText(g, kx + 26, ky - 22, '+', { 'text-anchor': 'middle', 'font-size': 10 });
+                el('circle', { cx: kx, cy: ky, r: 16, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, g);
+                el('circle', { cx: kx, cy: ky, r: 12, fill: '#90a4ae' }, g);
+                const kz = el('circle', { cx: kx, cy: ky - 9, r: 2.5, fill: '#fff' }, g);
+                _anaLive.push(() => { const a = Math.max(0, Math.min(1, anzeige()[2])); const w = (-135 + 270 * a) * Math.PI / 180; kz.setAttribute('cx', kx + 9 * Math.sin(w)); kz.setAttribute('cy', ky - 9 * Math.cos(w)); });
+                _anaText(g, kx, ky + 32, 'Einstellknopf', { 'text-anchor': 'middle', 'font-size': 7 });
+                // Wahlschalter (Feld B): Klick dreht eine Stellung weiter
+                const wx = 150, wy = 304;
+                const sg = el('g', { 'data-komp-wahl': idx, style: 'cursor:pointer' }, g);
+                KOMP_STELLUNGEN.forEach((st, i) => {
+                    const w = (-150 + i * 30) * Math.PI / 180;
+                    el('line', { x1: wx + 15 * Math.sin(w), y1: wy - 15 * Math.cos(w), x2: wx + 20 * Math.sin(w), y2: wy - 20 * Math.cos(w), stroke: '#37474f', 'stroke-width': 1 }, sg);
+                    const tx = wx + 30 * Math.sin(w), ty = wy - 28 * Math.cos(w) + 3;
+                    _anaText(sg, tx, ty, st, { 'text-anchor': Math.abs(Math.sin(w)) < 0.3 ? 'middle' : (Math.sin(w) > 0 ? 'start' : 'end'), 'font-size': 6.5, 'font-weight': 'bold' });
                 });
-                // Versorgung
-                _anaText(g, 18, H - 14, '+24 V', { 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' });
-                drawSocket(g, 64, H - 17, PALETTE.socketRed, `KK${idx}_24V`, `KK${idx}`);
-                drawSocket(g, 94, H - 17, PALETTE.socketBlue, `KK${idx}_0V`, `KK${idx}`);
-                _anaText(g, W - 18, H - 14, 'ein bei Sollwert + ½ Hysterese, aus bei Sollwert − ½ Hysterese', { 'text-anchor': 'end', 'font-size': 7 });
-                kanaele.forEach((kanal, k) => { if (kanal && kanal.v) (pos.ein[kanal.v] = pos.ein[kanal.v] || []).push({ x: x + 34, y: y + 52 + k * 196 + 30 }); });
+                el('circle', { cx: wx, cy: wy, r: 13, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, sg);
+                const wz = el('line', { x1: wx, y1: wy, x2: wx, y2: wy - 11, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }, sg);
+                const wSet = () => { const i = KOMP_STELLUNGEN.indexOf(wahl()); const w = (-150 + i * 30) * Math.PI / 180; wz.setAttribute('x2', wx + 11 * Math.sin(w)); wz.setAttribute('y2', wy - 11 * Math.cos(w)); };
+                wSet(); _anaLive.push(wSet);
+                const tt = el('title', {}, sg); tt.textContent = 'Wahlschalter: Klick dreht weiter. IN = Eingangsspannung, S = Schaltpunkt, H = Hysterese';
+                sg.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    const i = KOMP_STELLUNGEN.indexOf(wahl());
+                    _kompWahl[idx] = KOMP_STELLUNGEN[(i + 1) % KOMP_STELLUNGEN.length];
+                    _anaLive.forEach(f => { try { f(); } catch (e) {} });
+                });
+                _anaText(g, wx, wy + 40, 'Wahlschalter', { 'text-anchor': 'middle', 'font-size': 7 });
+                // Übersicht der Schaltpunkte (statt Ablesen jeder Stellung)
+                const uy = 400;
+                _anaText(g, 22, uy, 'Schaltet ein bei Schaltpunkt + ½ Hysterese, aus bei Schaltpunkt − ½ Hysterese', { 'font-size': 7 });
+                ['A1', 'A2', 'B1', 'B2'].forEach((n, i) => {
+                    const t = _anaText(g, 22 + (i % 2) * 200, uy + 14 + Math.floor(i / 2) * 12, '', { 'font-size': 7.5, 'font-family': 'Consolas, monospace', fill: PALETTE.slotLabel });
+                    _anaLive.push(() => { const { zp } = zpVon(n); const s = sollV(n), h = hystV(n); t.textContent = zp ? `${n} ${zp.aus}: S ${_anaZahl(s, 2)} V · H ${_anaZahl(h, 2)} V` : `${n} frei`; });
+                });
+                _anaLive.slice(liveAb).forEach(f => { try { f(); } catch (e) {} });
+                kanaele.forEach((kanal, k) => { if (kanal && kanal.v) (pos.ein[kanal.v] = pos.ein[kanal.v] || []).push({ x: x + 46, y: y + (k ? 252 : 140) + 22 }); });
                 const ids = kanaele.flatMap(k => (k ? k.zps : [])).filter(Boolean);
                 if (ids.length) g.addEventListener('dblclick', ev => { ev.stopPropagation(); window._reglerFenster && window._reglerFenster(ids[0].id, ids[0].aus); });
             }
@@ -66048,7 +66119,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Messbuchsen
                 _anaText(g, 250, 196, 'Messbuchsen (Oszilloskop)', { 'font-size': 8, 'font-weight': 'bold' });
                 ['w', 'x', 'e', 'P', 'I', 'D'].forEach((n, i) => {
-                    drawSocket(g, 250 + i * 34, 214, '#fdd835', `PK${idx}_M_${n}`, `PK${idx}`);
+                    drawSocket(g, 250 + i * 34, 214, ANA_SIG, `PK${idx}_M_${n}`, `PK${idx}`);
                     _anaText(g, 250 + i * 34, 234, n, { 'text-anchor': 'middle', 'font-size': 8 });
                 });
                 // Stellgröße
@@ -66067,7 +66138,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Sensorversorgung 15 V mit eigener Analogmasse, 24 V Versorgung
                 const vy = H - 64;
                 _anaText(g, 18, vy, 'Sensorversorgung', { 'font-size': 8, 'font-weight': 'bold' });
-                drawSocket(g, 34, vy + 20, '#8e24aa', `PK${idx}_15V`, `PK${idx}`);
+                drawSocket(g, 34, vy + 20, PALETTE.socketRed, `PK${idx}_15V`, `PK${idx}`);
                 drawSocket(g, 94, vy + 20, ANA_GND, `PK${idx}_AM`, `PK${idx}`);
                 _anaText(g, 34, vy + 40, '+15 V', { 'text-anchor': 'middle', 'font-size': 7 });
                 _anaText(g, 94, vy + 40, 'Analogmasse', { 'text-anchor': 'middle', 'font-size': 7 });
@@ -66157,8 +66228,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { d = _anaSammeln(); } catch (e) { return { w: 0, h: 0, n: 0 }; }
                 if (!d.quellen.length && !d.zps.length && !d.pids.length && !d.ventile.length) return { w: 0, h: 0, n: 0 };
                 const GAP = 18;
-                el('line', { x1: x0, y1: y0 + 12, x2: x0 + 1200, y2: y0 + 12, stroke: ANA_SIG, 'stroke-width': 1.2, 'stroke-dasharray': '6 4', opacity: 0.7 }, svg);
-                _anaText(svg, x0 + 4, y0 + 6, '▼ Analogtechnik (Geber · Komparator · PID-Regler · Proportionalverstärker) — orange Buchsen: Analogsignal, grau: Analogmasse', { 'font-size': 10, 'font-weight': 'bold', fill: '#bf360c' });
+                el('line', { x1: x0, y1: y0 + 12, x2: x0 + 1200, y2: y0 + 12, stroke: ANA_KABEL, 'stroke-width': 1.2, 'stroke-dasharray': '6 4', opacity: 0.7 }, svg);
+                _anaText(svg, x0 + 4, y0 + 6, '▼ Analogtechnik (Geber · Komparator · PID-Regler · Proportionalverstärker) — schwarze Buchsen: Analogsignal, weiß: Analogmasse', { 'font-size': 10, 'font-weight': 'bold', fill: '#bf360c' });
                 const top = y0 + 26;
                 const pos = { aus: {}, ein: {} };
                 let cx = x0, maxH = 0, n = 0;
@@ -66199,7 +66270,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const sag = Math.min(140, 50 + Math.abs(z.x - q.x) / 6);
                         const dpath = `M${q.x},${q.y} C${q.x},${q.y + sag} ${z.x},${z.y + sag} ${z.x},${z.y}`;
                         el('path', { d: dpath, fill: 'none', stroke: '#000', 'stroke-width': 4.5, opacity: 0.25 }, kabel);
-                        el('path', { d: dpath, fill: 'none', stroke: ANA_SIG, 'stroke-width': 3, opacity: 0.9, 'data-ana-var': v }, kabel);
+                        el('path', { d: dpath, fill: 'none', stroke: ANA_KABEL, 'stroke-width': 3, opacity: 0.9, 'data-ana-var': v }, kabel);
                     });
                 });
                 window._festoAnaLive = _anaLive;
@@ -73727,5 +73798,158 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         else init();
     })();
     </script>
+<!-- VALIS-Icons: eigene Zeichen statt Emojis (bunte Variante) -->
+<style id="vi-style">
+.vi{display:inline-block;width:1.15em;height:1.15em;vertical-align:-0.2em;flex:none;fill:none;stroke:var(--vi-c,currentColor);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.vi .v{fill:var(--vi-f,currentColor);stroke:none}
+.vi .inv{stroke:var(--vi-bg,#222);stroke-width:1.3}
+.vi .r{fill:#e53935;stroke:none}.vi .g{fill:#43a047;stroke:none}.vi .y{fill:#fbc02d;stroke:none}.vi .b{fill:#1e88e5;stroke:none}
+.vi .sr{stroke:#e53935}.vi .sg{stroke:#43a047}.vi .sb{stroke:#1e88e5}
+.vi-alt{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;white-space:nowrap!important;margin:-1px!important;padding:0!important;border:0!important}
+body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width:auto!important;height:auto!important;clip:auto!important;margin:0!important;overflow:visible!important}
+.vi.vi-mit-text{margin-right:.35em}
+.vi-zeile{display:inline-flex;align-items:center;justify-content:center}
+</style>
+<script id="vi-script">
+(function () {
+  'use strict';
+  // Eigene Icons statt Emojis: ein führendes Emoji in Knöpfen, Reitern,
+  // Menüeinträgen und Überschriften wird durch das passende SVG ersetzt.
+  // Das Emoji bleibt unsichtbar im Text stehen, damit textContent-Vergleiche
+  // im Code und Screenreader weiter funktionieren.
+  const IC = {"speichern":["<path d=\"M5 3h11l3 3v15H5z\"/><path d=\"M8 3v5h7V3\"/><rect x=\"8\" y=\"13\" width=\"8\" height=\"8\"/>","blau","blau"],"oeffnen":["<path d=\"M3 19V5h6l2 2h7v3\"/><path d=\"M3 19l3-9h15l-3 9z\"/>","blau","gelb"],"export":["<path d=\"M4 14v6h16v-6\"/><path d=\"M12 15V3\"/><path d=\"m7 8 5-5 5 5\"/>","blau","blau"],"import":["<path d=\"M4 14v6h16v-6\"/><path d=\"M12 3v12\"/><path d=\"m7 10 5 5 5-5\"/>","blau","blau"],"herunterladen":["<path d=\"M12 3v13\"/><path d=\"m6 11 6 6 6-6\"/><path d=\"M5 21h14\"/>","blau","blau"],"hochladen":["<path d=\"M12 21V8\"/><path d=\"m6 13 6-6 6 6\"/><path d=\"M5 3h14\"/>","blau","blau"],"kopieren":["<rect x=\"8\" y=\"8\" width=\"12\" height=\"13\" rx=\"2\"/><path d=\"M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3\"/>","blau","blau"],"link":["<path d=\"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1\"/><path d=\"M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1\"/>","blau","blau"],"drucken":["<path d=\"M7 9V3h10v6\"/><rect x=\"3\" y=\"9\" width=\"18\" height=\"8\" rx=\"2\"/><path d=\"M7 14h10v7H7z\"/>","grau","grau"],"pdf":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><rect class=\"v\" x=\"3\" y=\"11\" width=\"12\" height=\"7\" rx=\"1\"/><path class=\"inv\" d=\"M5.5 16.5v-3.5h1.6a1.1 1.1 0 0 1 0 2.2H5.5M9.5 13v3.5h1a1.75 1.75 0 0 0 0-3.5zM13 16.5V13h1.5M13 14.8h1.2\"/>","grau","rot"],"loeschen":["<path d=\"M4 7h16\"/><path d=\"M10 3h4\"/><path d=\"m6 7 1 14h10l1-14\"/><path d=\"M10 11v6M14 11v6\"/>","rot","rot"],"leeren":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><path d=\"m10 12 5 5M15 12l-5 5\"/>","rot","rot"],"aufraeumen":["<path d=\"M15 2l-3 9\"/><path d=\"M7 11h9l2 10H5z\"/><path d=\"M9 15v6M13 15v6\"/>","orange","orange"],"bearbeiten":["<path d=\"M4 20l1-5L16 4l4 4L9 19z\"/><path d=\"m14 6 4 4\"/>","orange","orange"],"neu":["<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"3\"/><path d=\"M12 8v8M8 12h8\"/>","gruen","gruen"],"schliessen":["<path d=\"M6 6l12 12M18 6 6 18\"/>","grau","grau"],"fertig":["<path d=\"m5 12 5 5 9-10\"/>","gruen","gruen"],"pruefen":["<path d=\"M14 21H6V2h9l4 4v7\"/><path d=\"M15 2v4h4\"/><path d=\"m14 18 2.5 2.5L21 16\"/><path d=\"M9 10h6M9 14h3\"/>","gruen","gruen"],"aktualisieren":["<path d=\"M20 11a8 8 0 0 0-14.3-4.7L4 8\"/><path d=\"M4 3v5h5\"/><path d=\"M4 13a8 8 0 0 0 14.3 4.7L20 16\"/><path d=\"M20 21v-5h-5\"/>","blau","blau"],"zuruecksetzen":["<path d=\"M4 12a8 8 0 1 0 2.4-5.7L4 8.6\"/><path d=\"M4 3.6v5h5\"/>","orange","orange"],"rueckgaengig":["<path d=\"M9 14 4 9l5-5\"/><path d=\"M4 9h10a6 6 0 0 1 0 12h-3\"/>","grau","grau"],"wiederholen":["<path d=\"m15 14 5-5-5-5\"/><path d=\"M20 9H10a6 6 0 0 0 0 12h3\"/>","grau","grau"],"verlauf":["<path d=\"M3 12a9 9 0 1 0 3-6.7L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l3 2\"/>","blau","blau"],"snapshot":["<path d=\"M4 8h3l2-3h6l2 3h3v11H4z\"/><circle cx=\"12\" cy=\"13\" r=\"3.5\"/>","violett","violett"],"alssvg":["<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M7 17c2-8 8-2 10-10\"/><rect class=\"v\" x=\"5.5\" y=\"15.5\" width=\"3\" height=\"3\"/><rect class=\"v\" x=\"15.5\" y=\"5.5\" width=\"3\" height=\"3\"/>","violett","violett"],"suchen":["<circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m15.5 15.5 5.5 5.5\"/>","blau","blau"],"vergleich":["<rect x=\"3\" y=\"4\" width=\"7\" height=\"16\" rx=\"1\"/><rect x=\"14\" y=\"4\" width=\"7\" height=\"16\" rx=\"1\"/><path d=\"M5.5 8h2M5.5 12h2M16.5 8h2M16.5 12h2\"/><path d=\"M5.5 16h2\" /><path class=\"v\" d=\"M16 15h3v3h-3z\"/>","blau","gruen"],"vorschau":["<path d=\"M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","blau","blau"],"optionen":["<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1\"/><circle cx=\"12\" cy=\"12\" r=\"7\"/>","grau","grau"],"info":["<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v6\"/><circle class=\"v\" cx=\"12\" cy=\"7.5\" r=\"1.2\"/>","blau","blau"],"anleitung":["<path d=\"M12 6C10 4.5 7 4 3 4v14c4 0 7 .5 9 2 2-1.5 5-2 9-2V4c-4 0-7 .5-9 2z\"/><path d=\"M12 6v14\"/>","blau","blau"],"mehr":["<path d=\"M5 4a2 2 0 0 1 2-2h12v16H7a2 2 0 0 0-2 2z\"/><path d=\"M5 20a2 2 0 0 0 2 2h12v-4\"/><path class=\"v\" d=\"M10 2v7l2-1.5L14 9V2z\"/>","blau","rot"],"beispiele":["<rect x=\"3\" y=\"4\" width=\"4\" height=\"16\"/><rect x=\"8\" y=\"4\" width=\"4\" height=\"16\"/><path d=\"m14 5.6 3.8-1 4.1 15.4-3.8 1z\"/><path d=\"M3 8h4M8 8h4\"/>","blau","orange"],"lernzentrum":["<path d=\"M2 9.5 12 5l10 4.5-10 4.5z\"/><path d=\"M6 11.3v4.2c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.2\"/><path d=\"M22 9.5v5\"/>","violett","violett"],"training":["<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"5\"/><circle class=\"v\" cx=\"12\" cy=\"12\" r=\"1.6\"/>","rot","rot"],"ki":["<path class=\"v\" d=\"M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z\"/><path class=\"v\" d=\"m18.5 14 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z\"/>","violett","violett"],"plugins":["<path d=\"M4 8h4a2 2 0 1 1 4 0h4v4a2 2 0 1 1 0 4v4H4v-4a2 2 0 1 0 0-4z\"/>","violett","violett"],"pakete":["<path d=\"m3 7 9-4 9 4v10l-9 4-9-4z\"/><path d=\"m3 7 9 4 9-4\"/><path d=\"M12 11v10\"/>","orange","orange"],"aufgaben":["<path d=\"M10 6h11M10 12h11M10 18h11\"/><path d=\"m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11\"/><rect x=\"3.5\" y=\"16.5\" width=\"3\" height=\"3\"/>","blau","blau"],"analyse":["<path d=\"M3 15l4-5 3 3 4-6\"/><circle cx=\"16.5\" cy=\"16.5\" r=\"3.5\"/><path d=\"m19 19 2.5 2.5\"/>","violett","violett"],"hinweis":["<path d=\"M9 18h6M10 21h4\"/><path d=\"M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z\"/>","gelb","gelb"],"loesung":["<circle cx=\"7.5\" cy=\"15.5\" r=\"4.5\"/><path d=\"M10.7 12.3 20 3\"/><path d=\"m17 6 3 3M14.5 8.5l2 2\"/>","gelb","gelb"],"musterloesung":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><path class=\"v\" d=\"m12 10 1.4 2.8 3.1.5-2.2 2.2.5 3.1-2.8-1.5-2.8 1.5.5-3.1-2.2-2.2 3.1-.5z\"/>","blau","gelb"],"beenden":["<circle cx=\"12\" cy=\"12\" r=\"9\"/><rect class=\"v\" x=\"8.5\" y=\"8.5\" width=\"7\" height=\"7\" rx=\"1\"/>","rot","rot"],"app":["<rect x=\"6\" y=\"2\" width=\"12\" height=\"20\" rx=\"2\"/><path d=\"M12 6.5v7M9 11l3 3 3-3\"/><path d=\"M11 18h2\"/>","blau","blau"],"zusammen":["<circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6\"/><circle cx=\"17\" cy=\"9\" r=\"2.5\"/><path d=\"M16 14.2c2.8.4 5 2.8 5 5.8\"/>","gruen","gruen"],"start":["<path d=\"m3 11 9-7 9 7\"/><path d=\"M5 10v10h14V10\"/><path d=\"M10 20v-6h4v6\"/>","blau","blau"],"karte":["<path d=\"m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2z\"/><path d=\"M9 4v14M15 6v14\"/>","gruen","gruen"],"layout":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M12 4v16M12 12h9\"/>","grau","grau"],"tonaus":["<path d=\"M4 9h4l5-4v14l-5-4H4z\"/><path d=\"m16 9 5 6M21 9l-5 6\"/>","grau","grau"],"aufzeichnen":["<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle class=\"r\" cx=\"12\" cy=\"12\" r=\"4.5\"/>","",""],"oszilloskop":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"13\" rx=\"2\"/><path d=\"M5 12h3l2-4 3 7 2-3h4\"/><path d=\"M8 21h8M12 17v4\"/>","gruen","gruen"],"ueberlagern":["<path d=\"M3 3v18h18\"/><path d=\"M6 16c3 0 4-9 7-9s4 5 7 5\"/><path d=\"M6 11c3 0 4 5 7 5s4-6 7-6\" stroke-dasharray=\"2 2.5\"/>","gruen","gruen"],"zeitraffer":["<path d=\"M3 6v12l8-6zM12 6v12l8-6z\"/><path d=\"M21 5v14\"/>","blau","blau"],"starten":["<path class=\"v\" d=\"M7 4v16l13-8z\"/>","gruen","gruen"],"schritt":["<path d=\"M5 5v14\"/><path class=\"v\" d=\"M9 5v14l11-7z\"/>","gruen","gruen"],"weiter":["<path d=\"M4 12h15M13 6l6 6-6 6\"/>","blau","blau"],"zurueck":["<path d=\"M20 12H5M11 6l-6 6 6 6\"/>","grau","grau"],"aufklappen":["<path d=\"m6 9 6 6 6-6\"/>","grau","grau"],"kurz":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><path d=\"M9 12h7\"/>","grau","grau"],"lang":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><path d=\"M9 10h7M9 13h7M9 16h7M9 19h4\"/>","grau","grau"],"bild":["<path d=\"m12 2 9 5v10l-9 5-9-5V7z\"/><path d=\"m3 7 9 5 9-5M12 12v10\"/><circle class=\"r\" cx=\"16.5\" cy=\"12\" r=\"1.6\"/>","grau","grau"],"codegen":["<path d=\"M8 4C6 4 5 5 5 7v2c0 1.5-1 2.5-2 3 1 .5 2 1.5 2 3v2c0 2 1 3 3 3\"/><path d=\"M16 4c2 0 3 1 3 3v2c0 1.5 1 2.5 2 3-1 .5-2 1.5-2 3v2c0 2-1 3-3 3\"/><path class=\"v\" d=\"m12 8 1 3 3 1-3 1-1 3-1-3-3-1 3-1z\"/>","violett","gelb"],"ausaufbau":["<rect x=\"2\" y=\"13\" width=\"9\" height=\"8\" rx=\"1\"/><circle class=\"v\" cx=\"5\" cy=\"17\" r=\"1.2\"/><circle class=\"v\" cx=\"8\" cy=\"17\" r=\"1.2\"/><path d=\"M6.5 13V8h5\"/><path d=\"m10 5.5 2.5 2.5L10 10.5\"/><path d=\"m17 4-2.5 3L17 10M19.5 4 22 7l-2.5 3\"/>","violett","violett"],"auscode":["<path d=\"M4 20 15 9\"/><path d=\"m13 7 4 4\"/><path d=\"M18 2v3M21.5 5.5h-3M20 8l1.5 1.5M16 3.5 14.8 2.3\"/>","violett","violett"],"scl":["<path d=\"M6 2h9l4 4v16H6z\"/><path d=\"M15 2v4h4\"/><path d=\"m10 11-2 2.5 2 2.5M13 11l2 2.5-2 2.5\"/><path d=\"M9 19h7\"/>","violett","violett"],"ob1":["<rect x=\"13\" y=\"6\" width=\"8\" height=\"12\" rx=\"1\"/><path d=\"M3 12h8M8 9l3 3-3 3\"/><path d=\"M16 10h2M16 14h2\"/>","violett","violett"],"tags":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"1\"/><path d=\"M3 9h18M3 14h18M9 4v16\"/>","violett","violett"],"zuordnung":["<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"2\"/><path d=\"M8 8h2M8 12h2M8 16h2M13 8h3M13 12h3M13 16h3\"/>","violett","violett"],"iframe":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 8h18\"/><path d=\"m10 11.5-2.5 2.5 2.5 2.5M14 11.5l2.5 2.5-2.5 2.5\"/>","blau","blau"],"sps":["<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"1\"/><path d=\"M4 8h16\"/><circle class=\"g\" cx=\"8\" cy=\"5.5\" r=\".9\"/><circle class=\"v\" cx=\"11\" cy=\"5.5\" r=\".9\"/><path d=\"M8 12h2M8 15h2M8 18h2M14 12h2M14 15h2M14 18h2\"/>","violett","violett"],"epneu":["<rect x=\"2\" y=\"13\" width=\"11\" height=\"7\"/><path d=\"M6 13v7M6 16.5h16\"/><path class=\"v\" d=\"m17 2-4.5 6.5h3L14.5 13l4.5-6.5h-3z\"/>","petrol","gelb"],"pro":["<path d=\"m6 20 6-5 6 5M6 15l6-5 6 5M6 10l6-5 6 5\"/>","violett","violett"],"steckaufbau":["<path d=\"M9 2v6M15 2v6\"/><path d=\"M6 8h12v4a6 6 0 0 1-12 0z\"/><path d=\"M12 18v4\"/>","gelb","gelb"],"fabrik":["<path d=\"M3 21V10l5 3V10l5 3V10l5 3V4h3v17z\"/><path d=\"M7 17h2M12 17h2\"/>","grau","grau"],"logikplan":["<rect x=\"2\" y=\"3\" width=\"8\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"8\" height=\"7\" rx=\"1\"/><path d=\"M10 6.5h2v11h2\"/><path d=\"M6 10v4M6 18v3M18 3v3M18 10v4\"/>","orange","orange"],"eingang":["<rect x=\"11\" y=\"5\" width=\"10\" height=\"14\" rx=\"1\"/><path d=\"M2 12h10M8.5 8.5 12 12l-3.5 3.5\"/>","gruen","gruen"],"ausgang":["<rect x=\"3\" y=\"5\" width=\"10\" height=\"14\" rx=\"1\"/><path d=\"M12 12h10M18.5 8.5 22 12l-3.5 3.5\"/>","blau","blau"],"seite":["<path d=\"M2 20h20\"/><rect x=\"5\" y=\"10\" width=\"6\" height=\"10\"/><path d=\"M14 20v-6h5v6\"/><path d=\"M3 6h18\" stroke-dasharray=\"2 2\"/>","grau","grau"],"draufsicht":["<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"1\" stroke-dasharray=\"2.5 2\"/><rect x=\"7\" y=\"7\" width=\"5\" height=\"5\"/><circle cx=\"16\" cy=\"15\" r=\"2.5\"/>","grau","grau"],"netzwerke":["<rect x=\"3\" y=\"3\" width=\"18\" height=\"5\" rx=\"1\"/><rect x=\"3\" y=\"10\" width=\"18\" height=\"5\" rx=\"1\"/><rect x=\"3\" y=\"17\" width=\"18\" height=\"4\" rx=\"1\"/><path d=\"M6 5.5h3M6 12.5h3\"/>","violett","violett"],"fup":["<path d=\"M2 8h5M2 16h5M17 12h5\"/><rect x=\"7\" y=\"4\" width=\"10\" height=\"16\" rx=\"1\"/><path d=\"M10 10h4M10 14h4\"/>","orange","orange"],"norm":["<path d=\"M3 21V4l17 17z\"/><path d=\"M7 17h4v-4\"/><path d=\"M3 8h2M3 12h2M3 16h2\"/>","violett","violett"],"dichte":["<path d=\"M4 5h16M4 9.5h16M4 14.5h16M4 19h16\"/>","grau","grau"],"konstanten":["<path d=\"M9.5 4l-2 16M16.5 4l-2 16M4 9h16M3.5 15h16\"/>","violett","violett"],"nummern":["<path d=\"M10 6h11M10 12h11M10 18h11\"/><path d=\"M4 4.5 5.5 4v4\"/><path d=\"M4 11a1.3 1.3 0 0 1 2.4.7L4 14h2.6\"/><path d=\"M4 17h2.3l-1.2 1.3a1.2 1.2 0 1 1-1.1 1.6\"/>","violett","violett"],"pinsort":["<path d=\"M7 4v16M4 17l3 3 3-3\"/><path d=\"M13 6h8M13 12h6M13 18h4\"/>","violett","violett"],"pinsnap":["<path d=\"M3 12h7\"/><circle class=\"v\" cx=\"12\" cy=\"12\" r=\"2.2\"/><circle class=\"v\" cx=\"6\" cy=\"6\" r=\".9\"/><circle class=\"v\" cx=\"12\" cy=\"6\" r=\".9\"/><circle class=\"v\" cx=\"18\" cy=\"6\" r=\".9\"/><circle class=\"v\" cx=\"18\" cy=\"12\" r=\".9\"/><circle class=\"v\" cx=\"6\" cy=\"18\" r=\".9\"/><circle class=\"v\" cx=\"12\" cy=\"18\" r=\".9\"/><circle class=\"v\" cx=\"18\" cy=\"18\" r=\".9\"/>","violett","violett"],"bunt":["<path class=\"sr\" d=\"M3 7h6l3 5h9\"/><path class=\"sg\" d=\"M3 12h18\"/><path class=\"sb\" d=\"M3 17h6l3-5\"/>","",""],"fehlerglow":["<rect x=\"7\" y=\"7\" width=\"10\" height=\"10\" rx=\"2\"/><path d=\"M12 9.5v3\"/><circle class=\"v\" cx=\"12\" cy=\"14.6\" r=\".9\"/><path d=\"M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8\"/>","rot","rot"],"glowhover":["<path d=\"M6 4l11 5.5-4.7 1.6L10.6 16z\"/><path d=\"M17 14v4M15 16h4M20 3v2M19 4h2\"/>","gelb","gelb"],"details":["<path d=\"M3 12V4h8l10 10-8 8z\"/><circle class=\"v\" cx=\"7.5\" cy=\"8\" r=\"1.5\"/>","orange","orange"],"wechsler":["<path d=\"M3 12h6l8-5\"/><path d=\"M17 3v4M17 21v-4.5M15 16.5h4\"/><circle class=\"v\" cx=\"9\" cy=\"12\" r=\"1.3\"/>","violett","violett"],"stromkreise":["<rect x=\"2\" y=\"5\" width=\"8\" height=\"14\" rx=\"1\"/><rect x=\"14\" y=\"5\" width=\"8\" height=\"14\" rx=\"1\"/><path d=\"M6 9v6M18 9v6\"/><path d=\"M11 12h2\" stroke-dasharray=\"1 1.4\"/>","gelb","gelb"],"nothaltrelais":["<path d=\"M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z\"/><rect x=\"9\" y=\"8\" width=\"6\" height=\"7\"/><path d=\"m9 15 6-7\"/>","rot","rot"],"hwlimit":["<rect x=\"3\" y=\"6\" width=\"18\" height=\"12\" rx=\"1\"/><path d=\"M7.5 6v12M12 6v12M16.5 6v12\"/><circle class=\"v\" cx=\"5.25\" cy=\"9\" r=\".8\"/><circle class=\"v\" cx=\"9.75\" cy=\"9\" r=\".8\"/><circle class=\"v\" cx=\"14.25\" cy=\"9\" r=\".8\"/>","violett","gruen"],"relaismodus":["<rect x=\"6\" y=\"7\" width=\"12\" height=\"10\"/><path d=\"M2 12h4M18 12h4\"/><path d=\"m6 17 12-10\"/>","violett","violett"],"srspalte":["<rect x=\"14\" y=\"4\" width=\"7\" height=\"16\" rx=\"1\"/><path d=\"M3 8h8M3 12h8M3 16h8\"/><path d=\"M16.5 8h2M16.5 16h2\"/>","violett","violett"],"helfer":["<path d=\"M16.9 3.9a5.2 5.2 0 0 0-6.7 6.7L4 16.8a2 2 0 0 0 0 2.8l.4.4a2 2 0 0 0 2.8 0l6.2-6.2a5.2 5.2 0 0 0 6.7-6.7l-3.1 3.1-2.6-.5-.5-2.6z\"/>","grau","grau"],"elektro":["<path d=\"M13 2 4 14h7l-1 8 9-12h-7z\"/>","gelb","gelb"],"pneumatik":["<path d=\"M3 8h11a3 3 0 1 0-3-3\"/><path d=\"M3 12h16a3 3 0 1 1-3 3\"/><path d=\"M3 16h7\"/>","petrol","petrol"],"hydraulik":["<path d=\"M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z\"/><path d=\"M9 15h6M12 12v6\"/>","orange","orange"],"auswaehlen":["<path d=\"M5 3l14 7-6 2-2 6z\"/><path d=\"m13 12 6 6\"/>","grau","grau"],"leitung":["<circle cx=\"5\" cy=\"18\" r=\"2\"/><circle cx=\"19\" cy=\"6\" r=\"2\"/><path d=\"M7 18h5V6h5\"/>","gelb","gelb"],"radierer":["<path d=\"m16 3 5 5-11 11H5l-3-3z\"/><path d=\"m9 10 5 5\"/><path d=\"M10 21h11\"/>","rot","rot"],"entleeren":["<path d=\"M12 2s5 5.5 5 8.5a5 5 0 0 1-10 0C7 7.5 12 2 12 2z\"/><path d=\"M12 17v5M9 19l3 3 3-3\"/>","orange","orange"],"speicher":["<rect x=\"5\" y=\"3\" width=\"14\" height=\"18\" rx=\"2\"/><path d=\"m9 9.5 3-3 3 3M9 14.5l3 3 3-3\"/><path d=\"M12 6.5v11\" stroke-dasharray=\"1.6 2\"/>","violett","violett"],"zeiten":["<circle cx=\"12\" cy=\"13\" r=\"8\"/><path d=\"M12 13V9M10 2h4M12 2v3M19 6l1.5-1.5\"/>","violett","violett"],"ton":["<path d=\"M3 9h3V4h12v5h3\"/><path d=\"M3 20h7v-5h8v5h3\"/><path d=\"M6 12v3h4\" stroke-dasharray=\"1.4 1.6\"/>","violett","violett"],"tof":["<path d=\"M3 9h3V4h8v5h7\"/><path d=\"M3 20h3v-5h12v5h3\"/><path d=\"M14 12v3h4\" stroke-dasharray=\"1.4 1.6\"/>","violett","violett"],"tp":["<path d=\"M3 9h3V4h4v5h11\"/><path d=\"M3 20h3v-5h10v5h5\"/>","violett","violett"],"zaehler":["<path d=\"M6 6v12M10 6v12M14 6v12M18 6v12\"/><path d=\"M3.5 15.5 20.5 8.5\"/>","violett","violett"],"regler":["<rect x=\"8\" y=\"3\" width=\"8\" height=\"6\" rx=\"1\"/><rect x=\"8\" y=\"15\" width=\"8\" height=\"6\" rx=\"1\"/><path d=\"M16 6h4v12h-4M8 18H4V6h4\"/><path d=\"m18 10 2-2 2 2M2 14l2 2 2-2\"/>","violett","violett"],"reglerfenster":["<circle cx=\"12\" cy=\"13\" r=\"7\"/><path d=\"m12 13 3.5-3.5\"/><path d=\"M12 3v2M4.9 6l1.4 1.4M19.1 6l-1.4 1.4M2 13h2M20 13h2\"/>","violett","violett"],"schrittkette":["<rect x=\"7\" y=\"2\" width=\"10\" height=\"6\"/><path d=\"M12 8v4M8.5 12h7M12 12v4\"/><rect x=\"7\" y=\"16\" width=\"10\" height=\"6\"/><path d=\"M9 4h0\"/>","violett","violett"],"arith":["<path d=\"M7 4v6M4 7h6M14 7h6M5 15l4 4M9 15l-4 4M14 17h6\"/><circle class=\"v\" cx=\"17\" cy=\"14.5\" r=\".9\"/><circle class=\"v\" cx=\"17\" cy=\"19.5\" r=\".9\"/>","violett","violett"],"control":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><circle cx=\"9\" cy=\"12\" r=\"3\"/><path d=\"m9 12 2-2\"/><path d=\"M15 9h3M15 12h3M15 15h3\"/>","violett","violett"],"taster":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><circle class=\"g\" cx=\"12\" cy=\"12\" r=\"5\"/>","",""],"taster_nc":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><circle class=\"r\" cx=\"12\" cy=\"12\" r=\"5\"/>","",""],"schalter":["<rect x=\"5\" y=\"13\" width=\"14\" height=\"8\" rx=\"1.5\"/><path d=\"M12 13 16.5 4\"/><circle class=\"v\" cx=\"16.5\" cy=\"4\" r=\"1.8\"/>","grau","gruen"],"nothalt":["<circle class=\"y\" cx=\"12\" cy=\"12\" r=\"10\"/><path class=\"r\" d=\"M5.5 12a6.5 6.5 0 0 1 13 0v1.5h-13z\"/><rect x=\"9.5\" y=\"13.5\" width=\"5\" height=\"4\"/>","",""],"schluessel":["<circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"9\" cy=\"12\" r=\"2.4\"/><path d=\"M11.4 12H17M15 12v2.2\"/>","grau","grau"],"induktiv":["<rect x=\"2\" y=\"9\" width=\"10\" height=\"6\" rx=\"1\"/><path d=\"M12 10h2v4h-2\"/><path d=\"M16.5 8.5c1.6 2 1.6 5 0 7M19.5 6.5c2.8 3 2.8 8 0 11\"/><path d=\"M4 9V7M7 9V7M10 9V7\"/>","blau","blau"],"kapazitiv":["<rect x=\"2\" y=\"9\" width=\"10\" height=\"6\" rx=\"1\"/><path d=\"M12 10h2v4h-2\"/><path d=\"M17 7v10M20.5 7v10\"/>","blau","blau"],"optisch":["<rect x=\"2\" y=\"9\" width=\"9\" height=\"6\" rx=\"1\"/><circle class=\"v\" cx=\"8\" cy=\"12\" r=\"1.3\"/><path d=\"M13 12h9\" stroke-dasharray=\"2 1.8\"/><path d=\"M14 7.5l1.5 1.5M14 16.5l1.5-1.5\"/>","blau","rot"],"magnetisch":["<path d=\"M5 3v9a7 7 0 0 0 14 0V3\"/><path d=\"M9 3v9a3 3 0 0 0 6 0V3\"/><path class=\"v\" d=\"M5 3h4v3H5zM15 3h4v3h-4z\"/>","rot","grau"],"reed":["<rect x=\"2\" y=\"8.5\" width=\"20\" height=\"7\" rx=\"3.5\"/><path d=\"M2 12h0M5 12h6l2.5-1.2M19 12h-5\"/>","blau","blau"],"lichtgitter":["<path d=\"M4 3v18M20 3v18\"/><path d=\"M4 7h16M4 11h16M4 15h16M4 19h16\" stroke-dasharray=\"2 2\"/>","rot","rot"],"messumformer":["<rect x=\"6\" y=\"2\" width=\"12\" height=\"9\" rx=\"2\"/><path d=\"M12 11v7\"/><circle class=\"v\" cx=\"12\" cy=\"19.5\" r=\"2\"/><path d=\"M8.5 6.5c1-1.6 2-1.6 3 0s2 1.6 3 0\"/>","gruen","gruen"],"sollwert":["<circle cx=\"12\" cy=\"14\" r=\"6\"/><path d=\"M12 14V9\"/><path d=\"M5 19.5 6 18.5M19 19.5 18 18.5M3.5 13H5M19 13h1.5M6.4 7.4l1 1M17.6 7.4l-1 1M12 3.5V5\"/>","gruen","gruen"],"drucksensor":["<rect x=\"4\" y=\"3\" width=\"16\" height=\"11\" rx=\"2\"/><rect x=\"7\" y=\"6\" width=\"10\" height=\"4.5\" rx=\".5\"/><path d=\"M12 14v3\"/><path d=\"M9.5 17h5v4h-5z\"/>","petrol","petrol"],"durchfluss":["<path d=\"M2 15h20M2 21h20\"/><path d=\"M7 18h8M13 16.5 15 18l-2 1.5\"/><rect x=\"8\" y=\"3\" width=\"8\" height=\"7\" rx=\"1.5\"/><path d=\"M12 10v5\"/>","petrol","petrol"],"fuellstand":["<path d=\"M5 6v15h14V6\"/><path d=\"M5 14c2-1.2 3.5 1.2 5.5 0s3.5 1.2 5.5 0 2 0 3 0\"/><path d=\"M12 2v10\"/><circle class=\"v\" cx=\"12\" cy=\"12\" r=\"1.3\"/>","blau","blau"],"druckschalter":["<circle cx=\"8\" cy=\"12\" r=\"6\"/><path d=\"m8 12 3-3\"/><path d=\"M14 12h3l4-3M21 15v-1\"/>","petrol","petrol"],"manometer":["<circle cx=\"12\" cy=\"11\" r=\"8\"/><path d=\"m12 11 4-4\"/><path d=\"M12 19v3M7 11h1M16 11h1M12 6v1\"/>","petrol","petrol"],"leuchte":["<circle cx=\"12\" cy=\"12\" r=\"7\"/><path d=\"m7 7 10 10M17 7 7 17\"/><path d=\"M2 12h3M19 12h3\"/>","gelb","gelb"],"signalsaeule":["<rect class=\"r\" x=\"8\" y=\"2\" width=\"8\" height=\"5\"/><rect class=\"y\" x=\"8\" y=\"7\" width=\"8\" height=\"5\"/><rect class=\"g\" x=\"8\" y=\"12\" width=\"8\" height=\"5\"/><path d=\"M12 17v3M8 21h8\"/>","",""],"sirene":["<path d=\"M6 18v-5a6 6 0 0 1 12 0v5\"/><path d=\"M4 18h16v3H4z\"/><path d=\"M12 2.5v2M4.5 5.5 6 7M19.5 5.5 18 7\"/>","rot","rot"],"motor":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M8.5 15.5v-7l3.5 4.5 3.5-4.5v7\"/>","blau","blau"],"luefter":["<circle cx=\"12\" cy=\"12\" r=\"9.5\"/><circle class=\"v\" cx=\"12\" cy=\"12\" r=\"1.5\"/><path d=\"M12 10.5c0-3 .5-5.5 3-6M13.3 12.7c2.6 1.5 4.5 3.2 3.9 5.9M10.7 12.7c-2.6 1.5-5 2.3-6.9.3\"/>","blau","blau"],"heizung":["<rect x=\"3\" y=\"6\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"m6 12 2-3 2 6 2-6 2 6 2-6 2 3\"/>","rot","rot"],"zyl_einfach":["<rect x=\"2\" y=\"7\" width=\"13\" height=\"10\"/><path d=\"M6 7v10M6 12h16\"/><path d=\"m7.5 9 2 6 2-6 2 6\"/><path d=\"M3.5 17v3\"/>","petrol","petrol"],"zyl_doppel":["<rect x=\"2\" y=\"7\" width=\"13\" height=\"10\"/><path d=\"M7 7v10M7 12h15\"/><path d=\"M4 17v3M13 17v3\"/>","petrol","petrol"],"ventil52":["<rect x=\"6\" y=\"6\" width=\"7.5\" height=\"12\"/><rect x=\"13.5\" y=\"6\" width=\"7.5\" height=\"12\"/><path d=\"m8 16 3.5-8M16 8v8M18.5 16V8\"/><path d=\"M2 9h4v6H2zM2 15l4-6\"/>","petrol","petrol"],"ventil43":["<rect x=\"2\" y=\"7\" width=\"6.7\" height=\"10\"/><rect x=\"8.7\" y=\"7\" width=\"6.6\" height=\"10\"/><rect x=\"15.3\" y=\"7\" width=\"6.7\" height=\"10\"/><path d=\"m3.5 9 3.5 6M7 9l-3.5 6M10.5 10h3M10.5 14h3M17.5 9v6M20 9v6\"/>","orange","orange"],"propventil":["<rect x=\"7\" y=\"6\" width=\"7\" height=\"12\"/><rect x=\"14\" y=\"6\" width=\"7\" height=\"12\"/><path d=\"m9 16 3-8M16.5 8v8M18.5 16V8\"/><path d=\"M2 9h5v6H2z\"/><path d=\"M1 19 8 5\"/>","petrol","petrol"],"drossel":["<path d=\"M12 2v20\"/><path d=\"M9.5 8c2 2 2 6 0 8M14.5 8c-2 2-2 6 0 8\"/><path d=\"M12 4h7v4M12 20h7v-4\"/><path d=\"m17 8 2 3 2-3\"/><circle cx=\"19\" cy=\"13\" r=\"1.8\"/>","petrol","petrol"],"stromregel":["<path d=\"M12 3v18\"/><path d=\"M9.5 8c2 2 2 6 0 8M14.5 8c-2 2-2 6 0 8\"/><path d=\"M5 19 19 5M15.5 5H19v3.5\"/>","petrol","petrol"],"wartung":["<path d=\"M7 6l4 6-4 6-4-6z\"/><path d=\"M3 12h8\"/><rect x=\"13\" y=\"7\" width=\"8\" height=\"10\"/><path d=\"M15 15l4-6M17.5 9H19v1.5\"/>","petrol","petrol"],"verteiler":["<rect x=\"3\" y=\"9\" width=\"18\" height=\"6\" rx=\"1\"/><path d=\"M7 9V4M12 9V4M17 9V4M12 15v5\"/>","petrol","petrol"],"kompressor":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 3.5 7.5 12h9z\"/><path d=\"M12 20.5V23\"/>","petrol","petrol"],"pumpe":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path class=\"v\" d=\"M12 3.5 7.5 12h9z\"/><path d=\"M12 20.5V23\"/>","orange","orange"],"aggregat":["<path d=\"M3 13v8h18v-8\"/><path d=\"M3 17c2-1 4 1 6 0s4 1 6 0 4 1 6 0\"/><circle cx=\"7.5\" cy=\"7\" r=\"3.5\"/><circle cx=\"16.5\" cy=\"7\" r=\"3.5\"/><path class=\"v\" d=\"m16.5 3.5-2 3.5h4z\"/><path d=\"M11 7h2M16.5 10.5V13\"/>","orange","orange"],"tank":["<path d=\"M4 6v14h16V6\"/><path d=\"M4 12c2.6-1.4 4.6 1.4 8 0s5.4 1.4 8 0\"/><path d=\"M9 3v6M15 3v9\"/>","orange","orange"],"speicher_hyd":["<rect x=\"7\" y=\"2\" width=\"10\" height=\"18\" rx=\"5\"/><path d=\"M7 11h10\"/><path d=\"M12 20v3\"/>","orange","orange"],"oelkuehler":["<path d=\"M12 2l9 10-9 10-9-10z\"/><path d=\"M3 12h18\"/><path class=\"v\" d=\"M12 4.5 10 7.5h4zM12 19.5l-2-3h4z\"/>","blau","blau"],"press":["<path d=\"M4 3h16M12 3v5\"/><rect x=\"7\" y=\"8\" width=\"10\" height=\"4\"/><path d=\"M4 21h16\"/><rect class=\"v\" x=\"8\" y=\"17\" width=\"8\" height=\"4\"/><path d=\"M12 13.5v2\" stroke-dasharray=\"1 1.3\"/>","grau","orange"],"greifer":["<rect x=\"7\" y=\"2\" width=\"10\" height=\"6\" rx=\"1\"/><path d=\"M8 8v4l-2 2v7M16 8v4l2 2v7\"/><path d=\"M6 21h2.5M15.5 21H18\"/><rect class=\"v\" x=\"9.5\" y=\"15\" width=\"5\" height=\"5\"/>","petrol","orange"],"sauger":["<path d=\"M12 2v8\"/><path d=\"M5 10h14l-2 4H7z\"/><path d=\"M5 14h14\"/><rect class=\"v\" x=\"7\" y=\"16\" width=\"10\" height=\"5\"/><path d=\"M9 5l3-3 3 3\"/>","petrol","orange"],"bohr":["<rect x=\"7\" y=\"2\" width=\"10\" height=\"6\" rx=\"1\"/><path d=\"M10 8h4v2h-4z\"/><path d=\"M12 10v10\"/><path d=\"m10.5 12 3 1.5M10.5 15l3 1.5M10.5 18l3 1.5\"/><path d=\"M12 20v2\"/>","grau","grau"],"kamera":["<rect x=\"2\" y=\"6\" width=\"13\" height=\"9\" rx=\"1\"/><path d=\"M15 9l6-3v12l-6-3\"/><path d=\"M8.5 15v4M4 21h9\"/><circle class=\"v\" cx=\"5\" cy=\"8.8\" r=\".9\"/>","grau","gruen"],"roboter":["<circle cx=\"12\" cy=\"8\" r=\"3\"/><path d=\"M8 5.5h8\"/><path class=\"v\" d=\"M9 5.5a3 3 0 0 1 6 0z\"/><path d=\"M6 21v-3a6 6 0 0 1 12 0v3\"/>","grau","gelb"],"relaispanel":["<rect x=\"3\" y=\"8\" width=\"7\" height=\"8\"/><path d=\"M6.5 4v4M6.5 16v4\"/><path d=\"M10 12h4\" stroke-dasharray=\"1.4 1.6\"/><path d=\"M18 3v5l3 6M18 15v6\"/>","violett","violett"],"band":["<rect x=\"2\" y=\"12\" width=\"20\" height=\"7\" rx=\"3.5\"/><circle cx=\"5.5\" cy=\"15.5\" r=\"1.5\"/><circle cx=\"18.5\" cy=\"15.5\" r=\"1.5\"/><rect class=\"v\" x=\"9\" y=\"6\" width=\"6\" height=\"6\"/>","grau","orange"],"wtband":["<rect x=\"2\" y=\"12\" width=\"20\" height=\"7\" rx=\"3.5\"/><circle cx=\"5.5\" cy=\"15.5\" r=\"1.5\"/><circle cx=\"18.5\" cy=\"15.5\" r=\"1.5\"/><path d=\"M7 12V9h10v3\"/><rect class=\"v\" x=\"10\" y=\"5\" width=\"4\" height=\"4\"/>","grau","orange"],"rollenbahn":["<path d=\"M2 10.5h20\"/><circle cx=\"4.5\" cy=\"13.5\" r=\"2.5\"/><circle cx=\"10\" cy=\"13.5\" r=\"2.5\"/><circle cx=\"15.5\" cy=\"13.5\" r=\"2.5\"/><circle cx=\"21\" cy=\"13.5\" r=\".1\"/><path d=\"M4.5 16v5M15.5 16v5\"/>","grau","grau"],"ablenker":["<path d=\"M2 18h20\"/><path d=\"M8 18 17 8\"/><circle class=\"v\" cx=\"8\" cy=\"18\" r=\"1.6\"/><path d=\"m14 4 4 4\"/>","grau","orange"],"schieber":["<path d=\"M3 5v14M3 12h9\"/><path d=\"M12 5h3v14h-3z\"/><path d=\"M18 9l3 3-3 3\"/>","petrol","petrol"],"halter":["<path d=\"M3 19h18M6 19v-9M18 19v-9\"/><rect class=\"v\" x=\"9\" y=\"12\" width=\"6\" height=\"7\"/><path d=\"M6 12.5h3M15 12.5h3\"/>","grau","orange"],"portalkran":["<path d=\"M3 21V5h18v16M3 9h18\"/><rect x=\"10\" y=\"9\" width=\"4\" height=\"3\"/><path d=\"M12 12v4\"/><path d=\"M9.5 16h5l-1 2h-3z\"/>","gelb","gelb"],"drehtisch":["<circle cx=\"12\" cy=\"12\" r=\"8.5\"/><circle class=\"v\" cx=\"12\" cy=\"6.5\" r=\"1.6\"/><circle class=\"v\" cx=\"17.5\" cy=\"12\" r=\"1.6\"/><circle class=\"v\" cx=\"12\" cy=\"17.5\" r=\"1.6\"/><circle class=\"v\" cx=\"6.5\" cy=\"12\" r=\"1.6\"/><path d=\"M20.5 5.5 20 8.5l-3-.5\"/>","grau","orange"],"kettenlift":["<path d=\"M6 2v20M18 2v20\"/><path d=\"M6 5h0M6 9h0M6 13h0M6 17h0M18 5h0M18 9h0M18 13h0M18 17h0\" stroke-width=\"3\"/><path d=\"M12 17V7M9 10l3-3 3 3\"/>","grau","grau"],"hubpalette":["<path d=\"M3 15h18M3 19h18M5 15v4M12 15v4M19 15v4\"/><path d=\"M12 12V3M8 7l4-4 4 4\"/>","grau","grau"],"silo":["<path d=\"M6 4a6 2 0 0 1 12 0v11l-4 4h-4l-4-4z\"/><path d=\"M6 4a6 2 0 0 0 12 0\"/><path d=\"M12 19v3M4 22h16\"/>","grau","grau"],"spawn_metall":["<path d=\"M4 3h16l-5 7v3H9v-3z\"/><path d=\"M12 15v6M9 18l3 3 3-3\"/><rect class=\"v\" x=\"10.5\" y=\"5\" width=\"3\" height=\"3\"/>","gruen","grau"],"spawn_kunststoff":["<path d=\"M4 3h16l-5 7v3H9v-3z\"/><path d=\"M12 15v6M9 18l3 3 3-3\"/><circle class=\"v\" cx=\"12\" cy=\"6.5\" r=\"1.7\"/>","gruen","orange"],"spawn_fluessig":["<path d=\"M4 3h16l-5 7v3H9v-3z\"/><path d=\"M12 15v6M9 18l3 3 3-3\"/><path class=\"v\" d=\"M12 4.5s1.8 2 1.8 3a1.8 1.8 0 0 1-3.6 0c0-1 1.8-3 1.8-3z\"/>","gruen","blau"],"spawn_sand":["<path d=\"M4 3h16l-5 7v3H9v-3z\"/><path d=\"M12 15v6M9 18l3 3 3-3\"/><circle class=\"v\" cx=\"10\" cy=\"6\" r=\".8\"/><circle class=\"v\" cx=\"13\" cy=\"5.5\" r=\".8\"/><circle class=\"v\" cx=\"12\" cy=\"7.8\" r=\".8\"/><circle class=\"v\" cx=\"14.5\" cy=\"7.5\" r=\".8\"/>","gruen","orange"],"spawn_spezial":["<path d=\"M4 3h16l-5 7v3H9v-3z\"/><path d=\"M12 15v6M9 18l3 3 3-3\"/><path class=\"v\" d=\"m12 4 .8 1.6 1.7.3-1.2 1.2.3 1.7-1.6-.8-1.6.8.3-1.7-1.2-1.2 1.7-.3z\"/>","gruen","violett"],"abfuehrung":["<ellipse cx=\"12\" cy=\"18\" rx=\"8.5\" ry=\"3\"/><path d=\"M12 3v10M8 9l4 4 4-4\"/>","rot","rot"],"auslass":["<path d=\"M3 7h9a3 3 0 0 1 3 3v3\"/><path d=\"M3 11h7\"/><path d=\"M7 4v3\"/><path class=\"v\" d=\"M15 15.5s1.6 1.8 1.6 2.8a1.6 1.6 0 0 1-3.2 0c0-1 1.6-2.8 1.6-2.8z\"/>","grau","blau"],"auslass_sand":["<path d=\"M3 7h9a3 3 0 0 1 3 3v3\"/><path d=\"M3 11h7\"/><path d=\"M7 4v3\"/><circle class=\"v\" cx=\"14\" cy=\"16\" r=\".9\"/><circle class=\"v\" cx=\"16\" cy=\"18\" r=\".9\"/><circle class=\"v\" cx=\"14\" cy=\"20\" r=\".9\"/>","grau","orange"],"bereich_pn":["<rect x=\"2\" y=\"3\" width=\"20\" height=\"18\" rx=\"2\" stroke-dasharray=\"3 2\"/><path d=\"M6 10h8a2 2 0 1 0-2-2M6 14h11a2 2 0 1 1-2 2\"/>","petrol","petrol"],"bereich_hy":["<rect x=\"2\" y=\"3\" width=\"20\" height=\"18\" rx=\"2\" stroke-dasharray=\"3 2\"/><path d=\"M12 7s3.5 4 3.5 6.5a3.5 3.5 0 0 1-7 0C8.5 11 12 7 12 7z\"/>","orange","orange"],"bedienpult":["<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><circle class=\"g\" cx=\"8\" cy=\"12\" r=\"2.2\"/><circle class=\"r\" cx=\"16\" cy=\"12\" r=\"2.2\"/><path d=\"M6 8h4M14 8h4\"/>","grau","grau"],"sensoren":["<circle class=\"v\" cx=\"5\" cy=\"19\" r=\"2\"/><path d=\"M5 12a7 7 0 0 1 7 7M5 6a13 13 0 0 1 13 13\"/>","blau","blau"],"aktoren":["<rect x=\"2\" y=\"8\" width=\"11\" height=\"8\"/><path d=\"M6 8v8M6 12h16\"/><path d=\"M19 9l3 3-3 3\"/>","petrol","petrol"],"struktur":["<path d=\"M3 21h18M5 21V5h14v16\"/><path d=\"M5 5l14 8M19 5 5 13M5 13h14\"/>","grau","grau"],"materialien":["<path d=\"m12 3 8 4v10l-8 4-8-4V7z\"/><path d=\"m4 7 8 4 8-4M12 11v10\"/>","orange","orange"],"block_metall":["<path d=\"m12 3 8 4v10l-8 4-8-4V7z\"/><path d=\"m4 7 8 4 8-4M12 11v10\"/><path d=\"m6 12 4 2M6 15l4 2M14 14l4-2M14 17l4-2\"/>","grau","grau"],"block_kunststoff":["<path d=\"m12 3 8 4v10l-8 4-8-4V7z\" stroke-linejoin=\"round\"/><path d=\"m4 7 8 4 8-4M12 11v10\"/><circle class=\"v\" cx=\"8\" cy=\"14\" r=\".9\"/><circle class=\"v\" cx=\"16\" cy=\"14\" r=\".9\"/><circle class=\"v\" cx=\"12\" cy=\"7\" r=\".9\"/>","orange","orange"],"block_hohl":["<path d=\"m12 3 8 4v10l-8 4-8-4V7z\"/><path d=\"m4 7 8 4 8-4M12 11v10\"/><path d=\"m12 5.5 4 2-4 2-4-2z\"/>","grau","grau"],"karton":["<path d=\"M3 9h18v11H3z\"/><path d=\"m3 9 2.5-4h13L21 9\"/><path d=\"M10 9v4h4V9\"/>","orange","orange"],"palette":["<path d=\"M3 11h18M3 15h18M3 19h18\"/><path d=\"M5 15v4M12 15v4M19 15v4\"/><path d=\"M3 11V9h18v2\"/>","orange","orange"],"flasche":["<path d=\"M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3z\"/><path d=\"M8 13h8M8 17h8\"/>","gruen","gruen"],"fass":["<path d=\"M5 5c0-1.1 3.1-2 7-2s7 .9 7 2v14c0 1.1-3.1 2-7 2s-7-.9-7-2z\"/><path d=\"M5 5c0 1.1 3.1 2 7 2s7-.9 7-2M5 12c0 1.1 3.1 2 7 2s7-.9 7-2\"/>","blau","blau"],"wanne":["<path d=\"M3 6v10a4 4 0 0 0 4 4h10a4 4 0 0 0 4-4V6\"/><path d=\"M3 12c3-1.5 6 1.5 9 0s6 1.5 9 0\" stroke-dasharray=\"2 2\"/>","grau","grau"],"gussform":["<rect x=\"3\" y=\"3\" width=\"18\" height=\"8\"/><rect x=\"3\" y=\"13\" width=\"18\" height=\"8\"/><path d=\"M8 11a4 3 0 0 0 8 0M8 13a4 3 0 0 1 8 0\"/><path d=\"M12 3v5\"/>","grau","grau"],"wand":["<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\"/><path d=\"M3 9.7h18M3 14.3h18M9 5v4.7M15 5v4.7M6 9.7v4.6M12 9.7v4.6M18 9.7v4.6M9 14.3V19M15 14.3V19\"/>","rot","rot"],"zaun":["<path d=\"M5 7v14M10 7v14M15 7v14M20 7v14\"/><path d=\"m4 7 1-3 1 3M9 7l1-3 1 3M14 7l1-3 1 3M19 7l1-3 1 3\"/><path d=\"M3 11h19M3 17h19\"/>","grau","grau"],"rolltor":["<rect x=\"3\" y=\"2\" width=\"18\" height=\"4\" rx=\"2\"/><path d=\"M5 6v15M19 6v15M5 9h14M5 12h14M5 15h14\"/>","grau","grau"],"schutztuer":["<rect x=\"5\" y=\"3\" width=\"14\" height=\"18\" rx=\"1\"/><rect x=\"8\" y=\"6\" width=\"8\" height=\"8\"/><path d=\"M16 16.5v2\"/>","grau","grau"],"tor":["<rect x=\"3\" y=\"7\" width=\"12\" height=\"11\"/><path d=\"M3 21h18M9 7v11\"/><path d=\"M17 12.5h5M20 10.5l2 2-2 2\"/>","grau","grau"],"rahmen":["<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\"/><path d=\"m3 3 18 18M21 3 3 21\"/>","grau","grau"],"dielen":["<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\"/><path d=\"M3 9.3h18M3 14.7h18M10 4v5.3M16 9.3v5.4M7 14.7V20\"/>","orange","orange"],"wasser":["<path d=\"M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z\"/><path d=\"M9.5 15a2.5 2.5 0 0 0 2.5 2.5\"/>","blau","blau"],"oel":["<path class=\"v\" d=\"M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z\"/><path class=\"inv\" d=\"M9.5 15a2.5 2.5 0 0 0 2.5 2.5\"/>","orange","orange"],"honig":["<path d=\"M8 3h8\"/><path d=\"M12 3v4c0 2 3 2 3 4.5S12 15 12 17.5\"/><path d=\"M6 21c0-2.2 2.7-4 6-4s6 1.8 6 4z\"/>","gelb","gelb"],"sand":["<path d=\"M3 20c3-6 15-6 18 0z\"/><circle class=\"v\" cx=\"8\" cy=\"8\" r=\"1\"/><circle class=\"v\" cx=\"12\" cy=\"5\" r=\"1\"/><circle class=\"v\" cx=\"16\" cy=\"9\" r=\"1\"/><circle class=\"v\" cx=\"11\" cy=\"11\" r=\"1\"/>","orange","orange"],"kuehlmittel":["<path d=\"M10 3s5 6.5 5 10a5 5 0 0 1-10 0c0-3.5 5-10 5-10z\"/><path d=\"M19 13v8M15.5 15l7 4M15.5 19l7-4\"/>","gruen","gruen"]};
+  const EM = {"💾":[["speichern",["speichern","lokal speichern","laden","als csv"]]],"📂":[["oeffnen",["öffnen","musterlösung laden"]]],"📤":[["export",["exportieren","export","valitask exportieren","scl generieren"]]],"📥":[["import",["importieren","import","valitask","valipack importieren"]]],"⬇":[["herunterladen",["herunterladen","scl herunterladen","als valisave speichern"]]],"⬆":[["hochladen",["datei laden","valisave laden","plugin hochladen"]],["kettenlift",["kettenlift"]]],"📋":[["kopieren",["kopieren","prompt kopieren"]],["aufgaben",["aufgaben","aufgabenliste"]],["tags",["plc-tags","csv"]],["zuordnung",["zuordnungsliste","sim-panel"]],["iframe",["einbetten","iframe kopieren","iframe-code"]]],"🔗":[["link",["als link kopieren"]],["ob1",["ob1-aufruf"]]],"🖨":[["drucken",["drucken"]],["pdf",["pdf erzeugen","pdf generieren"]]],"🗑":[["loeschen",["löschen","alle löschen","preset löschen"]],["leeren",["code leeren","leeren","logik-editor"]],["abfuehrung",["abführung","entferner","despawner"]]],"🧹":[["aufraeumen",["aufräumen","alle kabel entfernen"]]],"✏":[["bearbeiten",["bearbeiten","neue aufgabe erstellen"]]],"➕":[["neu",["neu anlegen","neues paket","neu","manuell"]]],"✕":[["schliessen",["schließen","alle fenster"]]],"✔":[["fertig",["fertig","übernehmen","in den editor übernehmen"]]],"✓":[["pruefen",["prüfen","code prüfen","operatoren prüfen","markierung prüfen"]]],"🔄":[["aktualisieren",["aktualisieren","iframe-code generieren"]]],"♻":[["zuruecksetzen",["zurücksetzen","reset","ersetzen"]]],"↶":[["rueckgaengig",["rückgängig","editor-werkzeugleiste"]]],"↷":[["wiederholen",["wiederholen","editor-werkzeugleiste"]]],"🕐":[["verlauf",["verlauf","verlauf öffnen","verwalten"]]],"📸":[["snapshot",["zustand festhalten","snapshot erstellen","aktuellen zustand übernehmen"]],["alssvg",["als bild speichern","logikplan","schaltplan als svg"]],["musterloesung",["musterlösung festlegen","aktuellen zustand als musterlösung"]]],"🔍":[["suchen",["überprüfen","analyse"]],["vergleich",["vergleichen","vergleich","lösung","eigener stand"]]],"👁":[["vorschau",["vorschau","prüfen","programm-sicht"]]],"⚙":[["optionen",["optionen","einstellungen"]],["codegen",["code generieren","schaltplan-editor"]],["ausaufbau",["code aus aufbau","steckaufbau"]],["pro",["pro-modus","pro"]],["motor",["motor","band","antrieb"]],["kompressor",["kompressor"]],["pumpe",["flüssigkeitspumpe"]],["aggregat",["hydraulikaggregat"]],["aktoren",["aktoren","aktoren ▼"]]],"ℹ":[["info",["hinweise","info-knöpfe","sim-panel","fenster"]]],"📘":[["anleitung",["anleitung","doku","sk-doku"]],["schrittkette",["schrittkette","sk-doku","schrittketten"]]],"📖":[["mehr",["mehr erfahren","code-","logik-erklärmodus"]]],"📚":[["beispiele",["beispiele","beispiele laden","bibliothek"]],["lang",["ausführlich","maxi","komplex"]]],"🎓":[["lernzentrum",["lernzentrum","wie auf t-bkde"]],["training",["trainingsmodus"]]],"🤖":[["ki",["mit ki erstellen","ki-prompt-generator","per ki erstellen"]]],"🧩":[["plugins",["plugins"]]],"📦":[["pakete",["aufgabenpakete","pakete","neues paket"]],["materialien",["materialien","materialien ▼"]],["karton",["karton"]],["palette",["palette","holz"]]],"🔎":[["analyse",["analyse-aufgaben","szenarien"]]],"💡":[["hinweis",["hinweis","hinweis in aufgaben"]],["loesung",["lösung zeigen","musterlösung anzeigen"]],["leuchte",["meldeleuchte","led","meldeeinrichtung"]]],"⏹":[["beenden",["aufgabe beenden"]]],"📱":[["app",["app installieren"]]],"👥":[["zusammen",["zusammen arbeiten","zusammen","live-zusammenarbeit"]]],"🏠":[["start",["startseite","start-knopf"]]],"🗺":[["karte",["übersicht","karte"]]],"◫":[["layout",["layout","layout wechseln"]]],"🔇":[["tonaus",["ton aus","ton: aus"]]],"⏺":[["aufzeichnen",["aufzeichnen","simulation aufzeichnen"]]],"📊":[["oszilloskop",["oszilloskop","signalverlauf","analyzer"]]],"📈":[["ueberlagern",["analog überlagern","oszilloskop"]],["messumformer",["messumformer","analog","analogeingang"]]],"⏩":[["zeitraffer",["zeitraffer","zeitraffer 1×–300×"]]],"▶":[["starten",["starten","jetzt starten","simulation starten"]]],"🪜":[["schritt",["einzelschritt","schritt-modus"]]],"→":[["weiter",["weiter","nächste stufe"]]],"←":[["zurueck",["zurück","zurück zur übersicht","abbrechen"]]],"▼":[["aufklappen",["aufklappen","menüs mit ▼"]]],"📄":[["kurz",["kurzfassung","mini","1–2 sätze"]],["scl",["scl-quelle","awl-quelle"]]],"🔴":[["bild",["redstone-snippets","minecraft"]],["taster_nc",["taster","öffner"]],["sauger",["sauggreifer","vakuum"]]],"🪄":[["auscode",["aus code zeichnen","aus code","schaltplan-editor"]]],"⚡":[["sps",["sps-modus","umschalter sps","e-pneu"]],["epneu",["e-pneu-modus","umschalter sps","e-pneu"]],["stromkreise",["getrennte stromkreise","getrennte stromkreise: aus"]],["elektro",["elektro-optionen"]]],"🔌":[["steckaufbau",["steckaufbau"]]],"🏭":[["fabrik",["2d-anlage","2d factory"]],["bereich_pn",["pneumatik-bereich"]],["bereich_hy",["hydraulik-bereich"]]],"🟠":[["logikplan",["logikplan","logic diagram","logik-indikator"]]],"🟢":[["eingang",["eingang","eingänge im sim-panel"]],["taster",["taster","schließer","signaleingabe"]],["kuehlmittel",["kühlmittel","kühlmittel platzieren"]]],"🔵":[["ausgang",["ausgang","ausgänge im sim-panel"]]],"🌍":[["seite",["seitenansicht","global: seitenansicht","zone","seite"]]],"🛸":[["draufsicht",["draufsicht","zone"]]],"🗂":[["netzwerke",["netzwerke","netzwerke: an","aus"]]],"📐":[["fup",["fup-darstellung","fup: an","aus"]],["norm",["norm-ansicht","norm: an","grafcet"]],["dichte",["dichte","dichte: normal","kompakt"]],["arith",["rechnen","arith-doku"]]],"🔢":[["konstanten",["konstanten","konstanten: an"]],["nummern",["fortlaufende nummern","fortlaufende nrn: aus"]],["zaehler",["zähler","legende: zähler","ctu"]]],"🧲":[["pinsort",["pin-sortierung","pin-sortierung: an"]],["speicher",["speicher","legende: speicher","speicherglieder"]],["induktiv",["induktiver sensor","induktiv","metall"]],["magnetisch",["magnetischer sensor","magnetisch","3-polig","hall"]],["reed",["reed-kontakt","zylinder"]],["relaispanel",["relais-panel","hilfsschütz"]],["schieber",["schieber","l-form"]]],"📏":[["pinsnap",["pin-snap","pin-snap: an"]],["fuellstand",["füllstandssensor","behälter"]]],"🌈":[["bunt",["bunte linien","pfade"]]],"🚨":[["fehlerglow",["fehler-glow","fehler-glow: an"]],["lichtgitter",["sicherheits-lichtgitter"]]],"✨":[["glowhover",["glow beim zeigen","glow-hover: an"]]],"🏷":[["details",["details","details: alle"]]],"🔀":[["wechsler",["wechslernummern","wechslernummerierung: aus"]],["ventil43",["wegeventil 4","hydraulik","wegeventil"]]],"🛡":[["nothaltrelais",["not-halt-relais","not-halt-relais: aus"]]],"♾":[["hwlimit",["hardware-grenze","hardware-limit: multi"]]],"💼":[["relaismodus",["relais-modus","modus: relais","klassisch"]]],"⚏":[["srspalte",["sr-spalte","sr-spalte: aus"]]],"🛠":[["helfer",["hilfswerkzeuge","helper: an","tool-knöpfe bei sim"]],["gussform",["gussform","form"]]],"💨":[["pneumatik",["pneumatik-optionen","pneumatik ▼"]]],"🛢":[["hydraulik",["hydraulik","hydraulik ▼"]],["tank",["öltank","behälter"]],["fass",["fass","tonne"]]],"🖱":[["auswaehlen",["auswählen","schaltplan-editor"]]],"↯":[["leitung",["leitung ziehen","leitung","schaltplan-editor"]]],"🩹":[["radierer",["radierer"]]],"🔻":[["entleeren",["system entleeren"]]],"⏱":[["zeiten",["zeiten","legende: zeiten","zeitrelais"]],["ton",["ton","einschaltverzögert"]],["tof",["tof","ausschaltverzögert"]],["tp",["impuls"]]],"🎛":[["regler",["regler","legende: regler","analogwerte"]],["reglerfenster",["reglerfenster","pid","🎛 im sim-panel"]],["control",["control-block","control","betriebsarten"]],["sollwert",["sollwertsteller","analog"]],["bedienpult",["bedienpult","bedienpult ▼","bedienpult-rahmen"]]],"🎚":[["schalter",["schalter","rastend"]],["propventil",["proportionalventil","zylinder"]]],"🍄":[["nothalt",["not-halt","öffner"]]],"🔑":[["schluessel",["schlüsselschalter"]]],"🔋":[["kapazitiv",["kapazitiver sensor","kapazitiv","alles"]]],"🔦":[["optisch",["optischer sensor","optisch","licht"]]],"🧭":[["drucksensor",["drucksensor mit anzeige","pneumatisch"]]],"🌬":[["durchfluss",["durchflusssensor"]]],"📟":[["druckschalter",["druckschalter"]]],"⏲":[["manometer",["manometer"]]],"🚦":[["signalsaeule",["signalsäule","signal-säule"]]],"📢":[["sirene",["sirene","hupe"]]],"🌀":[["luefter",["lüfter","gebläse"]]],"♨":[["heizung",["heizelement","ofen"]]],"🦾":[["zyl_einfach",["zylinder einfachwirkend","zylinder","einfach"]],["zyl_doppel",["zylinder doppeltwirkend","zylinder","doppel"]]],"🔧":[["ventil52",["magnetventil 5","wegeventil"]],["wartung",["wartungseinheit"]],["verteiler",["verteiler"]],["halter",["werkstückhalterung"]]],"🔩":[["drossel",["drosselrückschlagventil"]],["stromregel",["stromregelventil"]],["auslass",["auslass","flüssigkeit"]]],"🫙":[["speicher_hyd",["druckspeicher"]],["oel",["öl platzieren"]]],"❄":[["oelkuehler",["ölkühler"]]],"💥":[["press",["pressstempel"]]],"🤏":[["greifer",["pneumatikgreifer"]]],"🪛":[["bohr",["bohrspindel"]]],"📷":[["kamera",["inspektionskamera"]]],"👷":[["roboter",["humanoider roboter","werker"]]],"🛤":[["band",["förderband"]],["wtband",["werkstückträger-band"]]],"🛞":[["rollenbahn",["rollenbahn"]]],"⚪":[["ablenker",["ablenker"]]],"🏗":[["portalkran",["portalkran","pick&place"]],["silo",["silo"]],["struktur",["struktur","struktur ▼"]]],"🎯":[["drehtisch",["rundtakttisch","drehtisch"]]],"🔼":[["hubpalette",["hubpalette"]]],"⏳":[["spawn_metall",["zuführung metallteile","spawner","metall","block-spawner"]],["spawn_kunststoff",["zuführung kunststoffteile","spawner","kunststoff"]]],"💧":[["spawn_fluessig",["zuführung flüssigkeit","spawner","flüssigkeit"]],["wasser",["wasser","wasser platzieren"]]],"🏖":[["spawn_sand",["zuführung schüttgut","spawner","sand","körner"]],["sand",["sand","körner","körner platzieren"]]],"🧬":[["spawn_spezial",["zuführung spezialteil","spawner","spezialobjekt"]]],"⏬":[["auslass_sand",["auslass","schüttgut","sand","körner"]]],"📡":[["sensoren",["sensoren","sensoren ▼"]]],"🧱":[["block_metall",["block massiv","metall"]],["block_kunststoff",["block massiv","kunststoff"]],["wand",["ziegelwand","mauer"]]],"⬜":[["block_hohl",["block","hohl","block normal","metall","kunststoff"]]],"🍾":[["flasche",["flasche"]]],"🪣":[["wanne",["u-behälter","wanne"]]],"🚧":[["zaun",["zaun"]],["rolltor",["rolltor"]]],"🚪":[["schutztuer",["schutztür","alu","glas"]],["tor",["tor","pneumatik","horizontal"]]],"⛓":[["rahmen",["metallrahmen","boden"]]],"🪵":[["dielen",["holzdielen","holzoberfläche","dielen"]]],"🍯":[["honig",["honig","honig platzieren"]]]};
+  const FARBE = {
+    hell: { blau: '#64b5f6', gruen: '#81c784', rot: '#ef5350', gelb: '#fdd835', petrol: '#4dd0e1', orange: '#ffa726', violett: '#ce93d8', grau: '#b0bec5' },
+    dunkel: { blau: '#1565c0', gruen: '#2e7d32', rot: '#c62828', gelb: '#9a7400', petrol: '#00838f', orange: '#e65100', violett: '#6a1b9a', grau: '#546e7a' }
+  };
+  const SEL = 'button, summary, legend, h2, h3, h4, [role="button"], [role="tab"], [role="menuitem"], [onclick], [class*="btn"], [class*="tab"], [class*="-item"], [class*="-icon"], .sz-tool, label';
+  const SKIP = 'option, textarea, input, select, script, style, svg, .CodeMirror, pre, code, [contenteditable="true"], .vi-ignore';
+  // Englische Oberfläche: Zusatzbegriffe für mehrdeutige Emojis
+  const ALIAS = { optionen: ['options', 'settings'], elektro: ['electrical'], sps: ['plc'], epneu: ['e-pneu'], stromkreise: ['circuits'],
+    speicher: ['memory', 'latch'], zeiten: ['timers'], zaehler: ['counter'], regler: ['controller'], kopieren: ['copy'], aufgaben: ['task'],
+    beispiele: ['example'], hinweis: ['hint', 'tip'], loesung: ['solution'], leuchte: ['lamp', 'led', 'light'], loeschen: ['delete', 'remove'],
+    leeren: ['clear'], motor: ['motor'], kompressor: ['compressor'], pumpe: ['pump'], aggregat: ['power unit'], aktoren: ['actuator'],
+    bedienpult: ['control panel'], sollwert: ['setpoint'], materialien: ['material'], pakete: ['package'], ventil52: ['5/2'], wartung: ['service unit'],
+    induktiv: ['inductive'], magnetisch: ['magnetic'], relaispanel: ['relay'], lernzentrum: ['learning'], training: ['training'],
+    fabrik: ['factory'], bereich_pn: ['pneumatic'], bereich_hy: ['hydraulic'], wand: ['wall'], drucken: ['print'], codegen: ['generate'],
+    stromkreise: ['split circuits'], zyl_einfach: ['single'], zyl_doppel: ['double', 'doppel'], block_metall: ['metal'], block_kunststoff: ['plastic', 'kunststoff'],
+    arith: ['arithmetik'], alssvg: ['svg'], tp: ['tp'], ton: ['ton'], tof: ['tof'] };
+  // Hier passt das einzige Icon zum Emoji nicht: Emoji bleibt stehen
+  const NICHT = { druckschalter: ['anzeige', '7-seg', 'display'], fup: ['regelstrecke'], zyl_einfach: ['roboter'], zyl_doppel: ['roboter'],
+    aktualisieren: ['drehtisch'], spawn_fluessig: ['durchfluss', 'klassisch'] };
+  const schluessel = Object.keys(EM).sort((a, b) => b.length - a.length);
+  const RE = new RegExp('^(\\s*)(' + schluessel.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\uFE0F?');
+  // Pfeile und Haken nur, wenn sie wirklich allein als Knopfzeichen dienen
+  const NUR_KNOPF = new Set(['→', '←', '▼', '▶', '✓', '✔', '✕']);
+
+  const rgb = (s) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(s || ''); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null; };
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const kontrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  function hintergrund(el) {
+    for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+      const c = rgb(getComputedStyle(e).backgroundColor);
+      if (c && c[3] > 0.5) return c;
+    }
+    return [30, 30, 30, 1];
+  }
+  function waehle(emoji, el) {
+    const kand = EM[emoji];
+    if (!kand) return null;
+    const key = el.getAttribute('data-i18n');
+    const de = key && window.i18n && window.i18n.de && window.i18n.de[key];
+    const text = ((el.textContent || '') + ' ' + (de || '')).toLowerCase();
+    const wort = (t, b) => b.length >= 3 ? t.indexOf(b) >= 0 : new RegExp('(^|[^a-z])' + b + '([^a-z]|$)').test(t);
+    const finde = (t) => {
+      let best = null, bestLen = 0;
+      for (const [id, begriffe] of kand) for (const b of begriffe.concat(ALIAS[id] || [])) if (b.length > bestLen && wort(t, b)) { best = id; bestLen = b.length; }
+      return best;
+    };
+    // Erst Beschriftung, dann Tooltip (der nennt oft auch den Inhalt eines Menüs)
+    const id = finde(text) || finde(((el.getAttribute('title') || '') + ' ' + (el.id || '')).toLowerCase()) || kand[0][0];
+    if ((NICHT[id] || []).some(b => text.indexOf(b) >= 0)) return null;
+    return id;
+  }
+  function svgFuer(id, el) {
+    const d = IC[id];
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('class', 'vi vi-' + id);
+    svg.innerHTML = d[0];
+    const bg = hintergrund(el);
+    const hell = lum(bg) > 0.35;
+    svg.style.setProperty('--vi-bg', 'rgb(' + bg[0] + ',' + bg[1] + ',' + bg[2] + ')');
+    if (d[1]) {
+      const pal = hell ? FARBE.dunkel : FARBE.hell;
+      const c = pal[d[1]], f = pal[d[2]] || c;
+      // Bunte Linie nur, wenn sie sich vom Knopf genug abhebt (z. B. kein Rot auf Rot)
+      if (kontrast(hex(c), bg) >= 2.6) { svg.style.setProperty('--vi-c', c); svg.style.setProperty('--vi-f', kontrast(hex(f), bg) >= 2.6 ? f : c); }
+    }
+    return svg;
+  }
+  function dekoriere(el) {
+    if (el.closest(SKIP)) return;
+    let tn = null;
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) { if (n.nodeValue.trim()) { tn = n; break; } }
+      else if (n.nodeType === 1) { if (n.classList.contains('vi') || n.classList.contains('vi-alt') || n.classList.contains('vi-zeile')) return; if (!/^(B|I|STRONG|EM|SMALL)$/.test(n.tagName)) return; }
+    }
+    if (!tn) return;
+    const m = RE.exec(tn.nodeValue);
+    if (!m) return;
+    const emoji = m[2];
+    const rest = tn.nodeValue.slice(m[0].length);
+    if (NUR_KNOPF.has(emoji)) {
+      const tag = el.tagName;
+      if (!(tag === 'BUTTON' || tag === 'SUMMARY' || el.getAttribute('role') === 'button' || /btn/.test(el.className || ''))) return;
+      if (rest.trim().length > 40) return;
+    }
+    const id = waehle(emoji, el);
+    if (!id || !IC[id]) return;
+    const alt = document.createElement('span'); alt.className = 'vi-alt'; alt.textContent = m[0].slice(m[1].length);
+    const svg = svgFuer(id, el);
+    if (rest.trim()) svg.classList.add('vi-mit-text');
+    const vor = m[1] ? document.createTextNode(m[1]) : null;
+    tn.nodeValue = rest.replace(/^\s+/, '');
+    // Grid- oder Spalten-Knöpfe würden Icon und Text untereinander setzen
+    const cs = getComputedStyle(el);
+    if (/grid/.test(cs.display) || (/flex/.test(cs.display) && /column/.test(cs.flexDirection))) {
+      const w = document.createElement('span'); w.className = 'vi-zeile';
+      el.insertBefore(w, tn);
+      w.appendChild(svg); w.appendChild(alt); w.appendChild(tn);
+      if (vor) el.insertBefore(vor, w);
+    } else {
+      if (vor) el.insertBefore(vor, tn);
+      el.insertBefore(svg, tn); el.insertBefore(alt, tn);
+    }
+  }
+  let offen = new Set(), geplant = false;
+  function lauf() {
+    geplant = false;
+    const liste = offen; offen = new Set();
+    for (const wurzel of liste) {
+      if (!wurzel.isConnected) continue;
+      if (wurzel.matches && wurzel.matches(SEL)) dekoriere(wurzel);
+      if (wurzel.querySelectorAll) wurzel.querySelectorAll(SEL).forEach(dekoriere);
+    }
+  }
+  function merke(n) {
+    if (!n) return;
+    if (n.nodeType === 3) n = n.parentElement;
+    if (!n || n.nodeType !== 1) return;
+    // Zeichnungen (Schaltplan, FUP) und Canvas nicht durchsuchen
+    if (n instanceof SVGElement || n.tagName === 'CANVAS') return;
+    offen.add(n);
+    if (!geplant) { geplant = true; requestAnimationFrame(lauf); }
+  }
+  window._valisIcons = { IC, EM, dekoriere, alle: () => { offen.add(document.body); lauf(); } };
+  function start() {
+    merke(document.body);
+    new MutationObserver((ms) => { for (const m of ms) { if (m.type === 'characterData') merke(m.target); else m.addedNodes.forEach(merke); } })
+      .observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+</script>
 </body>
 </html>

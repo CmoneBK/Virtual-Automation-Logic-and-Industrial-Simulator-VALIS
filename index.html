@@ -65797,8 +65797,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Spannungen sind auf den Messbereich der Variablen bezogen
             // (Messbereichsanfang = 0 V, Ende = 10 V). Live-Werte zieht
             // _updateFestoAnalog pro Sim-Tick nach.
-            const ANA_SIG = '#ef6c00';   // Analogsignal-Buchse
-            const ANA_GND = '#78909c';   // Analogmasse (getrennt von 0 V)
+            // Buchsenfarben nach der Farbkodierung des Lernsystems:
+            // Signal schwarz, Analogmasse weiß, 24 V rot, 0 V blau.
+            const ANA_SIG = '#1c1c1c';   // Analogsignal-Buchse (schwarz)
+            const ANA_GND = '#f5f5f5';   // Analogmasse (weiß, getrennt von 0 V)
+            const ANA_KABEL = '#ef6c00'; // Kabel/Markierung der Analogreihe
             const ANA_GEBER = { w: 300, zeile: 58, proKarte: 5 };
             const ANA_KOMP = { w: 440, h: 450 };
             const ANA_PID = { w: 480, h: 450 };
@@ -65930,69 +65933,137 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
 
             // ---- Komparatorkarte: 2 Eingänge, 4 Komparatoren, Relais-Wechsler ----
+            // Aufbau wie die Frontplatte im Lehrsystem: oben/unten Versorgungsleiste
+            // (+24 V rot, 0 V blau), ein Display, Feld A mit Eingang IN A, Einstellknopf
+            // und Ausgängen OUT A1/A2, Feld B mit Eingang IN B, Wahlschalter und
+            // OUT B1/B2. Der Wahlschalter bestimmt, was Display und Knopf zeigen
+            // (IN = Eingangsspannung, S = Schaltpunkt, H = Hysterese).
+            const _kompWahl = {};
+            const KOMP_STELLUNGEN = ['H B2', 'S B2', 'H B1', 'S B1', 'IN B', 'D/E', 'IN A', 'S A1', 'H A1', 'S A2', 'H A2'];
             function drawAnaKomparatorPanel(parent, x, y, idx, kanaele, pos) {
                 // kanaele: [{ v, zps: [zp, zp] }, { v, zps }] — Eingang A und B
-                const W = ANA_KOMP.w, H = ANA_KOMP.h;
-                const g = _anaKoerper(parent, x, y, W, H, `Komparatorkarte ${idx}`, '2 Eingänge ±10 V · 4 Komparatoren · Relais-Wechsler', 'ana_komp', idx);
-                ['A', 'B'].forEach((ab, k) => {
-                    const kanal = kanaele[k] || { v: null, zps: [] };
-                    const by = 52 + k * 196;
-                    if (k > 0) el('line', { x1: 14, y1: by - 8, x2: W - 14, y2: by - 8, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
-                    _anaText(g, 18, by + 10, `Eingang ${ab}`, { 'font-weight': 'bold' });
-                    drawSocket(g, 34, by + 30, ANA_SIG, `KK${idx}_${ab}_E`, `KK${idx}`);
-                    drawSocket(g, 64, by + 30, ANA_GND, `KK${idx}_${ab}_M`, `KK${idx}`);
-                    _anaBelegt(g, 49, by + 54, kanal.v);
-                    const ber = kanal.v ? _anaBer(kanal.v) : { min: 0, max: 10 };
-                    _anaLcd(g, 18, by + 62, 64, () => kanal.v ? _anaZahl(_anaVolt(_anaState()[kanal.v], ber), 2) + ' V' : '– V');
-                    [0, 1].forEach(j => {
-                        const zp = kanal.zps[j];
-                        const id = zp ? zp.id : null;
-                        const cx = 108 + j * 160;
-                        const name = `${ab}${j + 1}`;
-                        _anaText(g, cx, by + 10, `Komparator ${name}`, { 'font-size': 8.5, 'font-weight': 'bold' });
-                        // Einschalt-/Ausschaltpunkt aus dem Regler (live) oder dem Code
-                        const punkte = () => {
-                            const t = id && window.simTimers ? window.simTimers[id] : null;
-                            if (t && typeof t.ein === 'number') return [t.ein, t.aus];
-                            if (!zp) return [0, 0];
-                            const a = _anaArg(zp.args[1] || '0'), b = _anaArg(zp.args[2] || '0');
-                            if (zp.richtung === null) return [a, b];
-                            const hh = Math.abs(b) / 2;
-                            return zp.richtung > 0 ? [a - hh, a + hh] : [a + hh, a - hh];
-                        };
-                        const soll = () => { const [e, a] = punkte(); return _anaVolt((e + a) / 2, ber); };
-                        const hyst = () => { const [e, a] = punkte(); return Math.min(5, 10 * Math.abs(a - e) / ((ber.max - ber.min) || 1)); };
-                        _anaPoti(g, cx + 14, by + 36, 'Sollwert', () => (soll() + 10) / 20, () => zp ? _anaZahl(soll(), 2) + ' V' : '');
-                        _anaPoti(g, cx + 70, by + 36, 'Hysterese', () => hyst() / 5, () => zp ? _anaZahl(hyst(), 2) + ' V' : '');
-                        // Relais mit LED und Wechsler 11-12-14
-                        const ry = by + 92;
-                        el('rect', { x: cx - 4, y: ry, width: 132, height: 86, rx: 4, fill: '#fff', stroke: '#b0bec5', 'stroke-width': 0.8 }, g);
-                        const an = () => !!(id && window.simTimers && window.simTimers[id] && window.simTimers[id].q) && (typeof isSimulationActive === 'undefined' || isSimulationActive);
-                        _anaLed(g, cx + 8, ry + 12, '#ffb300', an);
-                        _anaText(g, cx + 18, ry + 15, `Relais ${name}`, { 'font-size': 8 });
-                        // Wechsler: 11 unten (Wurzel), 12 Öffner links oben, 14 Schließer rechts oben
-                        const k11 = { x: cx + 62, y: ry + 70 }, k12 = { x: cx + 30, y: ry + 34 }, k14 = { x: cx + 94, y: ry + 34 };
-                        el('line', { x1: k12.x, y1: k12.y + 8, x2: k12.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: k14.x, y1: k14.y + 8, x2: k14.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: k11.x, y1: k11.y - 8, x2: k11.x, y2: ry + 58, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        const hebel = el('line', { x1: k11.x, y1: ry + 58, x2: k12.x, y2: ry + 46, stroke: PALETTE.trace, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
-                        _anaLive.push(() => { const q = an(); hebel.setAttribute('x2', q ? k14.x : k12.x); });
+                const W = ANA_KOMP.w, H = ANA_KOMP.h, liveAb = _anaLive.length;
+                const g = _anaKoerper(parent, x, y, W, H, `Komparatorkarte ${idx}`, '2 Eingänge 0 … ±10 V · 4 Komparatoren · Relais-Wechsler', 'ana_komp', idx);
+                const lin = (x1, y1, x2, y2, w) => el('line', { x1, y1, x2, y2, stroke: PALETTE.trace, 'stroke-width': w || 1 }, g);
+                // Versorgungsleisten: je 2 Buchsen außen, 4 verbundene dazwischen
+                const leiste = (ly, farbe, key, txt) => {
+                    lin(40, ly, W - 40, ly, 1.2);
+                    drawSocket(g, 40, ly, farbe, `KK${idx}_${key}`, `KK${idx}`);
+                    drawSocket(g, W - 40, ly, farbe, null, null);
+                    [0, 1, 2, 3].forEach(i => drawSocket(g, 110 + i * 73, ly, PALETTE.socketBlack, null, null));
+                    _anaText(g, 40, ly + (ly < H / 2 ? -11 : 19), txt, { 'text-anchor': 'middle', 'font-size': 7.5, 'font-weight': 'bold', fill: farbe });
+                    _anaText(g, W - 40, ly + (ly < H / 2 ? -11 : 19), txt, { 'text-anchor': 'middle', 'font-size': 7.5, 'font-weight': 'bold', fill: farbe });
+                };
+                leiste(62, PALETTE.socketRed, '24V', '+24 V');
+                leiste(372, PALETTE.socketBlue, '0V', '0 V');
+                // Werte je Komparator
+                const ber = k => (kanaele[k] && kanaele[k].v) ? _anaBer(kanaele[k].v) : { min: 0, max: 10 };
+                const zpVon = n => { const k = n[0] === 'A' ? 0 : 1; return { k, zp: (kanaele[k] || { zps: [] }).zps[+n[1] - 1] }; };
+                const punkte = n => {
+                    const { zp } = zpVon(n);
+                    const t = zp && window.simTimers ? window.simTimers[zp.id] : null;
+                    if (t && typeof t.ein === 'number') return [t.ein, t.aus];
+                    if (!zp) return null;
+                    const a = _anaArg(zp.args[1] || '0'), b = _anaArg(zp.args[2] || '0');
+                    if (zp.richtung === null) return [a, b];
+                    const hh = Math.abs(b) / 2;
+                    return zp.richtung > 0 ? [a - hh, a + hh] : [a + hh, a - hh];
+                };
+                const sollV = n => { const p = punkte(n); return p ? _anaVolt((p[0] + p[1]) / 2, ber(zpVon(n).k)) : null; };
+                const hystV = n => { const p = punkte(n); const b = ber(zpVon(n).k); return p ? Math.min(5, 10 * Math.abs(p[1] - p[0]) / ((b.max - b.min) || 1)) : null; };
+                const einV = k => (kanaele[k] && kanaele[k].v) ? _anaVolt(_anaState()[kanaele[k].v], ber(k)) : null;
+                const wahl = () => _kompWahl[idx] || 'IN A';
+                // [Zeile 1, Zeile 2, Anteil für den Einstellknopf]
+                const anzeige = () => {
+                    const w = wahl(), V = v => v === null ? '– – –' : _anaZahl(v, 2) + ' V';
+                    if (w === 'D/E') return ['Sprache', window.currentLang === 'en' ? 'English' : 'Deutsch', 0.5];
+                    if (w.startsWith('IN')) { const v = einV(w === 'IN A' ? 0 : 1); return [`Eingang ${w.slice(3)}`, V(v), v === null ? 0.5 : (v + 10) / 20]; }
+                    const n = w.slice(2);
+                    const { zp } = zpVon(n);
+                    if (w[0] === 'S') { const v = sollV(n); return [`Schaltpunkt ${n}${zp ? ' · ' + zp.aus : ''}`, V(v), v === null ? 0.5 : (v + 10) / 20]; }
+                    const v = hystV(n); return [`Hysterese ${n}${zp ? ' · ' + zp.aus : ''}`, V(v), v === null ? 0 : v / 5];
+                };
+                // Display
+                el('rect', { x: 96, y: 82, width: W - 192, height: 46, rx: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 1 }, g);
+                el('rect', { x: 104, y: 88, width: W - 208, height: 34, rx: 2, fill: '#1b2a1f' }, g);
+                const z1 = el('text', { x: 112, y: 101, 'font-size': 9.5, fill: '#b9f6ca', 'font-family': 'Consolas, monospace' }, g);
+                const z2 = el('text', { x: W - 112, y: 117, 'text-anchor': 'end', 'font-size': 12, fill: '#b9f6ca', 'font-family': 'Consolas, monospace' }, g);
+                _anaLive.push(() => { const [a, b] = anzeige(); z1.textContent = a; z2.textContent = b; });
+                // Felder A und B
+                const feld = (fy, ab, k) => {
+                    el('rect', { x: 22, y: fy, width: W - 44, height: 104, rx: 6, fill: 'none', stroke: '#37474f', 'stroke-width': 1.6 }, g);
+                    // Eingang: Signal (schwarz) oben, Analogmasse (weiß) unten
+                    drawSocket(g, 46, fy + 22, ANA_SIG, `KK${idx}_${ab}_E`, `KK${idx}`);
+                    drawSocket(g, 46, fy + 82, ANA_GND, `KK${idx}_${ab}_M`, `KK${idx}`);
+                    _anaText(g, 38, fy + 56, `IN ${ab}`, { 'font-size': 8.5, 'font-weight': 'bold' });
+                    _anaBelegt(g, 64, fy + 70, kanaele[k] && kanaele[k].v, 'start');
+                    // Ausgänge: je Relais 12 und 14 oben, 11 unten, LED daneben
+                    _anaText(g, 307, fy + 14, 'OUT', { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                    [1, 2].forEach(j => {
+                        const name = `${ab}${j}`;
+                        const { zp } = zpVon(name);
+                        const bx = 238 + (j - 1) * 104;
+                        const k12 = { x: bx, y: fy + 22 }, k14 = { x: bx + 34, y: fy + 22 }, k11 = { x: bx + 34, y: fy + 82 };
+                        // Wechsler: 12 und 14 enden in kurzen Stummeln, der Hebel von 11
+                        // liegt in Ruhe am Öffner 12 und wechselt beim Schalten auf 14
+                        const sy = fy + 46, py = fy + 64, px = bx + 17;
+                        lin(k12.x, k12.y + 8, k12.x, sy); lin(k12.x, sy, bx + 10, sy);
+                        lin(k14.x, k14.y + 8, k14.x, sy); lin(k14.x, sy, bx + 24, sy);
+                        lin(k11.x, k11.y - 8, k11.x, py); lin(k11.x, py, px, py);
+                        const an = () => !!(zp && window.simTimers && window.simTimers[zp.id] && window.simTimers[zp.id].q) && (typeof isSimulationActive === 'undefined' || isSimulationActive);
+                        const hebel = el('line', { x1: px, y1: py, x2: bx + 10, y2: sy + 2, stroke: PALETTE.trace, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
+                        _anaLive.push(() => { hebel.setAttribute('x2', an() ? bx + 24 : bx + 10); });
                         [[k11, '11'], [k12, '12'], [k14, '14']].forEach(([p, n]) => {
                             drawSocket(g, p.x, p.y, PALETTE.socketBlack, `KK${idx}_${name}_${n}`, `KK${idx}`);
-                            _anaText(g, p.x + (n === '12' ? -12 : 12), p.y + 3, n, { 'text-anchor': 'middle', 'font-size': 8, 'font-family': 'monospace' });
+                            _anaText(g, p.x + (n === '11' ? 13 : 0), p.y + (n === '11' ? 3 : -11), n, { 'text-anchor': 'middle', 'font-size': 7, 'font-family': 'monospace' });
                         });
-                        _anaBelegt(g, cx + 62, ry + 100, zp ? zp.aus : null);
-                        if (zp) {
-                            g.style.cursor = 'pointer';
-                        }
+                        _anaLed(g, bx, fy + 70, '#ffb300', an);
+                        _anaText(g, bx, fy + 86, name, { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                        _anaBelegt(g, bx + 17, fy + 100, zp ? zp.aus : null);
                     });
+                };
+                feld(140, 'A', 0);
+                feld(252, 'B', 1);
+                // Einstellknopf (Feld A) zeigt den gewählten Wert
+                const kx = 150, ky = 192;
+                el('path', { d: `M ${kx - 20} ${ky - 26} A 30 30 0 0 1 ${kx + 20} ${ky - 26}`, fill: 'none', stroke: '#37474f', 'stroke-width': 1.2 }, g);
+                _anaText(g, kx - 26, ky - 22, '−', { 'text-anchor': 'middle', 'font-size': 10 });
+                _anaText(g, kx + 26, ky - 22, '+', { 'text-anchor': 'middle', 'font-size': 10 });
+                el('circle', { cx: kx, cy: ky, r: 16, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, g);
+                el('circle', { cx: kx, cy: ky, r: 12, fill: '#90a4ae' }, g);
+                const kz = el('circle', { cx: kx, cy: ky - 9, r: 2.5, fill: '#fff' }, g);
+                _anaLive.push(() => { const a = Math.max(0, Math.min(1, anzeige()[2])); const w = (-135 + 270 * a) * Math.PI / 180; kz.setAttribute('cx', kx + 9 * Math.sin(w)); kz.setAttribute('cy', ky - 9 * Math.cos(w)); });
+                _anaText(g, kx, ky + 32, 'Einstellknopf', { 'text-anchor': 'middle', 'font-size': 7 });
+                // Wahlschalter (Feld B): Klick dreht eine Stellung weiter
+                const wx = 150, wy = 304;
+                const sg = el('g', { 'data-komp-wahl': idx, style: 'cursor:pointer' }, g);
+                KOMP_STELLUNGEN.forEach((st, i) => {
+                    const w = (-150 + i * 30) * Math.PI / 180;
+                    el('line', { x1: wx + 15 * Math.sin(w), y1: wy - 15 * Math.cos(w), x2: wx + 20 * Math.sin(w), y2: wy - 20 * Math.cos(w), stroke: '#37474f', 'stroke-width': 1 }, sg);
+                    const tx = wx + 30 * Math.sin(w), ty = wy - 28 * Math.cos(w) + 3;
+                    _anaText(sg, tx, ty, st, { 'text-anchor': Math.abs(Math.sin(w)) < 0.3 ? 'middle' : (Math.sin(w) > 0 ? 'start' : 'end'), 'font-size': 6.5, 'font-weight': 'bold' });
                 });
-                // Versorgung
-                _anaText(g, 18, H - 14, '+24 V', { 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' });
-                drawSocket(g, 64, H - 17, PALETTE.socketRed, `KK${idx}_24V`, `KK${idx}`);
-                drawSocket(g, 94, H - 17, PALETTE.socketBlue, `KK${idx}_0V`, `KK${idx}`);
-                _anaText(g, W - 18, H - 14, 'ein bei Sollwert + ½ Hysterese, aus bei Sollwert − ½ Hysterese', { 'text-anchor': 'end', 'font-size': 7 });
-                kanaele.forEach((kanal, k) => { if (kanal && kanal.v) (pos.ein[kanal.v] = pos.ein[kanal.v] || []).push({ x: x + 34, y: y + 52 + k * 196 + 30 }); });
+                el('circle', { cx: wx, cy: wy, r: 13, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, sg);
+                const wz = el('line', { x1: wx, y1: wy, x2: wx, y2: wy - 11, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' }, sg);
+                const wSet = () => { const i = KOMP_STELLUNGEN.indexOf(wahl()); const w = (-150 + i * 30) * Math.PI / 180; wz.setAttribute('x2', wx + 11 * Math.sin(w)); wz.setAttribute('y2', wy - 11 * Math.cos(w)); };
+                wSet(); _anaLive.push(wSet);
+                const tt = el('title', {}, sg); tt.textContent = 'Wahlschalter: Klick dreht weiter. IN = Eingangsspannung, S = Schaltpunkt, H = Hysterese';
+                sg.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    const i = KOMP_STELLUNGEN.indexOf(wahl());
+                    _kompWahl[idx] = KOMP_STELLUNGEN[(i + 1) % KOMP_STELLUNGEN.length];
+                    _anaLive.forEach(f => { try { f(); } catch (e) {} });
+                });
+                _anaText(g, wx, wy + 40, 'Wahlschalter', { 'text-anchor': 'middle', 'font-size': 7 });
+                // Übersicht der Schaltpunkte (statt Ablesen jeder Stellung)
+                const uy = 400;
+                _anaText(g, 22, uy, 'Schaltet ein bei Schaltpunkt + ½ Hysterese, aus bei Schaltpunkt − ½ Hysterese', { 'font-size': 7 });
+                ['A1', 'A2', 'B1', 'B2'].forEach((n, i) => {
+                    const t = _anaText(g, 22 + (i % 2) * 200, uy + 14 + Math.floor(i / 2) * 12, '', { 'font-size': 7.5, 'font-family': 'Consolas, monospace', fill: PALETTE.slotLabel });
+                    _anaLive.push(() => { const { zp } = zpVon(n); const s = sollV(n), h = hystV(n); t.textContent = zp ? `${n} ${zp.aus}: S ${_anaZahl(s, 2)} V · H ${_anaZahl(h, 2)} V` : `${n} frei`; });
+                });
+                _anaLive.slice(liveAb).forEach(f => { try { f(); } catch (e) {} });
+                kanaele.forEach((kanal, k) => { if (kanal && kanal.v) (pos.ein[kanal.v] = pos.ein[kanal.v] || []).push({ x: x + 46, y: y + (k ? 252 : 140) + 22 }); });
                 const ids = kanaele.flatMap(k => (k ? k.zps : [])).filter(Boolean);
                 if (ids.length) g.addEventListener('dblclick', ev => { ev.stopPropagation(); window._reglerFenster && window._reglerFenster(ids[0].id, ids[0].aus); });
             }
@@ -66048,7 +66119,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Messbuchsen
                 _anaText(g, 250, 196, 'Messbuchsen (Oszilloskop)', { 'font-size': 8, 'font-weight': 'bold' });
                 ['w', 'x', 'e', 'P', 'I', 'D'].forEach((n, i) => {
-                    drawSocket(g, 250 + i * 34, 214, '#fdd835', `PK${idx}_M_${n}`, `PK${idx}`);
+                    drawSocket(g, 250 + i * 34, 214, ANA_SIG, `PK${idx}_M_${n}`, `PK${idx}`);
                     _anaText(g, 250 + i * 34, 234, n, { 'text-anchor': 'middle', 'font-size': 8 });
                 });
                 // Stellgröße
@@ -66067,7 +66138,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Sensorversorgung 15 V mit eigener Analogmasse, 24 V Versorgung
                 const vy = H - 64;
                 _anaText(g, 18, vy, 'Sensorversorgung', { 'font-size': 8, 'font-weight': 'bold' });
-                drawSocket(g, 34, vy + 20, '#8e24aa', `PK${idx}_15V`, `PK${idx}`);
+                drawSocket(g, 34, vy + 20, PALETTE.socketRed, `PK${idx}_15V`, `PK${idx}`);
                 drawSocket(g, 94, vy + 20, ANA_GND, `PK${idx}_AM`, `PK${idx}`);
                 _anaText(g, 34, vy + 40, '+15 V', { 'text-anchor': 'middle', 'font-size': 7 });
                 _anaText(g, 94, vy + 40, 'Analogmasse', { 'text-anchor': 'middle', 'font-size': 7 });
@@ -66157,8 +66228,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { d = _anaSammeln(); } catch (e) { return { w: 0, h: 0, n: 0 }; }
                 if (!d.quellen.length && !d.zps.length && !d.pids.length && !d.ventile.length) return { w: 0, h: 0, n: 0 };
                 const GAP = 18;
-                el('line', { x1: x0, y1: y0 + 12, x2: x0 + 1200, y2: y0 + 12, stroke: ANA_SIG, 'stroke-width': 1.2, 'stroke-dasharray': '6 4', opacity: 0.7 }, svg);
-                _anaText(svg, x0 + 4, y0 + 6, '▼ Analogtechnik (Geber · Komparator · PID-Regler · Proportionalverstärker) — orange Buchsen: Analogsignal, grau: Analogmasse', { 'font-size': 10, 'font-weight': 'bold', fill: '#bf360c' });
+                el('line', { x1: x0, y1: y0 + 12, x2: x0 + 1200, y2: y0 + 12, stroke: ANA_KABEL, 'stroke-width': 1.2, 'stroke-dasharray': '6 4', opacity: 0.7 }, svg);
+                _anaText(svg, x0 + 4, y0 + 6, '▼ Analogtechnik (Geber · Komparator · PID-Regler · Proportionalverstärker) — schwarze Buchsen: Analogsignal, weiß: Analogmasse', { 'font-size': 10, 'font-weight': 'bold', fill: '#bf360c' });
                 const top = y0 + 26;
                 const pos = { aus: {}, ein: {} };
                 let cx = x0, maxH = 0, n = 0;
@@ -66199,7 +66270,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const sag = Math.min(140, 50 + Math.abs(z.x - q.x) / 6);
                         const dpath = `M${q.x},${q.y} C${q.x},${q.y + sag} ${z.x},${z.y + sag} ${z.x},${z.y}`;
                         el('path', { d: dpath, fill: 'none', stroke: '#000', 'stroke-width': 4.5, opacity: 0.25 }, kabel);
-                        el('path', { d: dpath, fill: 'none', stroke: ANA_SIG, 'stroke-width': 3, opacity: 0.9, 'data-ana-var': v }, kabel);
+                        el('path', { d: dpath, fill: 'none', stroke: ANA_KABEL, 'stroke-width': 3, opacity: 0.9, 'data-ana-var': v }, kabel);
                     });
                 });
                 window._festoAnaLive = _anaLive;

@@ -3628,6 +3628,10 @@
                         <input type="checkbox" id="festo-flow-anim" onchange="window._setFestoFlowAnim && window._setFestoFlowAnim(this.checked)" style="margin:0;">
                         <span style="font-size:11px;">⚡ Stromfluss</span>
                     </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Verlauf an Analogkabeln: Jedes Analog-Signalkabel zeigt eine kleine Kurve seiner Spannung über die letzten 10 Sekunden (nur bei aktiver Simulation)">
+                        <input type="checkbox" id="festo-ana-verlauf" onchange="window._setFestoAnaVerlauf && window._setFestoAnaVerlauf(this.checked)" style="margin:0;">
+                        <span style="font-size:11px;">〰️ Verlauf</span>
+                    </label>
                     <button type="button" id="festo-freebuild-toggle" class="festo-mode-btn" onclick="window._toggleFestoFreeBuild && window._toggleFestoFreeBuild()" title="Freier Aufbau (BETA): reale FESTO-Module selbst platzieren und verdrahten. Aus der Verkabelung wird Code erzeugt und über den Schaltplan zurückgespielt (Round-trip). BETA — noch in Erprobung, Rückmeldungen willkommen.">🧩 Freier Aufbau<span class="fb-beta-badge">BETA</span></button>
                     <button type="button" id="festo-step-toggle" class="festo-mode-btn" onclick="window._setFestoStepMode && window._setFestoStepMode(!window._festoStepModeActive)" title="Kabel-Schritt-Modus: Kabel nacheinander platzieren. Klick auf SVG → Tastatur ←/→ oder STRG + Mausrad steuert. Plain Mausrad zoomt wie gewohnt.">🪜 Schritt-Modus</button>
                     <button type="button" id="festo-train-toggle" class="festo-mode-btn" onclick="window._setFestoTrainMode && window._setFestoTrainMode(!window._festoTrainModeActive)" title="Trainingsmodus: Kabel selbst per Drag&amp;Drop von Sockel zu Sockel verlegen, mit Live-Feedback.">🎓 Trainingsmodus</button>
@@ -67356,6 +67360,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const sim = (typeof isSimulationActive === 'undefined') || isSimulationActive;
                 let schilder = svg.querySelector('#festo-ana-volt-layer');
                 if (schilder) schilder.textContent = '';
+                // Verlauf je Analogvariable puffern (alle 100 ms Echtzeit, 10 s lang)
+                const verlaufAn = !!window._festoAnaVerlauf && sim && !!window._anaSpannung;
+                const jetzt = Date.now();
+                const puffer = window._festoAnaPuffer = window._festoAnaPuffer || {};
+                if (verlaufAn && jetzt - (window._festoAnaPufferT || 0) >= 100) {
+                    window._festoAnaPufferT = jetzt;
+                    const vars = new Set();
+                    svg.querySelectorAll('path[data-ana-art="signal"]').forEach(pp => vars.add(pp.getAttribute('data-ana-var')));
+                    vars.forEach(v => { const b = puffer[v] = puffer[v] || []; b.push(window._anaSpannung(v)); if (b.length > 100) b.splice(0, b.length - 100); });
+                }
+                if (!sim) { for (const k in puffer) delete puffer[k]; }
                 svg.querySelectorAll('path[data-ana-art]').forEach(path => {
                     const v = path.getAttribute('data-ana-var');
                     const u = (enabled && sim && window._anaSpannung) ? window._anaSpannung(v) : 0;
@@ -67366,6 +67381,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         path.style.animationDuration = dauer + 's';
                         path.style.animationDirection = (u < 0) !== (path.getAttribute('data-ana-art') === 'masse') ? 'reverse' : 'normal';
                     } else { path.style.animationDuration = ''; path.style.animationDirection = ''; }
+                    if (verlaufAn && path.getAttribute('data-ana-art') === 'signal' && path.getTotalLength) {
+                        if (!schilder) { schilder = document.createElementNS(SVGNS, 'g'); schilder.id = 'festo-ana-volt-layer'; schilder.setAttribute('pointer-events', 'none'); svg.appendChild(schilder); }
+                        try {
+                            const b = puffer[path.getAttribute('data-ana-var')] || [];
+                            const m = path.getPointAtLength(path.getTotalLength() / 2);
+                            const W = 70, H = 30, x0 = m.x - W / 2, y0 = m.y - (enabled ? 10 : 0) - H - 4;
+                            const neg = b.some(w => w < -0.05), lo = neg ? -10 : 0, hi = 10;
+                            const yv = w => y0 + H - 3 - (Math.max(lo, Math.min(hi, w)) - lo) / (hi - lo) * (H - 6);
+                            const mk = (tag, at) => { const e = document.createElementNS(SVGNS, tag); Object.entries(at).forEach(([k, w]) => e.setAttribute(k, w)); schilder.appendChild(e); return e; };
+                            mk('rect', { x: x0, y: y0, width: W, height: H, rx: 3, fill: '#102027', stroke: '#ef6c00', 'stroke-width': 1, opacity: 0.92 });
+                            if (neg) mk('line', { x1: x0 + 2, y1: yv(0), x2: x0 + W - 2, y2: yv(0), stroke: '#546e7a', 'stroke-width': 0.6, 'stroke-dasharray': '2 2' });
+                            if (b.length > 1) mk('polyline', { points: b.map((w, i) => (x0 + 2 + (W - 4) * i / 99).toFixed(1) + ',' + yv(w).toFixed(1)).join(' '), fill: 'none', stroke: '#ffb74d', 'stroke-width': 1.3, 'stroke-linejoin': 'round' });
+                            const t = mk('text', { x: x0 + 3, y: y0 + 7.5, 'font-size': 5.5, fill: '#90a4ae', 'font-family': 'Consolas, monospace' });
+                            t.textContent = (neg ? '±10 V' : '10 V') + ' · 10 s';
+                        } catch (_) {}
+                    }
                     if (enabled && sim && path.getAttribute('data-ana-art') === 'signal' && path.getTotalLength) {
                         if (!schilder) { schilder = document.createElementNS(SVGNS, 'g'); schilder.id = 'festo-ana-volt-layer'; schilder.setAttribute('pointer-events', 'none'); svg.appendChild(schilder); }
                         try {
@@ -67402,6 +67433,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
             window._updateFestoCableFlow = _updateFestoCableFlow;
+            window._setFestoAnaVerlauf = function(an) {
+                window._festoAnaVerlauf = !!an;
+                _updateFestoCableFlow();
+            };
             window._setFestoFlowAnim = function(enabled) {
                 window._festoFlowAnimEnabled = !!enabled;
                 _updateFestoCableFlow();

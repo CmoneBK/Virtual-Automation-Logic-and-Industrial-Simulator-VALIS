@@ -46074,8 +46074,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             panel.style.width = '100%'; panel.style.height = '100%';
             panel.style.top = '0'; panel.style.left = '0';
             panel.style.transform = 'none'; panel.style.boxShadow = 'none';
+            // Im eigenen Fenster: Padding/Rand in die 100 % einrechnen (sonst unten
+            // abgeschnitten), keine Mindestgröße und kein eigener Zieh-Griff — die
+            // Größe bestimmt das Fenster.
+            panel.style.boxSizing = 'border-box';
+            panel.style.minWidth = '0'; panel.style.minHeight = '0';
+            panel.style.resize = 'none'; panel.style.border = 'none'; panel.style.borderRadius = '0';
             panel.style.display = 'flex';
             extWin.document.body.appendChild(panel);
+            const _fussLeiste = panel.lastElementChild;
+            if (_fussLeiste) { _fussLeiste.style.flexWrap = 'wrap'; _fussLeiste.style.gap = '6px'; _fussLeiste.style.flexShrink = '0'; if (_fussLeiste.firstElementChild) { _fussLeiste.firstElementChild.style.flex = '1 1 260px'; _fussLeiste.firstElementChild.style.minWidth = '0'; } }
+            let _oszResizeT = null;
+            extWin.addEventListener('resize', () => { clearTimeout(_oszResizeT); _oszResizeT = setTimeout(() => { try { drawAnalyzer(); } catch (_) {} }, 60); });
             isAnalyzerOpen = true;   // auch wenn das Oszilloskop vorher nicht offen war
             for (let key in window) {
                 if (typeof window[key] === 'function') {
@@ -46089,6 +46099,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (ph) { ph.parentNode.insertBefore(panel, ph); ph.remove(); }
                 panel.style.cssText = panel._oldCss;
                 panel.style.display = 'none';
+                const _fl = panel.lastElementChild;
+                if (_fl) { _fl.style.flexWrap = ''; _fl.style.gap = ''; _fl.style.flexShrink = ''; if (_fl.firstElementChild) { _fl.firstElementChild.style.flex = ''; _fl.firstElementChild.style.minWidth = ''; } }
                 isAnalyzerOpen = false;
                 delete window.popOutWindows[panelId];
             });

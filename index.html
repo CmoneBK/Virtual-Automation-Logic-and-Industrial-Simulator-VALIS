@@ -18497,6 +18497,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
             });
 
+            // === 0. Leerzeichen im Variablennamen (auch links, wo der Parser es still schluckt) ===
+            lineInfos.forEach(li => {
+                if (inSKBlock(li.idx) || !li.codePart.trim()) return;
+                const f = window._leerzeichenImNamen && window._leerzeichenImNamen(li.line);
+                if (!f) return;
+                addErr(li.idx, {
+                    title: 'Leerzeichen im Variablennamen?',
+                    why: '„' + f.woerter.join(' ') + '“ sind mehrere Wörter ohne Operator dazwischen. Ein Variablenname darf kein Leerzeichen enthalten.',
+                    hint: 'Meinst du einen Namen, dann verbinde die Wörter mit Unterstrich. Fehlt ein Operator, dann setze && (UND) oder || (ODER) dazwischen.',
+                    fix: null
+                });
+            });
+
+            // === 0b. Operator links vom := (z. B. `A_B && D := C`): der Parser nimmt sonst alles als einen Namen ===
+            lineInfos.forEach(li => {
+                if (!li.lhs || !/&|\||¬|!|\bAND\b|\bOR\b|\bUND\b|\bODER\b/i.test(li.lhs)) return;
+                addErr(li.idx, {
+                    title: 'Links vom := steht mehr als ein Name',
+                    why: 'Links steht der Ausgang, der den Wert bekommt: genau ein Name. „' + li.lhs + '“ enthält einen Operator.',
+                    hint: 'Die Bedingung gehört nach rechts. Sollen mehrere Ausgänge denselben Wert bekommen, schreibe je eine Zeile.',
+                    fix: 'AUSGANG := ' + (li.rhs || 'BEDINGUNG')
+                });
+            });
+
             // === 1. Mehrfach-Zuweisung (Details liefert _explainError) ===
             lineInfos.forEach(li => {
                 if (!li.codePart.trim()) return;
@@ -18967,6 +18991,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             gutter.innerHTML = html;
         };
 
+        // Leerzeichen im Variablennamen erkennen: zwei oder mehr Namen nur durch Leerzeichen
+        // getrennt (z. B. `A B && D := C`). Schlüsselwörter und DSL-Zeilen bleiben außen vor.
+        const _LEER_SCHLUESSEL = /^(AND|OR|UND|ODER|NOT|NICHT|XOR|IST|IS|GLEICH|TRUE|FALSE|HEIZEN|KUEHLEN|AFTER|IF|THEN|ELSE|ELSIF|END_IF)$/i;
+        window._leerzeichenImNamen = function(zeile) {
+            const code = String(zeile || '').split('//')[0];
+            if (/^\s*(SCHRITTKETTE|SCHRITT|STEP|INTERLOCK|SUPERVISION|CONTROL|ENDE|END|INIT|TRANSITION|ACTION|TRANS)\b/i.test(code)) return null;
+            // Aktions-Qualifier der Schrittketten (N ZYL_AUS, D T#2s …)
+            if (/^\s*(N|S|R|P|C|D|L|SD|DS|SL|P0|P1)\s+[A-Za-z_]/.test(code)) return null;
+            const re = /[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*(?:[ \t]+[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*)+/g;
+            let m;
+            while ((m = re.exec(code))) {
+                const woerter = m[0].split(/[ \t]+/);
+                // Lauf an Schlüsselwörtern auftrennen; übrig bleiben Gruppen aus reinen Namen
+                let gruppe = [], start = m.index, pos = m.index;
+                for (const w of woerter) {
+                    const at = code.indexOf(w, pos); pos = at + w.length;
+                    if (_LEER_SCHLUESSEL.test(w)) { if (gruppe.length > 1) return { woerter: gruppe, start, ende: code.indexOf(gruppe[gruppe.length - 1], start) + gruppe[gruppe.length - 1].length }; gruppe = []; continue; }
+                    if (!gruppe.length) start = at;
+                    gruppe.push(w);
+                }
+                // Funktionsaufruf wie `PID (` nicht als Name werten
+                if (gruppe.length > 1) {
+                    const ende = code.indexOf(gruppe[gruppe.length - 1], start) + gruppe[gruppe.length - 1].length;
+                    if (/^\s*\(/.test(code.slice(ende))) { gruppe.pop(); if (gruppe.length < 2) continue; }
+                    return { woerter: gruppe, start, ende: code.indexOf(gruppe[gruppe.length - 1], start) + gruppe[gruppe.length - 1].length };
+                }
+            }
+            return null;
+        };
+        window._leerzeichenKorrigieren = function(lineIdx, art) {
+            const ta = document.getElementById('code');
+            if (!ta) return;
+            const zeilen = ta.value.split('\n');
+            const z = zeilen[lineIdx] || '';
+            const f = window._leerzeichenImNamen(z);
+            if (!f) return;
+            const neu = f.woerter.join(art === 'und' ? ' && ' : art === 'oder' ? ' || ' : '_');
+            zeilen[lineIdx] = z.slice(0, f.start) + neu + z.slice(f.ende);
+            if (typeof window._setCodeUndoable === 'function') window._setCodeUndoable(zeilen.join('\n'));
+            else ta.value = zeilen.join('\n');
+            window._hideErrorPopup();
+            if (typeof updateHighlighting === 'function') updateHighlighting();
+            if (typeof updateEditor === 'function') updateEditor();
+            if (typeof saveToStorage === 'function') saveToStorage();
+            if (typeof window._updateErrorGutter === 'function') window._updateErrorGutter();
+        };
+
         window._hideErrorPopup = function() {
             const pop = document.getElementById('code-error-popup');
             if (!pop) return;
@@ -19289,7 +19360,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const line = (ta.value || '').split('\n')[lineIdx] || '';
             // Reihenfolge: Custom-Map (Cross-Line-Checks) > _explainError (per Zeile) > generischer Default
             const custom = (window._customErrorExplanations && window._customErrorExplanations.get(lineIdx)) || null;
-            const err = custom || window._explainError(line) || {
+            const leer = window._leerzeichenImNamen(line);
+            const err = (leer && {
+                title: 'Leerzeichen im Variablennamen?',
+                why: '„' + leer.woerter.join(' ') + '“ sind mehrere Wörter ohne Operator dazwischen. Ein Variablenname darf kein Leerzeichen enthalten.',
+                hint: 'Meinst du einen Namen, dann verbinde die Wörter mit Unterstrich. Fehlt ein Operator, dann setze && (UND) oder || (ODER) dazwischen.',
+                fix: null
+            }) || custom || window._explainError(line) || {
                 title: 'Syntax-Fehler in dieser Zeile',
                 why: 'Diese Zeile konnte nicht ausgewertet werden.',
                 hint: 'Prüfe Klammern, Operatoren und Variablen-Namen.',
@@ -19341,6 +19418,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                           + ' onclick="window._applySelfHoldConvert(' + lineIdx + ',\'RS\')">→ RS-Glied einsetzen</button>';
                     html += '</div>';
                 }
+            }
+            // Leerzeichen im Namen: Ein-Klick-Korrektur, Lernende entscheiden selbst
+            if (leer) {
+                const knopf = (art, text, haupt) => '<button type="button" class="ep-btn-convert" style="flex:1;background:' + (haupt ? '#26a69a' : '#444')
+                    + ';color:#fff;border:none;border-radius:3px;padding:5px 10px;font-size:11px;cursor:pointer;" onclick="window._leerzeichenKorrigieren(' + lineIdx + ',\'' + art + '\')">' + esc(text) + '</button>';
+                html += '<div class="ep-fix-label" style="margin-top:8px;">🔧 Mit einem Klick korrigieren</div>';
+                html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">'
+                      + knopf('name', '→ ' + leer.woerter.join('_') + ' (ein Name)', true)
+                      + knopf('und', '→ ' + leer.woerter.join(' && ') + ' (UND fehlt)', false)
+                      + knopf('oder', '→ ' + leer.woerter.join(' || ') + ' (ODER fehlt)', false)
+                      + '</div>';
             }
             pop.innerHTML = html;
             pop.style.display = 'block';

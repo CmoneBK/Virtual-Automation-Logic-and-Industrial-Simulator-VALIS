@@ -46022,12 +46022,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             panel.style.transform = 'none'; panel.style.boxShadow = 'none';
             panel.style.display = 'flex';
             extWin.document.body.appendChild(panel);
+            isAnalyzerOpen = true;   // auch wenn das Oszilloskop vorher nicht offen war
             for (let key in window) {
                 if (typeof window[key] === 'function') {
                     try { extWin[key] = window[key]; } catch(_) {}
                 }
             }
-            setTimeout(() => drawAnalyzer(), 100);
+            setTimeout(() => { updateAnalyzerLegend(); drawAnalyzer(); }, 100);
             _bindWindowRelay(extWin);
             extWin.addEventListener('beforeunload', () => {
                 const ph = document.getElementById(panelId + '-placeholder');
@@ -46088,6 +46089,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
         // ==========================================
+        // Abgekoppelt lebt das Oszilloskop im Popup-Dokument: dort suchen,
+        // sonst findet getElementById im Hauptfenster nichts mehr.
+        function _anaEl(id) {
+            const w = window.popOutWindows && window.popOutWindows['analyzer-modal'];
+            return (w && !w.closed && w.document.getElementById(id)) || document.getElementById(id);
+        }
         let analyzerHistory = [];
         let analyzerSimTimeMs = 0; // Simulationszeit seit „Verlauf leeren" (läuft nur bei aktiver Sim, berücksichtigt simSpeed)
         let isAnalyzerOpen = false;
@@ -46161,7 +46168,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const lay = _analyzerLayout();
             analyzerLanes = lay.lanes;
             _analyzerLaneSig = analyzerLanes.map(l => l.vars.join(',') + ':' + l.h).join('|');
-            const legendDiv = document.getElementById('analyzer-legend');
+            const legendDiv = _anaEl('analyzer-legend');
             legendDiv.innerHTML = '';
             analyzerLanes.forEach(l => {
                 if (!l.analog) {
@@ -46199,8 +46206,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
         function drawAnalyzer() {
             if (!isAnalyzerOpen) return;
-            const cvs = document.getElementById('analyzer-canvas');
-            const wrapper = document.getElementById('analyzer-canvas-wrapper');
+            const cvs = _anaEl('analyzer-canvas');
+            const wrapper = _anaEl('analyzer-canvas-wrapper');
             const ctx = cvs.getContext('2d');
             // Spuren neu einteilen, wenn sich etwas geändert hat (neue Variable, Analogwert erkannt)
             {
@@ -46214,7 +46221,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (cvs.width !== wrapper.clientWidth || cvs.height !== requiredHeight) {
                 cvs.width = wrapper.clientWidth;
                 cvs.height = requiredHeight;
-                document.getElementById('analyzer-legend').style.height = requiredHeight + 'px';
+                _anaEl('analyzer-legend').style.height = requiredHeight + 'px';
             }
             ctx.clearRect(0, 0, cvs.width, cvs.height);
             // Raster zeichnen
@@ -46345,7 +46352,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
         // Cursor zum Ablesen: Maus über dem Oszilloskop
         (function() {
-            const cv = document.getElementById('analyzer-canvas');
+            const cv = _anaEl('analyzer-canvas');
             if (!cv) return;
             cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); analyzerCursorX = (e.clientX - r.left) * (cv.width / Math.max(1, r.width)); if (!isSimulationActive) drawAnalyzer(); });
             cv.addEventListener('mouseleave', () => { analyzerCursorX = null; if (!isSimulationActive) drawAnalyzer(); });

@@ -20472,10 +20472,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } else {
                     spsState[name] = isNCContact ? true : false;
                 }
-                // Analogeingang: Zahl statt 0/1, Schieber statt Taster
+                // Analogeingang: Zahl statt 0/1, Schieber statt Taster.
+                // Beim Seitenstart kann das Sim-Panel vor dem Analog-Modul gebaut
+                // werden; dann Standardbereich nehmen und das Panel nachholen.
+                if (!window._anaBereichSicher) window._anaBereichSicher = function(n) {
+                    if (typeof window._anaBereich === 'function') return window._anaBereich(n);
+                    window._anaPanelNachholen = true;
+                    return { min: 0, max: 100, schritt: 0.1, einheit: '', quelle: null, obj: null };
+                };
                 const _isAna = cType === 'analog_in';
                 if (_isAna) {
-                    const _ab = window._anaBereich(name);
+                    const _ab = window._anaBereichSicher(name);
                     spsState[name] = (typeof oldState[name] === 'number') ? oldState[name]
                         : (_ab.min <= 0 && _ab.max >= 0 ? 0 : _ab.min);
                 }
@@ -20487,10 +20494,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let selectHTML = `<select class="type-select" onchange="changeType('${name}', this.value)">${_optsHTML}</select>`;
                 let controlHTML = _isAna
                     ? (() => {
-                        const _ab = window._anaBereich(name);
+                        const _ab = window._anaBereichSicher(name);
                         const _mu = _ab.quelle === 'mu';
                         const _tt = _mu ? 'Kommt vom Messumformer in der 2D-Anlage' : (_ab.quelle === 'poti' ? 'Dreht den Sollwertsteller in der 2D-Anlage' : 'Messwert von Hand vorgeben (kein Messumformer zugeordnet)');
-                        return `<div class="sim-ana-ctl" title="${_tt}"><input type="range" id="sim_ain_${name}" min="${_ab.min}" max="${_ab.max}" step="${_ab.schritt}" value="${spsState[name]}" ${_mu ? 'disabled' : ''} oninput="window._anaSimEingabe('${name}', this.value)"><span class="sim-ana-wert" id="sim_ainv_${name}">${window._anaSimText(name, spsState[name])}</span></div>`;
+                        return `<div class="sim-ana-ctl" title="${_tt}"><input type="range" id="sim_ain_${name}" min="${_ab.min}" max="${_ab.max}" step="${_ab.schritt}" value="${spsState[name]}" ${_mu ? 'disabled' : ''} oninput="window._anaSimEingabe('${name}', this.value)"><span class="sim-ana-wert" id="sim_ainv_${name}">${typeof window._anaSimText === 'function' ? window._anaSimText(name, spsState[name]) : (spsState[name] || 0)}</span></div>`;
                     })()
                     : isSwitchUI
                     ? `<label class="switch"><input type="checkbox" id="sim_in_${name}" ${isActuated ? 'checked' : ''} onchange="toggleInput('${name}')"><span class="slider"></span></label>`
@@ -20581,7 +20588,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return `<div class="led-row flex-col">
                     <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${_spsAddrOutHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmOutHTML}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;">${_reglerKnopf(name)}${componentTypes[name] === 'analog_out'
-                        ? `<div class="sim-ana-ctl"><div class="sim-ana-balken"><div id="sim_aoutb_${name}"></div></div><span class="sim-ana-wert" id="sim_aout_${name}">${window._anaSimText(name, spsState[name])}</span></div>`
+                        ? `<div class="sim-ana-ctl"><div class="sim-ana-balken"><div id="sim_aoutb_${name}"></div></div><span class="sim-ana-wert" id="sim_aout_${name}">${typeof window._anaSimText === 'function' ? window._anaSimText(name, spsState[name]) : (spsState[name] || 0)}</span></div>`
                         : `<div class="led" id="sim_out_${name}"></div>`}</div>
                 </div>`;
             };
@@ -52100,6 +52107,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (q) return Object.assign({ quelle: q.type === 'setpoint_pot' ? 'poti' : 'mu', obj: q }, signalBereich(q));
                 return { min: 0, max: 100, schritt: 0.1, einheit: '', quelle: null, obj: null };
             };
+            if (window._anaPanelNachholen) {
+                window._anaPanelNachholen = false;
+                setTimeout(() => { try { if (typeof updateEditor === 'function') updateEditor(); } catch (_) {} }, 0);
+            }
 
             // Variablentyp passend zum Bauteil setzen (Messumformer → Analogeingang)
             let _aufbauTimer = null;

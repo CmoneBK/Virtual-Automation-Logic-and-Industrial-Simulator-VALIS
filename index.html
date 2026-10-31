@@ -3678,6 +3678,12 @@
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
                             <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF)</button>
                         </div>
+                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
+                            <button type="button" onclick="window._fbAddModule('ana_geber')" title="Analoggeber: zwei Ausgänge 0 … 10 V (Messumformer bzw. Sollwertgeber aus der Anlage)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">📈 Analoggeber</button>
+                            <button type="button" onclick="window._fbAddModule('ana_komp')" title="Komparatorkarte: 2 Eingänge, 4 Komparatoren mit Relais-Wechsler (11/12/14)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 Komparatorkarte</button>
+                            <button type="button" onclick="window._fbAddModule('ana_pid')" title="PID-Reglerkarte: Eingänge W und X, P/I/D je Poti × Stufe, Ausgang Y" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 PID-Reglerkarte</button>
+                        </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Sensoren</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
                             <button type="button" onclick="window._fbAddModule('sensor','inductive')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Induktiv</button>
@@ -65022,9 +65028,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _fbSave() { try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {} }
             // Board-Registry: NUR echte FESTO-Module (dieselben Drawer wie im
             // Standard-Steckaufbau). Maße aus den Board-Konstanten.
-            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h} };
-            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF)' };
-            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z' };
+            // Analogkarten (Maße wie ANA_GEBER/ANA_KOMP/ANA_PID weiter unten; der
+            // Analoggeber im freien Aufbau hat zwei Kanäle)
+            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h},
+                                ana_geber:{w:300,h:214}, ana_komp:{w:440,h:450}, ana_pid:{w:600,h:450} };
+            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF)',
+                               ana_geber:'Analoggeber', ana_komp:'Komparatorkarte', ana_pid:'PID-Reglerkarte' };
+            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z', ana_geber:'AG', ana_komp:'KK', ana_pid:'PK' };
+            const FB_KOMP_NAMEN = ['A1', 'A2', 'B1', 'B2'];
             const _fbBoardById = (id) => FB.boards.find(b => b.id === id);
             // Sockel-Key → Schiene? (Panel-Bus „{P}_24V_{n}"/„{P}_0V_{n}").
             function _fbSocketRail(key) {
@@ -65065,6 +65076,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     elems.push({ id:'s1', cedType: _SENS_CED[b.sensorType]||'sensor_ind', varKey:'S1', varName: sv['S1']||'', terms:{ [`${P}_S1_24V`]:'in', [`${P}_S1_0V`]:'out', [`${P}_S1_Q`]:'signal' } });
                 } else if (b.type === 'magnet') {
                     elems.push({ id:'s1', cedType:'valve', varKey:'S1', varName: sv['S1']||'', terms:{ [`${P}_S1_24V_a`]:'in', [`${P}_S1_X2`]:'out' } });
+                } else if (b.type === 'ana_geber') {
+                    // Analogausgänge: kein Teil der Schaltlogik, nur Quelle für Karten
+                    for (let i = 1; i <= 2; i++) elems.push({ id:'k'+i, cedType:'ana_geber', varKey:'K'+i, varName: sv['K'+i]||'', terms:{ [`${P}_${i}_U`]:'signal', [`${P}_${i}_M`]:'masse' } });
+                } else if (b.type === 'ana_komp') {
+                    ['A', 'B'].forEach(ab => elems.push({ id:'in'+ab, cedType:'ana_in', terms:{ [`${P}_${ab}_E`]:'signal', [`${P}_${ab}_M`]:'masse' } }));
+                    // Relais je Komparator: Wechsler 11 (Wurzel), 12 (Öffner), 14 (Schließer)
+                    FB_KOMP_NAMEN.forEach(n => {
+                        const cv = sv[n] || '';
+                        elems.push({ id:n+'no', cedType:'komparator', varKey:n, varName:cv, komp:n, terms:{ [`${P}_${n}_14`]:'in', [`${P}_${n}_11`]:'out' } });
+                        elems.push({ id:n+'nc', cedType:'komparator_nc', varKey:n, varName:cv, komp:n, terms:{ [`${P}_${n}_12`]:'in', [`${P}_${n}_11`]:'out' } });
+                    });
+                } else if (b.type === 'ana_pid') {
+                    elems.push({ id:'w', cedType:'ana_in', terms:{ [`${P}_w_P`]:'signal', [`${P}_w_N`]:'masse' } });
+                    elems.push({ id:'x', cedType:'ana_in', terms:{ [`${P}_x_P`]:'signal', [`${P}_x_N`]:'masse' } });
+                    elems.push({ id:'y', cedType:'ana_pid_y', varKey:'Y', varName: sv['Y']||'', terms:{ [`${P}_Y`]:'signal', [`${P}_YM`]:'masse' } });
                 } else if (b.type === 'zeitrelais') {
                     // Slot 1 = TON, Slot 2 = TOF (board-fest). Spule als NEUTRALE
                     // Coil ('valve') kompilieren → liefert den IN-Ausdruck OHNE
@@ -65086,8 +65112,32 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (cedType && cedType.indexOf('sensor_') === 0) return 'BG';
                 return ({ taster:'SJ', taster_nc:'SJ', schalter:'SJ', schalter_nc:'SJ',
                           relais:'KF', relay_no:'KF', relay_nc:'KF',
-                          led:'PF', valve:'MB', siren:'H' }[cedType] || 'X');
+                          led:'PF', valve:'MB', siren:'H', komparator:'KOMP', komparator_nc:'KOMP', ana_geber:'ANALOG', ana_pid_y:'Y' }[cedType] || 'X');
             };
+            // Analogquelle eines Karteneingangs: über die Kabel bis zu einem
+            // Geberausgang (AGn_k_U) oder dem Ausgang Y einer PID-Karte
+            function _fbAnaQuelle(key) {
+                const nb = {};
+                FB.cables.forEach(c => { (nb[c.a] = nb[c.a] || []).push(c.b); (nb[c.b] = nb[c.b] || []).push(c.a); });
+                const gesehen = new Set([key]), offen = [key];
+                while (offen.length) {
+                    const k = offen.shift();
+                    let m;
+                    if ((m = /^(AG\d+)_(\d+)_U$/.exec(k))) { const b = FB.boards.find(x => x.prefix === m[1]); const v = b && (b.slotVars || {})['K' + m[2]]; if (v) return v; }
+                    if ((m = /^(PK\d+)_Y$/.exec(k))) { const b = FB.boards.find(x => x.prefix === m[1]); const v = b && (b.slotVars || {}).Y; if (v) return v; }
+                    (nb[k] || []).forEach(z => { if (!gesehen.has(z)) { gesehen.add(z); offen.push(z); } });
+                }
+                return '';
+            }
+            const _fbKompCfg = (b, n) => { b.komp = b.komp || {}; return b.komp[n] || (b.komp[n] = { s: 5, h: 0.5 }); };
+            // Schaltpunkt/Hysterese (Volt) → ZWEIPUNKT(X, W, H, KUEHLEN) in Einheiten von X:
+            // ein über W + H/2, aus unter W − H/2 (wie die Karte)
+            function _fbKompWerte(v, cfg) {
+                const ber = v && typeof window._anaBereich === 'function' ? window._anaBereich(v) : { min: 0, max: 10 };
+                const span = (ber.max - ber.min) || 1, r = x => Math.round(x * 1000) / 1000;
+                return { w: r(ber.min + cfg.s / 10 * span), h: r(cfg.h / 10 * span) };
+            }
+            const _fbPidCfg = b => b.pid || (b.pid = { kp: 1, tn: 0, tv: 0 });
             const _fbAllVars = () => { const s = new Set(); FB.boards.forEach(b => Object.values(b.slotVars||{}).forEach(v => v && s.add(v.toUpperCase()))); return s; };
             // Echtes FESTO-Board hinzufügen.
             window._fbAddModule = function(type, sensorType) {
@@ -65116,6 +65166,50 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let h = cy + rowH + 40;
                 FB.boards.forEach(b => { const d = FB_DIM[b.type]; if (d && b.moved) h = Math.max(h, b.y + d.h + 40); });
                 FB._height = h;
+            }
+            // ---- Analogkarten im freien Aufbau: dieselben Zeichnungen wie in der
+            // Analog-Reihe; Werte (Schaltpunkte, KP …) gehören zur Karte und wandern
+            // beim Erzeugen in den Code, Eingänge folgen den gesteckten Kabeln.
+            function _fbDrawAnalog(svg, b) {
+                const pos = { aus: {}, ein: {}, mAus: {}, mEin: {} }, sv = b.slotVars || {};
+                const codeZeile = (aus, neu) => { if (aus && new RegExp('^\\s*' + aus + '\\s*:=', 'm').test((document.getElementById('code') || {}).value || '')) _anaZeileAendern(aus, () => neu); };
+                if (b.type === 'ana_geber') {
+                    const namen = { analog_sensor: 'Messumformer', setpoint_pot: 'Sollwertgeber', pressure_sensor_pneu: 'Drucksensor', flow_sensor_pneu: 'Durchflusssensor' };
+                    const quellen = [1, 2].map(i => {
+                        const v = sv['K' + i] || '';
+                        const o = v && typeof factoryObjects !== 'undefined' ? factoryObjects.find(x => x && x.linkedVar === v && namen[x.type]) : null;
+                        return { v, name: o ? namen[o.type] : `Kanal ${i}` };
+                    });
+                    drawAnaGeberPanel(svg, b.x, b.y, b.idx, quellen, pos);
+                } else if (b.type === 'ana_komp') {
+                    const kanaele = ['A', 'B'].map(ab => {
+                        const v = _fbAnaQuelle(`${b.prefix}_${ab}_E`);
+                        return { v, zps: [1, 2].map(j => {
+                            const n = ab + j, aus = sv[n] || '', cfg = _fbKompCfg(b, n), w = _fbKompWerte(v, cfg);
+                            return { id: aus ? 'ZP_' + aus : null, aus, args: [v, String(w.w), String(w.h)], richtung: -1,
+                                fbSetzen: (art, dV) => {
+                                    if (art === 'S') cfg.s = Math.max(-10, Math.min(10, Math.round((cfg.s + dV) * 100) / 100));
+                                    else cfg.h = Math.max(0, Math.min(5, Math.round((cfg.h + dV) * 100) / 100));
+                                    const w2 = _fbKompWerte(v, cfg);
+                                    if (v) codeZeile(aus, `ZWEIPUNKT(${v}, ${w2.w}, ${w2.h}, KUEHLEN)`);
+                                    _fbSave(); _fbRerender();
+                                } };
+                        }) };
+                    });
+                    drawAnaKomparatorPanel(svg, b.x, b.y, b.idx, kanaele, pos);
+                } else if (b.type === 'ana_pid') {
+                    const c = _fbPidCfg(b), y = sv.Y || '';
+                    const w = _fbAnaQuelle(`${b.prefix}_w_P`), x = _fbAnaQuelle(`${b.prefix}_x_P`);
+                    const pid = { id: 'PID_' + (y || b.prefix), aus: y, args: [w, x, String(c.kp), String(c.tn), String(c.tv)], richtung: null,
+                        fbSetzen: (KP, KI, KD) => {
+                            b.pid = { kp: KP, tn: KI > 0 ? KP / KI : 0, tv: KD > 0 && KP > 0 ? KD / KP : 0 };
+                            const g = v => +(+v).toPrecision(4);
+                            if (w && x) codeZeile(y, `PID(${w}, ${x}, ${g(b.pid.kp)}, ${g(b.pid.tn)}, ${g(b.pid.tv)})`);
+                            _fbSave(); _fbRerender();
+                            return true;
+                        } };
+                    drawAnaPidPanel(svg, b.x, b.y, b.idx, pid, pos);
+                }
             }
             // ---- Renderer: echte Board-Drawer + Overlay (Kabel/×/✓) ----
             function _renderFestoFreeBuild() {
@@ -65147,6 +65241,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     el('text', { x:svgW/2, y:H/2, 'text-anchor':'middle', 'font-size':15, fill:'#90a4ae' }, svg).textContent = 'Panel „Freier Aufbau“ → „Modul hinzufügen" — echte FESTO-Boards platzieren, dann Buchsen anklicken zum Verdrahten.';
                     svg.onclick = _fbOnSvgClick; return;
                 }
+                _anaLive = [];
                 // 1) Boards über die vorhandenen Drawer zeichnen (empty assignments → „frei")
                 FB.boards.forEach(b => {
                     const asg = {}; Object.keys(b.slotVars || {}).forEach(k => { if (/^S\d+$/.test(k) && b.slotVars[k]) asg[`${b.prefix}_${k}`] = b.slotVars[k]; });
@@ -65157,8 +65252,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         else if (b.type === 'sensor') drawSensorPanel(svg, b.x, b.y, b.idx, b.sensorType || 'inductive', asg);
                         else if (b.type === 'magnet') drawMagnetventilPanel(svg, b.x, b.y, b.idx, asg);
                         else if (b.type === 'zeitrelais') drawZeitrelaisPanel(svg, b.x, b.y, b.idx, asg, {});
+                        else if (/^ana_/.test(b.type)) _fbDrawAnalog(svg, b);
                     } catch(e) { console.warn('FB board draw', b.type, e); }
                 });
+                window._festoAnaLive = _anaLive;
                 // 2) absolute Sockel-Positionen aus dem DOM (Transform-Kette summieren)
                 FB._sockPos = {};
                 svg.querySelectorAll('[data-festo-socket]').forEach(elm => {
@@ -65409,6 +65506,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!b.slotVars[e.varKey]) {
                     const used = _fbAllVars(); const pfx = _fbVarPfx(e.cedType);
                     let n = 1, sug; do { sug = pfx + n; n++; } while (used.has(sug.toUpperCase()));
+                    // Analoggeber: freie Analogvariable aus der Anlage vorschlagen
+                    if (e.cedType === 'ana_geber' && typeof factoryObjects !== 'undefined') {
+                        const frei = factoryObjects.find(o => o && ['analog_sensor', 'setpoint_pot', 'pressure_sensor_pneu', 'flow_sensor_pneu'].includes(o.type) && o.linkedVar && !used.has(o.linkedVar.toUpperCase()));
+                        if (frei) sug = frei.linkedVar;
+                    }
                     const inp = (!still && typeof window.prompt === 'function') ? window.prompt('Variablenname für dieses Bauteil:', sug) : sug;
                     if (inp && inp.trim()) b.slotVars[e.varKey] = inp.trim().replace(/\s+/g, '_');
                 }
@@ -65447,7 +65549,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     _fbBoardModel(b).elems.forEach(e => {
                         // Element nur emittieren, wenn wenigstens EIN Terminal verkabelt ist.
                         if (!Object.keys(e.terms).some(k => wired.has(k))) return;
-                        components.push({ id: b.id + '_' + e.id, type: e.cedType, x:0, y:0, varName: b.slotVars[e.varKey] || '' });
+                        if (/^ana_/.test(e.cedType)) return;
+                        const comp = { id: b.id + '_' + e.id, type: e.cedType, x:0, y:0, varName: b.slotVars[e.varKey] || '' };
+                        if (e.komp) {
+                            const v = _fbAnaQuelle(`${b.prefix}_${e.komp[0]}_E`), w = _fbKompWerte(v, _fbKompCfg(b, e.komp));
+                            Object.assign(comp, { kompIn: v, kompA: String(w.w), kompB: String(w.h), kompRicht: 'KUEHLEN' });
+                        }
+                        components.push(comp);
                     });
                 });
                 FB.cables.forEach(c => { const from = _fbKeyToCed(c.a), to = _fbKeyToCed(c.b); if (from && to) wires.push({ id:c.id, from, to }); });
@@ -65509,6 +65617,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         else if (!outToMinus) issues.push(`${e.varName}: Rückleitung zum 0V-Bus fehlt (Verbraucher → 0V)`);
                     });
                 });
+                // Analogkarten: Eingänge brauchen Signal und Analogmasse
+                const masseDa = (k) => FB.cables.some(c => c.a === k || c.b === k);
+                FB.boards.forEach(b => {
+                    if (b.type === 'ana_komp') {
+                        FB_KOMP_NAMEN.forEach(n => {
+                            const v = (b.slotVars || {})[n];
+                            if (!v || !['11', '12', '14'].some(p => wired.has(`${b.prefix}_${n}_${p}`))) return;
+                            if (!_fbAnaQuelle(`${b.prefix}_${n[0]}_E`)) issues.push(`${v}: IN ${n[0]} der Komparatorkarte ist mit keinem Analogausgang verbunden`);
+                            else if (!masseDa(`${b.prefix}_${n[0]}_M`)) issues.push(`${v}: Analogmasse an IN ${n[0]} fehlt (⊥ des Gebers → weiße Buchse)`);
+                        });
+                    } else if (b.type === 'ana_pid' && (b.slotVars || {}).Y) {
+                        [['w', 'W'], ['x', 'X']].forEach(([k, n]) => {
+                            if (!_fbAnaQuelle(`${b.prefix}_${k}_P`)) issues.push(`${b.slotVars.Y}: Eingang ${n} der PID-Karte ist nicht verbunden`);
+                            else if (!masseDa(`${b.prefix}_${k}_N`)) issues.push(`${b.slotVars.Y}: Analogmasse an ${n} − fehlt`);
+                        });
+                    }
+                });
                 return issues;
             }
             // ---- Kurzschluss-Erkennung: Pfad +24V → 0V OHNE Verbraucher.
@@ -65516,7 +65641,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // überbrückt, aber KEINE Verbraucher/Spulen/Sensoren (die sind die Last).
             // Erreicht +24V so den 0V-Bus, liegt ein Kurzschluss vor (bei geschlossenem
             // Kontakt bzw. sofort bei direkter Brücke). Liefert { shorted, cables }.
-            const _CONTACT_CED = new Set(['taster','taster_nc','schalter','schalter_nc','relay_no','relay_nc','nothalt','key_switch']);
+            const _CONTACT_CED = new Set(['taster','taster_nc','schalter','schalter_nc','relay_no','relay_nc','nothalt','key_switch','komparator','komparator_nc']);
             function _fbShorts() {
                 const rn = (k) => { const r = _fbSocketRail(k); return r === 'plus' ? '__P__' : (r === 'minus' ? '__M__' : k); };
                 // Feste Brücken (Kontakt in↔out) + interne Massen einmal sammeln.
@@ -65735,7 +65860,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._fbGenerate = function() {
                 if (!window.cedGenerateCode || !window._cedState) { FB.status = 'Compiler nicht verfügbar.'; _fbUpdateStatusUI(); return; }
                 const net = _fbToCedNetlist();
-                if (!net.components.some(c => _COIL_CED.has(c.type))) { FB.status = '⚠ Kein Ausgang (LED/Lampe/Ventil/Relais/Zeitrelais) verdrahtet.'; _fbUpdateStatusUI(); return; }
+                // PID-Karten: Zeile Y := PID(W, X, KP, TN, TV) — W und X kommen über
+                // die Kabel von den Analogausgängen
+                const pidZeilen = [];
+                FB.boards.filter(b => b.type === 'ana_pid' && (b.slotVars || {}).Y).forEach(b => {
+                    const w = _fbAnaQuelle(`${b.prefix}_w_P`), x = _fbAnaQuelle(`${b.prefix}_x_P`), c = _fbPidCfg(b);
+                    if (w && x) pidZeilen.push(`${b.slotVars.Y} := PID(${w}, ${x}, ${+c.kp.toPrecision(4)}, ${+(+c.tn).toPrecision(4)}, ${+(+c.tv).toPrecision(4)})`);
+                });
+                const hatSpule = net.components.some(c => _COIL_CED.has(c.type));
+                if (!hatSpule && !pidZeilen.length) { FB.status = '⚠ Kein Ausgang (LED/Lampe/Ventil/Relais/Zeitrelais/PID-Karte) verdrahtet.'; _fbUpdateStatusUI(); return; }
                 const ST = window._cedState;
                 const prev = { components: ST.components, wires: ST.wires };
                 let code = '';
@@ -65743,10 +65876,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // in #code schreiben — wir schreiben nach der Timer-Umschreibung selbst.
                 // _cedNoProxy: physisch platzierte Relais NICHT wegoptimieren.
                 window._cedNoProxy = true;
-                try { ST.components = net.components; ST.wires = net.wires; code = window.cedGenerateCode(true) || ''; }
+                try { ST.components = net.components; ST.wires = net.wires; code = hatSpule ? (window.cedGenerateCode(true) || '') : ''; }
                 catch (e) { console.warn('FB-Codegen:', e); FB.status = '⚠ Codegen-Fehler.'; }
                 finally { ST.components = prev.components; ST.wires = prev.wires; window._cedNoProxy = false; }
                 code = _fbApplyTimers(code);
+                if (pidZeilen.length) code = '// Analog: PID-Reglerkarte\n' + pidZeilen.join('\n') + '\n\n' + code;
                 // Freier Aufbau bildet UND/ODER als Reihen-/Parallel-Kontakte ab —
                 // das entspricht nur dem Direkt-Modus. „Klassisch" erfände je Gatter
                 // ein Hilfsrelais, das auf dem realen Tisch nicht existiert. Daher
@@ -66069,7 +66203,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const punkte = n => {
                     const { zp } = zpVon(n);
                     const t = zp && window.simTimers ? window.simTimers[zp.id] : null;
-                    if (t && typeof t.ein === 'number') return [t.ein, t.aus];
+                    if (t && typeof t.ein === 'number' && !(zp && _anaIstZahl(zp.args[1]) && _anaIstZahl(zp.args[2]))) return [t.ein, t.aus];
                     if (!zp) return null;
                     if (zp.vgl) { const k = _anaArg(zp.args[1] || '0'); return [k, k]; }
                     const a = _anaArg(zp.args[1] || '0'), b = _anaArg(zp.args[2] || '0');
@@ -66155,6 +66289,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (!/^[SH] /.test(w)) { hinweis('Wahlschalter erst auf S (Schaltpunkt) oder H (Hysterese) stellen.'); return; }
                     const n = w.slice(2), { k, zp } = zpVon(n);
                     if (!zp) { hinweis(`Komparator ${n} ist nicht belegt.`); return; }
+                    if (zp.fbSetzen) { zp.fbSetzen(w[0], dir * (gross ? 1 : 0.1)); return; }
                     const b = ber(k), span = (b.max - b.min) || 1;
                     const du = dir * (gross ? 1 : 0.1) * span / 10;
                     let fehler = null;
@@ -66210,7 +66345,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _anaText(g, 22, uy, 'Schaltet ein bei Schaltpunkt + ½ Hysterese, aus bei Schaltpunkt − ½ Hysterese', { 'font-size': 7 });
                 ['A1', 'A2', 'B1', 'B2'].forEach((n, i) => {
                     const t = _anaText(g, 22 + (i % 2) * 200, uy + 14 + Math.floor(i / 2) * 12, '', { 'font-size': 7.5, 'font-family': 'Consolas, monospace', fill: PALETTE.slotLabel });
-                    _anaLive.push(() => { const { zp } = zpVon(n); const s = sollV(n), h = hystV(n); t.textContent = zp ? `${n} ${zp.aus}${zp.vgl ? ' (' + zp.vgl + ')' : ''}: S ${_anaZahl(s, 2)} V · H ${_anaZahl(h, 2)} V` : `${n} frei`; });
+                    _anaLive.push(() => { const { zp } = zpVon(n); const s = sollV(n), h = hystV(n); t.textContent = zp && zp.aus ? `${n} ${zp.aus}${zp.vgl ? ' (' + zp.vgl + ')' : ''}: S ${_anaZahl(s, 2)} V · H ${_anaZahl(h, 2)} V` : `${n} frei`; });
                 });
                 _anaLive.slice(liveAb).forEach(f => { try { f(); } catch (e) {} });
                 kanaele.forEach((kanal, k) => {
@@ -66240,7 +66375,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const wArg = pid.args[0] || '', xArg = pid.args[1] || '';
                 const ber = _anaIstVar(xArg) ? _anaBer(xArg) : { min: 0, max: 100 };
                 const t = () => (window.simTimers || {})[pid.id] || {};
-                const wert = (key, i) => { const tt = t(); return typeof tt[key] === 'number' ? tt[key] : _anaArg(pid.args[i] || '0'); };
+                const wert = (key, i) => { const tt = t(); if (i >= 2 && _anaIstZahl(pid.args[i])) return _anaZ(pid.args[i]); return typeof tt[key] === 'number' ? tt[key] : _anaArg(pid.args[i] || '0'); };
                 const ein = () => (window._reglerEin || {})[pid.id] || {};
                 const kp = () => { const e = ein(); return typeof e.kp === 'number' ? e.kp : wert('kp', 2); };
                 const tn = () => { const e = ein(); return typeof e.tn === 'number' ? e.tn : wert('tn', 3); };
@@ -66324,6 +66459,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const setzeK = neu => {
                     const [KP, KI, KD] = neu;
                     if (!(KP > 0) && (KI > 0 || KD > 0)) { hinweis('P kann nicht aus sein, solange I oder D an ist (VALIS rechnet KI = KP / TN, KD = KP · TV).'); return false; }
+                    if (pid.fbSetzen) return pid.fbSetzen(KP, KI, KD);
                     let fehler = null;
                     const ok = _anaZeileAendern(pid.aus, body => {
                         const a = _anaAufruf(body);
@@ -74245,7 +74381,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
     stromkreise: ['split circuits'], zyl_einfach: ['single'], zyl_doppel: ['double', 'doppel'], block_metall: ['metal'], block_kunststoff: ['plastic', 'kunststoff'],
     arith: ['arithmetik'], alssvg: ['svg'], tp: ['tp'], ton: ['ton'], tof: ['tof'] };
   // Eindeutige Beschriftungen gewinnen vor der Emoji-Zuordnung
-  const TEXT = [['stromfluss', 'elektro', '⚡'], ['freier aufbau', 'plugins', '🧩'], ['live-sync', 'aktualisieren', '🔄'], ['modul hinzufügen', 'neu', '➕'], ['logikplan (fbs)', 'logikplan'], ['logic diagram (fbd)', 'logikplan'], ['schaltplan (iec)', 'schaltplan'], ['circuit diagram (iec)', 'schaltplan'],
+  const TEXT = [['analoggeber', 'messumformer', '📈'], ['komparatorkarte', 'regler', '🎛'], ['pid-reglerkarte', 'reglerfenster', '🎛'], ['stromfluss', 'elektro', '⚡'], ['freier aufbau', 'plugins', '🧩'], ['live-sync', 'aktualisieren', '🔄'], ['modul hinzufügen', 'neu', '➕'], ['logikplan (fbs)', 'logikplan'], ['logic diagram (fbd)', 'logikplan'], ['schaltplan (iec)', 'schaltplan'], ['circuit diagram (iec)', 'schaltplan'],
     ['eingangs- / ausgangskonfiguration', 'eakonfig'], ['input / output', 'eakonfig'], ['st-code', 'codeeditor'], ['2d-anlage', 'fabrik'], ['lektionen', 'lektionen'], ['tutorials', 'lektionen'], ['maxi-szenarien', 'lang'], ['maxi', 'lang'],
     ['klassisch', 'wasser', '💧'], ['anzeige (zeiger', 'anzeige', '📟'], ['7-seg', 'siebenseg', '📟'], ['regelstrecke', 'regelstrecke', '📐']];
   // Hier passt das einzige Icon zum Emoji nicht: Emoji bleibt stehen

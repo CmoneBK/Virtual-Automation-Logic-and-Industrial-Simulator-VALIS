@@ -66276,17 +66276,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 el('path', { d: `M ${kx - 20} ${ky - 26} A 30 30 0 0 1 ${kx + 20} ${ky - 26}`, fill: 'none', stroke: '#37474f', 'stroke-width': 1.2 }, g);
                 _anaText(g, kx - 26, ky - 22, '−', { 'text-anchor': 'middle', 'font-size': 10 });
                 _anaText(g, kx + 26, ky - 22, '+', { 'text-anchor': 'middle', 'font-size': 10 });
-                el('circle', { cx: kx, cy: ky, r: 16, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, g);
-                el('circle', { cx: kx, cy: ky, r: 12, fill: '#90a4ae' }, g);
-                const kz = el('circle', { cx: kx, cy: ky - 9, r: 2.5, fill: '#fff' }, g);
+                const kg = el('g', {}, g);
+                el('circle', { cx: kx, cy: ky, r: 16, fill: '#78909c', stroke: '#37474f', 'stroke-width': 1.5 }, kg);
+                el('circle', { cx: kx, cy: ky, r: 12, fill: '#90a4ae' }, kg);
+                const kz = el('circle', { cx: kx, cy: ky - 9, r: 2.5, fill: '#fff' }, kg);
+                // Gesperrt (ausgegraut), wenn der Knopf in dieser Stellung nichts verstellt
+                const knopfSperre = () => {
+                    const w = wahl();
+                    if (!/^[SH] /.test(w)) return 'Wahlschalter erst auf S (Schaltpunkt) oder H (Hysterese) stellen.';
+                    const n = w.slice(2), { zp } = zpVon(n);
+                    if (!zp) return `Komparator ${n} ist nicht belegt.`;
+                    if (zp.fbSetzen) return null;
+                    if (zp.vgl && w[0] === 'H') return 'Ein Vergleich hat keine Hysterese.';
+                    if (!zp.vgl && !(_anaIstZahl(zp.args[1]) && _anaIstZahl(zp.args[2]))) return 'Schaltwerte sind Variablen – im Code ändern.';
+                    return null;
+                };
                 _anaLive.push(() => { const a = Math.max(0, Math.min(1, anzeige()[2])); const w = (-135 + 270 * a) * Math.PI / 180; kz.setAttribute('cx', kx + 9 * Math.sin(w)); kz.setAttribute('cy', ky - 9 * Math.cos(w)); });
                 _anaText(g, kx, ky + 32, 'Einstellknopf', { 'text-anchor': 'middle', 'font-size': 7 });
                 const hinweis = _anaHinweis(g, 22, 438);
                 // Einstellknopf: verstellt Schaltpunkt (S) bzw. Hysterese (H) des am
                 // Wahlschalter gewählten Komparators und schreibt ihn in den Code
-                _anaDrehbar(g, kx, ky, 20, 'Einstellknopf', (dir, gross) => {
+                const kHit = _anaDrehbar(g, kx, ky, 20, 'Einstellknopf', (dir, gross) => {
                     const w = wahl();
-                    if (!/^[SH] /.test(w)) { hinweis('Wahlschalter erst auf S (Schaltpunkt) oder H (Hysterese) stellen.'); return; }
+                    const sperre = knopfSperre();
+                    if (sperre) { hinweis(sperre); return; }
                     const n = w.slice(2), { k, zp } = zpVon(n);
                     if (!zp) { hinweis(`Komparator ${n} ist nicht belegt.`); return; }
                     if (zp.fbSetzen) { zp.fbSetzen(w[0], dir * (gross ? 1 : 0.1)); return; }
@@ -66319,6 +66332,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     else if (!ok) hinweis('Codezeile nicht gefunden.');
                     _anaNeuZeichnen();
                 });
+                const kTitel = kHit.querySelector('title').textContent;
+                const kSetzen = () => {
+                    const sp = knopfSperre();
+                    kg.setAttribute('opacity', sp ? 0.35 : 1);
+                    kHit.style.cursor = sp ? 'not-allowed' : 'pointer';
+                    kHit.setAttribute('data-gesperrt', sp ? '1' : '0');
+                    kHit.querySelector('title').textContent = sp ? 'Einstellknopf gesperrt — ' + sp : kTitel;
+                };
+                kSetzen(); _anaLive.push(kSetzen);
                 // Wahlschalter (Feld B): Klick dreht eine Stellung weiter
                 const wx = 150, wy = 304;
                 const sg = el('g', { 'data-komp-wahl': idx, style: 'cursor:pointer' }, g);

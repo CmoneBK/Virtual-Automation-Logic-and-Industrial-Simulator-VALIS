@@ -9359,6 +9359,74 @@ You must output exactly this JSON format. The logic code goes as a single string
         }
         window._matchSpeicherKurzform = _matchSpeicherKurzform;
         window._expandSpeicherKurzform = _expandSpeicherKurzform;
+        // Umwandeln zwischen Langform (S1_SR / R1_SR / X := Q1_SR) und Kurzform
+        // (X := SR(…, …)) für das Rechtsklickmenü im Code-Editor. Reine Textfunktionen.
+        function _spGeteilt(zeile) { const i = String(zeile).indexOf('//'); return i < 0 ? [String(zeile), ''] : [String(zeile).slice(0, i), String(zeile).slice(i)]; }
+        // Findet das Speicherglied (Langform), zu dem Zeile `idx` gehört.
+        function _speicherLangformFinden(text, idx) {
+            const zeilen = String(text).split('\n');
+            const code = _spGeteilt(zeilen[idx] || '')[0];
+            let m = code.match(/^\s*[SR](\d+)(_SR|_RS)?\s*:=/i) || code.match(/\bQ(\d+)(_SR|_RS)?\b/i);
+            if (!m) return null;
+            const n = m[1], typ = (m[2] && m[2].toUpperCase() === '_RS') ? 'RS' : 'SR';
+            const suf = typ === 'RS' ? '_RS' : '(?:_SR)?';
+            const reS = new RegExp('^\\s*S' + n + suf + '\\s*:=\\s*(.*)$', 'i');
+            const reR = new RegExp('^\\s*R' + n + suf + '\\s*:=\\s*(.*)$', 'i');
+            const reQ = new RegExp('\\bQ' + n + suf + '(?![A-Za-z0-9_])', 'gi');
+            const reAlias = new RegExp('^\\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\\s*:=\\s*Q' + n + suf + '\\s*$', 'i');
+            let sZ = [], rZ = [], alias = null;
+            zeilen.forEach((z, i) => {
+                const c = _spGeteilt(z)[0];
+                let t;
+                if ((t = c.match(reS))) sZ.push({ i, ausdruck: t[1].trim() });
+                else if ((t = c.match(reR))) rZ.push({ i, ausdruck: t[1].trim() });
+                else if (!alias && (t = c.match(reAlias))) alias = { i, name: t[1] };
+            });
+            if (sZ.length !== 1 || rZ.length !== 1 || !sZ[0].ausdruck || !rZ[0].ausdruck) return null;
+            return { n, typ, s: sZ[0], r: rZ[0], alias, reQ, anzeige: typ === 'RS' ? `S${n}_RS / R${n}_RS / Q${n}_RS` : `S${n}_SR / R${n}_SR / Q${n}_SR` };
+        }
+        function _speicherZuKurzform(text, idx, name) {
+            const f = _speicherLangformFinden(text, idx);
+            if (!f) return null;
+            const zeilen = String(text).split('\n');
+            name = name || (f.alias && f.alias.name);
+            if (!name) return null;
+            const kommentare = [f.s.i, f.r.i].concat(f.alias ? [f.alias.i] : []).map(i => _spGeteilt(zeilen[i])[1].replace(/^\/\/\s*/, '').trim()).filter(Boolean);
+            const ersetzeQ = (z) => { const [c, k] = _spGeteilt(z); return c.replace(f.reQ, name) + k; };
+            const setz = f.s.ausdruck.replace(f.reQ, name), rueck = f.r.ausdruck.replace(f.reQ, name);
+            const einzug = (zeilen[Math.min(f.s.i, f.r.i)].match(/^\s*/) || [''])[0];
+            const neu = einzug + name + ' := ' + f.typ + '(' + setz + ', ' + rueck + ')' + (kommentare.length ? '  // ' + kommentare.join(' · ') : '');
+            const weg = new Set([f.s.i, f.r.i].concat(f.alias ? [f.alias.i] : []));
+            const ziel = Math.min(f.s.i, f.r.i);
+            const out = [];
+            let leerWeg = false;
+            zeilen.forEach((z, i) => {
+                if (i === ziel) { out.push(neu); return; }
+                if (weg.has(i)) { leerWeg = out.length > 0 && out[out.length - 1].trim() === ''; return; }
+                // Fällt eine Zeile zwischen zwei Leerzeilen weg, bleibt nur eine Leerzeile
+                if (leerWeg && z.trim() === '') { leerWeg = false; return; }
+                leerWeg = false;
+                out.push(ersetzeQ(z));
+            });
+            return out.join('\n');
+        }
+        function _speicherZuLangform(text, idx) {
+            const zeilen = String(text).split('\n');
+            const h = _matchSpeicherKurzform(zeilen[idx]);
+            if (!h) return null;
+            const belegt = new Set();
+            zeilen.forEach(l => (_spGeteilt(l)[0].match(/\b[SRQ](\d+)(?:_(?:RS|SR))?\b/gi) || []).forEach(t => belegt.add(parseInt(t.slice(1), 10))));
+            let n = 1; while (belegt.has(n)) n++;
+            const suf = h.type === 'RS' ? '_RS' : '_SR';
+            const [, kom] = _spGeteilt(zeilen[idx]);
+            const einzug = (zeilen[idx].match(/^\s*/) || [''])[0];
+            const neu = [einzug + 'S' + n + suf + ' := ' + h.setExpr + (kom ? '  ' + kom : ''), einzug + 'R' + n + suf + ' := ' + h.resetExpr, einzug + h.lhs + ' := Q' + n + suf];
+            zeilen.splice(idx, 1, ...neu);
+            return zeilen.join('\n');
+        }
+        window._speicherLangformFinden = _speicherLangformFinden;
+        window._speicherZuKurzform = _speicherZuKurzform;
+        window._speicherZuLangform = _speicherZuLangform;
         // Name → Speicherbaustein (`SR_2`/`RS_2`) aus allen Alias-Zeilen `NAME := Q<n>`,
         // deren Nummer auch eine S- oder R-Zeile hat (Kurzform, DSL oder von Hand).
         function _speicherBloecke(text) {
@@ -20614,6 +20682,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 html += `<div class="ctx-item" data-act="hand-rs-to-sk" data-name="${recognizedHand.chain.name}">
                             <span>SR-Kette „${recognizedHand.chain.name}" → in SCHRITTKETTE-Form umwandeln</span></div>`;
             }
+            // Speicherglied: Langform (S1_SR / R1_SR / Q1_SR) ⇄ Kurzform (X := SR(…, …))
+            {
+                const _zeile = text.split('\n')[cursorLine] || '';
+                const _kurz = window._matchSpeicherKurzform && window._matchSpeicherKurzform(_zeile);
+                const _lang = !_kurz && window._speicherLangformFinden && window._speicherLangformFinden(text, cursorLine);
+                if (_kurz) {
+                    const _suf = _kurz.type === 'RS' ? '_RS' : '_SR';
+                    html += `<div class="ctx-sep"></div>`;
+                    html += `<div class="ctx-item" data-act="sp-lang" data-line="${cursorLine}">
+                                <span>${_kurz.type}-Glied „${_kurz.lhs}" → Langform (S…${_suf}, R…${_suf}, Q…${_suf})</span></div>`;
+                } else if (_lang) {
+                    html += `<div class="ctx-sep"></div>`;
+                    html += `<div class="ctx-item" data-act="sp-kurz" data-line="${cursorLine}">
+                                <span>${_lang.typ}-Glied ${_lang.anzeige} → Kurzform ${_lang.alias ? _lang.alias.name : 'NAME'} := ${_lang.typ}(…, …)</span></div>`;
+                }
+            }
             html += `<div class="ctx-sep"></div>`;
             html += `<div class="ctx-section">Snippet einfügen</div>`;
             // PRO-Gating: Schrittketten-Vorlage rausfiltern, wenn Pro-Modus aus.
@@ -20791,6 +20875,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             } else if (act === 'rename') {
                 const id = item.getAttribute('data-id');
                 if (id && typeof window._renameVariable === 'function') window._renameVariable(id);
+            } else if (act === 'sp-lang' || act === 'sp-kurz') {
+                const zeile = parseInt(item.getAttribute('data-line'), 10);
+                let neu = null;
+                if (act === 'sp-lang') neu = window._speicherZuLangform(ta.value, zeile);
+                else {
+                    const f = window._speicherLangformFinden(ta.value, zeile);
+                    let name = f && f.alias ? f.alias.name : null;
+                    if (f && !name) {
+                        const ein = prompt('Name für den Ausgang des ' + f.typ + '-Glieds (statt Q' + f.n + '):', 'SPEICHER_' + f.n);
+                        if (ein === null) return;
+                        name = ein.trim().toUpperCase();
+                        if (!/^[A-Z_ÄÖÜ][A-Z0-9_ÄÖÜ]*$/.test(name)) { alert('Ungültiger Name. Erlaubt: Buchstaben, Ziffern, Unterstrich.'); return; }
+                    }
+                    neu = window._speicherZuKurzform(ta.value, zeile, name);
+                }
+                if (neu != null) {
+                    if (typeof window._setCodeUndoable === 'function') window._setCodeUndoable(neu);
+                    else { ta.value = neu; ta.dispatchEvent(new Event('input')); }
+                }
             } else if (act === 'sk-to-rs') {
                 const name = item.getAttribute('data-name');
                 if (name && typeof window._toggleSchrittketteToSR === 'function') {

@@ -30174,26 +30174,42 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const availH = visBottom - visTop - 8;
             const availW = visRight  - visLeft;
             ctxMenu.classList.remove('ctx-multicol');
-            ctxMenu.querySelectorAll('.ctx-col').forEach(c => c.remove());
+            // Alte Spalten auflösen (Kinder zurück in das Menü), sonst gehen Einträge verloren
+            ctxMenu.querySelectorAll('.ctx-col').forEach(c => { while (c.firstChild) ctxMenu.insertBefore(c.firstChild, c); c.remove(); });
+            ctxMenu.style.maxHeight = ''; ctxMenu.style.overflowY = '';
             ctxMenu.style.left = (x - wrapRect.left) + 'px';
             ctxMenu.style.top  = (y - wrapRect.top)  + 'px';
             ctxMenu.style.display = 'block';
             requestAnimationFrame(() => {
                 const mr = ctxMenu.getBoundingClientRect();
                 if (mr.height > availH) {
-                    // Spalten-Umbau: alle direkten Kinder gleichmäßig auf 2 Spalten verteilen
-                    const children = Array.from(ctxMenu.children);
-                    const col1 = document.createElement('div'); col1.className = 'ctx-col';
-                    const col2 = document.createElement('div'); col2.className = 'ctx-col';
-                    const half = Math.ceil(children.length / 2);
-                    children.forEach((c, i) => { ctxMenu.removeChild(c); (i < half ? col1 : col2).appendChild(c); });
-                    ctxMenu.appendChild(col1); ctxMenu.appendChild(col2);
+                    // Spalten-Umbau: Kinder gleichmäßig auf 2, bei Bedarf 3 oder 4 Spalten verteilen
+                    const children = Array.from(ctxMenu.children).filter(c => !c.classList.contains('ctx-drag-handle'));
+                    const verteilen = (n) => {
+                        ctxMenu.querySelectorAll('.ctx-col').forEach(c => c.remove());
+                        const cols = []; for (let i = 0; i < n; i++) { const c = document.createElement('div'); c.className = 'ctx-col'; cols.push(c); }
+                        const per = Math.ceil(children.length / n);
+                        children.forEach((c, i) => cols[Math.min(n - 1, Math.floor(i / per))].appendChild(c));
+                        cols.forEach(c => ctxMenu.appendChild(c));
+                    };
                     ctxMenu.classList.add('ctx-multicol');
                     ctxMenu.style.display = 'flex'; // Inline-Style überschreibt sonst das CSS
+                    let n = 2; verteilen(n);
+                    while (n < 4 && ctxMenu.getBoundingClientRect().height > availH && ctxMenu.getBoundingClientRect().width * (n + 1) / n <= availW) { n++; verteilen(n); }
                 }
+                // Passt es immer noch nicht: auf den sichtbaren Bereich begrenzen und scrollen
+                if (ctxMenu.getBoundingClientRect().height > availH) {
+                    ctxMenu.style.maxHeight = Math.max(120, availH) + 'px';
+                    ctxMenu.style.overflowY = 'auto';
+                }
+                // In den sichtbaren Bereich schieben (oben/links nicht über den Rand hinaus)
                 const mr2 = ctxMenu.getBoundingClientRect();
-                if (mr2.right  > visRight)  ctxMenu.style.left = Math.max(0, parseFloat(ctxMenu.style.left) - (mr2.right  - visRight))  + 'px';
-                if (mr2.bottom > visBottom) ctxMenu.style.top  = Math.max(0, parseFloat(ctxMenu.style.top)  - (mr2.bottom - visBottom)) + 'px';
+                const minL = visLeft - wrapRect.left, minT = visTop - wrapRect.top + 4;
+                let l = parseFloat(ctxMenu.style.left), t = parseFloat(ctxMenu.style.top);
+                if (mr2.right  > visRight)  l -= (mr2.right  - visRight);
+                if (mr2.bottom > visBottom - 4) t -= (mr2.bottom - (visBottom - 4));
+                ctxMenu.style.left = Math.max(minL, l) + 'px';
+                ctxMenu.style.top  = Math.max(minT, t) + 'px';
                 // Drag-Handle nach jedem Aufbau neu einfügen (ctxMenu.innerHTML='' löscht ihn)
                 if (!ctxMenu.querySelector('.ctx-drag-handle')) {
                     let _dh = document.createElement('div');

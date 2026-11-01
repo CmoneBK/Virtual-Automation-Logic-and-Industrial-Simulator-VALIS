@@ -40931,11 +40931,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].getFluidSolidCells) {
                     ComponentRegistry[obj.type].getFluidSolidCells(obj).forEach(([cx, cy]) => sandSolidGrid.add(cx + ',' + cy));
                 } else {
-                    // Generic fallback: rasterize bounding box at SAND_CELL resolution
-                    let x0 = Math.floor(obj.x / SAND_CELL), x1 = Math.floor((obj.x + obj.width - 1) / SAND_CELL);
-                    let y0 = Math.floor(obj.y / SAND_CELL), y1 = Math.floor((obj.y + (obj.height || obj.width) - 1) / SAND_CELL);
-                    for (let gx = x0; gx <= x1; gx++)
-                        for (let gy = y0; gy <= y1; gy++) sandSolidGrid.add(gx + ',' + gy);
+                    // Generic fallback at SAND_CELL resolution — mit Drehung (gedrehte Mauer
+                    // lag sonst ungedreht als waagerechter Boden im Sand)
+                    _rasterizeToSolidGrid(obj, SAND_CELL, sandSolidGrid);
                 }
             });
             _solidCS = FLUID_CELL;
@@ -40971,27 +40969,28 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             _pushSolidGridToSplash();
         }
 
-        function _rasterizeToSolidGrid(obj) {
+        function _rasterizeToSolidGrid(obj, CS = FLUID_CELL, grid = solidGrid) {
             let rot = (obj.rotation || 0) * Math.PI / 180;
             let hw = obj.width / 2, hh = (obj.height || obj.width) / 2;
             let ocx = obj.x + hw, ocy = obj.y + hh;
             let cos = Math.cos(rot), sin = Math.sin(rot);
             let ex = hw * Math.abs(cos) + hh * Math.abs(sin);
             let ey = hw * Math.abs(sin) + hh * Math.abs(cos);
-            let x0 = Math.floor((ocx - ex) / FLUID_CELL), x1 = Math.ceil((ocx + ex) / FLUID_CELL);
-            let y0 = Math.floor((ocy - ey) / FLUID_CELL), y1 = Math.ceil((ocy + ey) / FLUID_CELL);
+            let x0 = Math.floor((ocx - ex) / CS), x1 = Math.ceil((ocx + ex) / CS);
+            let y0 = Math.floor((ocy - ey) / CS), y1 = Math.ceil((ocy + ey) / CS);
             for (let gx = x0; gx <= x1; gx++) {
                 for (let gy = y0; gy <= y1; gy++) {
                     // Test all 4 corners of the cell to catch partially-overlapped cells
                     let hit = false;
-                    for (let cx = gx * FLUID_CELL; cx <= gx * FLUID_CELL + FLUID_CELL && !hit; cx += FLUID_CELL) {
-                        for (let cy = gy * FLUID_CELL; cy <= gy * FLUID_CELL + FLUID_CELL && !hit; cy += FLUID_CELL) {
+                    for (let cx = gx * CS; cx <= gx * CS + CS && !hit; cx += CS) {
+                        for (let cy = gy * CS; cy <= gy * CS + CS && !hit; cy += CS) {
                             let px = cx - ocx, py = cy - ocy;
                             let lx = px * cos + py * sin, ly = -px * sin + py * cos;
-                            if (Math.abs(lx) <= hw && Math.abs(ly) <= hh) hit = true;
+                            // Sand: streng (<), damit ungedrehte Objekte wie bisher genau ihre Box belegen
+                            if (grid === solidGrid ? (Math.abs(lx) <= hw && Math.abs(ly) <= hh) : (Math.abs(lx) < hw - 1e-6 && Math.abs(ly) < hh - 1e-6)) hit = true;
                         }
                     }
-                    if (hit) solidGrid.add(gx + ',' + gy);
+                    if (hit) grid.add(gx + ',' + gy);
                 }
             }
         }
@@ -55721,14 +55720,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     desc: 'Was ist ein Relais, und wofür baut man eines ein? Zwei Stränge nebeneinander an der Schaltwand — Steuerstrang und Laststrang — verbunden über das Relais. Mit den Kennziffern A1/A2 und 13/14.',
                     category: 'aufbau',
                     enforceEconMode: false,
-                    forceTypes: { 'START': 'taster', 'LAMPE': 'led', 'KF1': 'relais' },
+                    forceTypes: { 'START': 'taster', 'LAMPE': 'led', 'RELAIS': 'relais' },
                     onClose: _wallLessonOnClose,
-                    code: '// Lektion W2: Relais an der Schaltwand\n// Statt direkt zu schalten, treibt der Taster eine Relais-Spule.\n// Das Relais schaltet dann seinen eigenen Kontakt — und der erst\n// schaltet die LED. Aus 1 Strang werden 2.\n\n// Strang 1 (Steuerstrang): Taster erregt die Spule\nKF1 := START\n\n// Strang 2 (Laststrang): Relais-Kontakt schaltet die LED\nLAMPE := KF1\n',
+                    code: '// Lektion W2: Relais an der Schaltwand\n// Statt direkt zu schalten, treibt der Taster eine Relais-Spule.\n// Das Relais schaltet dann seinen eigenen Kontakt — und der erst\n// schaltet die LED. Aus 1 Strang werden 2.\n\n// Strang 1 (Steuerstrang): Taster erregt die Spule\nRELAIS := START\n\n// Strang 2 (Laststrang): Relais-Kontakt schaltet die LED\nLAMPE := RELAIS\n',
                     steps: [
                         {
                             target: '#editor-container', pos: 'right',
                             title: '📝 Zwei Zeilen, zwei Stränge',
-                            text: 'Zum ersten Mal hat unsere Steuerung <b>zwei Zuweisungen</b>:<br><br>• <code>KF1 := START</code> — der Taster treibt das Relais.<br>• <code>LAMPE := KF1</code> — das Relais treibt die LED.<br><br>📌 <b>Was du im Code sehen sollst:</b> Jede Zuweisung wird im Schaltplan zu <b>einem eigenen Strang</b>. Wir bekommen also gleich zwei nebeneinander stehende Strompfade an der Schaltwand. Beide arbeiten <i>gleichzeitig</i> — sobald der Taster gedrückt ist, läuft Strom durch beide.<br><br>🤔 <b>Sinn-Frage:</b> „Warum baue ich ein Relais ein, wenn der Taster doch direkt die LED schalten kann?" — die Antwort kommt im nächsten Schritt.'
+                            text: 'Zum ersten Mal hat unsere Steuerung <b>zwei Zuweisungen</b>:<br><br>• <code>RELAIS := START</code> — der Taster treibt das Relais.<br>• <code>LAMPE := RELAIS</code> — das Relais treibt die LED.<br><br>📌 <b>Was du im Code sehen sollst:</b> Jede Zuweisung wird im Schaltplan zu <b>einem eigenen Strang</b>. Wir bekommen also gleich zwei nebeneinander stehende Strompfade an der Schaltwand. Beide arbeiten <i>gleichzeitig</i> — sobald der Taster gedrückt ist, läuft Strom durch beide.<br><br>🤔 <b>Sinn-Frage:</b> „Warum baue ich ein Relais ein, wenn der Taster doch direkt die LED schalten kann?" — die Antwort kommt im nächsten Schritt.'
                         },
                         {
                             target: null, pos: 'center',

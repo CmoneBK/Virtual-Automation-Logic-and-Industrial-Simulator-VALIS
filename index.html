@@ -1576,6 +1576,9 @@
         .f2d-led { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #444; background: #222; z-index: 20; display: flex; justify-content: center; align-items: center; color: rgba(255,255,255,0.4); font-size: 8px; font-weight: bold; text-align: center; transition: all 0.1s; box-shadow: 2px 2px 5px rgba(0,0,0,0.4); }
         .f2d-control-active { transform: scale(0.95); border-color: #fff; }
         /* Bedienelemente als Frontansicht (Gehäuse, Ring, Knopf/Hebel/Pilz) */
+        .f2d-obj.f2d-spawner2 { background: transparent !important; border: none !important; box-shadow: none !important; }
+        .f2d-spawner2 > span { display: none !important; }
+        .f2d-spawner2 > svg.spsvg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; filter: drop-shadow(1px 2px 3px rgba(0,0,0,0.45)); }
         .f2d-sens2 { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
         .f2d-sens2 > svg.sens { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4)); }
         .f2d-sens2 .sens-led { fill: #5d4a1f; transition: fill 0.08s; }
@@ -32660,6 +32663,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         border: 2px solid rgba(255, 0, 0, 0.7); border-radius: 50%;
                         opacity: 0; pointer-events: none;
                     }
+                    .f2d-siren-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4)); }
+                    .f2d-siren-svg .f2d-siren-horn { width: auto; height: auto; border: none; position: static; }
                     .f2d-siren.active .f2d-siren-horn { animation: f2d-shake 0.1s infinite; }
                     .f2d-siren.active .f2d-siren-wave { animation: f2d-ping 1s infinite; }
                     @keyframes f2d-shake { 0% { transform: translateY(0); } 50% { transform: translateY(-2px); } 100% { transform: translateY(0); } }
@@ -32672,8 +32677,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.linkedVar = var1; obj.width = 40; obj.height = 40;
                     el.className = 'f2d-obj f2d-siren';
                     el.innerHTML = `
-                        <div class="f2d-siren-base"></div>
-                        <div class="f2d-siren-horn"></div>
+                        <svg class="f2d-siren-svg" viewBox="0 0 40 40" aria-hidden="true">
+                            <rect x="1" y="11" width="6" height="18" rx="1.2" fill="#424242" stroke="#212121" stroke-width=".8"/>
+                            <circle cx="4" cy="14" r=".9" fill="#9e9e9e"/><circle cx="4" cy="26" r=".9" fill="#9e9e9e"/>
+                            <g class="f2d-siren-horn">
+                                <rect x="7" y="14" width="9" height="12" rx="1.5" fill="#616161" stroke="#212121" stroke-width=".8"/>
+                                <path d="M16 15.5 L34 6 L34 34 L16 24.5 Z" fill="#e53935" stroke="#7f0000" stroke-width="1"/>
+                                <path d="M18 17 L31 10.5" stroke="#fff" stroke-opacity=".35" stroke-width="1.2" stroke-linecap="round"/>
+                                <ellipse cx="34" cy="20" rx="3" ry="14" fill="#b71c1c" stroke="#7f0000" stroke-width="1"/>
+                                <ellipse cx="34" cy="20" rx="1.4" ry="7" fill="#3e0000"/>
+                            </g>
+                        </svg>
                         <div class="f2d-siren-wave"></div>
                         <div class="f2d-siren-wave" style="animation-delay: 0.5s"></div>
                     `;
@@ -34395,9 +34409,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 obj.linkedVar = var1;
                 obj.fluidMat = obj.fluidMat || 'water'; // set by onLoadState or default
                 obj.useCollision = false;
-                el.className = 'f2d-obj f2d-spawner f2d-spawner-fluid';
+                el.className = 'f2d-obj f2d-spawner f2d-spawner-fluid f2d-spawner2';
                 let matLabel = { water: 'H₂O', oil: 'OIL', coolant: 'CLT', honey: 'HON' }[obj.fluidMat] || 'FLD';
-                el.innerHTML = `<span>SPAWN<br>${matLabel}</span><div style="font-size:16px;">💧</div>`;
+                el.innerHTML = `<span>SPAWN<br>${matLabel}</span>` + (window._spawnerSvg ? window._spawnerSvg('fl') : '');
+                el.style.setProperty('--fl', (window._FL_FARBE || {})[obj.fluidMat] || '#1e88e5');
                 let label = document.createElement('div'); label.className = 'f2d-label';
                 label.textContent = var1 ? `${var1} (${obj.interval}s)` : `Immer an (${obj.interval}s)`;
                 el.appendChild(label);
@@ -34424,6 +34439,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.fluidMat = sel.value;
                     let matLabel = { water: 'H₂O', oil: 'OIL', coolant: 'CLT', honey: 'HON' }[obj.fluidMat] || 'FLD';
                     let sp = obj.el.querySelector('span'); if (sp) sp.innerHTML = `SPAWN<br>${matLabel}`;
+                    obj.el.style.setProperty('--fl', (window._FL_FARBE || {})[obj.fluidMat] || '#1e88e5');
                     saveCallback();
                 };
                 matW.appendChild(sel); ctxMenu.appendChild(matW);
@@ -34433,6 +34449,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.fluidMat = savedData.fluidMat;
                     let matLabel = { water: 'H₂O', oil: 'OIL', coolant: 'CLT', honey: 'HON' }[obj.fluidMat] || 'FLD';
                     let sp = obj.el.querySelector('span'); if (sp) sp.innerHTML = `SPAWN<br>${matLabel}`;
+                    obj.el.style.setProperty('--fl', (window._FL_FARBE || {})[obj.fluidMat] || '#1e88e5');
                 }
             },
         },
@@ -34449,8 +34466,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 obj.linkedVar = var1 || null;
                 obj.fluidMat = 'sand';
                 obj.useCollision = false;
-                el.className = 'f2d-obj f2d-spawner f2d-spawner-sand';
-                el.innerHTML = `<span>SAND</span><div style="font-size:16px;">🏖️</div>`;
+                el.className = 'f2d-obj f2d-spawner f2d-spawner-sand f2d-spawner2';
+                el.innerHTML = `<span>SAND</span>` + (window._spawnerSvg ? window._spawnerSvg('sand') : '');
                 let label = document.createElement('div'); label.className = 'f2d-label';
                 label.textContent = var1 ? `${var1} (${obj.interval || 1}s)` : `Immer an (${obj.interval || 1}s)`;
                 el.appendChild(label);
@@ -38651,6 +38668,36 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Frontansicht der Bedienelemente (eigene Zeichnung): Taster mit Ring und
         // Druckknopf, rastender Schalter als Knebel 0/I, Not-Halt als roter Pilz
         // auf gelbem Schild. Farbe des Knopfs aus --bed (Farbwahl beim Anlegen).
+        // Zuführung (Magazin/Trichter, Draufsicht) für Werkstücke, Flüssigkeit und Sand.
+        // Größe bleibt 50×50; der alte Text bleibt als versteckter <span> erhalten.
+        function _spawnerSvg(art) {
+            const inhalt = {
+                fe: '<rect x="19" y="19" width="12" height="12" rx="1.5" fill="url(#spFe)" stroke="#455a64" stroke-width=".8"/><path d="M20.5 21h9" stroke="#fff" stroke-opacity=".5" stroke-width=".8"/>',
+                ku: '<rect x="19" y="19" width="12" height="12" rx="2.5" fill="#42a5f5" stroke="#1565c0" stroke-width=".8"/><path d="M21 21.5h8" stroke="#fff" stroke-opacity=".45" stroke-width=".9"/>',
+                fl: '<circle cx="25" cy="25" r="6.5" fill="var(--fl, #1e88e5)"/><path d="M22 23.5a3.5 3.5 0 0 1 3-2.3" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1"/>',
+                sand: '<g fill="#d7b46a">' + [[21,22],[25,21],[29,23],[22,27],[26,26],[29,28],[24,30],[27,30.5],[20.5,29.5],[23.5,24.5],[28,25]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.3"/>`).join('') + '</g>'
+            }[art] || '';
+            const tag = { fe: 'Fe', ku: 'Ku', fl: 'Fluid', sand: 'Sand' }[art];
+            return `<svg class="spsvg" viewBox="0 0 50 50" aria-hidden="true"><defs><linearGradient id="spFe" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#cfd8dc"/><stop offset="1" stop-color="#78909c"/></linearGradient></defs>`
+                + `<rect x="1" y="1" width="48" height="48" rx="4" fill="#546e7a" stroke="#263238" stroke-width="1.2"/>`
+                + `<path d="M6 6h38l-10 10H16z" fill="#78909c"/><path d="M44 6v38L34 34V16z" fill="#607d8b"/><path d="M6 44h38L34 34H16z" fill="#455a64"/><path d="M6 6v38l10-10V16z" fill="#6c848f"/>`
+                + `<rect x="6" y="6" width="38" height="38" fill="none" stroke="#263238" stroke-width=".8"/><rect x="16" y="16" width="18" height="18" fill="#1c262b" stroke="#263238" stroke-width=".8"/>`
+                + inhalt
+                + `<circle cx="4.5" cy="4.5" r="1.3" fill="#90a4ae"/><circle cx="45.5" cy="4.5" r="1.3" fill="#90a4ae"/><circle cx="4.5" cy="45.5" r="1.3" fill="#90a4ae"/><circle cx="45.5" cy="45.5" r="1.3" fill="#90a4ae"/>`
+                + (tag ? `<rect x="14" y="42" width="22" height="6.5" rx="1.5" fill="#eceff1" stroke="#263238" stroke-width=".5"/><text x="25" y="47" font-size="5" font-weight="bold" fill="#263238" text-anchor="middle" font-family="Arial, sans-serif">${tag}</text>` : '')
+                + `</svg>`;
+        }
+        // Entferner (Abwurf-Schacht mit Gitter und Warnstreifen), 50×50.
+        function _despawnerSvg() {
+            return `<svg class="spsvg" viewBox="0 0 50 50" aria-hidden="true"><defs><pattern id="dsWarn" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#212121"/><rect width="4" height="8" fill="#fbc02d"/></pattern></defs>`
+                + `<rect x="1" y="1" width="48" height="48" rx="4" fill="url(#dsWarn)" stroke="#212121" stroke-width="1.2"/>`
+                + `<rect x="7" y="7" width="36" height="36" rx="2" fill="#151515" stroke="#424242" stroke-width="1"/>`
+                + `<path d="M13 9v32M19 9v32M25 9v32M31 9v32M37 9v32" stroke="#455a64" stroke-width="1.6"/>`
+                + `<path d="M18 21l7 7 7-7" fill="none" stroke="#ff5252" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`
+                + `<path d="M18 28l7 7 7-7" fill="none" stroke="#ff5252" stroke-opacity=".55" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        }
+        const _FL_FARBE = { water: '#1e88e5', oil: '#f9a825', coolant: '#43a047', honey: '#ffb300' };
+        window._spawnerSvg = _spawnerSvg; window._FL_FARBE = _FL_FARBE;
         // Näherungssensor als Quader-Bauform (Draufsicht): aktive Fläche rechts in
         // der Typfarbe (dort sitzt auch die Erfassungskeule), Typzeichen, gelbe
         // Schalt-LED und M8-Stecker. LED leuchtet über die Klasse .f2d-sens-an.
@@ -38807,13 +38854,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 obj.isMetallic = true; // Induktiv-Sensoren schlagen hier an!
             } else if (type.startsWith('spawner_')) {
                 obj.linkedVar = var1; obj.spawnSolid = (var2 === 'solid' || var2 === true); 
-                obj.lastSpawnTime = 0; obj.width = 50; obj.height = 50; el.className = 'f2d-obj f2d-spawner';
+                obj.lastSpawnTime = 0; obj.width = 50; obj.height = 50; el.className = 'f2d-obj f2d-spawner f2d-spawner2';
                 let matName = type.includes('metall') ? 'FE' : 'KU'; 
-                el.innerHTML = `<span>SPAWN<br>${matName}</span><div style="font-size:16px;">⬇️</div>`;
+                el.innerHTML = `<span>SPAWN<br>${matName}</span>` + _spawnerSvg(type.includes('metall') ? 'fe' : 'ku');
                 let label = document.createElement('div'); label.className = 'f2d-label'; 
                 label.textContent = var1 ? `${var1} (${interval}s)` : `Immer an (${interval}s)`; el.appendChild(label);
             } else if (type === 'despawner') {
-                obj.width = 50; obj.height = 50; el.className = 'f2d-obj f2d-despawner'; el.innerHTML = `<span>DESPAWN</span><div style="font-size:16px;">❌</div>`;
+                obj.width = 50; obj.height = 50; el.className = 'f2d-obj f2d-despawner f2d-spawner2'; el.innerHTML = `<span>DESPAWN</span>` + _despawnerSvg();
             } else if (type === 'text_note') {
                 obj.width = 160; obj.height = 24; obj.noteHTML = ''; obj.noteTextColor = '#ffffff'; obj.noteBgColor = 'transparent'; obj.noteFontSize = 14;
                 el.className = 'f2d-obj f2d-text-note'; el.style.width = obj.width + 'px';

@@ -10061,8 +10061,29 @@ You must output exactly this JSON format. The logic code goes as a single string
         // im Script registriert, damit gating-Aufrufe nicht fehlschlagen.
         (function _initProMode() {
             const KEY = 'valis.proMode';
+            // Klassen-Einstellung aus dem Lehrkräftebereich von t-bk.de
+            // (Zuschnitt-Zentrale, Einstellung „valis-pro“). VALIS liegt dort
+            // unter derselben Adresse wie das Unterrichtsmaterial und liest den
+            // Zuschnitt der Klasse, den assets/bildungsgang.js ablegt.
+            // 'aus' = PRO für die Klasse gesperrt (Knopf weg), 'an' = PRO an,
+            // solange niemand auf diesem Gerät selbst umgeschaltet hat.
+            function klassenPro() {
+                try {
+                    const an = sessionStorage.getItem('tbk:klassenansicht');
+                    const kl = an || localStorage.getItem('tbk:klasse') || '';
+                    const d = JSON.parse((an ? sessionStorage.getItem('tbk:klassenansicht-zuschnitt') : localStorage.getItem('tbk:zuschnitt')) || 'null');
+                    if (!kl || !d || !d.klasse || String(d.klasse).toLowerCase() !== kl.toLowerCase()) return '';
+                    return (d.einstellungen && d.einstellungen['valis-pro']) || '';
+                } catch(_e) { return ''; }
+            }
             function read() {
-                try { return localStorage.getItem(KEY) === '1'; } catch(_e) { return false; }
+                const k = klassenPro();
+                if (k === 'aus') return false;
+                try {
+                    const v = localStorage.getItem(KEY);
+                    if (v === null && k === 'an') return true;
+                    return v === '1';
+                } catch(_e) { return false; }
             }
             function write(v) {
                 try { localStorage.setItem(KEY, v ? '1' : '0'); } catch(_e) {}
@@ -10070,6 +10091,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             function applyToggleButtonStyle() {
                 const btn = document.getElementById('btn-pro-toggle');
                 const on = read();
+                if (btn) btn.style.display = klassenPro() === 'aus' ? 'none' : '';
                 if (btn) {
                     btn.style.background = on ? '#7b1fa2' : '#424242';
                     btn.textContent = on ? '⚙️ PRO ✓' : '⚙️ PRO';
@@ -10094,6 +10116,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             window._isProMode = read;
             // PRO-Modus ist frei schaltbar (seit 2026-10-31 ohne PIN).
             window._toggleProMode = function() {
+                if (klassenPro() === 'aus') return;
                 const cur = read();
                 const next = !cur;
                 write(next);

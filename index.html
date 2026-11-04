@@ -4,6 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>VALIS - Virtual Automation, Logic & Industrial Simulator</title>
+    <script>
+    /* VALIS-Tour: Die Tour lädt ein Beispiel und schaltet Ansichten um. Vorher
+       sichert sie alle VALIS-Einträge im localStorage unter valisTourSicherung.
+       Beim Beenden lädt sie die Seite neu, und genau hier – vor jedem anderen
+       Skript – kommt der eigene Stand zurück. Das gilt auch, wenn der Tab
+       während der Tour geschlossen wurde oder abgestürzt ist. Eine Tour, die in
+       einem anderen Tab gerade läuft (Puls jünger als 20 s), bleibt unberührt. */
+    (function () {
+        try {
+            var K = 'valisTourSicherung', raw = localStorage.getItem(K);
+            if (!raw) return;
+            var s = JSON.parse(raw) || {};
+            var eigenerTab = sessionStorage.getItem('valisTourLaeuft') === String(s.tab);
+            if (!eigenerTab && Date.now() - (s.puls || 0) < 20000) return;
+            var d = s.daten || {}, gehoert = /^(valis|logik|ced)/i, weg = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var n = localStorage.key(i);
+                if (n !== K && gehoert.test(n) && !Object.prototype.hasOwnProperty.call(d, n)) weg.push(n);
+            }
+            weg.forEach(function (n) { localStorage.removeItem(n); });
+            Object.keys(d).forEach(function (n) { localStorage.setItem(n, d[n]); });
+            localStorage.removeItem(K);
+            sessionStorage.removeItem('valisTourLaeuft');
+            sessionStorage.setItem('valisTourEnde', '1');
+        } catch (e) {}
+    })();
+    </script>
 	<link rel="icon" type="image/x-icon" href="favicon.ico">
     <script src="vendor/svg-pan-zoom.min.js"></script>
     <script src="vendor/qrcode.min.js"></script>
@@ -2773,6 +2800,27 @@
         .tut-nav .tut-skip { background: transparent; color: #78909c; font-weight: normal; padding: 5px 6px; }
         .tut-nav .tut-skip:hover { background: transparent; color: #ef5350; }
         .tut-progress { font-size: 11px; color: #546e7a; min-width: 36px; text-align: center; }
+        .tut-nav #tut-kapitel { background: #37474f; color: #cfd8dc; font-weight: normal; }
+        .tut-nav #tut-kapitel:hover { background: #455a64; }
+        .tut-nav button.tut-ueberspringen { background: #455a64; color: #cfd8dc; font-weight: normal; }
+        .tut-mitmachen { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #ffb300; background: rgba(255,179,0,0.08); color: #ffe082; border-radius: 3px; }
+        .tut-geschafft { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #66bb6a; background: rgba(102,187,106,0.12); color: #a5d6a7; border-radius: 3px; font-weight: 600; }
+        .tut-lk { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #7e57c2; background: rgba(126,87,194,0.12); color: #d1c4e9; border-radius: 3px; }
+        /* Tour-Auswahl (kurz / ausführlich / Kapitel) */
+        #valis-tour-wahl { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9000; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        #valis-tour-wahl .vtw-box { background: #1e2329; border: 1px solid #2196f3; border-radius: 10px; padding: 20px 22px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; color: #cfd8dc; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+        #valis-tour-wahl h3 { margin: 0 0 6px; color: #64b5f6; font-size: 17px; }
+        #valis-tour-wahl p { margin: 0 0 14px; font-size: 12px; line-height: 1.55; color: #b0bec5; }
+        #valis-tour-wahl .vtw-wege { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        #valis-tour-wahl .vtw-weg { flex: 1 1 200px; text-align: left; background: #263238; border: 1px solid #37474f; border-radius: 8px; padding: 12px; color: #eceff1; cursor: pointer; font-size: 12px; line-height: 1.45; }
+        #valis-tour-wahl .vtw-weg:hover { border-color: #2196f3; background: #2c3a44; }
+        #valis-tour-wahl .vtw-weg b { display: block; font-size: 14px; color: #90caf9; margin-bottom: 3px; }
+        #valis-tour-wahl .vtw-kap-titel { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #78909c; margin: 4px 0 6px; }
+        #valis-tour-wahl .vtw-kapitel { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-bottom: 14px; }
+        #valis-tour-wahl .vtw-kap { background: #263238; border: 1px solid #37474f; border-radius: 6px; padding: 6px 8px; color: #cfd8dc; cursor: pointer; font-size: 11px; text-align: left; }
+        #valis-tour-wahl .vtw-kap:hover { border-color: #2196f3; color: #fff; }
+        #valis-tour-wahl .vtw-fuss { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 11px; color: #78909c; }
+        #valis-tour-wahl .vtw-zu { background: transparent; border: 1px solid #455a64; color: #b0bec5; border-radius: 5px; padding: 5px 12px; cursor: pointer; }
         /* Tooltip arrows */
         #tutorial-tooltip.arrow-top::before, #tutorial-tooltip.arrow-bottom::before {
             content: ''; position: absolute; left: var(--tut-ax, 50%); transform: translateX(-50%);
@@ -4191,7 +4239,7 @@
                 <div class="hub-body">
                     <div class="hub-list" id="hub-list">
                         <div class="hub-group-title">Einführung</div>
-                        <div class="hub-item" data-hub-text="tour rundgang oberfläche einführung schritt für schritt" onclick="hubLaunch('tour')"><div class="hub-item-icon">🎓</div><div class="hub-item-txt"><div class="hub-item-title">Tour</div><div class="hub-item-desc">Interaktiver Schritt-für-Schritt-Rundgang durch die Oberfläche.</div></div></div>
+                        <div class="hub-item" data-hub-text="tour rundgang oberfläche einführung schritt für schritt kurz ausführlich kapitel" onclick="hubLaunch('tour')"><div class="hub-item-icon">🎓</div><div class="hub-item-txt"><div class="hub-item-title">Tour</div><div class="hub-item-desc">Rundgang durch VALIS, kurz oder ausführlich in zehn Kapiteln, mit Mitmach-Schritten.</div></div></div>
                         <div class="hub-group-title">Lernen &amp; Trainieren</div>
                         <div class="hub-item" data-hub-text="lektionen grundlagen sps und oder negation selbsthaltung eingang ausgang lernen" onclick="hubLaunch('lektionen')"><div class="hub-item-icon">📚</div><div class="hub-item-txt"><div class="hub-item-title">Lektionen</div><div class="hub-item-desc">Geführte SPS-Grundlagen: Ein-/Ausgang, UND, ODER, Negation, Selbsthaltung.</div></div></div>
                         <div class="hub-item" data-hub-text="komponenten tutorials bauteile 2d anlage factory sensoren aktoren zylinder förderband" onclick="hubLaunch('tutorials')"><div class="hub-item-icon">🧩</div><div class="hub-item-txt"><div class="hub-item-title">Komponenten-Tutorials</div><div class="hub-item-desc">Erklärungen zu den Bauteilen der 2D-Anlage (Sensoren, Aktoren, Zylinder …).</div></div></div>
@@ -29243,7 +29291,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         })()}
                     </div>
                 </div>
-                <div style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
+                <div id="ted-bereiche" style="margin-top:14px;padding:10px;background:#151515;border-radius:4px;border:1px solid #333;">
                     <div style="color:#90a4ae;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">🔒 Bearbeitungsbereiche</div>
                     <table style="width:100%;border-collapse:collapse;font-size:11px;color:#b0bec5;">
                         <thead><tr>
@@ -54872,8 +54920,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Schritt. Abbrechen vorher zählt nicht als abgeschlossen.
             let _activeLessonId = null;
             let _reachedLastStep = false;
+            // Tour-Erweiterungen (alle optional, Lektionen nutzen sie nicht):
+            //   step.after()      räumt beim Verlassen des Schritts auf
+            //   step.wait (ms)    wartet nach before(), bis Panels stehen
+            //   step.fortschritt  eigener Fortschrittstext (Kapitel x/y …)
+            //   step.kapitelNr    erlaubt „⏭ Kapitel" (nächstes Kapitel)
+            //   step.mitmachen    { pruefen(), ok } – Weiter erst nach Aktion,
+            //                     bis dahin „Überspringen"
+            let _shownIdx = -1;
+            let _mitTimer = null;
+            function _stopMitmachen() {
+                if (_mitTimer) { clearInterval(_mitTimer); _mitTimer = null; }
+            }
+            function _leaveStep() {
+                _stopMitmachen();
+                const prev = (_shownIdx >= 0) ? _activeSteps[_shownIdx] : null;
+                _shownIdx = -1;
+                if (prev && typeof prev.after === 'function') {
+                    try { prev.after(); } catch(_) {}
+                }
+            }
 
             function _show(i) {
+                _leaveStep();
+                _shownIdx = i;
                 const step = _activeSteps[i];
                 const spotlight = document.getElementById('tutorial-spotlight');
                 const tip = document.getElementById('tutorial-tooltip');
@@ -54881,7 +54951,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 document.getElementById('tut-title').textContent = step.title;
                 document.getElementById('tut-text').innerHTML = step.text;
                 if (window._glossaryAnnotate) window._glossaryAnnotate(document.getElementById('tut-text'));
-                document.getElementById('tut-progress').textContent = `${i + 1} / ${_activeSteps.length}`;
+                document.getElementById('tut-progress').textContent = step.fortschritt || `${i + 1} / ${_activeSteps.length}`;
+                const _kapBtn = document.getElementById('tut-kapitel');
+                if (_kapBtn) {
+                    const _hatNaechstes = step.kapitelNr != null
+                        && _activeSteps.slice(i + 1).some(s => s.kapitelNr != null && s.kapitelNr !== step.kapitelNr);
+                    _kapBtn.style.display = _hatNaechstes ? '' : 'none';
+                }
                 document.getElementById('tut-prev').disabled = (i === 0);
                 document.getElementById('tut-next').textContent = (i === _activeSteps.length - 1) ? '✓ Fertig' : 'Weiter →';
                 // Letzter Schritt erreicht → Lektion gilt als „durchgearbeitet"
@@ -54892,6 +54968,51 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (typeof step.before === 'function') {
                     try { step.before(); } catch(_) {}
                 }
+                if (step.mitmachen && typeof step.mitmachen.pruefen === 'function') {
+                    const _nx = document.getElementById('tut-next');
+                    const _fertig = () => {
+                        _stopMitmachen();
+                        const t = document.getElementById('tut-text');
+                        if (t && !t.querySelector('.tut-geschafft')) {
+                            const d = document.createElement('div');
+                            d.className = 'tut-geschafft';
+                            d.innerHTML = '✓ ' + (step.mitmachen.ok || 'Geschafft!');
+                            t.appendChild(d);
+                        }
+                        if (_nx) { _nx.textContent = (i === _activeSteps.length - 1) ? '✓ Fertig' : 'Weiter →'; _nx.classList.remove('tut-ueberspringen'); }
+                    };
+                    let _schon = false;
+                    try { _schon = step.mitmachen.pruefen() === true; } catch(_) {}
+                    if (_schon) { _fertig(); }
+                    else {
+                        if (_nx) { _nx.textContent = 'Überspringen ⏭'; _nx.classList.add('tut-ueberspringen'); }
+                        const _soll = i;
+                        _mitTimer = setInterval(() => {
+                            if (_shownIdx !== _soll) { _stopMitmachen(); return; }
+                            let ok = false;
+                            try { ok = step.mitmachen.pruefen() === true; } catch(_) {}
+                            if (ok) _fertig();
+                        }, 250);
+                    }
+                } else {
+                    const _nx = document.getElementById('tut-next');
+                    if (_nx) _nx.classList.remove('tut-ueberspringen');
+                }
+                if (step.wait) {
+                    spotlight.style.display = 'none';
+                    tip.style.left = '-9999px';
+                    tip.style.top = '-9999px';
+                    const _soll = i;
+                    setTimeout(() => { if (_shownIdx === _soll) _place(_soll); }, step.wait);
+                    return;
+                }
+                _place(i);
+            }
+
+            function _place(i) {
+                const step = _activeSteps[i];
+                const spotlight = document.getElementById('tutorial-spotlight');
+                const tip = document.getElementById('tutorial-tooltip');
                 tip.className = '';
                 tip.style.removeProperty('--tut-ax');
                 tip.style.removeProperty('--tut-ay');
@@ -54909,7 +55030,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     tip.style.overflowY = 'auto';
                 }
 
-                if (!step.target) {
+                const _selsVorab = !step.target ? [] : (Array.isArray(step.target) ? step.target : [step.target]);
+                const _gefunden = _selsVorab.some(s => { const e = document.querySelector(s); return e && e.getClientRects().length > 0 && (e.offsetWidth > 0 || e.offsetHeight > 0); });
+                if (!step.target || !_gefunden) {
                     spotlight.style.display = 'none';
                     // Tatsächliche Größe verwenden statt fixer 300×200 —
                     // sonst wird die Vertikal-Mitte falsch berechnet und das
@@ -55019,7 +55142,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (_step <= 0) return;
                 _step--; _show(_step);
             };
+            window.tutorialSkipChapter = function () {
+                const cur = _activeSteps[_step];
+                if (!cur || cur.kapitelNr == null) return;
+                for (let j = _step + 1; j < _activeSteps.length; j++) {
+                    if (_activeSteps[j].kapitelNr != null && _activeSteps[j].kapitelNr !== cur.kapitelNr) {
+                        _step = j; _show(_step); return;
+                    }
+                }
+            };
+            // Für die Tour: an einer Stelle der Liste einsteigen (Kapitelwahl).
+            window._walkGoto = function (j) {
+                if (j < 0 || j >= _activeSteps.length) return;
+                _step = j; _show(_step);
+            };
             window.closeTutorial = function () {
+                _leaveStep();
                 document.getElementById('tutorial-overlay').classList.remove('active');
                 // Lektions-Abhaken: Lektion zählt als abgeschlossen, wenn der
                 // User den letzten Schritt mindestens einmal gesehen hat.
@@ -55110,6 +55248,559 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         })();
 
         // ==========================================
+        // 🎓 VALIS-TOUR — kurz und ausführlich (10 Kapitel)
+        // ==========================================
+        // Eine Schrittliste für beide Fassungen: Schritte mit `kurz: true`
+        // gehören auch zur kurzen Tour. Die Tour lädt das Beispiel
+        // „Sortieranlage (Kommentiert)" (Band mit Metall-Aussortierung) und führt
+        // die Bereiche live vor. Vorher sichert sie alle VALIS-Einträge im
+        // localStorage; beim Beenden lädt sie die Seite neu und ein kleines
+        // Skript im <head> spielt den eigenen Stand zurück (siehe dort).
+        // Start: Lernzentrum → Tour, oder ?tour=kurz|lang (&kapitel=<id>).
+        (function () {
+            const SICHERUNG = 'valisTourSicherung';
+            const BEISPIEL = 'comments';
+            const gehoert = /^(valis|logik|ced)/i;
+            let _puls = null;
+            let _laeuft = false;
+
+            // ── kleine Helfer ───────────────────────────────────────────────
+            const $ = (sel) => document.querySelector(sel);
+            const sim = (an) => {
+                try { if (!!isSimulationActive !== !!an && typeof toggleSimulation === 'function') toggleSimulation(); } catch (_) {}
+            };
+            const simLaeuft = () => { try { return !!isSimulationActive; } catch (_) { return false; } };
+            const sps = (v) => { try { return !!(spsState && spsState[v]); } catch (_) { return false; } };
+            const panels = (ids) => { try { if (window._valisSetPanels) window._valisSetPanels(ids); } catch (_) {} };
+            const pinne = (sel) => {
+                const el = $(sel); const dd = el && el.closest('.tb-dropdown');
+                if (dd) dd.classList.add('pinned');
+            };
+            const entpinne = () => document.querySelectorAll('.tb-dropdown.pinned').forEach(d => d.classList.remove('pinned'));
+            const hub = (bereich) => { try { window.openHub(bereich); } catch (_) {} };
+            const hubZu = () => { try { window.closeHub(); } catch (_) {} };
+            const proAn = () => { try { if (typeof window._isProMode === 'function' && !window._isProMode()) window._toggleProMode(); } catch (_) {} };
+            const legExt = (key, an) => {
+                const b = document.querySelector('.leg-ext-btn[data-leg-ext="' + key + '"]');
+                if (b && (b.getAttribute('aria-expanded') === 'true') !== an) window._legExtToggle(key);
+            };
+            const fbsOptionen = (an) => {
+                const g = document.getElementById('fbs-options-group');
+                if (g && g.classList.contains('expanded') !== an && typeof window.toggleFbsOptions === 'function') window.toggleFbsOptions();
+            };
+            const fbsPalette = (an) => {
+                const g = document.getElementById('fbs-button-group');
+                if (g && g.classList.contains('expanded') !== an && typeof window.toggleFbsToolbar === 'function') window.toggleFbsToolbar();
+            };
+            const spsModus = () => {
+                try { if (window.epneuMode === true && typeof window.toggleEpneuMode === 'function') window.toggleEpneuMode(); } catch (_) {}
+            };
+            // Menü der 2D-Anlage Nr. n (1 = Bedienpult …) aufklappen und als Ziel markieren.
+            const facMenueAuf = (n) => {
+                entpinne();
+                const dd = (typeof n === 'string') ? document.getElementById(n)
+                         : document.querySelectorAll('#factory-toolbar .tb-dropdown')[n - 1];
+                if (!dd) return;
+                dd.classList.add('pinned');
+                const inhalt = dd.querySelector('.tb-dropdown-content');
+                (inhalt || dd).setAttribute('data-tour-ziel', '1');
+            };
+            const facMenueZu = () => {
+                entpinne();
+                document.querySelectorAll('[data-tour-ziel]').forEach(e => e.removeAttribute('data-tour-ziel'));
+            };
+            const codeZeile = (muster) => {
+                const ta = document.getElementById('code'); if (!ta) return;
+                const pos = ta.value.indexOf(muster); if (pos < 0) return;
+                try { ta.focus(); ta.setSelectionRange(pos, pos); ta.dispatchEvent(new Event('keyup')); ta.dispatchEvent(new Event('click')); } catch (_) {}
+            };
+            let _codeVorher = null;
+            const codeAnhaengen = (zeile) => {
+                const ta = document.getElementById('code'); if (!ta) return;
+                _codeVorher = ta.value;
+                ta.value = ta.value.replace(/\s*$/, '') + '\n' + zeile + '\n';
+                ta.dispatchEvent(new Event('input'));
+            };
+            const codeZurueck = () => {
+                const ta = document.getElementById('code');
+                if (!ta || _codeVorher == null) return;
+                ta.value = _codeVorher; _codeVorher = null;
+                ta.dispatchEvent(new Event('input'));
+            };
+            // Aufgaben-Beispiele für Lehrkräfte – nur im Speicher, nie gespeichert.
+            const demoAufgabe = (name, beschreibung, hide, block, festo) => ({
+                version: '1.0', type: 'valitask', id: 'tour-demo-' + name.toLowerCase().replace(/[^a-z]+/g, '-'),
+                name: name, description: beschreibung, hint: '', category: 'Tour', difficulty: 'leicht',
+                conditions: [], restrictObjects: 'none', allowedObjectTypes: [],
+                hideAreas: hide || {}, blockAreas: block || {}, festoConfig: festo || {}
+            });
+            let _demoLaeuft = false;
+            const demoStarten = (t) => {
+                demoBeenden();
+                try { window._startTask(t); _demoLaeuft = true; } catch (_) {}
+            };
+            const demoBeenden = () => {
+                if (!_demoLaeuft) return;
+                _demoLaeuft = false;
+                try { window._taskAbandon(); } catch (_) {}
+            };
+            const mit = (txt) => '<div class="tut-mitmachen">👉 <b>Mach mit:</b> ' + txt + '</div>';
+            const lk = (txt) => '<div class="tut-lk">👩‍🏫 <b>Für Lehrkräfte:</b> ' + txt + '</div>';
+
+            // ── Kapitel ─────────────────────────────────────────────────────
+            const KAPITEL = [
+                { id: 'start',       titel: 'Start und Überblick' },
+                { id: 'editor',      titel: 'Logik-Editor' },
+                { id: 'simpanel',    titel: 'Sim-Panel' },
+                { id: 'simulation',  titel: 'Simulation und Analyse' },
+                { id: 'logikplan',   titel: 'Logikplan' },
+                { id: 'schaltplan',  titel: 'Schaltpläne und Steckaufbau' },
+                { id: 'anlage',      titel: '2D-Anlage' },
+                { id: 'lernzentrum', titel: 'Lernzentrum und Aufgaben' },
+                { id: 'teilen',      titel: 'Speichern, Teilen, Zusammenarbeiten' },
+                { id: 'extras',      titel: 'Einstellungen und Extras' }
+            ];
+
+            // ── Schritte ────────────────────────────────────────────────────
+            function _schritte() {
+                return [
+                // 1 · Start und Überblick
+                { k: 'start', kurz: true, title: '🎓 Willkommen bei VALIS!',
+                  text: 'VALIS ist eine virtuelle SPS mit Anlage: Du schreibst eine Steuerung, siehst sie als Logikplan, Schaltplan und Steckaufbau und testest sie an einer 2D-Anlage.<br><br>Die Tour führt alles live vor. Wo du selbst etwas tun sollst, steht <b>👉 Mach mit</b>. Du kannst diese Schritte auch überspringen.',
+                  textLang: 'Die ausführliche Tour hat zehn Kapitel. Mit <b>⏭ Kapitel</b> springst du zum nächsten Kapitel, mit <b>✕ Schließen</b> hörst du jederzeit auf.',
+                  target: null },
+                { k: 'start', kurz: true, title: '🧭 Aufbau der Oberfläche',
+                  text: 'Links schreibst du im <b>Logik-Editor</b> die Steuerung, darunter schaltest du im <b>Sim-Panel</b> die Eingänge. Rechts liegt der <b>Arbeitsbereich</b> mit den Ansichten: Logikplan, Schaltplan, Schaltplan-Editor, Steckaufbau und 2D-Anlage.<br><br>Jede Ansicht ist ein eigener Weg zur selben Logik: Du kannst im Code schreiben, Bausteine im Logikplan ziehen, im Schaltplan-Editor verdrahten oder im Steckaufbau Kabel stecken.'
+                      + lk('In Aufgaben lässt sich jeder dieser Bereiche einzeln <b>sperren</b> oder ganz <b>ausblenden</b>. So bauen Lernende die Logik z. B. nur im Logikplan oder nur im Steckaufbau. Wie das geht, zeigt das Kapitel „Lernzentrum und Aufgaben".'),
+                  before: () => panels(['fbs-wrapper', 'factory-wrapper']), wait: 250,
+                  target: ['#btn-view-fbs', '#btn-view-fac'], pos: 'bottom' },
+                { k: 'start', kurz: true, title: '📋 Das Beispiel für die Tour',
+                  text: 'Für die Tour ist die <b>Sortieranlage</b> geladen: Ein Band fördert Metall- und Kunststoffteile, ein induktiver Sensor erkennt Metall und ein Zylinder schiebt es aus.<br><br>🔒 Dein eigener Stand ist gesichert. Wenn die Tour endet, lädt VALIS kurz neu und alles ist wieder wie vorher, auch wenn du mittendrin abbrichst.',
+                  target: '#code', pos: 'right' },
+
+                // 2 · Logik-Editor
+                { k: 'editor', kurz: true, title: '💻 Der Logik-Editor',
+                  text: 'Hier steht die Steuerung als Text, eine Zuweisung pro Zeile: links das Ergebnis, rechts die Bedingung. <code>&&</code> ist UND, <code>||</code> ist ODER, <code>¬</code> ist NICHT. Text nach <code>//</code> ist ein Kommentar.<br><br>Alle Ansichten rechts entstehen aus diesem Code und ändern ihn auch, wenn du dort etwas baust.',
+                  target: '#code', pos: 'right' },
+                { k: 'editor', kurz: true, title: '🔤 Die Legende',
+                  text: 'Die Legende über dem Editor zeigt alle Zeichen. Ein Klick auf ein Zeichen fügt es an der Cursor-Stelle ein. Statt <code>&&</code> versteht VALIS auch <code>UND</code>, <code>AND</code> oder <code>∧</code>.',
+                  target: '#legend-grid', pos: 'right' },
+                { k: 'editor', title: '⏱ Speicher, Zeiten, Zähler, Regler',
+                  text: 'Die vier Knöpfe unter der Legende klappen die erweiterten Befehle auf: Speicherglieder (SR, RS), Zeitglieder (TON, TOF, TP), Zähler (CTU) und Regler (ZWEIPUNKT, PID). Hier sind die <b>Zeiten</b> aufgeklappt.',
+                  before: () => legExt('timer', true), after: () => legExt('timer', false), wait: 150,
+                  target: '.leg-ext-row', pos: 'right' },
+                { k: 'editor', title: '❗ Fehler sofort sehen',
+                  text: 'Die Tour hat unten eine unfertige Zeile angehängt. VALIS markiert sie am rechten Rand rot, bevor du überhaupt startest. Fahr mit der Maus auf die Markierung, dann siehst du, was fehlt. Im Logikplan leuchtet dieselbe Stelle rot.<br><br>Beim Weiterklicken nimmt die Tour die Zeile wieder heraus.',
+                  before: () => codeAnhaengen('TEST_LAMPE := START &&'), after: codeZurueck, wait: 400,
+                  target: '#error-gutter', pos: 'right' },
+                { k: 'editor', title: '📖 Erklärmodus',
+                  text: 'Der Erklärmodus übersetzt die Zeile, in der der Cursor steht, in einen deutschen Satz. Die Tour hat ihn eingeschaltet und den Cursor in die Zeile mit der Selbsthaltung gesetzt.',
+                  before: () => {
+                      _erklAn = !window._explainMode;
+                      if (_erklAn) window.toggleExplainMode();
+                      codeZeile('S1 :=');
+                  },
+                  after: () => { if (_erklAn && window._explainMode) window.toggleExplainMode(); _erklAn = false; },
+                  wait: 300, target: ['#btn-explain-toggle', '#code-inspector'], pos: 'right' },
+                { k: 'editor', title: '⚙️ Werkzeuge des Editors',
+                  text: 'Oben rechts am Editor: <b>Leeren</b>, <b>↶ Rückgängig</b> und <b>↷ Wiederholen</b> (auch Strg+Z, Strg+Y) und <b>⚙️</b> für die Editor-Einstellungen: Zeilennummern, Schriftgröße, Großbuchstaben erzwingen und Autovervollständigung der Variablennamen.',
+                  target: ['#btn-explain-toggle', '#btn-code-editor-settings'], pos: 'bottom' },
+
+                // 3 · Sim-Panel
+                { k: 'simpanel', kurz: true, title: '🎛 Das Sim-Panel',
+                  text: 'Jede Variable aus dem Code erscheint hier von selbst: Eingänge links, Ausgänge rechts. Eingänge schaltest du per Klick, Ausgänge zeigen ihren Zustand. Mit gedrückter <b>Strg</b>-Taste bleiben mehrere Taster gleichzeitig gedrückt.',
+                  target: '#simulator-container', pos: 'right' },
+                { k: 'simpanel', title: '🔘 Was für ein Bauteil?',
+                  text: 'Hinter jedem Eingang wählst du, was er ist: Taster, Schalter, Not-Halt, Öffner oder einer der Sensoren. Davon hängt ab, wie er sich verhält und wie er im Schaltplan und im Steckaufbau gezeichnet wird.',
+                  target: '#sim-inputs .type-select', pos: 'right' },
+                { k: 'simpanel', title: '⌨️ Tasten zuweisen',
+                  text: 'Mit dem Tastatur-Knopf vor dem Namen legst du einen Eingang auf eine Taste. Dann bedienst du die Anlage mit der Tastatur, z. B. START auf <b>S</b>. Entf löscht die Zuweisung.',
+                  target: '#sim-inputs .key-bind-btn', pos: 'right' },
+                { k: 'simpanel', kurz: true, title: '⚡ SPS- oder E-Pneumatik-Modus',
+                  text: 'Zwei Lesarten desselben Codes. Im <b>SPS-Modus</b> steht eine Variable für das Signal an der SPS-Klemme: ein Not-Halt (Öffner) liefert in Ruhe 1. Im <b>E-Pneu-Modus</b> ist der Code ein Abbild der Schaltplanlogik: die Variable sagt, ob das Bauteil gedrückt ist.<br><br>Der Unterschied zeigt sich nur bei Öffnern wie Not-Halt oder Lichtgitter.',
+                  target: '#btn-epneu-mode', pos: 'right' },
+                { k: 'simpanel', title: '📋 Zuordnungsliste',
+                  text: 'Im SPS-Modus gibt es die <b>Zuordnungsliste</b>: Variable, Adresse (z. B. E0.0), Betriebsmittelkennzeichen, Bauteil, Öffner oder Schließer und Kommentar, mit Live-Zustand. Sie lässt sich drucken und als CSV speichern.',
+                  before: spsModus, wait: 250,
+                  target: ['#btn-zuordnung-sim'], pos: 'right' },
+                { k: 'simpanel', title: '🗑 Papierkorb und Variablen',
+                  text: 'Der <b>Papierkorb</b> hält die letzten 20 gelöschten Bauteile der Anlage, ein Klick holt eines zurück. Das <b>⚙️</b> daneben stellt ein, wann nicht mehr benutzte Variablen aus dem Sim-Panel verschwinden.',
+                  target: ['#btn-hmi-recycle', '#btn-editor-settings'], pos: 'right' },
+
+                // 4 · Simulation und Analyse
+                { k: 'simulation', kurz: true, title: '▶️ Simulation starten',
+                  text: 'Mit <b>Simulation starten</b> läuft die Steuerung: VALIS rechnet den Code etwa 20-mal pro Sekunde durch, und alle Ansichten zeigen live, was passiert.'
+                      + mit('Klick auf <b>▶ Simulation starten</b>.'),
+                  before: () => panels(['fbs-wrapper', 'factory-wrapper']),
+                  mitmachen: { pruefen: simLaeuft, ok: 'Die Simulation läuft.' },
+                  target: '#btn-toggle-sim', pos: 'bottom' },
+                { k: 'simulation', kurz: true, title: '🟢 Die Anlage einschalten',
+                  text: 'In diesem Beispiel schaltet <b>START</b> die Anlage ein, und eine Selbsthaltung hält sie an, bis <b>STOP</b> kommt.'
+                      + mit('Drück im Sim-Panel oder an der Anlage den Taster <b>START</b>.'),
+                  before: () => sim(true),
+                  mitmachen: { pruefen: () => sps('Q1') || sps('LED_BETRIEB'), ok: 'Die Anlage läuft. Im Logikplan siehst du den Signalweg farbig.' },
+                  target: '#simulator-container', pos: 'right' },
+                { k: 'simulation', title: '🌈 Live in jeder Ansicht',
+                  text: 'Während die Simulation läuft, färbt der Logikplan jede Leitung nach ihrem Zustand, im Schaltplan fließt der Strom sichtbar und in der Anlage fahren Band und Zylinder. So siehst du, welche Bedingung gerade fehlt.',
+                  before: () => sim(true), target: '#fbs-wrapper', pos: 'left' },
+                { k: 'simulation', kurz: true, title: '📊 Oszilloskop',
+                  text: 'Das <b>Oszilloskop</b> zeichnet alle Signale über die Zeit auf, auch Analogwerte. So siehst du Verzögerungen von Zeitgliedern oder kurze Impulse, die man sonst verpasst. Mit <b>Analog überlagern</b> liegen Sollwert, Istwert und Stellgröße in einer Spur.',
+                  before: () => { sim(true); try { window.openAnalyzerModal(); } catch (_) {} },
+                  after: () => { try { window.closeAnalyzerModal(); } catch (_) {} },
+                  wait: 300, target: '#analyzer-modal', pos: 'left' },
+                { k: 'simulation', title: '⏩ Zeitraffer',
+                  text: 'Langsame Vorgänge wie eine Öltemperatur dauern in echt Minuten bis Stunden. Der <b>Zeitraffer</b> (bis 300×) lässt SPS-Zeit, Zeitglieder, Regler und Regelstrecken schneller laufen, die Mechanik der Anlage aber nicht.',
+                  before: () => { try { window.openAnalyzerModal(); } catch (_) {} },
+                  after: () => { try { window.closeAnalyzerModal(); } catch (_) {} },
+                  wait: 300, target: '#analyzer-modal .zeitraffer-wahl', pos: 'bottom' },
+                { k: 'simulation', title: '⏺ Aufzeichnen',
+                  text: 'Der rote Knopf im Sim-Panel zeichnet eine Simulation auf. So kannst du einen Ablauf festhalten und später wieder abspielen.',
+                  target: '#btn-record', pos: 'right' },
+                { k: 'simulation', title: '🔊 Ton',
+                  text: 'Schaltet den Ton durch: aus, nur Schaltklicks oder Klicks mit Anlagengeräuschen. So hörst du z. B., wie oft ein Relais schaltet oder wann Druckluft strömt.',
+                  target: '#btn-toggle-sound', pos: 'bottom' },
+
+                // 5 · Logikplan
+                { k: 'logikplan', kurz: true, title: '🧩 Der Logikplan',
+                  text: 'Der Logikplan (FBS) zeigt den Code als Funktionsbausteine und entsteht automatisch. Du kannst hier aber auch selbst bauen: Bausteine aus der Palette ziehen, per Rechtsklick Verbindungen und Bausteine ändern. Der Code passt sich an.',
+                  before: () => panels(['fbs-wrapper']), wait: 250,
+                  target: '#btn-view-fbs', pos: 'bottom' },
+                { k: 'logikplan', title: '➕ Bausteinpalette',
+                  text: 'Die Palette enthält Zuweisung, UND, ODER, Speicher, Zeitglied und Zähler. Einen Baustein klickst du an oder ziehst ihn direkt auf eine Leitung, dann baut er sich dort ein.',
+                  before: () => fbsPalette(true), after: () => fbsPalette(false), wait: 200,
+                  target: '#fbs-toolbar', pos: 'bottom' },
+                { k: 'logikplan', title: '🎯 Fokus und Glow',
+                  text: 'Im <b>Fokus-Modus</b> klickst du auf einen Baustein und siehst nur noch, was in ihn hineinführt und was aus ihm herauskommt. Bei laufender Simulation zeigt ein goldener <b>Glow</b> beim Darüberfahren, welcher Pfad den Wert gerade bestimmt.',
+                  target: '#btn-fbs-focus', pos: 'bottom' },
+                { k: 'logikplan', title: '⚙️ Optionen und FUP nach Norm',
+                  text: 'In den Optionen: <b>Netzwerke</b> teilt den Plan wie im TIA-Portal in nummerierte Netzwerke, <b>FUP</b> zeichnet ihn nach IEC 61131-3. Dazu bunte Linien, Dichte, Pin-Sortierung, eine eigene Spalte für Speicher und Zeiten und das rote Leuchten bei Fehlern.',
+                  before: () => fbsOptionen(true), after: () => fbsOptionen(false), wait: 200,
+                  target: '#fbs-options-group', pos: 'bottom' },
+
+                // 6 · Schaltpläne und Steckaufbau
+                { k: 'schaltplan', kurz: true, title: '⚡ Schaltplan (automatisch)',
+                  text: 'Aus demselben Code zeichnet VALIS einen Schaltplan nach IEC mit Kontakten, Relais und Spulen. In der Simulation fließt der Strom sichtbar.',
+                  before: () => panels(['circuit-wrapper']), wait: 300,
+                  target: '#btn-view-iec', pos: 'bottom' },
+                { k: 'schaltplan', title: '🔧 Schaltplan-Optionen',
+                  text: 'Die Optionen stellen die Darstellung ein: <b>Relais</b> (jedes Gatter als Hilfsrelais) oder <b>Direkt</b>, Wechslernummern 11/12/14, fortlaufende Kontaktnummern, getrennte Steuer- und Lastkreise und wie viel beschriftet wird. Im SPS-Modus wechselt ein Knopf zur <b>Anschluss-Sicht</b> mit Klemmen nach DIN EN 60204.',
+                  target: ['#btn-iec-toggle', '#btn-iec-anschluss'], pos: 'bottom' },
+                { k: 'schaltplan', kurz: true, title: '🎨 Schaltplan-Editor',
+                  text: 'Im Editor zeichnest du selbst: Kontakte, Spulen, Sensoren zwischen +24 V und 0 V ziehen und verdrahten. Aus deiner Verdrahtung erkennt VALIS den Code, auch Selbsthaltungen. Umgekehrt baut <b>Aus Code</b> den Plan aus dem Code auf.',
+                  before: () => panels(['circuit-editor-wrapper']), wait: 300,
+                  target: '#ced-toolbar', pos: 'bottom' },
+                { k: 'schaltplan', kurz: true, title: '🔌 Steckaufbau',
+                  text: 'Der Steckaufbau zeigt, wie der Schaltplan auf Lehrplatinen gesteckt wird: Taster-, Relais- und Leuchtenplatinen mit Kabeln in Normfarben, Rot für +24 V und Blau für 0 V. An jeder Buchse steht die Anschlusskennziffer.',
+                  before: () => panels(['festo-wrapper']), wait: 300,
+                  target: '#btn-view-festo', pos: 'bottom' },
+                { k: 'schaltplan', title: '🎓 Selbst stecken',
+                  text: 'Im <b>Trainingsmodus</b> steckst du die Kabel selbst, VALIS prüft jedes Kabel. Im <b>freien Aufbau</b> steckst du ohne Vorlage, und VALIS erzeugt daraus den Code. Die Aufbau-Lektionen im Lernzentrum führen Schritt für Schritt hinein.',
+                  target: '#festo-train-toggle', pos: 'bottom' },
+                { k: 'schaltplan', title: '📋 Schrittkette (PRO)',
+                  text: 'Im PRO-Modus gibt es die Ansicht <b>Schrittkette</b>: Ablaufsteuerungen als GRAFCET oder S7-GRAPH. Sie erscheint, sobald der Code eine Schrittkette enthält, und zeigt in der Simulation den aktiven Schritt. Die Tour hat PRO dafür kurz eingeschaltet.',
+                  before: () => { proAn(); panels(['sk-wrapper']); }, wait: 400,
+                  target: '#btn-view-sk', pos: 'bottom' },
+
+                // 7 · 2D-Anlage
+                { k: 'anlage', kurz: true, title: '🏭 Die 2D-Anlage',
+                  text: 'Hier baust du die Anlage, an der deine Steuerung läuft: Bedienpult, Bänder, Sensoren, Zylinder, Werkstücke. Sobald ein Bauteil mit einer Variable verbunden ist, steuert die Anlage diesen Eingang. Im Sim-Panel ist er dann gesperrt.',
+                  before: () => { panels(['factory-wrapper']); sim(true); }, wait: 400,
+                  target: '#btn-view-fac', pos: 'bottom' },
+                { k: 'anlage', kurz: true, title: '🔩 Metall aussortieren',
+                  text: 'Der induktive Sensor am Band erkennt nur Metall. Dann fährt der Zylinder aus und schiebt das Teil auf das Sortierband, Kunststoff läuft durch.'
+                      + mit('Schau zu, bis ein Metallteil am Sensor ankommt. Die Tour hat die Anlage dafür eingeschaltet.'),
+                  before: () => {
+                      panels(['factory-wrapper']); sim(true);
+                      setTimeout(() => {
+                          if (sps('Q1')) return;
+                          try { setTaster('START', true); setTimeout(() => { try { setTaster('START', false); } catch (_) {} }, 300); } catch (_) {}
+                      }, 300);
+                  },
+                  mitmachen: { pruefen: () => sps('ZYL_AUS'), ok: 'Der Zylinder ist ausgefahren und hat das Metallteil aussortiert.' },
+                  wait: 300, target: '#factory-canvas-area', pos: 'left' },
+                { k: 'anlage', title: '🖱 Bewegen und Zoomen',
+                  text: 'Mit dem Mausrad zoomst du, mit gedrückter Maus auf freier Fläche verschiebst du die Ansicht. Bauteile ziehst du mit der Maus. <b>Rechtsklick</b> auf ein Bauteil öffnet das Kontextmenü: Variable zuweisen, Position, Ebene, Sperren, ohne Kollision und Beschriftung anheften.',
+                  before: () => panels(['factory-wrapper']), target: '#factory-canvas-area', pos: 'left' },
+                { k: 'anlage', title: '🎛 Bedienpult',
+                  text: 'Die Menüs oben enthalten alle Bauteile. Im <b>Bedienpult</b>: Taster, Schalter, Not-Halt, Schlüsselschalter, Meldeleuchten, Signalsäule, Anzeigen und Sollwertsteller.',
+                  before: () => facMenueAuf(1), after: facMenueZu, wait: 150,
+                  target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '📦 Werkstücke, Schüttgut, Flüssigkeiten',
+                  text: 'Werkstücke aus Metall oder Kunststoff, dazu Sand, Wasser, Öl, Kühlmittel und Honig. Flüssigkeiten und Schüttgut rechnet VALIS mit einer eigenen Simulation: sie fließen, stauen sich in Behältern und laufen über Auslässe ab. <b>Zuführungen</b> erzeugen laufend Nachschub.',
+                  before: () => facMenueAuf(2), after: facMenueZu, wait: 150,
+                  target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '📡 Sensoren',
+                  text: 'Induktiv (nur Metall), kapazitiv (alles), optisch (Lichtschranke), magnetisch und Reed-Kontakt am Zylinder, Füllstand, Druck und Durchfluss, dazu analoge Messumformer. Jeder Sensor zeigt sein Erfassungsfeld.',
+                  before: () => facMenueAuf(3), after: facMenueZu, wait: 150,
+                  target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '⚙️ Aktoren',
+                  text: 'Bänder, Rollenbahnen, Weichen, Drehtisch, Zylinder, Greifer, Portalkran, Roboterarm, Lüfter, Heizung und mehr: alles, was sich bewegt oder schaltet.',
+                  before: () => facMenueAuf(4), after: facMenueZu, wait: 150,
+                  target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '💨 Pneumatik und Hydraulik',
+                  text: 'Kompressor, Wartungseinheit, Wegeventile und Drosseln bilden ein echtes Druckluftnetz, mit Leckage und Druckabfall. Die Hydraulik hat Aggregat, Ventile, Druckschalter, Manometer und Speicher. Der <b>Inspektor</b> zeigt Drücke und Ströme an jeder Leitung.<br><br>Die Menüs Pneumatik und Hydraulik schaltest du in der Seitenleiste rechts (▶) an, die Tour hat Pneumatik dafür eingeschaltet.',
+                  before: () => { try { window.togglePneumaticMenu(true); } catch (_) {} facMenueAuf('tb-dropdown-pneu'); }, after: facMenueZu, wait: 150,
+                  target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '🎛 Analogwerte und Regler',
+                  text: 'Neben Ein und Aus kann VALIS auch Analogwerte: Messumformer, Sollwertsteller, Regelstrecken und Proportionalventile. Mit <code>ZWEIPUNKT</code> und <code>PID</code> regelst du z. B. eine Öltemperatur. Ein Doppelklick auf den PID im Logikplan öffnet das <b>Reglerfenster</b>.<br><br>Das Beispiel „Ölkühlung mit Regler" im Lernzentrum zeigt das komplett.',
+                  target: null },
+                { k: 'anlage', title: 'ℹ️ Hilfe in jedem Fenster',
+                  text: 'Jedes Fenster hat einen <b>ℹ️</b>-Knopf mit Hilfe genau zu diesem Bereich. In der Anlage erklärt er Werkzeuge, Bauteile und die Steuerung der Kamera. Daneben: <b>Seiten- oder Draufsicht</b>, Raster und Minimap.',
+                  target: ['#factory-wrapper .panel-info-btn', '#btn-viewmode'], pos: 'bottom' },
+
+                // 8 · Lernzentrum und Aufgaben
+                { k: 'lernzentrum', kurz: true, title: '🎓 Das Lernzentrum',
+                  text: 'Alles zum Lernen an einem Ort, auch mit <b>Strg+K</b>: Tour, Lektionen, Komponenten-Tutorials, Szenario-Analyse, Aufgaben, Beispiele und das Fachbegriff-Lexikon. Oben durchsucht ein Feld alles auf einmal.',
+                  before: () => { sim(false); hub(); }, after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '📚 Lektionen',
+                  text: 'Geführte Lektionen in drei Reihen: <b>Grundlagen</b> (Ein- und Ausgang, UND, ODER, NICHT, Selbsthaltung, Sensoren), <b>Fortgeschritten</b> (SR und RS, TON und TOF, Regeln) und <b>Aufbau</b> an der Schaltwand. Erledigte Lektionen bekommen einen Haken.',
+                  before: () => hub('lektionen'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '🧩 Komponenten-Tutorials',
+                  text: 'Zu jedem Bauteil der Anlage gibt es ein kurzes Tutorial: was es ist, wie es sich verhält und wie man es anschließt.',
+                  before: () => hub('tutorials'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '🔎 Szenario-Analyse',
+                  text: 'Vom Text zur Steuerung in vier Schritten: im Aufgabentext Eingänge, Ausgänge und Logik-Wörter markieren, daraus Operatoren bestimmen, die Sätze in Logik übersetzen und zum Schluss den Code schreiben.',
+                  before: () => hub('szenario'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '🎯 Aufgaben',
+                  text: 'Im Aufgaben-Modus löst du Übungen mit automatischer Prüfung, Hinweisen und Musterlösung. Lehrkräfte erstellen eigene Aufgaben mit Erfolgsbedingungen, Stufen, Zeitlimit und Vorgabe-Anlage und bündeln sie in Paketen.',
+                  before: () => hub('aufgaben'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '🔒 Bereiche sperren oder ausblenden',
+                  text: 'Im Aufgaben-Editor legst du für jeden Bereich fest, ob ihn Lernende benutzen dürfen: <b>Sperren</b> lässt ihn sichtbar, aber nicht bedienbar, <b>Ausblenden</b> nimmt ihn ganz weg. Das gilt für Code-Editor, Ein-/Ausgänge, Logikplan, Schaltplan, Schaltplan-Editor, 2D-Anlage, Steckaufbau und Schrittkette. Dazu gibt es feinere Schalter, z. B. „Aus Code" im Schaltplan-Editor abschalten.'
+                      + lk('Die nächsten drei Schritte zeigen drei typische Zuschnitte so, wie Lernende sie sehen. Die Beispiel-Aufgaben existieren nur in der Tour und werden nicht gespeichert.'),
+                  before: () => {
+                      try { window._openTaskEditor(demoAufgabe('Tour-Beispiel', 'Nur für die Tour', {}, {})); } catch (_) {}
+                      setTimeout(() => { const t = document.getElementById('ted-bereiche'); if (t) t.scrollIntoView({ block: 'center' }); }, 60);
+                  },
+                  after: () => { const m = document.getElementById('task-editor-modal'); if (m) m.style.display = 'none'; },
+                  wait: 400, target: '#ted-bereiche', pos: 'left' },
+                { k: 'lernzentrum', title: '🧩 Beispiel 1: nur im Logikplan bauen',
+                  text: 'Hier ist der Code-Editor <b>ausgeblendet</b>, ebenso Schaltplan, Schaltplan-Editor und Steckaufbau. Lernende bauen die Logik nur mit Bausteinen im Logikplan.'
+                      + lk('Häkchen im Aufgaben-Editor: Ausblenden bei Code-Editor, Schaltplan, Schaltplan-Editor und Steckaufbau.'),
+                  before: () => {
+                      panels(['fbs-wrapper', 'factory-wrapper']);
+                      demoStarten(demoAufgabe('Nur Logikplan', 'Baue die Sortierlogik im Logikplan.',
+                          { codeEditor: true, schaltplan: true, circuitEditor: true, festo: true }, {}));
+                  },
+                  after: demoBeenden, wait: 500, target: '#fbs-wrapper', pos: 'left' },
+                { k: 'lernzentrum', title: '🎨 Beispiel 2: nur im Schaltplan-Editor verdrahten',
+                  text: 'Code-Editor, Logikplan und Steckaufbau sind ausgeblendet. Im Schaltplan-Editor sind <b>Aus Code</b> und der Live-Abgleich abgeschaltet: Lernende müssen selbst verdrahten, der Code entsteht aus ihrer Verdrahtung.'
+                      + lk('Häkchen: Ausblenden bei Code-Editor, Logikplan, Schaltplan und Steckaufbau, dazu „Aus Code" und „Live-Sync" aus.'),
+                  before: () => {
+                      demoStarten(demoAufgabe('Nur Schaltplan-Editor', 'Verdrahte die Steuerung im Schaltplan-Editor.',
+                          { codeEditor: true, logikplan: true, schaltplan: true, festo: true },
+                          { disableFromCode: true, disableLiveSync: true }));
+                      panels(['circuit-editor-wrapper']);
+                  },
+                  after: demoBeenden, wait: 500, target: '#circuit-editor-wrapper', pos: 'left' },
+                { k: 'lernzentrum', title: '🔌 Beispiel 3: nur im Steckaufbau stecken',
+                  text: 'Jetzt bleibt nur der <b>Steckaufbau</b>, im freien Aufbau. Lernende stecken die Kabel auf den Platinen, VALIS erzeugt daraus den Code und prüft ihn an der Anlage.'
+                      + lk('Häkchen: Ausblenden bei Code-Editor, Logikplan, Schaltplan und Schaltplan-Editor, dazu im Steckaufbau „Freier Aufbau erzwingen".'),
+                  before: () => {
+                      demoStarten(demoAufgabe('Nur Steckaufbau', 'Stecke die Steuerung auf den Platinen.',
+                          { codeEditor: true, logikplan: true, schaltplan: true, circuitEditor: true }, {},
+                          { freeBuildPreset: true, freeBuildForce: true }));
+                      panels(['festo-wrapper']);
+                  },
+                  after: demoBeenden, wait: 500, target: '#festo-wrapper', pos: 'left' },
+                { k: 'lernzentrum', title: '📋 Beispiele',
+                  text: 'Fertige Projekte zum Ausprobieren: von der einfachen Sortieranlage über Pressen mit Sicherheitsschaltung bis zu Schrittketten und der Ölkühlung mit Regler. Ein Klick lädt Code und Anlage.',
+                  before: () => hub('beispiele'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+                { k: 'lernzentrum', title: '📖 Fachbegriff-Lexikon',
+                  text: 'Alle Fachbegriffe kurz erklärt, von UND und ODER über Selbsthaltung bis „quittiert". In Texten von VALIS sind diese Begriffe unterstrichen: Fahr mit der Maus darauf, dann erscheint die Erklärung.',
+                  before: () => hub('lexikon'), after: hubZu, wait: 300,
+                  target: '#hub-overlay .hub-box', pos: 'left' },
+
+                // 9 · Speichern, Teilen, Zusammenarbeiten
+                { k: 'teilen', title: '💾 Automatisch gespeichert',
+                  text: 'VALIS speichert jede Änderung sofort im Browser. Oben neben dem Namen leuchtet dann kurz <b>Gespeichert</b>. Nach einem Neuladen ist alles wieder da.',
+                  target: '#save-indicator', pos: 'bottom' },
+                { k: 'teilen', kurz: true, title: '📤 Speichern, Laden, Teilen',
+                  text: 'Hier sicherst du Code und Anlage als <b>.valisave</b>-Datei und lädst sie wieder. Ein <b>Link</b> mit QR-Code nimmt das ganze Projekt mit, z. B. für Lernende am Tablet.',
+                  before: () => { try { window.openSaveLoadModal(); } catch (_) {} },
+                  after: () => { try { window.closeSaveLoadModal(); } catch (_) {} },
+                  wait: 300, target: '#saveload-modal', pos: 'left' },
+                { k: 'teilen', title: '🖨 Exportieren',
+                  text: 'Weiter unten im selben Fenster: Logikplan und Schaltplan als <b>SVG</b>, alles zusammen als <b>PDF</b>, der Code als <b>Siemens SCL</b> für das TIA-Portal, ein <b>Iframe</b> zum Einbetten in Moodle oder ILIAS und der <b>Versionsverlauf</b> mit Ständen zum Zurückholen.',
+                  before: () => {
+                      try { window.openSaveLoadModal(); } catch (_) {}
+                      setTimeout(() => { const d = document.querySelector('#saveload-modal .sl-section'); if (d) d.scrollIntoView({ block: 'center' }); }, 60);
+                  },
+                  after: () => { try { window.closeSaveLoadModal(); } catch (_) {} },
+                  wait: 350, target: '#saveload-modal .sl-section', pos: 'left' },
+                { k: 'teilen', title: '☁️ Meine Umgebung und Zusammenarbeiten',
+                  text: 'Mit <b>Meine Umgebung</b> meldest du dich an: Aufgaben und Pakete liegen dann auf dem Server und sind auf jedem Gerät da, eine Klasse tritt mit dem <b>Klassencode</b> bei. Über <b>👥 Zusammen</b> bearbeiten mehrere gleichzeitig dasselbe Projekt, live.',
+                  target: '#btn-cloud', pos: 'bottom' },
+
+                // 10 · Einstellungen und Extras
+                { k: 'extras', title: '⚙️ PRO-Modus',
+                  text: '<b>PRO</b> schaltet die Profi-Funktionen frei: Schrittketten als eigene Sprache mit GRAFCET- und S7-GRAPH-Ansicht, Betriebsarten, Verriegelungen und Arithmetik. Für den Einstieg bleibt er aus. Lehrkräfte können ihn für ihre Klasse vorgeben.',
+                  target: '#btn-pro-toggle', pos: 'bottom' },
+                { k: 'extras', title: '◫ Layout und zweiter Bildschirm',
+                  text: 'Hier ordnest du die Ansichten an: nebeneinander, untereinander oder die Anlage groß unten, oben, links oder rechts. Rechts im Menü <b>koppelst</b> du einzelne Ansichten in ein eigenes Fenster ab, z. B. die Anlage auf den Beamer und den Code auf den Laptop.',
+                  before: () => pinne('#btn-layout-text'), after: entpinne, wait: 150,
+                  target: '#btn-layout-text', pos: 'bottom' },
+                { k: 'extras', title: '🌍 Sprache und App',
+                  text: 'Die Flagge schaltet die Oberfläche zwischen Deutsch und Englisch um. Wenn der Browser es kann, erscheint daneben <b>App installieren</b>: Dann läuft VALIS wie ein eigenes Programm, auch ohne Internet.',
+                  target: '#btn-lang-toggle', pos: 'bottom' },
+                { k: 'extras', kurz: true, title: '🎓 Geschafft!',
+                  text: 'Das war die Tour. Wenn du auf <b>✓ Fertig</b> klickst, lädt VALIS kurz neu und dein eigener Stand ist wieder da.<br><br>Ein guter nächster Schritt sind die <b>Lektionen</b> im Lernzentrum (Strg+K). In jedem Fenster hilft dir der <b>ℹ️</b>-Knopf.',
+                  textKurz: 'Das war die kurze Tour. Die <b>ausführliche Tour</b> im Lernzentrum zeigt in zehn Kapiteln alles Weitere: Fehleranzeige, Erklärmodus, Oszilloskop, Pneumatik, Regler, Aufgaben für Lehrkräfte, Export und mehr.',
+                  target: null }
+                ];
+            }
+            let _erklAn = false;
+
+            // ── Liste für eine Fassung bauen ─────────────────────────────────
+            function _liste(fassung) {
+                const alle = _schritte().filter(s => fassung === 'lang' || s.kurz);
+                const kapNr = {}; KAPITEL.forEach((k, n) => kapNr[k.id] = n);
+                const genutzt = KAPITEL.filter(k => alle.some(s => s.k === k.id));
+                return alle.map((s, i) => {
+                    const st = Object.assign({}, s);
+                    let txt = s.text;
+                    if (fassung === 'lang' && s.textLang) txt += '<br><br>' + s.textLang;
+                    if (fassung === 'kurz' && s.textKurz) txt += '<br><br>' + s.textKurz;
+                    st.text = txt;
+                    const kn = genutzt.findIndex(k => k.id === s.k);
+                    const imKap = alle.filter(x => x.k === s.k);
+                    if (fassung === 'lang') {
+                        st.kapitelNr = kapNr[s.k];
+                        st.fortschritt = 'Kapitel ' + (kn + 1) + '/' + genutzt.length + ' · ' + (imKap.indexOf(s) + 1) + '/' + imKap.length;
+                    } else {
+                        st.fortschritt = (i + 1) + ' / ' + alle.length;
+                    }
+                    return st;
+                });
+            }
+
+            // ── eigenen Stand sichern ────────────────────────────────────────
+            function _sichern() {
+                const daten = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const n = localStorage.key(i);
+                    if (n !== SICHERUNG && gehoert.test(n)) daten[n] = localStorage.getItem(n);
+                }
+                const tab = String(Date.now()) + Math.random().toString(36).slice(2, 7);
+                localStorage.setItem(SICHERUNG, JSON.stringify({ tab: tab, puls: Date.now(), daten: daten }));
+                sessionStorage.setItem('valisTourLaeuft', tab);
+                _puls = setInterval(() => {
+                    try {
+                        const s = JSON.parse(localStorage.getItem(SICHERUNG) || 'null');
+                        if (!s) return;
+                        s.puls = Date.now();
+                        localStorage.setItem(SICHERUNG, JSON.stringify(s));
+                    } catch (_) {}
+                }, 5000);
+            }
+            function _beenden() {
+                _laeuft = false;
+                if (_puls) { clearInterval(_puls); _puls = null; }
+                try { demoBeenden(); } catch (_) {}
+                try { sim(false); } catch (_) {}
+                // Neu laden: das Skript im <head> spielt den gesicherten Stand zurück.
+                const hinweis = document.createElement('div');
+                hinweis.id = 'valis-tour-wahl';
+                hinweis.innerHTML = '<div class="vtw-box"><h3>🔄 Dein Stand kommt zurück …</h3><p>VALIS lädt kurz neu und stellt alles so her wie vor der Tour.</p></div>';
+                document.body.appendChild(hinweis);
+                setTimeout(() => { try { location.reload(); } catch (_) {} }, 350);
+            }
+
+            // ── Tour starten ─────────────────────────────────────────────────
+            function _starten(fassung, kapitel) {
+                if (_laeuft) return;
+                if (typeof window._valisLiveAn === 'function' && window._valisLiveAn()) {
+                    alert('Während der gemeinsamen Bearbeitung kann die Tour nicht starten, sonst würde ihr Beispiel bei allen landen. Verlasse zuerst die gemeinsame Bearbeitung.');
+                    return;
+                }
+                if (typeof window._valisTaskIsActive === 'function' && window._valisTaskIsActive()) {
+                    alert('Gerade läuft eine Aufgabe. Beende sie zuerst, dann kann die Tour starten.');
+                    return;
+                }
+                try { _sichern(); } catch (e) {
+                    alert('Die Tour kann deinen Stand nicht sichern (Browser-Speicher voll oder gesperrt). Deshalb startet sie nicht.');
+                    return;
+                }
+                _laeuft = true;
+                const fasse = (fassung === 'lang' || fassung === 'ausfuehrlich') ? 'lang' : 'kurz';
+                const steps = _liste(fasse);
+                try { window.closeHub(); } catch (_) {}
+                try { window.loadExample(BEISPIEL); } catch (_) {}
+                setTimeout(() => {
+                    panels(['fbs-wrapper', 'factory-wrapper']);
+                    window._startWalk(steps, { onClose: _beenden });
+                    if (kapitel) {
+                        const j = steps.findIndex(s => s.k === kapitel);
+                        if (j > 0 && typeof window._walkGoto === 'function') window._walkGoto(j);
+                    }
+                }, 600);
+            }
+
+            // ── Auswahl kurz / ausführlich / Kapitel ─────────────────────────
+            window._valisTourWaehlen = function () {
+                if (document.getElementById('valis-tour-wahl')) return;
+                const lang = _liste('lang'), kurz = _liste('kurz');
+                const ov = document.createElement('div');
+                ov.id = 'valis-tour-wahl';
+                ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+                const kap = KAPITEL.map((k, n) =>
+                    '<button class="vtw-kap" data-kap="' + k.id + '">' + (n + 1) + '. ' + k.titel
+                    + ' <span style="color:#78909c;">(' + lang.filter(s => s.k === k.id).length + ')</span></button>').join('');
+                ov.innerHTML = '<div class="vtw-box" role="dialog" aria-label="Tour wählen">'
+                    + '<h3>🎓 Tour durch VALIS</h3>'
+                    + '<p>Die Tour lädt ein Beispiel und führt dir alles live vor. Dein eigener Stand wird vorher gesichert und kommt am Ende zurück.</p>'
+                    + '<div class="vtw-wege">'
+                    + '<button class="vtw-weg" data-fassung="kurz"><b>Kurz</b>' + kurz.length + ' Schritte, etwa 5 Minuten. Die wichtigsten Bereiche.</button>'
+                    + '<button class="vtw-weg" data-fassung="lang"><b>Ausführlich</b>' + lang.length + ' Schritte in ' + KAPITEL.length + ' Kapiteln, etwa 20 bis 25 Minuten.</button>'
+                    + '</div>'
+                    + '<div class="vtw-kap-titel">Oder direkt in ein Kapitel der ausführlichen Tour</div>'
+                    + '<div class="vtw-kapitel">' + kap + '</div>'
+                    + '<div class="vtw-fuss"><span>👉 Schritte mit „Mach mit" warten auf dich. Du kannst sie überspringen.</span>'
+                    + '<button class="vtw-zu">Abbrechen</button></div>'
+                    + '</div>';
+                ov.querySelectorAll('[data-fassung]').forEach(b => b.addEventListener('click', () => { ov.remove(); _starten(b.dataset.fassung); }));
+                ov.querySelectorAll('[data-kap]').forEach(b => b.addEventListener('click', () => { ov.remove(); _starten('lang', b.dataset.kap); }));
+                ov.querySelector('.vtw-zu').addEventListener('click', () => ov.remove());
+                document.body.appendChild(ov);
+            };
+            // Alte Einstiege (Lernzentrum, Countdown) führen jetzt zur Auswahl.
+            window.startTutorial = window._valisTourWaehlen;
+            window._valisTourStarten = _starten;
+            window._valisTourSchritte = _liste;   // für Tests
+
+            // ── Direktlink ?tour=kurz|lang (&kapitel=<id>) und Abschluss-Hinweis ──
+            function _beimLaden() {
+                try {
+                    if (sessionStorage.getItem('valisTourEnde') === '1') {
+                        sessionStorage.removeItem('valisTourEnde');
+                        setTimeout(() => { try { _showToast('✓ Tour beendet. Dein eigener Stand ist wieder da.', '#2e7d32'); } catch (_) {} }, 800);
+                    }
+                } catch (_) {}
+                let q = null;
+                try { q = new URLSearchParams(location.search); } catch (_) { return; }
+                const f = q && q.get('tour');
+                if (!f) return;
+                const kapitel = q.get('kapitel') || '';
+                q.delete('tour'); q.delete('kapitel');
+                try {
+                    const rest = q.toString();
+                    history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+                } catch (_) {}
+                setTimeout(() => {
+                    if (f === 'kurz' || f === 'lang' || f === 'ausfuehrlich') _starten(f, kapitel);
+                    else window._valisTourWaehlen();
+                }, 1200);
+            }
+            if (document.readyState === 'complete') _beimLaden();
+            else window.addEventListener('load', _beimLaden);
+        })();
+
+        // ==========================================
         // 📚 LEKTIONEN — Interaktive Lernpfade
         // ==========================================
         (function() {
@@ -55155,6 +55846,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 });
             };
+            window._valisSetPanels = _setLessonPanels;
             const _setEditorCode = (code) => {
                 // Delegieren an den globalen Undo-fähigen Helper. Dispatcht
                 // bereits das input-Event; updateEditor anschließend zur
@@ -59761,7 +60453,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             window.hubLaunch = function (id) {
                 // Tour ist nicht einbettbar → Hub schließen und mit Countdown starten.
-                if (id === 'tour') { window.closeHub(); _hubStartTourCountdown(); return; }
+                if (id === 'tour') {
+                    window.closeHub();
+                    if (typeof window._valisTourWaehlen === 'function') window._valisTourWaehlen();
+                    else _hubStartTourCountdown();
+                    return;
+                }
                 // Alle anderen: Inhalt direkt IM Hub anzeigen (kein separates Modal).
                 window._hubShowSection(id);
             };
@@ -71808,6 +72505,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 <button class="tut-skip" onclick="closeTutorial()">✕ Schließen</button>
                 <span class="tut-progress" id="tut-progress"></span>
                 <div style="display:flex;gap:5px;">
+                    <button id="tut-kapitel" onclick="tutorialSkipChapter()" title="Zum nächsten Kapitel springen" style="display:none;">⏭ Kapitel</button>
                     <button id="tut-prev" onclick="tutorialPrev()">← Zurück</button>
                     <button id="tut-next" onclick="tutorialNext()">Weiter →</button>
                 </div>
@@ -73444,6 +74142,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         var live = { kind: '', uid: '', name: '', on: false, mine: false, taken: false,
                      mode: 'pen', timer: null, lastVer: 0, lastFp: '', locked: false,
                      base: null };
+        // Für die VALIS-Tour: Während gemeinsamer Bearbeitung darf sie nicht
+        // starten, sonst würde das Tour-Beispiel bei allen landen.
+        window._valisLiveAn = function () { return !!live.on; };
         var rtBusy = false, rtConflictAt = 0;
 
         // Je TAB eine eigene Kennung, nicht je Browser. Frueher lag sie im

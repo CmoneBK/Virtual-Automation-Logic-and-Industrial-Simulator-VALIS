@@ -75215,6 +75215,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             try { return (typeof spsAddresses !== 'undefined' && spsAddresses[name]) ? spsAddresses[name] : ''; }
             catch (_) { return ''; }
         }
+        // Echter Ausgang (Klemme) und kein Merker?
+        function isPhysOut(name) {
+            const outs = (typeof globalOutputs !== 'undefined' && Array.isArray(globalOutputs)) ? globalOutputs : [];
+            if (!outs.includes(name) || /^Q\d+(_(?:RS|SR))?$/i.test(name)) return false;
+            // Im Programm weiterverwendetes Ergebnis = Merker/Hilfsrelais (wie _isMerkerVar, aber modusunabhängig)
+            try {
+                const g = (typeof currentGraph !== 'undefined') ? currentGraph : null;
+                if (g && g.edges && g.edges.some(e => (e._origSourceId || e.sourceId) === name)) return false;
+            } catch (_) {}
+            return !/^M/i.test(addrOf(name));
+        }
+        // Name des internen Speicherbits eines SR/RS-Glieds (wie im Code: Q1 bzw. Q2_RS)
+        function ffMerker(node) {
+            const num = (String(node.id).match(/\d+/) || ['1'])[0];
+            return 'Q' + num + (node.type === 'RS' ? '_RS' : '');
+        }
         function isIO(name) {
             const ins = (typeof globalInputs !== 'undefined' && Array.isArray(globalInputs)) ? globalInputs : [];
             const outs = (typeof globalOutputs !== 'undefined' && Array.isArray(globalOutputs)) ? globalOutputs : [];
@@ -75225,6 +75241,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let k = bmk[name] || '';
             // Hilfsrelais/Merker tragen kein Betriebsmittelkennzeichen im FUP
             if (/^KF/.test(k) && (!isIO(name) || /^M/i.test(a))) k = '';
+            // Speicherbit eines SR/RS-Glieds (Q1, Q2_RS): SPS-intern, kein Betriebsmittel
+            if (/^Q\d+(_(?:RS|SR))?$/i.test(name)) k = '';
             const parts = [];
             if (k) parts.push('-' + k);
             if (a) parts.push(/^%/.test(a) ? a : '%' + a);
@@ -75304,9 +75322,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const ie = inEdges.get(r.id) || [];
                     const e = ie[0];
                     const child = e ? tree(e.sourceId, r.id, 0) : { kind: 'op', name: 'FALSE', src: 'FALSE' };
-                    if (child.kind === 'box' && (child.node.type === 'SR' || child.node.type === 'RS') && !(e && e.inverted)) {
+                    const isFF = child.kind === 'box' && (child.node.type === 'SR' || child.node.type === 'RS');
+                    if (isFF && !(e && e.inverted) && !isPhysOut(r.id)) {
+                        // Ziel ist selbst ein Merker → steht als Operand über dem Kasten
                         body = { kind: 'mem', target: r.id, child };
                     } else {
+                        // Ziel ist ein echter Ausgang: Über dem Kasten steht der
+                        // Speicher-Merker des Glieds (Q1, Q2_RS …), Q führt auf „=“ Ausgang.
+                        if (isFF) child.ownerName = ffMerker(child.node);
                         body = { kind: 'assign', target: r.id, inv: !!(e && e.inverted), child };
                     }
                 }

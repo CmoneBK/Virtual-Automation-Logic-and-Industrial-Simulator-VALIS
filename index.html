@@ -2803,6 +2803,8 @@
         .tut-nav #tut-kapitel { background: #37474f; color: #cfd8dc; font-weight: normal; }
         .tut-nav #tut-kapitel:hover { background: #455a64; }
         .tut-nav button.tut-ueberspringen { background: #455a64; color: #cfd8dc; font-weight: normal; }
+        @keyframes tutBlinken { 0%,100% { box-shadow: 0 0 0 0 rgba(255,213,79,0); filter: none; } 50% { box-shadow: 0 0 0 4px rgba(255,213,79,0.95); filter: brightness(1.45); } }
+        .tut-blinken { animation: tutBlinken 0.9s ease-in-out infinite; position: relative; z-index: 2; }
         .tut-mitmachen { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #ffb300; background: rgba(255,179,0,0.08); color: #ffe082; border-radius: 3px; }
         .tut-geschafft { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #66bb6a; background: rgba(102,187,106,0.12); color: #a5d6a7; border-radius: 3px; font-weight: 600; }
         .tut-lk { margin-top: 8px; padding: 6px 9px; border-left: 3px solid #7e57c2; background: rgba(126,87,194,0.12); color: #d1c4e9; border-radius: 3px; }
@@ -55292,9 +55294,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const g = document.getElementById('fbs-button-group');
                 if (g && g.classList.contains('expanded') !== an && typeof window.toggleFbsToolbar === 'function') window.toggleFbsToolbar();
             };
-            const spsModus = () => {
-                try { if (window.epneuMode === true && typeof window.toggleEpneuMode === 'function') window.toggleEpneuMode(); } catch (_) {}
+            // Modus ohne Rückfrage umschalten (die Tour stellt am Ende ohnehin alles zurück).
+            const modus = (epneu) => {
+                if (typeof window.toggleEpneuMode !== 'function' || !!window.epneuMode === !!epneu) return;
+                const oc = window.confirm;
+                window.confirm = function () { return true; };
+                try { window.toggleEpneuMode(); } catch (_) {} finally { window.confirm = oc; }
             };
+            const spsModus = () => modus(false);
+            const epneuModus = () => modus(true);
             // Menü der 2D-Anlage Nr. n (1 = Bedienpult …) aufklappen und als Ziel markieren.
             const facMenueAuf = (n) => {
                 entpinne();
@@ -55320,7 +55328,29 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _codeVorher = ta.value;
                 ta.value = ta.value.replace(/\s*$/, '') + '\n' + zeile + '\n';
                 ta.dispatchEvent(new Event('input'));
+                // Zur neuen Zeile scrollen, damit die Fehlermarke im Bild ist.
+                const zuEnde = () => {
+                    try {
+                        ta.scrollIntoView({ block: 'nearest' });
+                        ta.scrollTop = ta.scrollHeight;
+                        ta.dispatchEvent(new Event('scroll'));
+                        if (typeof window._updateErrorGutter === 'function') window._updateErrorGutter();
+                    } catch (_) {}
+                };
+                zuEnde(); setTimeout(zuEnde, 150);
             };
+            // Fehler-Popup an der (letzten) Fehlermarke öffnen.
+            const fehlerZeigen = () => {
+                try {
+                    const icons = document.querySelectorAll('#error-gutter .error-icon');
+                    const icon = icons[icons.length - 1];
+                    if (!icon) return;
+                    const n = parseInt(icon.getAttribute('data-line'), 10);
+                    if (!isNaN(n) && typeof window._showErrorPopupForLine === 'function') window._showErrorPopupForLine(n, icon);
+                } catch (_) {}
+            };
+            const fehlerZu = () => { try { if (window._hideErrorPopup) window._hideErrorPopup(); } catch (_) {} };
+            const blinke = (sel, an) => { const e = $(sel); if (e) e.classList.toggle('tut-blinken', !!an); };
             const codeZurueck = () => {
                 const ta = document.getElementById('code');
                 if (!ta || _codeVorher == null) return;
@@ -55394,17 +55424,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   before: () => legExt('timer', true), after: () => legExt('timer', false), wait: 150,
                   target: '.leg-ext-row', pos: 'right' },
                 { k: 'editor', title: '❗ Fehler sofort sehen',
-                  text: 'Die Tour hat unten eine unfertige Zeile angehängt. VALIS markiert sie am rechten Rand rot, bevor du überhaupt startest. Fahr mit der Maus auf die Markierung, dann siehst du, was fehlt. Im Logikplan leuchtet dieselbe Stelle rot.<br><br>Beim Weiterklicken nimmt die Tour die Zeile wieder heraus.',
-                  before: () => codeAnhaengen('TEST_LAMPE := START &&'), after: codeZurueck, wait: 400,
-                  target: '#error-gutter', pos: 'right' },
+                  text: 'Die Tour hat unten eine unfertige Zeile angehängt und dorthin gescrollt. VALIS markiert sie am rechten Rand mit einem roten Zeichen, bevor du überhaupt startest. Ein Klick auf das Zeichen (oder die Maus darauf) zeigt, was fehlt; hier ist die Erklärung schon offen. Im Logikplan leuchtet dieselbe Stelle rot.<br><br>Beim Weiterklicken nimmt die Tour die Zeile wieder heraus.',
+                  before: () => { codeAnhaengen('TEST_LAMPE := START &&'); setTimeout(fehlerZeigen, 350); },
+                  after: () => { fehlerZu(); codeZurueck(); }, wait: 450,
+                  target: ['#error-gutter .error-icon', '#code-error-popup'], pos: 'right' },
                 { k: 'editor', title: '📖 Erklärmodus',
-                  text: 'Der Erklärmodus übersetzt die Zeile, in der der Cursor steht, in einen deutschen Satz. Die Tour hat ihn eingeschaltet und den Cursor in die Zeile mit der Selbsthaltung gesetzt.',
+                  text: 'Der Erklärmodus übersetzt die Zeile, in der der Cursor steht, in einen deutschen Satz. Du schaltest ihn mit dem blinkenden Knopf <b>📖 Code-/Logik-Erklärmodus</b> ein und aus. Die Tour hat ihn eingeschaltet und den Cursor in die Zeile mit der Selbsthaltung gesetzt.',
                   before: () => {
+                      blinke('#btn-explain-toggle', true);
                       _erklAn = !window._explainMode;
                       if (_erklAn) window.toggleExplainMode();
                       codeZeile('S1 :=');
                   },
-                  after: () => { if (_erklAn && window._explainMode) window.toggleExplainMode(); _erklAn = false; },
+                  after: () => { blinke('#btn-explain-toggle', false); if (_erklAn && window._explainMode) window.toggleExplainMode(); _erklAn = false; },
                   wait: 300, target: ['#btn-explain-toggle', '#code-inspector'], pos: 'right' },
                 { k: 'editor', title: '⚙️ Werkzeuge des Editors',
                   text: 'Oben rechts am Editor: <b>Leeren</b>, <b>↶ Rückgängig</b> und <b>↷ Wiederholen</b> (auch Strg+Z, Strg+Y) und <b>⚙️</b> für die Editor-Einstellungen: Zeilennummern, Schriftgröße, Großbuchstaben erzwingen und Autovervollständigung der Variablennamen.',
@@ -55425,7 +55457,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   target: '#btn-epneu-mode', pos: 'right' },
                 { k: 'simpanel', title: '📋 Zuordnungsliste',
                   text: 'Im SPS-Modus gibt es die <b>Zuordnungsliste</b>: Variable, Adresse (z. B. E0.0), Betriebsmittelkennzeichen, Bauteil, Öffner oder Schließer und Kommentar, mit Live-Zustand. Sie lässt sich drucken und als CSV speichern.',
-                  before: spsModus, wait: 250,
+                  before: spsModus, after: epneuModus, wait: 250,
                   target: ['#btn-zuordnung-sim'], pos: 'right' },
                 { k: 'simpanel', title: '🗑 Papierkorb und Variablen',
                   text: 'Der <b>Papierkorb</b> hält die letzten 20 gelöschten Bauteile der Anlage, ein Klick holt eines zurück. Das <b>⚙️</b> daneben stellt ein, wann nicht mehr benutzte Variablen aus dem Sim-Panel verschwinden.',
@@ -55734,6 +55766,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const fasse = (fassung === 'lang' || fassung === 'ausfuehrlich') ? 'lang' : 'kurz';
                 const steps = _liste(fasse);
                 try { window.closeHub(); } catch (_) {}
+                // Die Tour läuft im Standardmodus E-Pneu (eigener Modus kommt am Ende zurück).
+                try { epneuModus(); } catch (_) {}
                 try { window.loadExample(BEISPIEL); } catch (_) {}
                 setTimeout(() => {
                     panels(['fbs-wrapper', 'factory-wrapper']);

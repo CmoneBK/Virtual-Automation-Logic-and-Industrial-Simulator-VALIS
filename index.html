@@ -75288,18 +75288,31 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
             const isVar = (n) => !n || n.type === 'PURE_INPUT' || n.type === 'INPUT' || n.type === 'OUTPUT' || n.type === 'ARITH';
             const pinOrder = { S: 0, S1: 0, IN: 0, CU: 0, CD: 0, R: 1, R1: 1, PT: 2, PV: 2 };
-            function tree(srcId, rootId, depth) {
+            function tree(srcId, rootId, depth, path) {
                 const n = nodes.get(srcId);
                 if (depth > 40 || isVar(n)) return { kind: 'op', name: srcId, src: srcId };
-                if (n.type !== 'GATE' && owner.has(n.id) && owner.get(n.id) !== rootId)
-                    return { kind: 'op', name: owner.get(n.id), src: owner.get(n.id) };
+                // Rückführung (Selbsthaltung über den eigenen Speicher): als Operand am
+                // Eingang lesen, nicht erneut aufklappen (sonst endlose Kaskade).
+                if (path && path.includes(n.id)) {
+                    const own = owner.get(n.id) || rootId;
+                    const ff = n.type === 'SR' || n.type === 'RS';
+                    const nm = ff && (!owner.has(n.id) || isPhysOut(own)) ? ffMerker(n) : own;
+                    return { kind: 'op', name: nm, src: own };
+                }
+                if (n.type !== 'GATE' && owner.has(n.id) && owner.get(n.id) !== rootId) {
+                    const own = owner.get(n.id);
+                    // Speicherglied auf echten Ausgang: andere Netzwerke lesen den
+                    // Merker des Glieds (Q1, Q2_RS), nicht den Ausgang.
+                    const nm = ((n.type === 'SR' || n.type === 'RS') && isPhysOut(own)) ? ffMerker(n) : own;
+                    return { kind: 'op', name: nm, src: own };
+                }
                 const ie = (inEdges.get(n.id) || []).slice();
                 // RS (setzdominant): R oben, S1 unten — wie im Tabellenbuch.
                 const ord = (pin) => (n.type === 'RS' && (pin === 'S' || pin === 'R')) ? (pin === 'R' ? 0 : 1) : (pinOrder[pin] ?? 0);
                 ie.sort((a, b) => ord(a.targetPin) - ord(b.targetPin));
                 return {
                     kind: 'box', node: n, src: n.id,
-                    ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1) }))
+                    ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1, (path || []).concat(n.id)) }))
                 };
             }
             // Netzwerk-Marker (// NETZWERK n: Titel) wie im normalen Netzwerkmodus

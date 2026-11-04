@@ -13589,6 +13589,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const svg = $svg();
                 const btn = $btn();
                 if (!panel || !svg) return;
+                // Aufgabe blendet die Schrittkette aus → Renderer darf Button
+                // und Panel nicht wieder einblenden.
+                let _skTaskHide = false;
+                try { _skTaskHide = !!(activeTask && activeTask.hideAreas && activeTask.hideAreas.schrittkette); } catch(_e) {}
+                if (_skTaskHide) {
+                    if (btn) btn.style.display = 'none';
+                    if (panel.style.display !== 'none') panel.style.display = 'none';
+                    return;
+                }
                 // PRO-Modus aus → alles weg. Renderer komplett ruhig, Top-Bar-
                 // Button verstecken, Panel zumachen. Ausnahme: eine von Hand
                 // geschriebene SR-Kette (Relais-/Merker-Schrittkette) wird auch
@@ -27091,7 +27100,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // In Grid-Layout erzwingt CSS "display:flex !important" auf allen Panels →
             // erst in flex-row wechseln damit display:none greift
             _taskSavedLayout = null;
-            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.circuitEditor || areas.factory2d || areas.festo;
+            const _wsAnyHide = areas.logikplan || areas.schaltplan || areas.circuitEditor || areas.factory2d || areas.festo || areas.schrittkette;
             if (_wsAnyHide && typeof currentLayout !== 'undefined' && currentLayout.startsWith('grid-')) {
                 _taskSavedLayout = currentLayout;
                 window.changeWorkspaceLayout('flex-row');
@@ -28970,6 +28979,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 circuitEditor:   !!(document.getElementById('ted-block-edit') || {}).checked,
                 factory2d:       !!(document.getElementById('ted-block-2d') || {}).checked,
                 festo:           !!(document.getElementById('ted-block-festo') || {}).checked,
+                schrittkette:    !!(document.getElementById('ted-block-sk') || {}).checked,
                 factoryNewVars:  !!(document.getElementById('ted-block-newvar') || {}).checked,
                 excludeControls: !!(document.getElementById('ted-block-2d-excl-ctrl') || {}).checked,
                 disableFromCode: !!(document.getElementById('ted-block-edit-no-fromcode') || {}).checked,
@@ -28983,6 +28993,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 circuitEditor:!!(document.getElementById('ted-hide-edit') || {}).checked,
                 factory2d:    !!(document.getElementById('ted-hide-2d') || {}).checked,
                 festo:        !!(document.getElementById('ted-hide-festo') || {}).checked,
+                schrittkette: !!(document.getElementById('ted-hide-sk') || {}).checked,
             };
             task.festoConfig = {
                 freeBuildPreset: !!(document.getElementById('ted-festo-fb-preset') || {}).checked,
@@ -29249,6 +29260,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             ['edit',   '🎨 Schaltplan-Editor','ted-block-edit',  'ted-hide-edit',   (task.blockAreas||{}).circuitEditor,(task.hideAreas||{}).circuitEditor,'(Sperren lässt Wires/Komponenten betrachten, aber nichts mehr ändern)'],
                             ['2d',     '2D Anlage',          'ted-block-2d',     'ted-hide-2d',     (task.blockAreas||{}).factory2d,   (task.hideAreas||{}).factory2d,   ''],
                             ['festo',  '🔌 Steckaufbau',    'ted-block-festo',  'ted-hide-festo',  (task.blockAreas||{}).festo,       (task.hideAreas||{}).festo,       ''],
+                            ['sk',     '📋 Schrittkette',   'ted-block-sk',     'ted-hide-sk',     (task.blockAreas||{}).schrittkette,(task.hideAreas||{}).schrittkette,'(Grafcet/S7-GRAPH-Panel; erscheint im PRO-Modus oder bei einer erkannten SR-Kette)'],
                         ].map(([key,label,blockId,hideId,blockChk,hideChk,hint]) => `
                             <tr style="border-top:1px solid #2a2a2a;">
                                 <td style="padding:4px 0;">${label}${hint?`<br><span style="color:#607d8b;font-size:10px;">${hint}</span>`:''}</td>
@@ -29504,13 +29516,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 '  "circuitEditor"   Schaltplan-Editor gesperrt (Betrachten ja, Aendern nein).',
                 '  "factory2d"       2D-Anlage gesperrt.',
                 '  "festo"           Steckaufbau-Panel gesperrt.',
+                '  "schrittkette"    Schrittketten-Panel (Grafcet/S7-GRAPH) gesperrt.',
                 '  "factoryNewVars"  Neue Objekte zur 2D-Anlage hinzufuegen sperren (nur wenn 2D nicht ganz gesperrt).',
                 '  "excludeControls" Bedienelemente (Taster/Schalter/Not-Halt) bleiben trotz 2D-Sperre klickbar.',
                 '  "disableFromCode" Schaltplan-Editor: "Aus Code"-Button + Live-Sync aus (Lerner muss selbst verdrahten).',
                 '  "disableLiveSync" Schaltplan-Editor: Live-Sync komplett aus.',
                 '',
                 '=== BEREICHE AUSBLENDEN ("hideAreas") — Wert true blendet ganz aus ===',
-                '  Schluessel: codeEditor, ioPanel, logikplan, schaltplan, circuitEditor, factory2d, festo.',
+                '  Schluessel: codeEditor, ioPanel, logikplan, schaltplan, circuitEditor, factory2d, festo, schrittkette.',
                 '',
                 '=== 2D-OBJEKT-EINSCHRAENKUNG ===',
                 '  "restrictObjects": "none"        keine Einschraenkung.',

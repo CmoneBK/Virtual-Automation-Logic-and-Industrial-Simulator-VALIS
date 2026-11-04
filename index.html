@@ -15724,8 +15724,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         py = tgt.y + 20 + sp * (idx + 0.5);
                     }
                 } else if (tgt.type === 'SR' || tgt.type === 'RS' || tgt.type === 'CTU') {
-                    if (edge.targetPin === 'S' || edge.targetPin === 'CU') py = tgt.y + 15;
-                    else if (edge.targetPin === 'R' || edge.targetPin === 'R1') py = tgt.y + tgt.height - 15;
+                    py = fbsFfPinY(tgt, edge.targetPin, py);
                 }
                 return py;
             };
@@ -16277,8 +16276,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const spacing = usableHeight / Math.max(1, target.inputs.length);
                     endY = target.y + 20 + spacing * (inIndex + 0.5);
                 } else if (target.type === 'SR' || target.type === 'RS' || target.type === 'CTU') {
-                    if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
-                    if (edge.targetPin === 'R') endY = target.y + target.height - 15;
+                    endY = fbsFfPinY(target, edge.targetPin, endY);
                 }
                 // Jeder Pin blockiert horizontal den Kanal (120px nach links) für alle fremden Leitungen!
                 horizontalUsage.push({ y: safe(endY), x1: target.x - 120, x2: target.x, isPinStub: true });
@@ -16321,8 +16319,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const spacing = usableHeight / Math.max(1, target.inputs.length);
                         endY = target.y + 20 + spacing * (inIndex + 0.5); 
                     } else if (target.type === 'SR' || target.type === 'RS' || target.type === 'CTU') {
-                        if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
-                        if (edge.targetPin === 'R') endY = target.y + target.height - 15;
+                        endY = fbsFfPinY(target, edge.targetPin, endY);
                     }
                     edge.calcEndY = safe(endY);
                     edge.calcEndX = safe(target.x);
@@ -16444,8 +16441,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const spacing = usableHeight / Math.max(1, target.inputs.length);
                     endY = target.y + 20 + spacing * (inIndex + 0.5);
                 } else if (target.type === 'SR' || target.type === 'RS' || target.type === 'CTU') {
-                    if (edge.targetPin === 'S' || edge.targetPin === 'CU') endY = target.y + 15;
-                    if (edge.targetPin === 'R') endY = target.y + target.height - 15;
+                    endY = fbsFfPinY(target, edge.targetPin, endY);
                 }
                 // Negations-Bubble respektieren — der Pin-Anfang sitzt dann
                 // ein paar Pixel weiter links.
@@ -16597,10 +16593,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             const isSR = node.type === 'SR';
                             // Namen wie im Tabellenbuch (der letzte Buchstabe gewinnt),
                             // dominanter Eingang mit „1" wie in IEC 61131-3:
-                            // SR (Rücksetzdominant) -> S, R1
-                            // RS (Setzdominant) -> S1, R
-                            sText.textContent = isSR ? "S" : "S1";
-                            rText.textContent = isSR ? "R1" : "R";
+                            // SR (Rücksetzdominant) -> oben S,  unten R1
+                            // RS (Setzdominant)    -> oben R,  unten S1
+                            // (Reihenfolge von oben nach unten = Buchstaben im Namen,
+                            // Lage über fbsFfPinY, damit Leitungen dazu passen.)
+                            sText.textContent = isSR ? "S" : "R";
+                            rText.textContent = isSR ? "R1" : "S1";
                         } else if (['TON', 'TOF', 'TP'].includes(node.type)) {
                             // Timer Eingänge: IN und PT (Preset Time)
                             sText.textContent = "IN";
@@ -50083,6 +50081,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         const fbsWrapper = document.getElementById('fbs-wrapper');
         let lastHighlightedLine = null;
         window.draggedFbsButton = null; 
+        // Y-Lage eines Eingangs-Pins an SR/RS/CTU im Logikplan.
+        // SR: S oben, R1 unten. RS: R oben, S1 unten (Tabellenbuch: Reihenfolge
+        // wie im Namen, der untere/letzte Eingang gewinnt). CTU: CU oben, R unten.
+        // Kanten bleiben semantisch ('S'/'R'), deshalb laden alte Stände unverändert.
+        function fbsFfPinY(node, pin, fallback) {
+            let top;
+            if (pin === 'S' || pin === 'S1') top = node.type !== 'RS';
+            else if (pin === 'R' || pin === 'R1') top = node.type === 'RS';
+            else if (pin === 'CU') top = true;
+            else return fallback;
+            return top ? node.y + 15 : node.y + node.height - 15;
+        }
+        window.fbsFfPinY = fbsFfPinY;
         window.startFbsDrag = function(e, type) {
             e.dataTransfer.setData('text/plain', type);
             e.dataTransfer.effectAllowed = 'copy';
@@ -75265,7 +75276,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (n.type !== 'GATE' && owner.has(n.id) && owner.get(n.id) !== rootId)
                     return { kind: 'op', name: owner.get(n.id), src: owner.get(n.id) };
                 const ie = (inEdges.get(n.id) || []).slice();
-                ie.sort((a, b) => (pinOrder[a.targetPin] ?? 0) - (pinOrder[b.targetPin] ?? 0));
+                // RS (setzdominant): R oben, S1 unten — wie im Tabellenbuch.
+                const ord = (pin) => (n.type === 'RS' && (pin === 'S' || pin === 'R')) ? (pin === 'R' ? 0 : 1) : (pinOrder[pin] ?? 0);
+                ie.sort((a, b) => ord(a.targetPin) - ord(b.targetPin));
                 return {
                     kind: 'box', node: n, src: n.id,
                     ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1) }))

@@ -8291,7 +8291,8 @@ You must output exactly this JSON format. The logic code goes as a single string
                     warnMsg += `Legacy-Öffner (taster_nc / schalter_nc), Anzahl ${legacyNcVars.length}: ${legacyNcVars.join(', ')}\n` +
                                `behalten ihre SPS-Semantik (Inversion) für Code-Migration und erscheinen im Dropdown mit ⚠️.\n\n`;
                 }
-                warnMsg += `Notaus und Lichtgitter bleiben Symbol-seitig als Öffner gezeichnet (Sicherheits-Konvention nach Norm).\n\n` +
+                warnMsg += `Der Schaltplan zeichnet den Kontakt so, wie der Code ihn liest: "¬NOTAUS" erscheint als Öffner, ` +
+                           `ein NOTAUS ohne ¬ als Schließer (= wirkt nur bei gedrücktem Not-Aus). VALIS markiert diesen Fall im Code.\n\n` +
                            `Fortfahren?`;
                 if (!confirm(warnMsg)) return;
                 window.epneuMode = true;
@@ -10673,7 +10674,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         </table>
                         <h5>Beispiel</h5>
 <pre>  <span class="kw">STEP</span> S2 (FUELLEN):
-    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU     <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span>
+    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU     <span class="cm">// NOT_AUS = nothalt (NC): im SPS-Modus TRUE im Ruhezustand</span>
     C: A_PUMPE := <span class="kw">TRUE</span>         <span class="cm">// nur wenn Interlock TRUE</span>
     P: A_HUPE := <span class="kw">TRUE</span>          <span class="cm">// 100 ms Puls beim Eintritt</span>
     D <span class="num">1.0</span>: A_LED_RUN := <span class="kw">TRUE</span>   <span class="cm">// LED erst nach 1 s</span>
@@ -10692,7 +10693,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                         <h4>Übergangs-Bedingungen</h4>
                         <p>Jeder ausgehende Übergang hat eine boolesche Bedingung. Standard:</p>
 <pre>  <span class="kw">TRANS:</span>
-    SENSOR_VOLL && NOT_AUS -&gt; S3   <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span></pre>
+    SENSOR_VOLL && NOT_AUS -&gt; S3   <span class="cm">// NOT_AUS = nothalt (NC): im SPS-Modus TRUE im Ruhezustand</span></pre>
                         <h5>AFTER &lt;t&gt; — Übergangs-Timer</h5>
                         <p>Mit <code>AFTER &lt;sekunden&gt;</code> kannst du einen <b>step-eintritts-relativen Timer</b>
                         in der Bedingung verwenden — wie ein FUP-Timer in der Transition bei S7-GRAPH:</p>
@@ -10734,7 +10735,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         unterdrückt. Der Step bleibt aktiv, die Aktoren werden nur einfach nicht angesteuert.
                         Im Grafcet/S7-GRAPH-Panel als 🔒-Badge unter dem Step angezeigt.</p>
 <pre>  <span class="kw">STEP</span> S2 (FUELLEN):
-    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU   <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand</span>
+    <span class="kw">INTERLOCK:</span> NOT_AUS && DECKEL_ZU   <span class="cm">// NOT_AUS = nothalt (NC): im SPS-Modus TRUE im Ruhezustand</span>
     C: A_PUMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt nur wenn Interlock TRUE</span>
     N: A_LAMPE := <span class="kw">TRUE</span>     <span class="cm">// fließt immer (N ignoriert Interlock)</span></pre>
                         <h5>SUPERVISION — Überwachung / Watchdog</h5>
@@ -10766,7 +10767,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
 <pre><span class="kw">SCHRITTKETTE</span> MISCHER:
   <span class="kw">CONTROL:</span>
     INIT_SQ:     RESET_BTN
-    OFF_SQ:      ¬NOT_AUS     <span class="cm">// NOT_AUS = nothalt (NC): TRUE im Ruhezustand → ¬NOT_AUS</span>
+    OFF_SQ:      ¬NOT_AUS     <span class="cm">// NOT_AUS = nothalt (NC): im SPS-Modus TRUE im Ruhezustand → ¬NOT_AUS</span>
     ACK_EF:      ACK_BTN
     MODE_AUTO:   SW_AUTO
     MODE_TAP:    SW_TAP
@@ -10791,7 +10792,7 @@ S3 := (Q2 && (_TMR_X_S2_5))</pre>
                         <table>
                             <tr><th>Key</th><th>Wirkung</th></tr>
                             <tr><td><code>INIT_SQ</code></td><td>Wenn TRUE: alle Q werden zurückgesetzt + Init-Step wird aktiviert. Reset-Taster.</td></tr>
-                            <tr><td><code>OFF_SQ</code></td><td>Wenn TRUE: alle Q=0 und Init-Term blockiert. Komplette Abschaltung (z.B. NOT-Halt). <b>NC-Konvention:</b> bei nothalt-Typ (NC) ist die Variable im Ruhezustand TRUE, daher als <code>¬NOT_AUS</code> binden — der Generator macht das richtige.</td></tr>
+                            <tr><td><code>OFF_SQ</code></td><td>Wenn TRUE: alle Q=0 und Init-Term blockiert. Komplette Abschaltung (z.B. NOT-Halt). <b>NC-Konvention:</b> bei nothalt-Typ (NC) ist die Variable im SPS-Modus im Ruhezustand TRUE, daher als <code>¬NOT_AUS</code> binden (im E-Pneu-Modus heißt NOT_AUS = TRUE „gedrückt", dort also <code>NOT_AUS</code>) — der Generator macht das richtige.</td></tr>
                             <tr><td><code>ACK_EF</code></td><td>Quittier-Taster. Aktiviert RS-Latch für SUPERVISION-Faults — sonst sind sie auto-clearing.</td></tr>
                         </table>
                         <h5>Betriebsarten</h5>
@@ -16923,7 +16924,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // (z. B. `START && NOT_AUS` statt `START && ¬NOT_AUS`), funktionieren
             // semantisch nur im SPS-Modus. Beim Laden zwingen wir den Modus und
             // weisen per Toast darauf hin.
-            const _SPS_REQUIRED_EXAMPLES = new Set(['schrittkette_bohrer', 'schrittkette_norm']);
+            const _SPS_REQUIRED_EXAMPLES = new Set(['schrittkette_bohrer', 'schrittkette_norm', 'schrittkette_mischer']);
+            // Umgekehrt: Beispiele, die den Not-Halt als „gedrückt = 1" lesen
+            // (z. B. `S2_RS := NOTHALT` setzt den Alarm beim Drücken), stimmen nur
+            // im E-Pneu-Modus.
+            const _EPNEU_REQUIRED_EXAMPLES = new Set(['full_demo']);
+            if (_EPNEU_REQUIRED_EXAMPLES.has(type) && window.epneuMode !== true && typeof _taskSetEpneuMode === 'function') {
+                _taskSetEpneuMode(true);
+                if (typeof _showToast === 'function') {
+                    _showToast('⚡ E-Pneu-Modus aktiviert — im Beispiel heißt NOTHALT = 1 „gedrückt".', '#0288d1');
+                }
+            }
             if (_SPS_REQUIRED_EXAMPLES.has(type) && window.epneuMode === true) {
                 window.epneuMode = false;
                 try { localStorage.setItem('valisEpneuMode', '0'); } catch(_) {}
@@ -19667,6 +19678,60 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             });
                         }
                     } catch(e) {}
+                });
+            }
+
+            // === 11b. Not-Halt / Lichtgitter in der falschen Richtung als Freigabe ===
+            // Öffner-Sicherheitsbauteile lesen sich je nach Modus verschieden:
+            //   SPS-Modus:    NOTAUS = 1 heißt „nicht gedrückt"  → Freigabe:  && NOTAUS
+            //   E-Pneu-Modus: NOTAUS = 1 heißt „gedrückt"        → Freigabe:  && ¬NOTAUS
+            // Steht das Bauteil in einer UND-Kette in der „gedrückt"-Lesart, läuft die
+            // Anlage nur bei betätigtem Not-Halt. Rücksetz-Eingänge (R1 …) und OFF_SQ
+            // sind ausgenommen, dort ist „gedrückt" genau richtig.
+            if (typeof window._tokenizeLine === 'function' && typeof window._parseLine === 'function'
+                && typeof window._isNCContact === 'function' && typeof componentTypes !== 'undefined') {
+                const safetyTypes = new Set(['nothalt', 'light_curtain']);
+                const ctOf = (name) => componentTypes[name] || componentTypes[name.toUpperCase()] || '';
+                const isSafety = (name) => {
+                    const t = ctOf(name);
+                    return safetyTypes.has(t) || (window._isNCContact(t) && t !== 'taster_nc' && t !== 'schalter_nc');
+                };
+                const ep = !!window.epneuMode;
+                lineInfos.forEach(li => {
+                    if (!li.rhs || !li.lhs) return;
+                    if (/^R\d+(_(?:RS|SR))?$/i.test(li.lhs) || /^OFF_SQ$/i.test(li.lhs)) return;
+                    try {
+                        const ast = window._parseLine(window._tokenizeLine(li.rhs));
+                        const expr = ast && (ast.type === 'ASSIGN' ? ast.rhs : (ast.type === 'EXPR_ONLY' ? ast.expr : null));
+                        if (!expr || expr.type !== 'AND') return;
+                        const collect = (n) => (!n || n.type !== 'AND') ? [n] : collect(n.l).concat(collect(n.r));
+                        const bad = [];
+                        collect(expr).forEach(a => {
+                            if (!a) return;
+                            if (ep && a.type === 'IDENT' && isSafety(a.val)) bad.push(a.val);
+                            if (!ep && a.type === 'NOT' && a.x && a.x.type === 'IDENT' && isSafety(a.x.val)) bad.push(a.x.val);
+                        });
+                        if (!bad.length) return;
+                        const v = bad[0];
+                        const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        let fixed = li.rhs;
+                        if (ep) fixed = fixed.replace(new RegExp('(^|[^¬!A-Za-z0-9_ÄÖÜäöüß])(?<!\\b(?:NOT|NICHT)\\s+)(' + esc + ')\\b', 'g'), '$1¬$2');
+                        else fixed = fixed.replace(new RegExp('(?:¬|!|\\b(?:NOT|NICHT)\\s+)\\s*(' + esc + ')\\b', 'gi'), '$1');
+                        const kind = ctOf(v) === 'light_curtain' ? 'Lichtgitter' : 'Not-Halt';
+                        addErr(li.idx, {
+                            title: ep
+                                ? kind + ' ' + v + ' wirkt hier nur, wenn er betätigt ist'
+                                : kind + ' ' + v + ' ist hier doppelt umgedreht',
+                            why: ep
+                                ? 'Im E-Pneu-Modus heißt ' + v + ' = 1 „betätigt". In der UND-Kette gibt ' + v + ' ohne ¬ die Anlage also nur frei, solange der ' + kind + ' betätigt ist. Der Schaltplan zeichnet ihn deshalb als Schließer.'
+                                : 'Im SPS-Modus liefert der ' + kind + ' (Öffner) in Ruhe 1 an die Klemme: ' + v + ' = 1 heißt „nicht betätigt". Mit ¬ gibt die UND-Kette die Anlage nur frei, solange der ' + kind + ' betätigt ist.',
+                            hint: ep
+                                ? 'Für eine Freigabe „solange der ' + kind + ' nicht betätigt ist" schreibe ¬' + v + '. Dann erscheint im Schaltplan der gewohnte Öffner.'
+                                : 'Für eine Freigabe „solange der ' + kind + ' nicht betätigt ist" schreibe ' + v + ' ohne ¬.',
+                            fix: (fixed !== li.rhs) ? (li.lhs + ' := ' + fixed) : null,
+                            severity: 'info'
+                        });
+                    } catch (e) {}
                 });
             }
 
@@ -22783,6 +22848,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let isRelayContact = ['relais', 'ton', 'tof', 'tp', 'ctu'].includes(cType);
                     // Stromfluss prüfen (Ist der Pfad von L+ bis hier intakt?)
                     let hasPower = el._checkPower ? el._checkPower(spsState) : true;
+                    // E-Pneu: Relaiskontakt hinter einem Öffner-Bauteil (Not-Halt, Lichtgitter) —
+                    // das Relais ist angezogen, wenn das Bauteil NICHT betätigt ist (Variable = 0).
+                    if (isRelayContact && cRole !== 'coil' && Array.isArray(globalInputs) && globalInputs.includes(varName)
+                        && window._isNCContact(componentTypes[varName]) && !window._variableIsNCInverted(componentTypes[varName])) {
+                        val = !val;
+                    }
                     // 🌟 FIX: Spulen (und vor allem die virtuellen AUX-Relais) leuchten IMMER, wenn sie Strom haben!
                     if (cRole === 'coil') {
                         val = hasPower; 
@@ -24044,10 +24115,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return el;
             };
             const getCond = (edge) => edge ? ((edge.inverted ? "!" : "") + `state['${edge.sourceId}']`) : "false";
+            // Koppelrelais-Kehrwert: Ein Öffner-Bauteil (Not-Halt, Lichtgitter) zieht sein
+            // Koppelrelais -KF im Ruhezustand AN. Im SPS-Modus ist die Variable genau dieser
+            // Klemmenzustand (Variable = Relais). Im E-Pneu-Modus ist die Variable aber der
+            // Betätigt-Zustand (1 = gedrückt) — also das GEGENTEIL des Relais. Dann muss jeder
+            // Relaiskontakt (und die Spule) umgekehrt gezeichnet werden.
+            const kFlip = (id) => {
+                if (!globalInputs.includes(id)) return false;
+                const ct = componentTypes[id];
+                return window._isNCContact(ct) && !window._variableIsNCInverted(ct);
+            };
             const getContactNC = (edge) => {
                 if (!edge) return false;
                 let t = contactTypeMap[edge.sourceId] || 'relais';
-                if (['relais', 'ton', 'tof', 'tp', 'ctu'].includes(t)) return edge.inverted;
+                if (['relais', 'ton', 'tof', 'tp', 'ctu'].includes(t)) return (t === 'relais' && kFlip(edge.sourceId)) ? !edge.inverted : edge.inverted;
                 // Symbol-NC ergibt sich aus Variable-Semantik (mode-abhängig) ⊕ Code-seitiger Negation.
                 // SPS-Modus: NC-Hardware → Variable invertiert, also wirkt `X` raw als NC-Symbol.
                 // E-Pneu-Modus: keine Variable-Inversion, also nur Code-Negation `¬X` zeichnet NC.
@@ -24093,7 +24174,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (!auxRelayNames[nodeId]) auxRelayNames[nodeId] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (AUX_${nodeId})` : '');
                         name = auxRelayNames[nodeId];
                         type = 'relais';
-                        logicalIsNC = isTargetInverted; 
+                        logicalIsNC = isTargetInverted !== kFlip(nodeId);
                     }
                     let col = getNodeColor(nodeId);
                     let myCond = (isTargetInverted ? "!" : "") + `state['${nodeId}']`;
@@ -24215,7 +24296,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (!auxRelayNames[edge.sourceId]) auxRelayNames[edge.sourceId] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (AUX_${edge.sourceId})` : '');
                         name = auxRelayNames[edge.sourceId];
                         type = 'relais';
-                        logicalIsNC = edge.inverted;
+                        logicalIsNC = edge.inverted !== kFlip(edge.sourceId);
                         finalIsNC = forceInvertNC ? !logicalIsNC : logicalIsNC;
                     }
                     let cy = (yStart + yEnd) / 2;
@@ -24270,7 +24351,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             preRungsToDraw.forEach(item => {
                 let col = getNodeColor(item.id);
                 // 🌟 FIX: Keine Invertierung mehr! Ein ungedrückter Not-Halt (NC) lässt Strom durch und zieht das Relais an!
-                let pCond = `state['${item.id}']`;
+                // E-Pneu: Variable = betätigt → das Relais hinter dem Öffner zieht beim Gegenteil an.
+                let pCond = (kFlip(item.id) ? '!' : '') + `state['${item.id}']`;
                 if (item.cType === 'nothalt') {
                     symMap[item.id] = item.kfName; // KF-Name in iecSymMap eintragen
                     let p1 = pathCounter++;
@@ -24374,7 +24456,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     if (!auxRelayNames[edge.sourceId]) auxRelayNames[edge.sourceId] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (AUX_${edge.sourceId})` : '');
                                     name = auxRelayNames[edge.sourceId];
                                     type = 'relais';
-                                    isNC = edge.inverted;
+                                    isNC = edge.inverted !== kFlip(edge.sourceId);
                                 }
                                 let srcCol = getNodeColor(edge.sourceId);
                                 setPower(drawContact(currX, y, name, isNC, type, edge.sourceId, srcCol, p, prefix), pCond);
@@ -24441,7 +24523,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                         if (!auxRelayNames[edge.sourceId]) auxRelayNames[edge.sourceId] = `-KF${kfCount++}` + (window.configDetails >= 1 ? ` (AUX_${edge.sourceId})` : '');
                                         name = auxRelayNames[edge.sourceId];
                                         type = 'relais';
-                                        isNC = edge.inverted;
+                                        isNC = edge.inverted !== kFlip(edge.sourceId);
                                     }
                                     let srcCol = getNodeColor(edge.sourceId);
                                     setPower(drawLine(bx, 90, bx, 205, 2, edge.sourceId, srcCol, isNC), "true");
@@ -24695,7 +24777,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 setPower(drawLine(currX, yTop, currX, 135, 2, hwId, srcCol), "true");
                 let g = drawContact(currX, 150, name, pNC, cType.replace('_nc', ''), hwId, srcCol, p, hwId);
                 setPower(g, "true");
-                let pCond = `state['${hwId}']`;
+                let pCond = (kFlip(hwId) ? '!' : '') + `state['${hwId}']`;
                 setPower(drawLine(currX, 165, currX, coilApproachY, 2, hwId, srcCol), pCond);
                 let coilG = drawCoil(currX, coilY, auxName, `AUX_${hwId}`, 'relais', srcCol, p);
                 setPower(coilG, pCond);
@@ -26190,6 +26272,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             hint:'💡 HINWEISE:\n\n1. Start/Stopp mit Selbsthaltung:\n   Eine Anlage, die nach einmaligem Tastendruck läuft und erst durch\n   den Not-Halt gestoppt wird, braucht ein Speicherglied.\n   In VALIS: S1 := ... setzt den Ausgang Q1, R1 := ... setzt ihn zurück.\n\n2. Not-Halt ist ein Öffner (NC-Kontakt):\n   Im Ruhezustand liefert E_NOTHALT den Wert TRUE.\n   Beim Drücken wird er FALSE.\n   Überlege: Bei welchem Wert soll die Anlage stoppen?\n   → Tipp: Negation (¬) könnte hilfreich sein.\n\n3. Förderbänder und Leuchte:\n   Sie sollen aktiv sein, solange die Anlage läuft.\n   Woran erkennst du ob die Anlage gerade läuft?\n\n4. Sortierzylinder:\n   Zwei Bedingungen müssen gleichzeitig erfüllt sein, damit er ausfährt.\n   Für das Einfahren gilt die entgegengesetzte Logik.\n\n5. Verknüpfung nicht vergessen:\n   Rechtsklick auf jedes Bauteil → Variable aus der Liste wählen.\n   Beim Zylinder gibt es zwei Anschlüsse: Ausfahren und Einfahren!',
             category:'Automatisierungstechnik',
             difficulty:'schwer',
+            enforceMode:'sps',
             timeLimit:600,
             solutionMode:'after_time', solutionMinTime:120, solutionMinDone:3,
             restrictObjects:'manual', allowedObjectTypes:['taster','nothalt','led'],
@@ -26307,7 +26390,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 name:'① Förderband – Not-Halt-Logik ergänzen',
                 description:'Eine Förderanlage ist bereits fertig aufgebaut und verdrahtet. Fast das gesamte SPS-Programm ist schon geschrieben – es fehlt nur eine einzige Zeile!\n\n🎯 AUFGABE:\nDas Förderband (A_BAND) soll laufen, wenn der Schalter eingeschaltet ist UND der Not-Halt nicht ausgelöst ist.\n\n• E_SCHALTER = TRUE  → Schalter eingeschaltet\n• E_NOTHALT  = TRUE  → Not-Halt nicht gedrückt → Anlage darf laufen\n• E_NOTHALT  = FALSE → Not-Halt ausgelöst     → Anlage stoppt sofort\n\nDie Betriebslampe ist bereits fertig programmiert:\n  A_LAMPE := E_SCHALTER\n\n❓ Was fehlt:\nEine Zeile für A_BAND, die beide Eingänge mit UND verknüpft.\n\n✅ TIPP: Die Syntax lautet:\n  AUSGANG := EINGANG1 && EINGANG2\n\n⚙ BESCHRÄNKUNGEN:\nNur der Code-Editor ist verfügbar.\nLogikplan und Schaltplan sind für diese Aufgabe gesperrt.',
                 hint:'Die fehlende Zeile lautet:\n  A_BAND := E_SCHALTER && E_NOTHALT\n\nDas bedeutet: Das Band läuft nur wenn der Schalter eingeschaltet (TRUE) UND der Not-Halt nicht ausgelöst (TRUE) ist.',
-                category:'Grundlagen', difficulty:'leicht',
+                category:'Grundlagen', difficulty:'leicht', enforceMode:'sps',
                 timeLimit:300, solutionMode:'after_time', solutionMinTime:60, solutionMinDone:2,
                 restrictObjects:'none', allowedObjectTypes:[],
                 blockAreas:{codeEditor:false, ioPanel:false, logikplan:true, schaltplan:true, factory2d:true, factoryNewVars:true},
@@ -26427,8 +26510,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 id:'task-t3-zweihand-circ-2026',
                 name:'③ Zweihand-Sicherheitsschaltung – Schaltplan erstellen',
                 description:'Eine pneumatische Presse mit Zweihand-Sicherheitsschaltung ist verdrahtet aber noch nicht programmiert. Aus Sicherheitsgründen müssen beide Taster gleichzeitig gedrückt werden, damit der Zylinder ausfährt.\n\nDer Code-Editor und der Logikplan sind für diese Aufgabe gesperrt!\n\n🎯 AUFGABE:\nErstelle im SCHALTPLAN-EDITOR (IEC 61131) folgende drei Ausgänge:\n\n• A_ZYLINDER = Zylinder auslösen\n  Bedingung: Taster Links (E_TASTE_L) UND Taster Rechts (E_TASTE_R)\n             UND Not-Halt aktiv (E_NOTHALT)\n\n• A_LAMPE_GRUEN = Grüne Bereitschafts-LED\n  Bedingung: Not-Halt aktiv (E_NOTHALT)\n\n• A_LAMPE_ROT = Rote Not-Halt-LED\n  Bedingung: Not-Halt ausgelöst (NOT E_NOTHALT)\n\n🛠 SO GEHTS MIT DEM SCHALTPLAN:\n① Öffne das Schaltplan-Panel\n② Klicke auf das 🎨-Symbol (Palette) oben rechts im Panel\n③ Ziehe Kontakte (Schließer/Öffner) und Spulen in die Schaltplanreihen\n④ Gib die Variablennamen an den Elementen ein\n⑤ Für eine neue Reihe: ziehe ein Element auf eine freie Reihe\n\n⚙ BESCHRÄNKUNGEN:\nNur der Schaltplan-Editor ist verfügbar.\nCode-Editor und Logikplan sind gesperrt.',
-                hint:'Für A_ZYLINDER (neue Reihe im Schaltplan):\n  [E_TASTE_L] ── [E_TASTE_R] ── [E_NOTHALT] ──( A_ZYLINDER )\n  (Drei Schließer-Kontakte in Reihe, eine Ausgangs-Spule)\n\nFür A_LAMPE_GRUEN:\n  [E_NOTHALT] ──( A_LAMPE_GRUEN )\n  (Ein Schließer, eine Spule)\n\nFür A_LAMPE_ROT:\n  [/E_NOTHALT/] ──( A_LAMPE_ROT )\n  (Ein Öffner-Kontakt = normally-closed, eine Spule)',
-                category:'Grundlagen', difficulty:'schwer',
+                hint:'Für A_ZYLINDER (neue Reihe im Schaltplan):\n  [E_TASTE_L] ── [E_TASTE_R] ── [E_NOTHALT] ──( A_ZYLINDER )\n  (Zwei Schließer für die Taster und der Not-Halt als Öffner in Reihe, eine Ausgangs-Spule)\n\nFür A_LAMPE_GRUEN:\n  [E_NOTHALT] ──( A_LAMPE_GRUEN )\n  (Der Not-Halt-Öffner, eine Spule — leuchtet, solange niemand den Not-Halt drückt)\n\nFür A_LAMPE_ROT:\n  [¬E_NOTHALT] ──( A_LAMPE_ROT )\n  (Negiert: im Plan erscheint dafür ein Schließer am Not-Halt, eine Spule)\n\nMerke: Der Not-Halt ist ein Öffner. Im SPS-Modus liefert E_NOTHALT in Ruhe TRUE.',
+                category:'Grundlagen', difficulty:'schwer', enforceMode:'sps',
                 timeLimit:600, solutionMode:'after_time', solutionMinTime:180, solutionMinDone:3,
                 restrictObjects:'none', allowedObjectTypes:[],
                 blockAreas:{codeEditor:true, ioPanel:false, logikplan:true, schaltplan:false, factory2d:true, factoryNewVars:true},
@@ -26804,6 +26887,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         window._startTask = function(taskObj) {
             window._rsSrMigrate(taskObj);   // Aufgabe von vor der RS/SR-Umstellung
+            // Mitgelieferte Beispielaufgaben, die früher ohne Modus gespeichert wurden:
+            // den Modus (SPS/E-Pneu) aus der aktuellen Vorlage übernehmen. Sonst liest
+            // eine SPS-Aufgabe den Not-Halt im E-Pneu-Modus verkehrt herum.
+            try {
+                if (taskObj && taskObj.id && !taskObj.enforceMode) {
+                    const _vorlage = _EXAMPLE_TASKS.concat(..._EXAMPLE_PACKS.map(p => p.tasks || []))
+                        .find(t => t && t.id === taskObj.id);
+                    if (_vorlage && _vorlage.enforceMode) taskObj.enforceMode = _vorlage.enforceMode;
+                }
+            } catch (e) {}
             // Reset all input states so no stale taster/switch values survive into the new task
             spsState = {};
             latchedTasters.clear();

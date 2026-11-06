@@ -15038,9 +15038,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Sensoren. Klassifizierung über componentTypes, nicht über DOM,
         // damit auch verspätet umgehängte Typen korrekt greifen.
         (function _initIecSimInputClick() {
-            const TASTER_TYPES = new Set(['taster','taster_nc','nothalt']);
+            // Not-Halt rastet ein (wie im Sim-Panel) → Klick schaltet um, nicht tippen.
+            const TASTER_TYPES = new Set(['taster','taster_nc']);
             const TOGGLE_TYPES = new Set([
-                'schalter','schalter_nc','key_switch','light_curtain',
+                'schalter','schalter_nc','key_switch','nothalt','light_curtain',
                 'sensor_ind','sensor_kap','sensor_opt','sensor_mag','sensor_reed','mech_sensor'
             ]);
             const _simActive = () => (!!window.isSimulationActive)
@@ -65563,8 +65564,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             //                 Bauteilen außerhalb der Panels später.
             // Schlüsselschalter rastet wie ein Schalter (Schlüssel bleibt in
             // Stellung) → gehört auf den rastenden Slot, nicht auf einen Taster.
-            const TASTER_TYPES    = new Set(['taster','taster_nc','nothalt','mech_sensor','light_curtain']);
-            const SCHALTER_TYPES  = new Set(['schalter','schalter_nc','key_switch']);
+            // Not-Halt rastet beim Drücken ein (Entriegeln nötig) → rastender Slot,
+            // genau wie im Sim-Panel, wo er als Schalter bedient wird.
+            const TASTER_TYPES    = new Set(['taster','taster_nc','mech_sensor','light_curtain']);
+            const SCHALTER_TYPES  = new Set(['schalter','schalter_nc','key_switch','nothalt']);
             const LED_TYPES       = new Set(['led','heater','motor']);
             // 5/2-Wege-Magnetventile bekommen ein eigenes Bauteil-Panel
             // (FESTO 567199). 2-Pin-Spule wie ein normaler Verbraucher
@@ -69394,7 +69397,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-lever]').forEach(lever => {
                     const slotKey = lever.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    // Der Wechsler kippt, wenn der Taster BETÄTIGT ist — nicht, wenn das
+                    // Signal 1 ist. Im SPS-Modus liefert ein Öffner (Not-Halt) in Ruhe 1,
+                    // daher hier wie bei den Aktuatoren über die Variable-Semantik gehen.
+                    const _sig = (varName && hasState) ? !!spsState[varName] : false;
+                    const _ct = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || 'taster';
+                    const _inv = (typeof window._variableIsNCInverted === 'function') ? window._variableIsNCInverted(_ct) : false;
+                    const isActive = varName ? (_inv ? !_sig : _sig) : false;
                     const cx = parseFloat(lever.getAttribute('data-festo-cx'));
                     const cy = parseFloat(lever.getAttribute('data-festo-cy'));
                     const type = lever.getAttribute('data-festo-lever');
@@ -70431,7 +70440,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const c = getConnPoints(elem, 'contact');
                     if (!c) return;
                     const mv = elem.querySelector('.circ-moving-contact');
-                    const isNC = !!(mv && mv.classList.contains('is-nc'));
+                    let isNC = !!(mv && mv.classList.contains('is-nc'));
+                    // Koppelrelais-Kontakt hinter einem Öffner-Bauteil (E-Pneu, Not-Halt/Lichtgitter):
+                    // Im Steckaufbau gibt es dafür kein eigenes Relais, der Kontakt wird direkt
+                    // am Bauteil gesteckt. Das Relais zieht bei NICHT betätigtem Öffner an, also
+                    // entspricht sein Schließer dem Öffner des Bauteils und umgekehrt.
+                    const _ct = (typeof componentTypes !== 'undefined') ? componentTypes[varName] : null;
+                    if (elem.getAttribute('data-ctype') === 'relais' && Array.isArray(globalInputs) && globalInputs.includes(varName)
+                        && window._isNCContact(_ct) && !window._variableIsNCInverted(_ct)) isNC = !isNC;
                     allContacts.push({ varName, elem, isNC, yOff: _ancestorYOffset(elem), ...c });
                 });
                 // ─── Horizontals als Brücken zwischen Spalten ───

@@ -63298,13 +63298,80 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Zeichnet eine halbtransparente Vorschau der zu droppenden Komponente an der Cursor-Position.
             // Bei Hover über vertikalem Wire-Segment: Vorschau snapt an die Wire-x und zeigt Insert-Marker.
             // Bauteil in eine vertikale Leitung einbauen. Kontakte/Spulen: oben in,
-            // unten out. Sensoren (3-Leiter): BN (+) an das obere Leitungsende,
-            // BK (Signal) führt den Strang nach unten weiter, BU an die 0V-Schiene.
-            // Der Sensor sitzt dafür links neben der Leitung, sein Signal-Pin liegt
-            // genau auf der Leitungs-x.
-            const _insertX = (t, wireX) => wireX - (t.kind === 'sensor' ? t.w : t.cx);
+            // unten out. Sensoren: Ein Sensorausgang verträgt nur kleine Ströme,
+            // deshalb wie im Auto-Schaltplan: Sensor + Koppel-Hilfsrelais (-KF) als
+            // eigener Block rechts neben dem Plan, im Strang sitzt dessen Schließer.
+            const _insertX = (t, wireX) => wireX - t.cx;
+            const _wiresAt = (id, pin) => ST.wires.filter(w => (w.from.compId === id && w.from.pin === pin) || (w.to.compId === id && w.to.pin === pin));
+            const _otherEnd = (w, id) => (w.from.compId === id ? w.to : w.from);
+            // Hilfsrelais, dessen Spule direkt am Sensor-Signal (BK) hängt
+            function _sensorHelper(sensor) {
+                for (const w of _wiresAt(sensor.id, 'signal')) {
+                    const o = _otherEnd(w, sensor.id);
+                    const c = o.compId && ST.components.find(x => x.id === o.compId);
+                    if (c && c.type === 'relais' && o.pin === 'in') return c;
+                }
+                return null;
+            }
+            // Hilfsrelais + Schließer nach dem Sensor benennen (K_<SENSOR>)
+            function _syncSensorHelper(sensor) {
+                const t = CTYPES[sensor.type];
+                if (!t || t.kind !== 'sensor' || !sensor.varName) return;
+                const rel = _sensorHelper(sensor);
+                if (!rel) return;
+                const alt = rel.varName;
+                rel.varName = 'K_' + sensor.varName;
+                ST.components.forEach(c => {
+                    if (CTYPES[c.type] && CTYPES[c.type].kind === 'aux' && (c.refNormPrefix === rel.normPrefix || (alt && c.varName === alt))) {
+                        c.varName = rel.varName;
+                        _computeNormLabel(c);
+                    }
+                });
+                _computeNormLabel(rel);
+            }
+            function _spliceSensorViaRelay(sensor, wire, cursorY) {
+                const t = CTYPES[sensor.type];
+                let rel = _sensorHelper(sensor);
+                if (!rel) {
+                    // Bisherige Leitungen des Sensors lösen; war er (alte Art) direkt im
+                    // Strang eingebaut (BN oben, BK unten), den Strang wieder schließen.
+                    const wIn = _wiresAt(sensor.id, 'in'), wSig = _wiresAt(sensor.id, 'signal');
+                    const all = ST.wires.filter(w => w.from.compId === sensor.id || w.to.compId === sensor.id);
+                    ST.wires = ST.wires.filter(w => !all.includes(w));
+                    if (wIn.length === 1 && wSig.length === 1) {
+                        const a = _otherEnd(wIn[0], sensor.id), b = _otherEnd(wSig[0], sensor.id);
+                        if (!(a.rail && b.rail)) ST.wires.push({ id: nextId('w'), from: a, to: b });
+                    }
+                    // Block rechts neben allen übrigen Bauteilen
+                    let maxR = 0;
+                    ST.components.forEach(c => {
+                        if (c.id === sensor.id || !CTYPES[c.type]) return;
+                        maxR = Math.max(maxR, c.x + CTYPES[c.type].w);
+                    });
+                    const colX = snap(maxR + 40);
+                    sensor.x = colX;
+                    sensor.y = _clampCompY(RAIL_PLUS_Y + 60, sensor.type);
+                    const rT = CTYPES.relais;
+                    rel = { id: nextId('c'), type: 'relais', x: snap(colX + t.w + 30), y: _clampCompY(RAIL_MINUS_Y - 100, 'relais'), varName: '' };
+                    ST.components.push(rel);
+                    _ensureNormPrefix(rel);
+                    const sPinX = sensor.x + t.cx, rPinX = rel.x + rT.cx;
+                    ST.wires.push({ id: nextId('w'), from: { rail:'plus', x: sPinX }, to: { compId: sensor.id, pin:'in' } });
+                    ST.wires.push({ id: nextId('w'), from: { compId: sensor.id, pin:'out' }, to: { rail:'minus', x: sPinX } });
+                    ST.wires.push({ id: nextId('w'), from: { compId: sensor.id, pin:'signal' }, to: { compId: rel.id, pin:'in' } });
+                    ST.wires.push({ id: nextId('w'), from: { compId: rel.id, pin:'out' }, to: { rail:'minus', x: rPinX } });
+                }
+                _ensureNormPrefix(rel);
+                // Schließer trägt das Kennzeichen seines Relais (wie im Auto-Schaltplan)
+                const aux = { id: nextId('c'), type: 'relay_no', x: 0, y: 0, varName: rel.varName || '', normPrefix: rel.normPrefix, refNormPrefix: rel.normPrefix };
+                ST.components.push(aux);
+                _spliceIntoWire(aux, wire, cursorY);
+                if (sensor.varName) _syncSensorHelper(sensor);
+                _computeNormLabel(aux);
+            }
             function _spliceIntoWire(comp, wire, cursorY) {
                 const t = CTYPES[comp.type];
+                if (t.kind === 'sensor') { _spliceSensorViaRelay(comp, wire, cursorY); return; }
                 const pa = _pinPos(wire.from), pb = _pinPos(wire.to);
                 comp.x = _insertX(t, pa.x);
                 comp.y = _clampCompY(snap(cursorY) - t.cy, comp.type);
@@ -63312,12 +63379,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const botEnd = (pa.y <= pb.y) ? wire.to   : wire.from;
                 ST.wires = ST.wires.filter(w => w.id !== wire.id);
                 ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in' } });
-                if (t.kind === 'sensor') {
-                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'signal' }, to: botEnd });
-                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: { rail:'minus', x: comp.x + t.cx } });
-                } else {
-                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
-                }
+                ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
             }
             const _spliceable = (t) => !!t && (t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil' || t.kind === 'sensor');
 
@@ -63522,6 +63584,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (_needsVar(type)) {
                         if (!comp.varName) comp.varName = _cedAutoName(comp);
+                        _syncSensorHelper(comp);
                         cedRender();
                         _showNamePopup(comp);
                     } else {
@@ -63794,14 +63857,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!hit || hit.segDir !== 'v') return;
                 const targetWire = hit.wire;
                 // Strang am alten Ort reparieren (1 in + 1 out Wire vorhanden)
-                const _pinW = (pin) => ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === pin) || (w.to.compId === comp.id && w.to.pin === pin));
-                const inWires  = _pinW('in');
-                // Sensor: Strang läuft über BK weiter; BU-Leitungen zur 0V-Schiene fallen weg.
-                const outWires = _pinW(t.kind === 'sensor' ? 'signal' : 'out');
                 if (t.kind === 'sensor') {
-                    const bu = _pinW('out').filter(w => w.from.rail === 'minus' || w.to.rail === 'minus');
-                    ST.wires = ST.wires.filter(w => !bu.includes(w));
+                    // Sensor bleibt in seinem Block; eingebaut wird der Schließer des Hilfsrelais
+                    _spliceSensorViaRelay(comp, targetWire, cursorY);
+                    cedRender();
+                    return;
                 }
+                const inWires  = _wiresAt(comp.id, 'in');
+                const outWires = _wiresAt(comp.id, 'out');
                 if (inWires.length === 1 && outWires.length === 1) {
                     const wIn = inWires[0], wOut = outWires[0];
                     const otherIn  = (wIn.from.compId  === comp.id) ? wIn.to  : wIn.from;
@@ -64207,6 +64270,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (newNorm) comp.normPrefix = newNorm;
                     comp.varName = newVar;
                     if (!comp.varName) comp.varName = _cedAutoName(comp);
+                    _syncSensorHelper(comp);
                     // Komparator: Eingang, Schaltart und Schwellen übernehmen
                     if (t && t.komp) {
                         const wert = id2 => { const e = _d().getElementById(id2); return (e && e.value || '').trim(); };

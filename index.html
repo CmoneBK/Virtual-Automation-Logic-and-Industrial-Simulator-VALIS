@@ -3260,7 +3260,14 @@
                 <div id="fup-norm-host" style="display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:40;">
                     <div style="position:sticky; top:0; left:0; display:flex; gap:8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px 'Segoe UI', Arial, sans-serif; color:#455a64; z-index:2;">
                         <span><b>FUP</b> nach IEC 61131-3 · Ansicht des Codes · in der Simulation: <span style="color:#2e7d32;font-weight:bold;">1 = grün</span>, <span style="color:#1565c0;">0 = blau gestrichelt</span></span>
-                        <button class="btn-export" style="margin-left:auto; background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._saveFupSvg()" title="FUP als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>
+                        <span style="margin-left:auto; display:inline-flex; gap:2px; align-items:center;">
+                            <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(1/1.2)" title="Verkleinern (oder Mausrad)">−</button>
+                            <span id="fup-zoom-anzeige" style="min-width:40px; text-align:center;">100 %</span>
+                            <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(1.2)" title="Vergrößern (oder Mausrad)">+</button>
+                            <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(0)" title="Zoom zurücksetzen (100 %)">⟲</button>
+                            <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(-1)" title="An die Fensterbreite anpassen">⇲</button>
+                        </span>
+                        <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._saveFupSvg()" title="FUP als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>
                     </div>
                     <svg id="fup-norm-svg" xmlns="http://www.w3.org/2000/svg" style="display:block;"></svg>
                 </div>
@@ -76594,6 +76601,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         let fupOn = false;
         try { fupOn = localStorage.getItem(LS_KEY) === '1'; } catch (_) {}
         window.fbsFupMode = fupOn;
+        let fupZoom = 1, fupGroesse = null; // Zoom der FUP-Ansicht (siehe zoomAuf)
 
         // Maße
         const PIN_GAP = 30;      // Abstand zweier Eingänge am Kasten
@@ -77034,7 +77042,63 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             svg.style.height = (y + 10) + 'px';
             svg.style.maxWidth = 'none';
             svg.setAttribute('viewBox', '0 0 ' + (right + 60) + ' ' + (y + 10));
+            fupGroesse = { w: right + 60, h: y + 10 };
+            zoomAnwenden();
+            zoomBinden(host);
             live();
+        }
+
+        // ---- Zoom wie im Logikplan: Mausrad (um den Mauszeiger), Knöpfe
+        // + / − / 100 % / Fensterbreite, Ziehen mit der Maus verschiebt.
+        function zoomAnwenden() {
+            const d = doc(), svg = d.getElementById('fup-norm-svg');
+            if (!svg || !fupGroesse) return;
+            svg.style.width = (fupGroesse.w * fupZoom) + 'px';
+            svg.style.height = (fupGroesse.h * fupZoom) + 'px';
+            const a = d.getElementById('fup-zoom-anzeige');
+            if (a) a.textContent = Math.round(fupZoom * 100) + ' %';
+        }
+        function zoomAuf(z, cx, cy) {
+            const host = doc().getElementById('fup-norm-host');
+            if (!host || !fupGroesse) return;
+            z = Math.max(0.2, Math.min(4, z));
+            const r = host.getBoundingClientRect();
+            const px = (cx == null ? r.width / 2 : cx - r.left), py = (cy == null ? r.height / 2 : cy - r.top);
+            const fx = (host.scrollLeft + px) / fupZoom, fy = (host.scrollTop + py) / fupZoom;
+            fupZoom = z;
+            zoomAnwenden();
+            host.scrollLeft = fx * fupZoom - px;
+            host.scrollTop = fy * fupZoom - py;
+        }
+        window._fupZoom = function (f) {
+            if (f === 0) return zoomAuf(1);
+            if (f === -1) {
+                const host = doc().getElementById('fup-norm-host');
+                if (host && fupGroesse) zoomAuf((host.clientWidth - 10) / fupGroesse.w);
+                return;
+            }
+            zoomAuf(fupZoom * f);
+        };
+        function zoomBinden(host) {
+            if (host._fupZoomGebunden) return;
+            host._fupZoomGebunden = true;
+            host.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                zoomAuf(fupZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
+            }, { passive: false });
+            let zug = null;
+            host.addEventListener('mousedown', (e) => {
+                if (e.button !== 0 || e.target.closest('button')) return;
+                zug = { x: e.clientX, y: e.clientY, l: host.scrollLeft, t: host.scrollTop };
+                host.style.cursor = 'grabbing';
+            });
+            const w = host.ownerDocument.defaultView;
+            w.addEventListener('mousemove', (e) => {
+                if (!zug) return;
+                host.scrollLeft = zug.l - (e.clientX - zug.x);
+                host.scrollTop = zug.t - (e.clientY - zug.y);
+            });
+            w.addEventListener('mouseup', () => { if (zug) { zug = null; host.style.cursor = ''; } });
         }
 
         function live() {
@@ -77080,6 +77144,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!svg) return;
             const clone = svg.cloneNode(true);
             clone.setAttribute('xmlns', NS);
+            clone.removeAttribute('style'); // Zoom der Ansicht nicht mit speichern
             const bg = doc().createElementNS(NS, 'rect');
             bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#fff');
             clone.insertBefore(bg, clone.firstChild);

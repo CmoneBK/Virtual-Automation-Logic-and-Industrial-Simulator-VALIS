@@ -21448,15 +21448,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 </div>`;
             };
             // Entweder gruppiert oder flach rendern.
+            // Erst als Text sammeln, dann einmal einfügen: `innerHTML +=` in der
+            // Schleife baut den ganzen Kasten jedes Mal neu (bei vielen Variablen
+            // wie im Mischer-Beispiel über 10 s).
+            let _inHtml = '';
             if (window._simGroup) {
                 const groups = window._groupSimVars(_orderedInputs, 'in');
                 groups.forEach(grp => {
-                    simInputsContainer.innerHTML += `<div class="sim-group-header">${grp.name}</div>`;
-                    grp.items.forEach(name => { simInputsContainer.innerHTML += _buildInputRow(name); });
+                    _inHtml += `<div class="sim-group-header">${grp.name}</div>`;
+                    grp.items.forEach(name => { _inHtml += _buildInputRow(name); });
                 });
             } else {
-                _orderedInputs.forEach(name => { simInputsContainer.innerHTML += _buildInputRow(name); });
+                _orderedInputs.forEach(name => { _inHtml += _buildInputRow(name); });
             }
+            simInputsContainer.insertAdjacentHTML('beforeend', _inHtml);
             // 🌟 i18n Übersetzung für die Ausgänge
             simOutputsContainer.innerHTML = `<h3>${window.t('sim_outputs')}${_cleanupBtnHTML}</h3>`;
             // S/R-Pin-Variablen vorab filtern (werden in der UI nicht gezeigt), dann
@@ -21524,19 +21529,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 && !!(name.match(/^Q\d+(_(?:RS|SR))?$/i) || (usedAsSource.has(name) && componentTypes[name] !== 'analog_out'));
             const _physOutputs  = _orderedOutputs.filter(n => !_isMerkerRow(n));
             const _merkerOutputs = _orderedOutputs.filter(n => _isMerkerRow(n));
+            let _outHtml = '';
             if (window._simGroup) {
                 const groups = window._groupSimVars(_physOutputs, 'out');
                 groups.forEach(grp => {
-                    simOutputsContainer.innerHTML += `<div class="sim-group-header">${grp.name}</div>`;
-                    grp.items.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+                    _outHtml += `<div class="sim-group-header">${grp.name}</div>`;
+                    grp.items.forEach(name => { _outHtml += _buildOutputRow(name); });
                 });
             } else {
-                _physOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+                _physOutputs.forEach(name => { _outHtml += _buildOutputRow(name); });
             }
             if (_merkerOutputs.length) {
-                simOutputsContainer.innerHTML += `<div class="sim-group-header sim-merker-header" title="${window.t('sim_merker_hint')}">${window.t('sim_merker')}</div>`;
-                _merkerOutputs.forEach(name => { simOutputsContainer.innerHTML += _buildOutputRow(name); });
+                _outHtml += `<div class="sim-group-header sim-merker-header" title="${window.t('sim_merker_hint')}">${window.t('sim_merker')}</div>`;
+                _merkerOutputs.forEach(name => { _outHtml += _buildOutputRow(name); });
             }
+            simOutputsContainer.insertAdjacentHTML('beforeend', _outHtml);
             // 🔒 Verwaiste (sticky-aber-nicht-im-Code) Variablen anhängen — grau/kursiv,
             // mit „verwaist"-Badge und Trash-Icon. Eingaben oben, Ausgaben unten.
             if (window._stickyVars && window._committedOrphans && window._committedOrphans.size > 0) {
@@ -76941,7 +76948,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (item.kind !== 'box') return 0;
             let m = 0;
             item.ins.forEach(i => { m = Math.max(m, widthOf(i.child)); });
-            return m + item.spec.w + STUB + GAP_X;
+            // je Ebene: Kasten + Stummel am Ausgang + Stummel am Eingang + Abstand
+            // (so zeichnet draw() die Kinder: bx - STUB - GAP_X)
+            return m + item.spec.w + 2 * STUB + GAP_X;
         }
 
         function render(graph) {
@@ -77000,9 +77009,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (!it.branchOf._dot) { el('circle', { cx: bxp, cy: it.branchOf._ay, r: 3.2, fill: '#111' }, g); it.branchOf._dot = true; }
                         el('rect', { x: ax, y: ay - 13, width: aw, height: ah, fill: '#fff', stroke: '#111', 'stroke-width': 1.6 }, g);
                         txt(g, ax + aw / 2, ay + 5, '=', { anchor: 'middle', bold: true, size: 15 });
+                        // Name rechts neben den Kasten: über dem Kasten läge er auf
+                        // der senkrechten Abzweigleitung.
                         const info = operandInfo(it.target, bmk);
-                        txt(g, ax + aw / 2, ay - 18, info.name, { anchor: 'middle', bold: true, mono: true, size: 12 });
-                        if (info.sub) txt(g, ax + aw / 2, ay - 31, info.sub, { anchor: 'middle', size: 10, fill: '#666' });
+                        txt(g, ax + aw + 6, ay + 4, info.name, { bold: true, mono: true, size: 12 });
+                        if (info.sub) txt(g, ax + aw + 6, ay - 10, info.sub, { size: 10, fill: '#666' });
                         // Negation relativ zur Eltern-Zuweisung (die Eltern-Zuweisung
                         // kann selbst negiert sein — dann zählt der Unterschied).
                         if (!!it.inv !== !!it.branchOf.inv) el('circle', { cx: ax - 4, cy: ay, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
@@ -77036,13 +77047,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 y += NET_GAP;
             });
-            svg.setAttribute('width', right + 60);
+            // Breite: lange Ausgangsnamen (A_LAMPE_BEREIT) nicht abschneiden
+            let breite = right + 60;
+            nets.forEach(net => net.items.forEach(it => {
+                if (it.kind === 'mem') return;
+                const nm = operandInfo(it.target, bmk).name || '';
+                const w = String(nm).length * 7.4;
+                breite = Math.max(breite, it.branchOf ? right + 34 + 6 + w + 10 : right + 17 + w / 2 + 10);
+            }));
+            breite = Math.ceil(breite);
+            svg.setAttribute('width', breite);
             svg.setAttribute('height', y + 10);
-            svg.style.width = (right + 60) + 'px';
+            svg.style.width = breite + 'px';
             svg.style.height = (y + 10) + 'px';
             svg.style.maxWidth = 'none';
-            svg.setAttribute('viewBox', '0 0 ' + (right + 60) + ' ' + (y + 10));
-            fupGroesse = { w: right + 60, h: y + 10 };
+            svg.setAttribute('viewBox', '0 0 ' + breite + ' ' + (y + 10));
+            fupGroesse = { w: breite, h: y + 10 };
             zoomAnwenden();
             zoomBinden(host);
             live();

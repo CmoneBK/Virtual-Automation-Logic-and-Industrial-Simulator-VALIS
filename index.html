@@ -63297,6 +63297,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // ---------- Drop-Ghost (Vorschau beim Drag aus der Palette) ----------
             // Zeichnet eine halbtransparente Vorschau der zu droppenden Komponente an der Cursor-Position.
             // Bei Hover über vertikalem Wire-Segment: Vorschau snapt an die Wire-x und zeigt Insert-Marker.
+            // Bauteil in eine vertikale Leitung einbauen. Kontakte/Spulen: oben in,
+            // unten out. Sensoren (3-Leiter): BN (+) an das obere Leitungsende,
+            // BK (Signal) führt den Strang nach unten weiter, BU an die 0V-Schiene.
+            // Der Sensor sitzt dafür links neben der Leitung, sein Signal-Pin liegt
+            // genau auf der Leitungs-x.
+            const _insertX = (t, wireX) => wireX - (t.kind === 'sensor' ? t.w : t.cx);
+            function _spliceIntoWire(comp, wire, cursorY) {
+                const t = CTYPES[comp.type];
+                const pa = _pinPos(wire.from), pb = _pinPos(wire.to);
+                comp.x = _insertX(t, pa.x);
+                comp.y = _clampCompY(snap(cursorY) - t.cy, comp.type);
+                const topEnd = (pa.y <= pb.y) ? wire.from : wire.to;
+                const botEnd = (pa.y <= pb.y) ? wire.to   : wire.from;
+                ST.wires = ST.wires.filter(w => w.id !== wire.id);
+                ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in' } });
+                if (t.kind === 'sensor') {
+                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'signal' }, to: botEnd });
+                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: { rail:'minus', x: comp.x + t.cx } });
+                } else {
+                    ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
+                }
+            }
+            const _spliceable = (t) => !!t && (t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil' || t.kind === 'sensor');
+
             function _updateDropGhost(clientX, clientY) {
                 const type = ST.dragPreviewType;
                 if (!type || !CTYPES[type]) return;
@@ -63311,7 +63335,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const cursorY = _csv.y;
                 let x, y, isInsert = false;
                 // Wire-Hit-Test (nur für einsetzbare Komponenten)
-                const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
+                const insertable = _spliceable(tt);
                 if (insertable) {
                     const eltUnder = _d().elementFromPoint(clientX, clientY);
                     if (eltUnder && eltUnder.classList && eltUnder.classList.contains('ced-wire-hit')) {
@@ -63322,7 +63346,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (segDir === 'v') {
                                 const pa = _pinPos(wire.from);
                                 if (pa) {
-                                    x = pa.x - tt.cx;
+                                    x = _insertX(tt, pa.x);
                                     y = _clampCompY(snap(cursorY) - tt.cy, type);
                                     isInsert = true;
                                 }
@@ -63458,7 +63482,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let x = pinX - tt.cx;
                     let y = _clampCompY(pinY - tt.cy, type);
                     // Drop auf einer Wire? → Komponente in den Wire einfügen (vertikales Segment, Komponente mit in/out)
-                    const insertable = (tt.kind === 'contact' || tt.kind === 'aux' || tt.kind === 'coil');
+                    const insertable = _spliceable(tt);
                     let insertIntoWire = null, insertSegDir = null;
                     if (insertable) {
                         const eltUnder = _d().elementFromPoint(e.clientX, e.clientY);
@@ -63473,17 +63497,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     const comp = { id: nextId('c'), type, x, y };
                     if (insertIntoWire && insertSegDir === 'v') {
-                        // Vertikales Wire: Komponente an Wire-x ausrichten (Pin-Mittellinie auf Wire)
-                        const pa = _pinPos(insertIntoWire.from), pb = _pinPos(insertIntoWire.to);
-                        const wireX = pa.x; // bei vertikalen Segmenten ist pa.x === pb.x === Wire-x
-                        comp.x = wireX - tt.cx;
-                        comp.y = _clampCompY(snap(cursorY) - tt.cy, type);
-                        // Top-/Bottom-Ende des Original-Wires bestimmen
-                        const topEnd = (pa.y <= pb.y) ? insertIntoWire.from : insertIntoWire.to;
-                        const botEnd = (pa.y <= pb.y) ? insertIntoWire.to   : insertIntoWire.from;
-                        ST.wires = ST.wires.filter(w => w.id !== insertIntoWire.id);
-                        ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in'  } });
-                        ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
+                        // Vertikales Wire: Komponente an Wire-x ausrichten und Wire splitten
+                        _spliceIntoWire(comp, insertIntoWire, cursorY);
                     }
                     ST.components.push(comp);
                     // Auto-Norm-Prefix sofort zuteilen — der nächste freie Identifier
@@ -63770,7 +63785,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const comp = ST.components.find(c => c.id === dragInfo.id);
                 if (!comp) return;
                 const t = CTYPES[comp.type];
-                if (!t || !(t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil')) return;
+                if (!_spliceable(t)) return;
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 const _csvR = _clientToSvg(clientX, clientY); const cursorX = _csvR.x, cursorY = _csvR.y;
@@ -63779,8 +63794,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!hit || hit.segDir !== 'v') return;
                 const targetWire = hit.wire;
                 // Strang am alten Ort reparieren (1 in + 1 out Wire vorhanden)
-                const inWires  = ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === 'in')  || (w.to.compId === comp.id && w.to.pin === 'in'));
-                const outWires = ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === 'out') || (w.to.compId === comp.id && w.to.pin === 'out'));
+                const _pinW = (pin) => ST.wires.filter(w => (w.from.compId === comp.id && w.from.pin === pin) || (w.to.compId === comp.id && w.to.pin === pin));
+                const inWires  = _pinW('in');
+                // Sensor: Strang läuft über BK weiter; BU-Leitungen zur 0V-Schiene fallen weg.
+                const outWires = _pinW(t.kind === 'sensor' ? 'signal' : 'out');
+                if (t.kind === 'sensor') {
+                    const bu = _pinW('out').filter(w => w.from.rail === 'minus' || w.to.rail === 'minus');
+                    ST.wires = ST.wires.filter(w => !bu.includes(w));
+                }
                 if (inWires.length === 1 && outWires.length === 1) {
                     const wIn = inWires[0], wOut = outWires[0];
                     const otherIn  = (wIn.from.compId  === comp.id) ? wIn.to  : wIn.from;
@@ -63789,15 +63810,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ST.wires.push({ id: nextId('w'), from: otherIn, to: otherOut });
                 }
                 // Komponente an Wire-x ausrichten + Wire splitten
-                const pa = _pinPos(targetWire.from), pb = _pinPos(targetWire.to);
-                const wireX = pa.x;
-                comp.x = wireX - t.cx;
-                comp.y = _clampCompY(snap(cursorY) - t.cy, comp.type);
-                const topEnd = (pa.y <= pb.y) ? targetWire.from : targetWire.to;
-                const botEnd = (pa.y <= pb.y) ? targetWire.to   : targetWire.from;
-                ST.wires = ST.wires.filter(w => w.id !== targetWire.id);
-                ST.wires.push({ id: nextId('w'), from: topEnd, to: { compId: comp.id, pin:'in'  } });
-                ST.wires.push({ id: nextId('w'), from: { compId: comp.id, pin:'out' }, to: botEnd });
+                _spliceIntoWire(comp, targetWire, cursorY);
                 cedRender();
             }
             // Geometrischer Hit-Test gegen alle Wires (ausgenommen die der eigenen Komponente)
@@ -64907,7 +64920,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (sigNode === inNode || sigNode === outNode || sigNode === uf.find(PLUS) || sigNode === uf.find(MINUS)) {
                             return;
                         }
-                        edges.push({ a: uf.find(PLUS), b: sigNode, expr: c.varName });
+                        // Signal nur, wenn der Sensor versorgt ist: BN verdrahtet → ab
+                        // dem BN-Knoten (z. B. hinter einem Kontakt eingebaut = UND),
+                        // BN offen → wie bisher direkt ab +24V.
+                        const bnWired = ST.wires.some(w => (w.from.compId === c.id && w.from.pin === 'in') || (w.to.compId === c.id && w.to.pin === 'in'));
+                        edges.push({ a: bnWired ? inNode : uf.find(PLUS), b: sigNode, expr: c.varName });
                     }
                 });
                 return _seriesParallel(edges, plus, coilIn);

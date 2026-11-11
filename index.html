@@ -3251,7 +3251,7 @@
                         <button id="btn-fbs-errorglow" class="btn-export" style="background-color: #d50000; border: 1px solid #333;" onclick="toggleFbsErrorHighlight()" title="Code-Fehler im Logikplan durch rotes Leuchten an den betroffenen Variablen und Linien sichtbar machen.">🚨 Fehler-Glow: AN</button>
                         <button id="btn-fbs-glowhover" class="btn-export" style="background-color: #b8860b; border: 1px solid #333;" onclick="toggleFbsGlowHover()" title="Im Simulations-Modus: Maus über einen Knoten → goldgelber Glow zeigt den minimalen Pfad, der seinen aktuellen Wert GERADE treibt (AND TRUE = alle Eingänge; AND FALSE = nur die FALSE-Eingänge; OR TRUE = nur die TRUE-Eingänge; …).">✨ Glow-Hover: AN<span style="display:inline-block;background:#ff9800;color:#000;font-size:8px;font-weight:bold;padding:1px 4px;border-radius:2px;margin-left:5px;letter-spacing:0.5px;vertical-align:middle;line-height:1;">BETA</span></button>
                         <div class="fbs-opt-hdr">🗂 Netzwerke</div>
-                        <button id="btn-fbs-mergesimple" class="btn-export" style="background-color: #555; border: 1px solid #333;" onclick="toggleFbsMergeSimple()" title="Nur im Netzwerkmodus: Eine einfache Zuweisung (genau EIN Eingang, keine Logik dazwischen — z. B. BAND := Q1) bekommt kein eigenes Netzwerk, sondern rutscht in das Netzwerk, in dem ihre Quell-Variable ihre Verbindung hat. Ausgänge mit Logik dazwischen (z. B. Q1 && S_METALL) bleiben eigene Netzwerke.">🔗 Einfache Zuweisungen einsortieren: AUS</button>
+                        <button id="btn-fbs-mergesimple" class="btn-export" style="background-color: #388e3c; border: 1px solid #333;" onclick="toggleFbsMergeSimple()" title="Nur im Netzwerkmodus: Eine einfache Zuweisung (genau EIN Eingang, keine Logik dazwischen — z. B. BAND := Q1) bekommt kein eigenes Netzwerk, sondern rutscht in das Netzwerk, in dem ihre Quell-Variable ihre Verbindung hat. Ausgänge mit Logik dazwischen (z. B. Q1 && S_METALL) bleiben eigene Netzwerke.">🔗 Einfache Zuweisungen einsortieren: AN</button>
                     </div>
                     <button id="btn-fbs-networks" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsNetworkMode()" title="Netzwerkmodus — teilt den Logikplan SPS-typisch in nummerierte Netzwerke (pro Output-Zuweisung ein Netzwerk). Jedes Netzwerk ist in sich abgeschlossen: benötigte Eingänge werden pro Netzwerk dupliziert (TIA-Portal-Style). Optional: ein Kommentar `// NETZWERK 1: Sicherheitskreis` im Code überschreibt die Aufteilung und gruppiert mehrere Outputs unter einem Titel.">🗂 Netzwerke: AUS</button>
                     <button id="btn-fbs-fup" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsFup()" title="FUP-Darstellung nach Norm (IEC 61131-3) — zeichnet das Programm Netzwerk für Netzwerk wie im TIA-Portal oder auf Papier: Operanden mit Betriebsmittelkennzeichen und SPS-Adresse direkt am Eingang, Kästen &amp; / &gt;=1 / SR / RS / TON / CTU, Negation als Kreis, Zuweisung „=“ am Ende. In der Simulation: 1 = grün, 0 = blau gestrichelt. Reine Ansicht — bearbeitet wird im Code oder im normalen Logikplan.">📐 FUP: AUS</button>
@@ -7015,7 +7015,7 @@ You must output exactly this JSON format. The logic code goes as a single string
         window.fbsGlowSegmentedTrunks = true; // Trunks segmentweise zeichnen (1 pro Edge statt 1 pro Net) → Glow-Hover präzise ohne Überschuss. FEST AN — keine Option mehr.
         window.fbsNetworkMode   = false;  // Logikplan in nummerierte Netzwerke (SPS-Style) splitten — auto pro Output, optional via `// NETZWERK n: …`-Marker
         window.fbsNetworkDuplicateInputs = true; // Inputs pro Netzwerk klonen (jedes Netzwerk in sich abgeschlossen, TIA-Portal-Style). FEST AN im Netzwerkmodus — keine Option mehr.
-        window.fbsNetworkMergeSimple = false; // Einfache Zuweisungen (A:=B, genau EIN Eingang, KEIN Gatter dazwischen) rutschen in das (frühere) Netzwerk ihrer Quell-Variable — nicht jeder Simple-Ausgang bekommt ein eigenes Netzwerk.
+        window.fbsNetworkMergeSimple = true;  // Standard AN (wie im TIA Portal: Abzweig hinter dem Speicher). Einfache Zuweisungen (A:=B, genau EIN Eingang, KEIN Gatter dazwischen) rutschen in das (frühere) Netzwerk ihrer Quell-Variable — nicht jeder Simple-Ausgang bekommt ein eigenes Netzwerk.
         (function _initFbsSettings() {
             try {
                 const _ls = (k) => localStorage.getItem(k);
@@ -15518,6 +15518,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const byId = new Map(newNets.map(w => [w.id, w]));
                     graph.nodes.forEach(n => { if (n.type === 'OUTPUT' && n._networkId != null && byId.has(n._networkId)) byId.get(n._networkId).outputIds.push(n.id); });
                     netInfo.networks.length = 0; newNets.forEach(w => netInfo.networks.push(w));
+                }
+                // Auto-Modus: Titel = alle Ausgänge des Netzwerks (z. B. „LED_BETRIEB, BAND"),
+                // nicht nur der erste. Mit `// NETZWERK n: …`-Markern bleibt der Marker-Titel.
+                if (!netInfo.hasMarkers) {
+                    const byNet = new Map(netInfo.networks.map(w => [w.id, w]));
+                    netInfo.networks.forEach(w => { w.outputIds = []; });
+                    const outs = [];
+                    graph.nodes.forEach(n => { if (n.type === 'OUTPUT' && n._networkId != null && byNet.has(n._networkId)) outs.push(n); });
+                    outs.sort((a, b) => ((a.sourceLine ?? 1e9) - (b.sourceLine ?? 1e9)) || a.id.localeCompare(b.id));
+                    outs.forEach(n => byNet.get(n._networkId).outputIds.push(n.id));
+                    netInfo.networks.forEach(w => { if (w.outputIds.length > 1) w.title = w.outputIds.join(', '); });
                 }
             }
         };
@@ -76221,10 +76232,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         body = { kind: 'assign', target: r.id, inv: !!(e && e.inverted), child };
                     }
                 }
+                // Option „Einfache Zuweisungen einsortieren“ (wie im Netzwerkmodus):
+                // Eine reine Weitergabe X := Y bzw. X := ¬Y (ohne Gatter) wird ein
+                // Abzweig hinter der Zuweisung, die Y schon in einem früheren
+                // Netzwerk erzeugt — so wie man es im TIA Portal zeichnet:
+                // SR → Q ─┬─ [=] LED_BETRIEB
+                //         └o [=] BAND
+                if (window.fbsNetworkMergeSimple && !markers.length && body.kind === 'assign' && body.child.kind === 'op') {
+                    const parentNet = nets.find(nt => nt.items.some(it => it.kind === 'assign' && !it.branchOf && it.target === body.child.src));
+                    if (parentNet) {
+                        body.branchOf = parentNet.items.find(it => it.kind === 'assign' && !it.branchOf && it.target === body.child.src);
+                        parentNet.items.push(body);
+                        return;
+                    }
+                }
                 const last = nets[nets.length - 1];
                 if (group != null && last && last.group === group) last.items.push(body);
                 else nets.push({ group, title, comment, items: [body], firstId: r.id });
             });
+            // Titel eines Netzwerks mit Abzweigen: alle Ausgänge nennen
+            nets.forEach(nt => { if (!nt.title && nt.items.length > 1 && nt.items.some(it => it.branchOf)) nt.title = nt.items.map(it => it.target).join(', '); });
             return nets;
         }
 
@@ -76415,6 +76442,28 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 y += NET_HEAD;
                 net.items.forEach(it => {
                     const c = it.child;
+                    if (it.branchOf && it.branchOf._ay != null) {
+                        // Abzweig: senkrecht vom Ausgangsdraht der Eltern-Zuweisung
+                        // herunter auf einen eigenen „=“-Kasten.
+                        const ax = right, aw = 34, ah = 26;
+                        const ay = y + 30;
+                        const bxp = right - 20;
+                        const src = it.branchOf._wireSrc;
+                        const v = el('line', { x1: bxp, y1: it.branchOf._ay, x2: bxp, y2: ay, stroke: '#111', 'stroke-width': 1.6 }, g);
+                        const h = el('line', { x1: bxp, y1: ay, x2: ax, y2: ay, stroke: '#111', 'stroke-width': 1.6 }, g);
+                        lastLayout.wires.push({ el: v, src }, { el: h, src });
+                        if (!it.branchOf._dot) { el('circle', { cx: bxp, cy: it.branchOf._ay, r: 3.2, fill: '#111' }, g); it.branchOf._dot = true; }
+                        el('rect', { x: ax, y: ay - 13, width: aw, height: ah, fill: '#fff', stroke: '#111', 'stroke-width': 1.6 }, g);
+                        txt(g, ax + aw / 2, ay + 5, '=', { anchor: 'middle', bold: true, size: 15 });
+                        const info = operandInfo(it.target, bmk);
+                        txt(g, ax + aw / 2, ay - 18, info.name, { anchor: 'middle', bold: true, mono: true, size: 12 });
+                        if (info.sub) txt(g, ax + aw / 2, ay - 31, info.sub, { anchor: 'middle', size: 10, fill: '#666' });
+                        // Negation relativ zur Eltern-Zuweisung (die Eltern-Zuweisung
+                        // kann selbst negiert sein — dann zählt der Unterschied).
+                        if (!!it.inv !== !!it.branchOf.inv) el('circle', { cx: ax - 4, cy: ay, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
+                        y = ay + 13 + 14;
+                        return;
+                    }
                     const top = y + (c.kind === 'box' ? 10 : 22);
                     if (it.kind === 'mem') {
                         draw(g, c, top, right + 50, ctx);
@@ -76435,6 +76484,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         } else {
                             draw(g, c, top, ax, ctx);
                         }
+                        it._ay = ay; it._wireSrc = c.src;
                         if (it.inv) el('circle', { cx: ax - 4, cy: ay, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
                     }
                     y = top + c.h + 14;

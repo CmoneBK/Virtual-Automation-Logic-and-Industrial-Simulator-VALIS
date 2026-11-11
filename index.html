@@ -50684,6 +50684,33 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 } catch(_e) {}
             }
         });
+        // Optionen-Panel an die sichtbare Höhe des Logikplan-Fensters binden:
+        // Ragt es unten über das Fenster hinaus (z. B. hinter die 2D-Anlage),
+        // wird es begrenzt und scrollt.
+        window._fitFbsOptions = function() {
+            const doc = _fbsDoc();
+            const group = doc.getElementById('fbs-options-group');
+            if (!group) return;
+            if (!group.classList.contains('expanded')) {
+                group.style.maxHeight = ''; group.style.overflowY = ''; group.style.overflowX = ''; group.style.boxSizing = '';
+                return;
+            }
+            const wrap = doc.getElementById('fbs-wrapper');
+            const win = doc.defaultView || window;
+            if (wrap && !wrap._fitOptsRO && win.ResizeObserver) {
+                wrap._fitOptsRO = new win.ResizeObserver(() => { try { window._fitFbsOptions(); } catch (_) {} });
+                wrap._fitOptsRO.observe(wrap);
+            }
+            const gTop = group.getBoundingClientRect().top;
+            let bottom = win.innerHeight;
+            if (wrap) bottom = Math.min(bottom, wrap.getBoundingClientRect().bottom);
+            const avail = Math.max(120, Math.min(460, Math.floor(bottom - gTop - 8)));
+            group.style.boxSizing = 'border-box';
+            group.style.maxHeight = avail + 'px';
+            group.style.overflowY = 'auto';
+            group.style.overflowX = 'hidden';
+        };
+        window.addEventListener('resize', () => { try { window._fitFbsOptions(); } catch (_) {} });
         window.toggleFbsOptions = function() {
             let doc = (window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)
                       ? window.popOutWindows['fbs-wrapper'].document : document;
@@ -50692,6 +50719,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!group || !btn) return;
             group.classList.toggle('expanded');
             btn.classList.toggle('expanded');
+            window._fitFbsOptions();
             if (btn.classList.contains('expanded')) {
                 btn.textContent = '❌ Schließen';
             } else {

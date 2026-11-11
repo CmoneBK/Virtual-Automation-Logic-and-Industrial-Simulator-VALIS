@@ -232,6 +232,13 @@ Nutzt der Code `ZWEIPUNKT` oder `PID`, oder stehen Analogbauteile in der Anlage,
 
 Orange Signalleitungen verbinden Geber- und Reglerausgänge mit den Eingängen, die dieselbe Variable lesen. Anzeigen, Relais-LEDs und Wechsler laufen in der Simulation live mit.
 
+### Schaltplan-Editor: Zähler, Vergleiche und Programmbausteine
+
+* **Zählrelais (CTU):** Palette „Zeit- und Zählrelais“. Der Strang ist der Zähleingang, jede steigende Flanke zählt einen Schritt. Doppelklick: Vorwahl und „Rücksetzen durch“ (Variable oder Ausdruck). Der Editor schreibt `VAR := CTU(<Strang>, <Reset>, <Vorwahl>)`, Hilfskontakte des Zählrelais schalten bei Erreichen der Vorwahl.
+* **Vergleich am Komparator:** Schaltart „Vergleich ohne Hysterese“ schreibt `VAR := EINGANG < 5` (auch `>`, `<=`, `>=`, `==`, `!=`). „Aus Code“ macht aus solchen Zeilen Komparator-Kontakte.
+* **Programmbaustein:** Was ein Relaisplan nicht zeigen kann (Schrittkette, `PID`, Rechnen, `MIN`/`MAX` …), legt „Aus Code“ als Kasten ohne Anschlüsse neben den Plan. Sein Text geht beim Code-Erzeugen unverändert zurück; Doppelklick zeigt und ändert ihn. Auch `INPUT`-Zeilen bleiben erhalten. Code → Plan → Code verliert so nichts.
+* **Prüfung:** `node pruefungen/schaltplan-editor-rundlauf.js` schickt alle Beispiele, Lektionen und Aufgaben aus `index.html` durch Code → Plan → Code und vergleicht per Wahrheitstabelle (braucht Playwright).
+
 ### Analogwerte im Schaltplan-Editor und in der Schrittkette
 
 * **Schaltplan-Editor:** Palette „Analog (Komparator)“ mit Schließer und Öffner einer Komparatorkarte. Doppelklick: Eingang (Analogwert), Schaltart (Sollwert ± ½ Hysterese heizen/kühlen oder Einschalt-/Ausschaltpunkt) und die beiden Werte. Der Editor schreibt dafür `VAR := ZWEIPUNKT(EINGANG, a, b[, HEIZEN|KUEHLEN])`; „Aus Code“ macht aus solchen Zeilen wieder Komparator-Kontakte. So passen Analogwerte auch in den Relais-Modus: Messwert rein, Relaiskontakt raus.

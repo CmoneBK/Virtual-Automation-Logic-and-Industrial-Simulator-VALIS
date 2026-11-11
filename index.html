@@ -61559,40 +61559,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _CMP_RE = new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*(' + ID_RE_STR + '|' + _NUM_STR + ')\\s*(<=|>=|==|!=|<>|≤|≥|≠|<|>)\\s*(' + ID_RE_STR + '|' + _NUM_STR + ')\\s*$');
                 const _CMP_DREH = { '<':'>', '>':'<', '<=':'>=', '>=':'<=', '≤':'≥', '≥':'≤' };
 
-                for (let raw of lines) {
-                    const line = raw.replace(/\/\/.*/, '').trim();
-                    // Schrittkette: der ganze Block bis END wird ein Baustein
-                    if (_skBlock) {
-                        _skBlock.text += '\n' + raw.replace(/\s+$/, '');
-                        if (/^END\b/i.test(line)) _skBlock = null;
-                        continue;
-                    }
-                    if (!line) continue;
-                    if (/^SCHRITTKETTE\b/i.test(line)) {
-                        const nm = (line.match(/^SCHRITTKETTE\s+([^\s:]+)/i) || [])[1] || '';
-                        _skBlock = { text: raw.trim(), titel: 'Schrittkette ' + nm };
-                        bausteine.push(_skBlock);
-                        _bsOffen = null;
-                        continue;
-                    }
-                    if (/^INPUT\s+/.test(line)) {
-                        line.replace(/^INPUT\s+/, '').split(/[\s,]+/).filter(Boolean).forEach(v => { if (!_inputs.includes(v)) _inputs.push(v); });
-                        continue;
-                    }
+                // Eine Codezeile einlesen. kette = Name der Schrittkette, aus deren
+                // Auflösung die Zeile stammt (dann wird ihr Strang markiert und beim
+                // Code-Erzeugen übersprungen: die Kette steht als Text im Baustein).
+                function _zeile(raw, line, kette) {
                     let m;
                     let _alsBaustein = false;
                     // FF: S1[_RS] := expr
                     m = line.match(new RegExp('^([RS])(\\d+)(_RS)?\\s*:=\\s*(.+)$'));
                     if (m && _nurBool(m[4])) {
                         const side = m[1], num = m[2], isRS = !!m[3], expr = m[4];
-                        if (!ffMap.has(num)) ffMap.set(num, { num, isRS, setAst: null, resetAst: null, outVar: null, raw: [] });
+                        if (!ffMap.has(num)) ffMap.set(num, { num, isRS, setAst: null, resetAst: null, outVar: null, raw: [], kette });
                         const f = ffMap.get(num); f.isRS = isRS; f.raw.push(raw);
                         try {
                             if (side === 'S') f.setAst = parseExpr(expr);
                             else              f.resetAst = parseExpr(expr);
                         } catch(e) { skipped.push({ lhs: side+num, reason: 'Parse-Fehler: '+e.message }); }
                         _bsOffen = null;
-                        continue;
+                        return;
                     }
                     if (m) _alsBaustein = true;
                     // Zeitrelais (TON/TOF/TP): innerer Ausdruck = Strang (IN), Zeit merken.
@@ -61601,11 +61585,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (_nurBool(m[3])) {
                             try {
                                 const _fn = m[2].toUpperCase();
-                                assigns.push({ lhs: m[1], ast: parseExpr(m[3]) });
+                                assigns.push({ kette, lhs: m[1], ast: parseExpr(m[3]) });
                                 _timerForAssign[m[1]] = { fn: _fn, time: parseTimerSeconds(m[4]) };
-                                _rawByLhs[m[1]] = raw;
+                                if (!kette) _rawByLhs[m[1]] = raw;
                                 _bsOffen = null;
-                                continue;
+                                return;
                             } catch(e) { /* → Baustein */ }
                         }
                         _alsBaustein = true;
@@ -61621,8 +61605,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (r === 'DIREKT' || r === 'NORMAL') r = 'HEIZEN';
                             if (r === 'INVERS') r = 'KUEHLEN';
                             _kompForAssign[m[1]] = { kompIn: a[0] || '', kompA: a[1] || '50', kompB: a[2] || '4', kompRicht: r };
+                            if (kette) _kompForAssign[m[1]].skKette = kette;
                             _bsOffen = null;
-                            continue;
+                            return;
                         }
                         _alsBaustein = true;
                     }
@@ -61634,8 +61619,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (istZahl(ein) && !istZahl(wert)) { [ein, wert] = [wert, ein]; op = _CMP_DREH[op] || op; }
                         if (!istZahl(ein)) {
                             _kompForAssign[m[1]] = { kompIn: ein, kompRicht: 'VERGLEICH', kompOp: op, kompA: wert, kompB: '' };
+                            if (kette) _kompForAssign[m[1]].skKette = kette;
                             _bsOffen = null;
-                            continue;
+                            return;
                         }
                         _alsBaustein = true;
                     }
@@ -61645,11 +61631,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const a = _argsTeilen(m[2]);
                         if (a.length === 3 && _nurBool(a[0]) && _nurBool(a[1]) && /^\d+$/.test(a[2])) {
                             try {
-                                assigns.push({ lhs: m[1], ast: parseExpr(a[0]) });
+                                assigns.push({ kette, lhs: m[1], ast: parseExpr(a[0]) });
                                 _ctuForAssign[m[1]] = { reset: a[1], limit: parseInt(a[2], 10) };
-                                _rawByLhs[m[1]] = raw;
+                                if (!kette) _rawByLhs[m[1]] = raw;
                                 _bsOffen = null;
-                                continue;
+                                return;
                             } catch(e) { /* → Baustein */ }
                         }
                         _alsBaustein = true;
@@ -61658,15 +61644,55 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (!_alsBaustein) m = line.match(new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*(.+)$'));
                     if (!_alsBaustein && m && _nurBool(m[2])) {
                         try {
-                            assigns.push({ lhs: m[1], ast: parseExpr(m[2]) });
-                            _rawByLhs[m[1]] = raw;
+                            assigns.push({ kette, lhs: m[1], ast: parseExpr(m[2]) });
+                            if (!kette) _rawByLhs[m[1]] = raw;
                             _bsOffen = null;
-                            continue;
+                            return;
                         } catch(e) { /* → Baustein */ }
                     }
                     // Alles andere bleibt als Programmbaustein erhalten
-                    _bsZeile(raw);
+                    if (!kette) _bsZeile(raw);
                 }
+                for (let raw of lines) {
+                    const line = raw.replace(/\/\/.*/, '').trim();
+                    // Schrittkette: der ganze Block bis END wird ein Baustein
+                    if (_skBlock) {
+                        _skBlock.text += '\n' + raw.replace(/\s+$/, '');
+                        if (/^END\b/i.test(line)) _skBlock = null;
+                        continue;
+                    }
+                    if (!line) continue;
+                    if (/^SCHRITTKETTE\b/i.test(line)) {
+                        const nm = (line.match(/^SCHRITTKETTE\s+([^\s:]+)/i) || [])[1] || '';
+                        _skBlock = { text: raw.trim(), titel: 'Schrittkette ' + nm, skName: nm.toUpperCase() };
+                        bausteine.push(_skBlock);
+                        _bsOffen = null;
+                        continue;
+                    }
+                    if (/^INPUT\s+/.test(line)) {
+                        line.replace(/^INPUT\s+/, '').split(/[\s,]+/).filter(Boolean).forEach(v => { if (!_inputs.includes(v)) _inputs.push(v); });
+                        continue;
+                    }
+                    _zeile(raw, line, null);
+                }
+
+                // Schrittketten wie im Auto-Schaltplan als Relaisschaltung zeigen:
+                // dieselbe Auflösung, die auch die Simulation nutzt (Selbsthaltung
+                // je Schritt, Zeitglieder, Aktionen). Die Stränge sind markiert
+                // (skKette) und gehen nicht in den Code — dort bleibt der Text der
+                // Kette aus ihrem Programmbaustein.
+                try {
+                    const _exp = (typeof window._expandSchrittketten === 'function') ? window._expandSchrittketten(code) : null;
+                    if (_exp && _exp.chains && _exp.chains.length && _exp.lineMap) {
+                        const _start = new Map(_exp.chains.map(c => [c.startLine, c.name]));
+                        _exp.code.split('\n').forEach((z, i) => {
+                            const nm = _start.get(_exp.lineMap[i]);
+                            if (!nm) return;
+                            const zl = z.replace(/\/\/.*/, '').trim();
+                            if (zl) _zeile(z, zl, nm);
+                        });
+                    }
+                } catch (e) { console.warn('Schrittkette im Editor:', e); }
                 // FF-Output-Variablen: Qn_RS bevorzugt sobald die FF-Definition
                 // selbst _RS-Suffix trug (set-dominant), oder die Qn_RS-Variante
                 // in einer Assign-RHS auftaucht. Sonst Standard Qn (SR/reset-dom).
@@ -61737,7 +61763,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             ]
                         };
                     }
-                    assigns.unshift({ lhs: helperVar, ast: helperAst });
+                    assigns.unshift({ lhs: helperVar, ast: helperAst, kette: f.kette || null });
                     _ffConsumed.add(f.num);
                 });
 
@@ -62525,7 +62551,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // — sie bekommen einen Skip-Hinweis.
                 flipFlops.forEach(f => {
                     if (_ffConsumed.has(f.num)) return;
-                    if (f.raw && f.raw.length) { bausteine.push({ text: f.raw.map(z => z.trim()).join('\n'), titel: '' }); }
+                    if (f.kette) { /* Teil einer Schrittkette: steht im Ketten-Baustein */ }
+                    else if (f.raw && f.raw.length) { bausteine.push({ text: f.raw.map(z => z.trim()).join('\n'), titel: '' }); }
                     else skipped.push({ lhs: 'Q'+f.num, reason: 'SR/RS-FF: Set- oder Reset-Bedingung fehlt — beide Sn:= und Rn:= angeben' });
                 });
 
@@ -62577,7 +62604,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 const SENSOR_GAP = 30;
                 const SENSOR_BLOCK_PAD = 30;
+                // Sensoren, die nur eine Schrittkette liest, gehören mit ihrem
+                // Koppelrelais zur Kette (gesperrt, kein eigener Code)
+                const _sensorNurKette = (name) => {
+                    let kette = null;
+                    for (const a of assigns) {
+                        if (!_astHasIdent(a.ast, name)) continue;
+                        if (!a.kette) return null;
+                        kette = kette || a.kette;
+                    }
+                    return kette;
+                };
                 sensorVars.forEach(name => {
+                    const _nC0 = ST.components.length, _nW0 = ST.wires.length;
+                    _sensorSpalte(name);
+                    const k = _sensorNurKette(name);
+                    if (k) _strangMarkieren({ kette: k }, _nC0, _nW0);
+                });
+                function _sensorSpalte(name) {
                     const sType = _ct(name);
                     const sT = CTYPES[sType];
                     const cT = CTYPES.relais;
@@ -62602,7 +62646,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     placeWire({ compId: sensorId, pin:'signal' }, { compId: coilId, pin:'in' });
                     placeWire({ compId: coilId, pin:'out' }, { rail:'minus', x: coilPinX });
                     colX = coilX + cT.w + SENSOR_BLOCK_PAD;
-                });
+                }
 
                 // Helper für Hauptstrang: Sensor-Variable wird beim Kontakt-Plazieren
                 // durch den Hilfsrelais-Namen ersetzt — die Hilfskontakte (relay_no/_nc)
@@ -62621,7 +62665,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const SUB_PITCH_FOR_WIDTH = 100;
                 // Etwas Puffer zwischen Sensor-Block und erstem Strang
                 if (sensorVars.size > 0) colX += 40;
+                // Bauteile und Leitungen eines Strangs aus einer Schrittkette markieren
+                function _strangMarkieren(a, nC, nW) {
+                    if (!a.kette) return;
+                    ST.components.slice(nC).forEach(c => { c.skKette = a.kette; });
+                    ST.wires.slice(nW).forEach(w => { w.skKette = a.kette; });
+                }
                 assigns.forEach(a => {
+                    const _nC = ST.components.length, _nW = ST.wires.length;
+                    try { _strangBauen(a); } finally { _strangMarkieren(a, _nC, _nW); }
+                });
+                function _strangBauen(a) {
                     // Erst RS-Pattern (set-dominant) prüfen — typische Form
                     // OR(setAst, AND(IDENT(lhs), resetAst)). Layout: parallele
                     // Set-Pfade neben Self-AND-Reset-Pfaden, alle direkt auf Coil.
@@ -62662,7 +62716,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const cols = sz ? sz.cols : 1;
                     const rungW = cols > 1 ? (cols - 1) * SUB_PITCH_FOR_WIDTH + 80 : 80;
                     colX += rungW + 40;  // 40 px Puffer zwischen Strängen
-                });
+                }
 
                 // Stränge, die das Layout nicht zeichnen konnte, bleiben als
                 // Programmbaustein mit ihrer Originalzeile erhalten.
@@ -62682,7 +62736,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (by + bT.h > RAIL_MINUS_Y - 20) { bx += bT.w + 30; by = RAIL_PLUS_Y + 30; }
                         const id = placeComp('baustein', bx, by, '');
                         const c = ST.components.find(k => k.id === id);
-                        if (c) { c.codeText = b.text; c.titel = b.titel || ''; }
+                        if (c) { c.codeText = b.text; c.titel = b.titel || ''; if (b.skName) c.skName = b.skName; }
                         by += bT.h + 20;
                     });
                 }
@@ -62808,7 +62862,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     transform: `translate(${comp.x}, ${comp.y})`,
                     'data-id': comp.id
                 }, g);
-                el('rect', { x:-4, y:-4, width: t.w + 8, height: t.h + 8, class:'ced-comp-bg', rx:2 }, grp);
+                const _bg = el('rect', { x:-4, y:-4, width: t.w + 8, height: t.h + 8, class:'ced-comp-bg', rx:2 }, grp);
+                if (comp.skKette) {
+                    // Strang einer Schrittkette: hellgrün hinterlegt, gesperrt
+                    _bg.setAttribute('style', 'fill:rgba(46,125,50,0.10)');
+                    el('title', {}, grp).textContent = 'Schrittkette ' + comp.skKette + ' (gesperrt: im Code oder im Schrittketten-Panel ändern)';
+                }
                 _renderIecSymbol(grp, comp);
                 const pinR = 4;
                 if (t.kind === 'junction') {
@@ -63909,7 +63968,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const ids = Array.from(ST.selectedIds);
                 clearSelection();
                 ids.forEach(id => {
-                    if (ST.wires.find(x => x.id === id)) {
+                    const _wx = ST.wires.find(x => x.id === id);
+                    if (_wx) {
+                        if (_wx.skKette) { _skGesperrt({ skKette: _wx.skKette }); return; }
                         ST.wires = ST.wires.filter(x => x.id !== id);
                     } else if (ST.components.find(c => c.id === id)) {
                         _deleteComp(id);
@@ -64077,6 +64138,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _onCompDblClick(e) {
                 const id = e.currentTarget.getAttribute('data-id');
                 const comp = ST.components.find(c => c.id === id);
+                if (_skGesperrt(comp)) return;
                 if (comp && comp.type === 'baustein') _showBausteinPopup(comp);
                 else if (comp && _needsVar(comp.type)) _showNamePopup(comp);
             }
@@ -64088,6 +64150,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!comp) return;
                 setSelection(id);
                 cedRender();
+                if (_skGesperrt(comp)) return;
                 if (comp.type === 'baustein') _showBausteinPopup(comp, e.clientX, e.clientY);
                 else if (_needsVar(comp.type)) _showNamePopup(comp, e.clientX, e.clientY);
             }
@@ -64298,8 +64361,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
 
             // ---------- Delete ----------
+            // Stränge einer Schrittkette sind gesperrt: sie zeigen die Kette nur,
+            // geändert wird sie im Code bzw. im Schrittketten-Panel.
+            function _skGesperrt(comp) {
+                if (!comp || !comp.skKette) return false;
+                _setStatus('🔒 Gehört zur Schrittkette ' + comp.skKette + ': im Code oder im Schrittketten-Panel ändern');
+                return true;
+            }
             function _deleteComp(id) {
                 const comp = ST.components.find(c => c.id === id);
+                if (_skGesperrt(comp)) return;
+                // Baustein einer Schrittkette: ihre gezeichneten Stränge gehen mit
+                if (comp && comp.type === 'baustein' && comp.skName) {
+                    const weg = new Set(ST.components.filter(c => c.skKette === comp.skName || c.id === id).map(c => c.id));
+                    ST.components = ST.components.filter(c => !weg.has(c.id));
+                    ST.wires = ST.wires.filter(w => w.skKette !== comp.skName && !weg.has(w.from.compId) && !weg.has(w.to.compId));
+                    weg.forEach(i => ST.selectedIds.delete(i));
+                    cedRender();
+                    _maybeSync();
+                    return;
+                }
                 if (comp && CTYPES[comp.type]) {
                     const t = CTYPES[comp.type];
                     const connected = ST.wires.filter(w => w.from.compId === id || w.to.compId === id);
@@ -64331,6 +64412,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _maybeSync();
             }
             function _deleteWire(id) {
+                const _w0 = ST.wires.find(w => w.id === id);
+                if (_w0 && _w0.skKette) { _skGesperrt({ skKette: _w0.skKette }); return; }
                 ST.wires = ST.wires.filter(w => w.id !== id);
                 ST.selectedIds.delete(id);
                 cedRender();
@@ -64885,6 +64968,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ST.components.forEach(c => {
                     if (!CTYPES[c.type] || CTYPES[c.type].kind !== 'coil') return;
                     if (!c.varName) return;
+                    if (c.skKette) return; // Strang einer Schrittkette: Code kommt aus ihrem Baustein
                     if (!coilGroups[c.varName]) coilGroups[c.varName] = [];
                     coilGroups[c.varName].push(c);
                 });
@@ -65048,7 +65132,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const kompZeilen = [], kompVars = new Set();
                 ST.components.forEach(c => {
                     const t = CTYPES[c.type];
-                    if (!t || !t.komp || !c.varName || kompVars.has(c.varName)) return;
+                    if (!t || !t.komp || !c.varName || kompVars.has(c.varName) || c.skKette) return;
                     kompVars.add(c.varName);
                     if (!c.kompIn) { kompZeilen.push(`// ⚠ Komparator ${c.varName}: Eingang (Analogwert) fehlt — Doppelklick auf den Kontakt`); return; }
                     const r = String(c.kompRicht == null ? 'HEIZEN' : c.kompRicht).toUpperCase();

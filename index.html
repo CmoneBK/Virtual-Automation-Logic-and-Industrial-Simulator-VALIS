@@ -3414,6 +3414,9 @@
                             <option value="both">Editor ↔ Code</option>
                         </select>
                     </label>
+                    <label title="Bauteile ohne Variable bekommen beim Platzieren einen Namen nach dem Bauteil (SCHLIESSER_1, LAMPE_1 …), fortlaufend nummeriert. Im Namensfeld überschreibbar." style="color:#fff;font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <input type="checkbox" id="ced-autonames" onchange="window._setCircAutoNames(this.checked)"> Auto-Namen
+                    </label>
                     <button id="ced-btn-generate" class="tool-btn" onclick="window.cedGenerateCode()" title="Code aus Schaltplan generieren" style="background:#ff9800;color:#fff;">⚙ Code generieren</button>
                     <button id="ced-btn-from-code" class="tool-btn" onclick="window.cedGenerateFromCode()" title="Schaltplan aus VALIS-Code aufbauen (Boolesche Logik + SR/RS-FF)" style="background:#4caf50;color:#fff;">🪄 Aus Code</button>
                     <button class="tool-btn" onclick="window.cedAutoAlign()" title="Komponenten in Strängen vertikal ausrichten" style="background:#9c27b0;color:#fff;">⫯ Ausrichten</button>
@@ -49764,7 +49767,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._setCircAutoNames = function (an) {
             window.circAutoNames = !!an;
             try { localStorage.setItem('valisCircAutoNames', an ? '1' : '0'); } catch (_) {}
+            window._syncCircAutoNamesBox();
         };
+        // Häkchen im Schaltplan-Editor (auch im abgekoppelten Fenster) nachziehen.
+        window._syncCircAutoNamesBox = function () {
+            [document, window._cedDoc && window._cedDoc()].forEach(d => {
+                const cb = d && d.getElementById('ced-autonames');
+                if (cb) cb.checked = !!window.circAutoNames;
+            });
+        };
+        setTimeout(() => { try { window._syncCircAutoNamesBox(); } catch (_) {} }, 0);
         window._circAutoBase = function (typ) {
             const m = {
                 taster: 'SCHLIESSER', taster_nc: 'OEFFNER', schalter: 'SCHALTER', schalter_nc: 'SCHALTER_OEFFNER',
@@ -60909,6 +60921,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const t = CTYPES[type]; if (!t) return false;
                 return t.kind === 'contact' || t.kind === 'aux' || t.kind === 'coil' || t.kind === 'sensor';
             };
+            // Auto-Name nach dem Bauteil (SCHLIESSER_1, LAMPE_2 …), wenn die Option
+            // „Auto-Namen" an ist. Hilfskontakte erben den Namen ihrer Spule → nie.
+            const _cedAutoName = (comp) => {
+                const t = CTYPES[comp.type];
+                if (!window.circAutoNames || !t || t.kind === 'aux' || !_needsVar(comp.type)) return '';
+                const extra = { komparator: 'KOMPARATOR', komparator_nc: 'KOMPARATOR_OEFFNER',
+                    timer_ton: 'ZEITRELAIS_TON', timer_tof: 'ZEITRELAIS_TOF', timer_tp: 'ZEITRELAIS_TP' };
+                const base = extra[comp.type] || window._circAutoBase(comp.type);
+                const belegt = ST.components.filter(c => c !== comp && c.varName).map(c => c.varName).join(' ');
+                const code = (document.getElementById('code') || {}).value || '';
+                return window._circAutoName(base, code + '\n' + belegt);
+            };
 
             // State
             const ST = window._cedState = {
@@ -63482,6 +63506,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     }
                     if (_needsVar(type)) {
+                        if (!comp.varName) comp.varName = _cedAutoName(comp);
                         cedRender();
                         _showNamePopup(comp);
                     } else {
@@ -64168,6 +64193,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const newVar  = (varInp && varInp.value || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_ÄÖÜ]/g, '');
                     if (newNorm) comp.normPrefix = newNorm;
                     comp.varName = newVar;
+                    if (!comp.varName) comp.varName = _cedAutoName(comp);
                     // Komparator: Eingang, Schaltart und Schwellen übernehmen
                     if (t && t.komp) {
                         const wert = id2 => { const e = _d().getElementById(id2); return (e && e.value || '').trim(); };

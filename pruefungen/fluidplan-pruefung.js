@@ -258,6 +258,26 @@ const FAELLE = {
     window.toggleSimulation();
     return R;
   },
+  'Verbunden: Änderung in der 2D-Anlage landet im Plan': async () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 0, 300);
+    const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_RA' }, '1V1');
+    const z = F.setzen('zyl_dw', 0, -100, {}, '1A1');
+    const d = F.setzen('drv', 120, 40, { offen: 6 }, '1V2');
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
+    F.verbinden2D(true);
+    const id = F.plan().teile.find(t => t.id === z).o.anlage;
+    const o = factoryObjects.find(x => x.id === id);
+    const th = factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ext');
+    th.opening = 15; o.pistonD = 32;
+    await new Promise(r => setTimeout(r, 900));
+    const p = F.plan();
+    R.push(['2D-Drossel 15 % → Plan-DRV 15 %', p.teile.find(t => t.id === d).o.offen === 15, p.teile.find(t => t.id === d).o.offen]);
+    R.push(['2D-Kolben 32 mm → Plan 32 mm', p.teile.find(t => t.id === z).o.d === 32, p.teile.find(t => t.id === z).o.d]);
+    R.push(['und bleibt in 2D stehen', th.opening === 15 && o.pistonD === 32, [th.opening, o.pistonD]]);
+    F.verbinden2D(false);
+    return R;
+  },
   'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {
     const F = Fluidplan, R = [];
     const bau = () => {

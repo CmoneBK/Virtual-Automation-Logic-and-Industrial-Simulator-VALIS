@@ -34,7 +34,7 @@
     const G_DROSSEL = window._fpGDr || 8;
     const gDrossel = o => G_DROSSEL * Math.max(0, o) / 100;
     const G_LEITUNG = 60;      // Leitwert zwischen Knoten (nur intern)
-    const V_LEITUNG = 0.004;   // Volumen je Leitung (l)
+    const V_LEITUNG = window._fpVL || 0.0015;  // Volumen je Leitung (l), kurzer 4er-Schlauch
 
     // ------------------------------------------------------------
     // Hilfen
@@ -2108,7 +2108,7 @@
         const AK = Math.PI * d * d / 400;               // cm²
         const AS = AK - Math.PI * ds * ds / 400;
         const Fmax = 10 * 6 * AK;
-        return { AK, AS, tot: 0.0015 + AK * 0.5e-4, m: 0.3 + d / 80, d: Fmax / (window._fpDmp || 10), reib: 0.04 * Fmax + 3,
+        return { AK, AS, tot: 0.0015 + AK * 0.5e-4, m: (window._fpMasse || 0.3) + d / 80, d: Fmax / (window._fpDmp || 10), reib: 0.04 * Fmax + 3,
             feder0: 0.06 * Fmax, federC: 0.06 * Fmax / Math.max(10, zahl(t.o.hub, 50)) };
     }
     let letzterKlick = 0;

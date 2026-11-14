@@ -628,6 +628,8 @@ const FAELLE = {
     const zz2 = () => factoryObjects.find(o => o.id === F.plan().teile.find(t => t.id === z2).o.anlage);
     R.push(['Rollenventil steht in 2D als Fluidplan-Teil mit Rolle, Lage und Schalldämpfer', !!v2() && v2().pneu.fp.o.links === 'rolle' && v2().pneu.fp.o.zyl === 'cyl1' && v2().pneu.fp.ab['3'] && v2().pneu.fp.ab['3'].art === 'daempfer', v2() && JSON.stringify(v2().pneu.fp)]);
     R.push(['… mit demselben Kennzeichen wie im Plan', v2() && v2().normLabel === F.plan().teile.find(t => t.id === s).bez, v2() && v2().normLabel]);
+    await warte(500);
+    R.push(['… der erst frei gesetzte Schalldämpfer bleibt nach dem Andocken im Plan', !!v2() && !!(v2().pneu.fp.ab || {})['3'] && F.plan().teile.some(t => t.typ === 'daempfer'), v2() && JSON.stringify(v2().pneu.fp.ab)]);
     R.push(['-MM2 ohne 2D-Magnetventil, hängt an Schläuchen', !!zz2() && zz2().hasPneumatics && !factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === zz2().id)]);
     const mf = factoryObjects.find(o => o.type === 'manifold');
     const hat = (a, ap, b, bp) => window.pneuConnections.some(c => !c._broken && ((c.aObjId === a && c.aPortId === ap && c.bObjId === b && c.bPortId === bp) || (c.aObjId === b && c.aPortId === bp && c.bObjId === a && c.bPortId === ap)));
@@ -679,6 +681,39 @@ const FAELLE = {
     const e3 = factoryObjects.find(o => o.id === 'cyl1').extension || 0;
     window.toggleSimulation(); await warte(200);
     R.push(['… Hebel rastet: Zylinder fährt aus', e3 > 90, Math.round(e3)]);
+    return R;
+  },
+  'Wegeventil in 2D: Gehäusebild oder Normsymbol, beidseitig von Hand': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = [];
+    window.loadExample('code'); await warte(800);
+    F._leeren(); F.ausAnlage(); F.verbinden2D(true);
+    const q = F.plan().teile.find(t => t.typ === 'wartung') || F.plan().teile.find(t => t.typ === 'quelle');
+    const h = F.setzen('ventil', 0, 600, { wege: '5/3', links: 'hebel', rechts: 'hebel' });
+    F.verbinden(q.id, q.typ === 'wartung' ? '2' : '1', h, '1');
+    await warte(300);
+    const v = () => factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu.fp.o.wege === '5/3');
+    const ids = () => window._fpPorts2D(v()).map(p => p.id).sort().join(',');
+    R.push(['Standard: Gehäusebild mit Fenster und festen Anschlüssen', !!v() && !!v().el.querySelector('svg.fp-gehaeuse') && ids() === '1,2,3,4,5', v() && ids()]);
+    const p1 = window._fpPorts2D(v()).find(p => p.id === '1'), x0 = v().x + p1.lx;
+    v().pneu.fp.bild = 'symbol'; ComponentRegistry.pneu_fp.refreshLabel(v());
+    await warte(400);
+    const p1b = window._fpPorts2D(v()).find(p => p.id === '1');
+    R.push(['Umschalten auf Normsymbol: gleiche Anschlüsse, Plan bleibt, Wahl bleibt', !v().el.querySelector('svg.fp-gehaeuse') && !!v().el.querySelector('svg.fp2d') && ids() === '1,2,3,4,5' && v().pneu.fp.bild === 'symbol' && !('bild' in F.plan().teile.find(t => t.id === h).o), ids()]);
+    R.push(['… das Ventil bleibt an seinem Ort (Anschluss 1 wandert nicht weit)', Math.abs(v().x + p1b.lx - x0) < 40, Math.round(x0) + ' → ' + Math.round(v().x + p1b.lx)]);
+    delete v().pneu.fp.bild; ComponentRegistry.pneu_fp.refreshLabel(v());
+    const fw = document.getElementById('factory-wrapper'), fwAlt = fw && fw.style.display; if (fw) fw.style.display = 'block';
+    window.toggleSimulation(); await warte(500);
+    const klick = sd => { const r = v().el.querySelector('.fp-g-bet[data-seite="' + sd + '"]').getBoundingClientRect(); ComponentRegistry.pneu_fp.clickSimulate(v(), { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }); };
+    klick('R'); await warte(300); const s1 = v()._fpStand;
+    klick('L'); await warte(300); const s2 = v()._fpStand;
+    klick('L'); await warte(300); const s3 = v()._fpStand;
+    window.toggleSimulation(); await warte(200);
+    if (fw) fw.style.display = fwAlt;
+    R.push(['Beidseitig Hebel: Klick rechts schaltet rechts, links schaltet links (löst rechts), nochmal links → Mitte', s1 === 2 && s2 === 0 && s3 === 1, [s1, s2, s3].join(' ')]);
+    F.verbinden2D(false); F._leeren();
     return R;
   },
   'Export / Import und Speichern in der Anlage': () => {

@@ -158,6 +158,7 @@ const FAELLE = {
     R.push(['2D-Ventil monostabil mit FP_Y1', vt && !vt.isDouble && vt.linkedVarExt === 'FP_Y1', vt && [vt.isDouble, vt.linkedVarExt]]);
     const th = factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ext');
     R.push(['Drossel der Ausfahrbewegung 30 %', th && th.opening === 30, th && th.opening]);
+    R.push(['keine Drossel fürs Einfahren (nicht im Plan)', !factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ret'), '']);
     R.push(['Maße übernommen', o && o.pistonD === 32 && o.rodD === 12 && o.stroke === 200, o && [o.pistonD, o.rodD, o.stroke]]);
     F.aendern(v, { links: 'magnet', rechts: 'magnet', varR: 'FP_Y2' });
     const vt2 = factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
@@ -165,6 +166,10 @@ const FAELLE = {
     F.aendern(v, { wege: '5/3' });
     const vt3 = factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
     R.push(['5/3 im Plan → 5/3 in 2D', vt3 && vt3.isTriple, vt3 && vt3.isTriple]);
+    // Drossel aus dem Plan nehmen: 2D-Drossel verschwindet
+    F._entfernen(d);
+    F.verbinden(v, '2', z, 'S');
+    R.push(['ohne Drossel im Plan keine 2D-Drossel', !factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id), factoryObjects.filter(x => x.type === 'throttle' && x.targetCylinderId === id).length]);
     // Rückweg
     F._leeren();
     const n = F.ausAnlage();

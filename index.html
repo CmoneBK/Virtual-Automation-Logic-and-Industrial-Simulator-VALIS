@@ -51362,7 +51362,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         // wahl ('single'|'double'|'triple') überspringt den Ventil-Dialog und das Scrollen
         // (genutzt vom freien Fluidplan, der die 2D-Pneumatik aufbaut).
-        window.generatePneumaticSetup = function(cylObj, wahl) {
+        // opt.drosseln = { ext: bool, ret: bool }: nur diese Drosseln anlegen (Standard: beide).
+        window.generatePneumaticSetup = function(cylObj, wahl, opt) {
+            const _dr = (opt && opt.drosseln) || { ext: true, ret: true };
             let zone = factoryObjects.find(o => o.type === 'pneumatic_zone');
             if (!zone) { zone = createFactoryObject('pneumatic_zone', ''); zone.x = 20; zone.y = 600; }
             let comp = factoryObjects.find(o => o.type === 'compressor');
@@ -51420,14 +51422,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (valD) valD.textContent = openingVal + '%';
                     if (knob) knob.style.transform = `rotate(${openingVal * 2.7}deg)`;
                 };
-                let tExt = createFactoryObject('throttle', '');
-                tExt.normLabel = '-RN' + ((groupNum - 1) * 2 + 1);
-                let tExtLbl = tExt.el.querySelector('.f2d-norm-label'); if(tExtLbl) tExtLbl.textContent = tExt.normLabel;
-                applyThrottleVisuals(tExt, reqOpenExt);
-                tExt.x = valve.x - 10; tExt.y = valve.y - 70;
-                tExt.targetCylinderId = cylObj.id; tExt.role = 'ext';
+                let tExt = null;
+                if (_dr.ext) {
+                    tExt = createFactoryObject('throttle', '');
+                    tExt.normLabel = '-RN' + ((groupNum - 1) * 2 + 1);
+                    let tExtLbl = tExt.el.querySelector('.f2d-norm-label'); if(tExtLbl) tExtLbl.textContent = tExt.normLabel;
+                    applyThrottleVisuals(tExt, reqOpenExt);
+                    tExt.x = valve.x - 10; tExt.y = valve.y - 70;
+                    tExt.targetCylinderId = cylObj.id; tExt.role = 'ext';
+                }
                 let tRet = null;
-                if (isDouble) {
+                if (isDouble && _dr.ret) {
                     tRet = createFactoryObject('throttle', '');
                     tRet.normLabel = '-RN' + ((groupNum - 1) * 2 + 2);
                     let tRetLbl = tRet.el.querySelector('.f2d-norm-label'); if(tRetLbl) tRetLbl.textContent = tRet.normLabel;
@@ -51437,7 +51442,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 updateObjTransform(zone); updateObjTransform(comp);
                 if (manifold) updateObjTransform(manifold);
-                updateObjTransform(valve); updateObjTransform(tExt);
+                updateObjTransform(valve); if (tExt) updateObjTransform(tExt);
                 if (tRet) updateObjTransform(tRet);
                 // Auto-Verbindungen materialisieren (rechtsklick-fähig)
                 window.pneuConnections = window.pneuConnections || [];
@@ -77725,6 +77730,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114b"></script>
+<script src="fluidplan.js?v=20261114c"></script>
 </body>
 </html>

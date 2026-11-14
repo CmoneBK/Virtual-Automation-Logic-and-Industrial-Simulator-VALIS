@@ -873,6 +873,7 @@
         h('span', { class: 'fp-trenner' }, leiste);
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
+        if (window._fpFehlersuche) k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
         k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
         k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
         h('span', { class: 'fp-trenner' }, leiste);
@@ -1145,6 +1146,14 @@
                 svg.setPointerCapture(e.pointerId); return;
             }
             const ziel = e.target;
+            // Fehlersuche: Klick auf Bauteil/Leitung = Verdacht melden (Handbetätiger bleiben bedienbar)
+            if (plan.fehlersuche && fehlerAnzahl() && !(ziel.closest && ziel.closest('.fp-hand') && simLaeuft())) {
+                const lt0 = ziel.getAttribute && ziel.getAttribute('data-l');
+                const tg0 = ziel.closest && ziel.closest('.fp-teil');
+                const key = lt0 ? 'L:' + lt0 : tg0 ? tg0.getAttribute('data-t') : null;
+                if (key && !(plan.behoben || []).includes(key)) { verdachtUmschalten(key); return; }
+                if (!simLaeuft()) { zug = { art: 'pan', sx: e.clientX, sy: e.clientY, ax: ansicht.x, ay: ansicht.y }; svg.setPointerCapture(e.pointerId); return; }
+            }
             // Während der Simulation: nur Handbetätigung
             if (simLaeuft()) {
                 const hand = ziel.closest && ziel.closest('.fp-hand');
@@ -1417,6 +1426,7 @@
     // ------------------------------------------------------------
     function eigenschaften() {
         const box = document.getElementById('fp-eigen'); if (!box) return;
+        if (plan.fehlersuche && fehlerAnzahl()) { fehlersucheZeigen(); return; }
         const ids = [...auswahl].filter(a => !a.startsWith('L:'));
         box.innerHTML = '';
         if (ids.length !== 1) {
@@ -1426,6 +1436,7 @@
                 const l = plan.leitungen.find(q => 'L:' + q.id === [...auswahl][0]);
                 h('button', { class: 'fp-btn', text: 'Verlauf zurücksetzen', title: 'Knicke wieder automatisch legen', onclick: () => aendern(() => { if (l) delete l.pkt; }) }, box);
                 h('div', { class: 'fp-hinw', text: 'Ein gerades Stück der Leitung kannst du mit der Maus verschieben. Entf löscht die Leitung.' }, box);
+                if (l) fehlerFeld(box, 'L:' + l.id);
             } else box.classList.remove('offen');
             return;
         }
@@ -1526,6 +1537,7 @@
             num('Schaltdruck', 'p', 0.2, 10, 0.1, 'bar');
             variable('VALIS-Eingang', 'var', 'in');
         }
+        fehlerFeld(box, t.id);
         if (simLaeuft()) box.querySelectorAll('input,select').forEach(i => { if (!(i.type === 'range')) i.disabled = true; });
     }
 
@@ -2153,6 +2165,105 @@
 
 
     // ------------------------------------------------------------
+    // Fehlersuche: versteckte Fehler (Lehrkraft) und Befund (Lernende)
+    // ------------------------------------------------------------
+    // plan.fehler = { '<teilId>' | 'L:<leitungId>': art }, plan.fehlersuche = true
+    // blendet sie aus; plan.verdacht = Liste der Meldungen der Lernenden.
+    const FEHLER = {
+        leitung: [['leck', 'Leitung undicht (bläst ab)'], ['zu', 'Leitung geknickt (kein Durchgang)']],
+        ventil: [['klemmt', 'Ventil klemmt in Ruhestellung'], ['spule', 'Magnetspule defekt'], ['rolle', 'Rolle/Betätigung verstellt'], ['leck', 'Ventil innen undicht']],
+        zyl_dw: [['dichtung', 'Kolbendichtung undicht'], ['klemmt', 'Zylinder schwergängig'], ['sensor', 'Endlagensensoren defekt']],
+        zyl_ew: [['dichtung', 'Kolbendichtung undicht'], ['klemmt', 'Zylinder schwergängig'], ['sensor', 'Endlagensensoren defekt']],
+        schwenk: [['klemmt', 'Schwenkantrieb schwergängig'], ['sensor', 'Sensoren defekt']],
+        quelle: [['druck', 'Versorgungsdruck zu niedrig (2,5 bar)']],
+        wartung: [['druck', 'Druckregler verstellt (2,5 bar)'], ['zu', 'Filter verstopft']],
+        druckregel: [['druck', 'Druckregler verstellt (2,5 bar)']],
+        drossel: [['zu', 'Drossel verstopft']],
+        drv: [['zu', 'Drossel verstopft'], ['verkehrt', 'verkehrt herum eingebaut']],
+        rueck: [['verkehrt', 'verkehrt herum eingebaut']],
+        wechsel: [['klemmt', 'Ventil klemmt']],
+        zweidruck: [['klemmt', 'Ventil klemmt']],
+        schnell: [['klemmt', 'Ventil klemmt']],
+        zeit: [['zu', 'Zeitdrossel verstopft (schaltet nie)']],
+        folge: [['klemmt', 'Ventil klemmt']],
+        dschalter: [['defekt', 'Druckschalter defekt (meldet nie)']],
+        daempfer: [['zu', 'Schalldämpfer zugesetzt']]
+    };
+    const fehlerVon = id => (plan.fehler && plan.fehler[id]) || null;
+    const fehlerAktiv = id => { const f = fehlerVon(id); return f && !(plan.behoben || []).includes(id) ? f : null; };
+    function fehlerName(key) {
+        const f = fehlerVon(key); if (!f) return '';
+        const t = key.startsWith('L:') ? null : teil(key);
+        const liste = key.startsWith('L:') ? FEHLER.leitung : (t && FEHLER[t.typ]) || [];
+        const e = liste.find(x => x[0] === f);
+        return e ? e[1] : f;
+    }
+    function fehlerAnzahl() { return Object.keys(plan.fehler || {}).filter(k => k.startsWith('L:') ? plan.leitungen.some(l => 'L:' + l.id === k) : teil(k)).length; }
+    function fehlerGefunden() {
+        const n = fehlerAnzahl();
+        return n > 0 && Object.keys(plan.fehler).every(k => (plan.behoben || []).includes(k) || !(k.startsWith('L:') ? plan.leitungen.some(l => 'L:' + l.id === k) : teil(k)));
+    }
+    function verdachtUmschalten(key) {
+        plan.verdacht = plan.verdacht || [];
+        const i = plan.verdacht.indexOf(key);
+        if (i >= 0) plan.verdacht.splice(i, 1); else plan.verdacht.push(key);
+        speichern(); zeichnen(); fehlersucheZeigen();
+    }
+    function befundPruefen() {
+        const v = plan.verdacht || [], f = plan.fehler || {};
+        const treffer = v.filter(k => f[k]), falsch = v.filter(k => !f[k]);
+        plan.behoben = Array.from(new Set((plan.behoben || []).concat(treffer)));
+        plan.fehlversuche = (plan.fehlversuche || 0) + falsch.length;
+        plan.verdacht = [];
+        speichern(); sim = null; zeichnen();
+        const n = fehlerAnzahl(), gef = plan.behoben.filter(k => f[k]).length;
+        let txt = treffer.length ? `Richtig: ${treffer.map(k => (k.startsWith('L:') ? 'Leitung' : (teil(k) || {}).bez || '?') + ' (' + fehlerName(k) + ')').join(', ')}. Instandgesetzt. ` : '';
+        if (falsch.length) txt += `${falsch.length} Meldung${falsch.length > 1 ? 'en waren' : ' war'} kein Fehler. `;
+        txt += gef >= n ? `Alle ${n} Fehler gefunden!` : `Noch ${n - gef} von ${n} Fehlern versteckt.`;
+        fehlersucheZeigen(txt);
+        return { treffer: treffer.length, falsch: falsch.length, offen: n - gef };
+    }
+    function fehlersucheZeigen(meldung) {
+        const box = document.getElementById('fp-eigen'); if (!box) return;
+        box.innerHTML = ''; box.classList.add('offen');
+        const n = fehlerAnzahl();
+        h('h4', { text: '🔍 Fehlersuche' }, box);
+        if (plan.fehlersuche) {
+            const gef = (plan.behoben || []).filter(k => (plan.fehler || {})[k]).length;
+            h('div', { class: 'fp-hinw', text: `In diesem Plan stecken ${n} versteckte Fehler (${gef} gefunden). Starte die Simulation, beobachte, miss mit dem Manometer. Dann klicke auf das Bauteil oder die Leitung, die du für defekt hältst, und prüfe den Befund.` }, box);
+            const v = plan.verdacht || [];
+            h('label', { text: 'Deine Meldungen' }, box);
+            if (!v.length) h('div', { class: 'fp-hinw', text: '– noch keine –' }, box);
+            v.forEach(k => h('div', { text: '• ' + (k.startsWith('L:') ? 'Leitung' : ((teil(k) || {}).bez || TYP[(teil(k) || {}).typ] && TYP[teil(k).typ].name || '?')), style: 'color:#ffb74d;margin:2px 0' }, box));
+            h('button', { class: 'fp-btn', text: '✓ Befund prüfen', style: 'margin-top:8px', onclick: befundPruefen }, box);
+            if (meldung) h('div', { class: 'fp-hinw', text: meldung, style: 'color:#e0e0e0;font-size:11.5px' }, box);
+            h('button', { class: 'fp-btn', text: 'Lehrkraft: Fehler zeigen', style: 'margin-top:14px', title: 'Fehlersuche beenden und die Fehler wieder einblenden', onclick: () => { if (confirm('Fehlersuche beenden und die versteckten Fehler zeigen?')) aendern(() => { plan.fehlersuche = false; plan.verdacht = []; }); } }, box);
+        } else {
+            h('div', { class: 'fp-hinw', text: 'Lehrkraft: Bauteil oder Leitung anklicken und unter „Versteckter Fehler“ einen Fehler wählen. Dann die Fehlersuche starten: Die Fehler sind nicht mehr zu sehen, die Lernenden melden ihren Befund. Als Aufgabe speichern: Bedingung „Fluidplan: alle Fehler gefunden“.' }, box);
+            h('label', { text: `Eingebaute Fehler (${n})` }, box);
+            for (const k of Object.keys(plan.fehler || {})) {
+                const ok = k.startsWith('L:') ? plan.leitungen.some(l => 'L:' + l.id === k) : teil(k);
+                if (!ok) continue;
+                h('div', { text: '• ' + (k.startsWith('L:') ? 'Leitung' : (teil(k).bez || TYP[teil(k).typ].name)) + ': ' + fehlerName(k), style: 'color:#ef9a9a;margin:2px 0' }, box);
+            }
+            const st = h('button', { class: 'fp-btn', text: '▶ Fehlersuche starten', style: 'margin-top:8px', onclick: () => aendern(() => { plan.fehlersuche = true; plan.verdacht = []; plan.behoben = []; plan.fehlversuche = 0; }) }, box);
+            if (!n) st.disabled = true;
+        }
+    }
+    function fehlerFeld(box, key) {
+        if (plan.fehlersuche) return;
+        const t = key.startsWith('L:') ? null : teil(key);
+        const liste = key.startsWith('L:') ? FEHLER.leitung : (t && FEHLER[t.typ]);
+        if (!liste) return;
+        h('label', { text: 'Versteckter Fehler (Fehlersuche)' }, box);
+        const sel = h('select', {}, box);
+        h('option', { value: '', text: '– kein Fehler –' }, sel);
+        liste.forEach(([v, n]) => h('option', { value: v, text: n }, sel));
+        sel.value = fehlerVon(key) || '';
+        sel.onchange = () => aendern(() => { plan.fehler = plan.fehler || {}; if (sel.value) plan.fehler[key] = sel.value; else delete plan.fehler[key]; });
+    }
+
+    // ------------------------------------------------------------
     // Eine Wahrheit: Fluidplan baut die Pneumatik der 2D-Anlage auf
     // ------------------------------------------------------------
     // Ist der Plan mit der 2D-Anlage verbunden (plan.anlage), entsteht zu jedem
@@ -2169,9 +2280,11 @@
     }
     // Vom Zylinderanschluss zum Stellglied: durch T-Stücke, Drosseln, Rückschlag-
     // und Schnellentlüftungsventile hindurch. Liefert Ventil, Anschluss und Drosselöffnung.
+    // zu/ab: Öffnung der Drossel, die die Zuluft (zum Zylinder) bzw. Abluft (vom Zylinder) drosselt.
     function stellgliedVon(zyl, port) {
         const nb = nachbarn(), gesehen = new Set();
-        let offen = null;
+        let offen = null, zu = null, ab = null;
+        const min = (a, b) => a == null ? b : Math.min(a, b);
         const stapel = [zyl.id + ':' + port];
         while (stapel.length) {
             const k = stapel.pop();
@@ -2180,16 +2293,20 @@
                 if (gesehen.has(n)) continue;
                 const [tid, pid] = n.split(':');
                 const t = teil(tid); if (!t) continue;
-                if (t.typ === 'ventil' && (pid === '2' || pid === '4')) return { ventil: t, port: pid, offen };
+                if (t.typ === 'ventil' && (pid === '2' || pid === '4')) return { ventil: t, port: pid, offen, zu, ab };
                 if (t.typ === 'knoten') { gesehen.add(n); for (const w of nb[n] || []) stapel.push(w); continue; }
                 if (['drossel', 'drv', 'rueck', 'schnell'].includes(t.typ) && (pid === '1' || pid === '2')) {
-                    if ((t.typ === 'drossel' || t.typ === 'drv') && offen == null) offen = zahl(t.o.offen, 50);
+                    const w = zahl(t.o.offen, 50);
+                    if (t.typ === 'drossel') { zu = min(zu, w); ab = min(ab, w); }
+                    // DRV drosselt von 1 nach 2: von der Zylinderseite an 1 betreten = Abluft gedrosselt
+                    else if (t.typ === 'drv') { if (pid === '1') ab = min(ab, w); else zu = min(zu, w); }
+                    if ((t.typ === 'drossel' || t.typ === 'drv') && offen == null) offen = w;
                     gesehen.add(n);
                     stapel.push(tid + ':' + (pid === '1' ? '2' : '1'));
                 }
             }
         }
-        return null;
+        return { ventil: null, offen, zu, ab };
     }
     function anlageAbgleichen() {
         const F = fabrik();
@@ -2201,10 +2318,13 @@
             const dw = t.typ === 'zyl_dw';
             const K = stellgliedVon(t, 'K'), S = dw ? stellgliedVon(t, 'S') : null;
             const v = (K && K.ventil) || (S && S.ventil) || null;
+            // Drosseln: Ausfahren bremst die Zuluft an K oder die Abluft an S, Einfahren umgekehrt
+            const mn = (...a) => { const b = a.filter(x => x != null); return b.length ? Math.min(...b) : null; };
+            const drExt = mn(K && K.zu, S && S.ab), drRet = dw ? mn(K && K.ab, S && S.zu) : null;
             // Variablen der Spulen: Seite, die den Kolbenraum belüftet = Ausfahren
             let ext = '', ret = '';
             if (v) {
-                const linksBeluftetK = K && K.ventil === v ? K.port === '4' || v.o.wege === '3/2' || v.o.wege === '2/2' : !(S && S.port === '4');
+                const linksBeluftetK = K && K.ventil && K.ventil === v ? K.port === '4' || v.o.wege === '3/2' || v.o.wege === '2/2' : !(S && S.port === '4');
                 const vl = v.o.links === 'magnet' ? v.o.varL || '' : '', vr = v.o.rechts === 'magnet' ? v.o.varR || '' : '';
                 ext = linksBeluftetK ? vl : vr; ret = linksBeluftetK ? vr : vl;
             }
@@ -2228,12 +2348,14 @@
             if (!dw) o.linkedVar = ext || null;
             // Ventil passend zum Stellglied (sonst neu aufbauen)
             let ventil = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
-            const passt = ventil && (wahl === 'triple' ? ventil.isTriple : wahl === 'double' ? (ventil.isDouble && !ventil.isTriple) : !ventil.isDouble);
-            if (ventil && !passt && dw) {
+            const hat = rolle => !!F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
+            const passt = ventil && (wahl === 'triple' ? ventil.isTriple : wahl === 'double' ? (ventil.isDouble && !ventil.isTriple) : !ventil.isDouble)
+                && hat('ext') === (drExt != null) && hat('ret') === (drRet != null);
+            if (ventil && !passt) {
                 F.filter(q => (q.type === 'valve_pneu' || q.type === 'throttle') && q.targetCylinderId === o.id).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
                 o.hasPneumatics = false; ventil = null;
             }
-            if (!o.hasPneumatics && typeof window.generatePneumaticSetup === 'function') { try { window.generatePneumaticSetup(o, wahl); } catch (e) { console.warn('Fluidplan → 2D', e); } }
+            if (!o.hasPneumatics && typeof window.generatePneumaticSetup === 'function') { try { window.generatePneumaticSetup(o, wahl, { drosseln: { ext: drExt != null, ret: drRet != null } }); } catch (e) { console.warn('Fluidplan → 2D', e); } }
             ventil = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
             if (ventil) { ventil.linkedVarExt = o.linkedVarExt; ventil.linkedVarRet = o.linkedVarRet; }
             const dr = (rolle, wert) => {
@@ -2244,8 +2366,8 @@
                 if (vd) vd.textContent = th.opening + '%';
                 if (kn) kn.style.transform = `rotate(${th.opening * 2.7}deg)`;
             };
-            dr('ext', S && S.offen != null ? S.offen : K && K.offen);
-            dr('ret', K && K.offen != null ? K.offen : S && S.offen);
+            dr('ext', drExt);
+            dr('ret', drRet);
         }
         // Vom Plan erzeugte 2D-Zylinder, die es im Plan nicht mehr gibt, wieder entfernen
         plan.erzeugt = plan.erzeugt.filter(id => {

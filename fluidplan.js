@@ -177,7 +177,7 @@
     // ---------- Ventil (Wegeventil) ----------
     TYP.ventil = {
         name: 'Wegeventil', buchstabe: 'V',
-        optionen: { wege: '3/2', ruhe: 'zu', mitte: 'gesperrt', links: 'taster', rechts: 'feder', varL: '', varR: '', zyl: '', pos: 'hinten', richt: 'aus', zylR: '', posR: 'vorne', richtR: 'ein' },
+        optionen: { wege: '3/2', ruhe: 'zu', mitte: 'gesperrt', links: 'taster', rechts: 'feder', varL: '', varR: '', zyl: '', pos: 'hinten', richt: 'aus', zylR: '', posR: 'vorne', richtR: 'ein', schaltweg: 3 },
         geometrie(t) {
             const o = t.o, st = ventilStellungen(o), n = st.length, heim = n === 3 ? 1 : 1;
             const lage = VLAGE[o.wege] || VLAGE['3/2'];
@@ -1248,12 +1248,9 @@
         if (z.o.sensV) m.push({ pos: 'vorne', name: z.o.sensV, el: true });
         return m;
     }
-    function posAnteil(z, pos) {
-        if (pos === 'hinten') return 0;
-        if (pos === 'vorne') return 1;
-        const hub = zylHub(z);
-        return Math.max(0, Math.min(1, zahl(pos, 0) / hub));
-    }
+    // Lage einer Rolle am Zylinder: 'hinten' (0 %), 'vorne' (100 %) oder eine Zahl in % vom Hub
+    const posProzent = pos => pos === 'hinten' ? 0 : pos === 'vorne' ? 100 : Math.max(0, Math.min(100, zahl(pos, 0)));
+    function posAnteil(z, pos) { void z; return posProzent(pos) / 100; }
     const zylHub = z => z.typ === 'schwenk' ? zahl(z.o.winkel, 180) : zahl(z.o.hub, 100);
     function markenZeichnen() {
         for (const z of plan.teile) {
@@ -1664,6 +1661,10 @@
             const opts = [['', '– kein Zylinder –']].concat(plan.teile.filter(z => z.typ === 'zyl_dw' || z.typ === 'zyl_ew').map(z => [z.id, z.bez || TYP[z.typ].name]));
             wahl(lbl, key, opts);
         };
+        const lage = (key) => {
+            const i = fld('Lage der Rolle (% vom Hub, 100 = vordere Endlage)', h('input', { type: 'number', min: 0, max: 100, step: 1, value: posProzent(t.o[key]) }));
+            i.onchange = () => setze(() => { const v = Math.max(0, Math.min(100, zahl(i.value, posProzent(t.o[key])))); t.o[key] = v === 0 ? 'hinten' : v === 100 ? 'vorne' : v; });
+        };
         if (t.typ === 'ventil') {
             const s = wahl('Wegeventil', 'wege', [['2/2', '2/2-Wege'], ['3/2', '3/2-Wege'], ['4/2', '4/2-Wege'], ['5/2', '5/2-Wege'], ['5/3', '5/3-Wege']]);
             void s;
@@ -1674,14 +1675,16 @@
             if (t.o.links === 'magnet') variable('Spule links: VALIS-Ausgang', 'varL', 'out');
             if (t.o.links === 'rolle' || t.o.links === 'rolle_leer') {
                 zylWahl('Rolle betätigt von Zylinder', 'zyl');
-                wahl('an der Stelle', 'pos', [['hinten', 'hintere Endlage'], ['vorne', 'vordere Endlage']]);
+                lage('pos');
+                num('Schaltweg der Rolle', 'schaltweg', 0.5, 20, 0.5, 'mm');
                 if (t.o.links === 'rolle_leer') wahl('betätigt beim', 'richt', [['aus', 'Ausfahren'], ['ein', 'Einfahren']]);
             }
             wahl('Betätigung rechts', 'rechts', [['feder', 'Feder (Rückstellung)']].concat(bets));
             if (t.o.rechts === 'magnet') variable('Spule rechts: VALIS-Ausgang', 'varR', 'out');
             if (t.o.rechts === 'rolle' || t.o.rechts === 'rolle_leer') {
                 zylWahl('Rolle rechts betätigt von Zylinder', 'zylR');
-                wahl('an der Stelle', 'posR', [['hinten', 'hintere Endlage'], ['vorne', 'vordere Endlage']]);
+                lage('posR');
+                if (t.o.links !== 'rolle' && t.o.links !== 'rolle_leer') num('Schaltweg der Rolle', 'schaltweg', 0.5, 20, 0.5, 'mm');
                 if (t.o.rechts === 'rolle_leer') wahl('betätigt beim', 'richtR', [['aus', 'Ausfahren'], ['ein', 'Einfahren']]);
             }
             const st = ventilStellungen(t.o);
@@ -2092,11 +2095,16 @@
             const zyl = teil(zid); if (!zyl || !sim.zust[zid]) return false;
             const zz = sim.zust[zid], hub = zylHub(zyl);
             const ziel = posAnteil(zyl, pos) * hub;
-            // Endlagen: Der Nocken drückt die Rolle auf den letzten Millimetern (Schaltweg wie ein
-            // Reed-Schalter, 6 % des Hubs, mind. 3 mm). Dazwischen: ±2 % um die eingestellte Stelle.
-            const fenster = Math.max(3, hub * 0.06);
-            const nah = pos === 'vorne' ? zz.x >= hub - fenster : pos === 'hinten' ? zz.x <= fenster : Math.abs(zz.x - ziel) <= Math.max(1.5, hub * 0.02);
-            if (b === 'rolle') return nah;
+            // Der Nocken drückt die Rolle, solange der Kolben höchstens den Schaltweg (mm) von ihrer
+            // Lage entfernt ist; am Anschlag (0 % / 100 %) reicht der Bereich nur nach innen.
+            const nah = Math.abs(zz.x - ziel) <= Math.max(0.5, zahl(t.o.schaltweg, 3));
+            if (b === 'rolle') {
+                // schnell überfahren (zwischen zwei Bildern): kurz betätigt wie in echt
+                const key = seite === 'L' ? 'pulsL' : 'pulsR', kx = key + 'X';
+                const vorher = z[kx]; z[kx] = zz.x;
+                if (!nah && vorher != null && (vorher - ziel) * (zz.x - ziel) < 0) z[key] = 0.02;
+                return nah || z[key] > 0;
+            }
             // Leerrücklauf: betätigt nur, wenn der Nocken in Wirkrichtung auf die
             // Rolle fährt. Bleibt er darauf stehen (Endlage), bleibt das Ventil
             // betätigt, bis er zurückfährt (dann klappt die Rolle weg). Wird die
@@ -3370,7 +3378,7 @@
         oeffnen, schliessen, umschalten,
         _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
         _abkoppeln: abkoppeln,
-        _schaltbild: schaltbild,
+        _schaltbild: schaltbild, _posProzent: posProzent,
         exportieren: planExport,
         importieren: planImport,
         plan: () => kopie(plan),

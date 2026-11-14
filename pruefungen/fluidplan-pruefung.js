@@ -531,6 +531,28 @@ const FAELLE = {
     F.druecken(v, 'L', false); F._schritt(2);
     return R;
   },
+  'Schalldämpfer und Blindstopfen sitzen direkt am Ventil': () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 60, 300);
+    const z = F.setzen('zyl_dw', 40, -100, {});
+    const v = F.setzen('ventil', 40, 100, { wege: '5/2', links: 'taster', rechts: 'feder' });
+    const d = F.setzen('daempfer', 400, 400), st = F.setzen('stopfen', -300, 400);
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden(v, '3', d, '1'); F.verbinden(v, '5', st, '1');
+    const gleich = (a, ap, b, bp) => { const A = F._portLage(a, ap), B = F._portLage(b, bp); return !!A && !!B && Math.hypot(A.x - B.x, A.y - B.y) < 0.01; };
+    R.push(['Schalldämpfer an 3, ohne Leitung', gleich(v, '3', d, '1')]);
+    R.push(['Blindstopfen an 5, ohne Leitung', gleich(v, '5', st, '1')]);
+    F.aendern(v, { links: 'hebel' });
+    const t = F.plan().teile.find(x => x.id === v);
+    F.importieren(Object.assign(F.exportieren(), { teile: F.exportieren().teile.map(x => x.id === v ? Object.assign({}, x, { x: x.x + 120, y: x.y + 40 }) : x) }));
+    R.push(['Ventil verschoben: Schalldämpfer wandert mit', gleich(v, '3', d, '1')]);
+    // Abluft rechnet weiter über den Schalldämpfer, der Stopfen sperrt
+    F._neu(); F._schritt(0.5); F.druecken(v, 'L', true); F._schritt(2);
+    const a = F.zustand().teile[z].anteil;
+    R.push(['Zylinder fährt aus, Stangenraum entlüftet über den Schalldämpfer', a > 0.95, a.toFixed(2)]);
+    void t;
+    return R;
+  },
   'Kennzeichen wie im Auto-Schaltplan (DIN EN 81346-2)': () => {
     const F = Fluidplan, R = [];
     const ids = { q: F.setzen('quelle', 0, 300), w: F.setzen('wartung', 100, 300, { kurz: true }), z: F.setzen('zyl_dw', 0, 0), z2: F.setzen('zyl_ew', 300, 0),

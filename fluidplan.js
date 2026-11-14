@@ -2859,8 +2859,9 @@
         kennSpiegel.set(obj.id, { teil: t.id, kz: t.bez });
     }
     function rueckAbgleich() {
-        const F = fabrik(); if (!F || !plan.anlage || !spiegel.size) return;
+        const F = fabrik(); if (!F || !plan.anlage || (!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
         const neu = []; let masse = false;
+        if (rueck2D(F, neu)) masse = true;
         for (const [id, w] of kennSpiegel) {
             const o = F.find(q => q.id === id), t = teil(w.teil);
             if (!o || !t) { kennSpiegel.delete(id); continue; }
@@ -3228,22 +3229,33 @@
             vater[a] = vater[a] || a; vater[b] = vater[b] || b;
             if (knot(l.a) || knot(l.b)) eins(a, b);
         }
-        const gruppen = new Map();
+        const gruppen = new Map(), gLeit = new Map();
         for (const l of plan.leitungen) {
-            const a = l.a.t + ':' + l.a.p, b = l.b.t + ':' + l.b.p;
+            const a = l.a.t + ':' + l.a.p;
             if (knot(l.a) && knot(l.b)) continue;
-            if (!knot(l.a) && !knot(l.b)) { gruppen.set('L' + l.id, [l.a, l.b]); continue; }
-            const g = finde(a), liste = gruppen.get(g) || []; for (const e of [l.a, l.b]) if (!knot(e) && !liste.some(x => x.t === e.t && x.p === e.p)) liste.push(e); gruppen.set(g, liste);
+            if (!knot(l.a) && !knot(l.b)) { gruppen.set('L' + l.id, [l.a, l.b]); gLeit.set('L' + l.id, [l]); continue; }
+            const g = finde(knot(l.a) ? a : l.b.t + ':' + l.b.p), liste = gruppen.get(g) || [];
+            for (const e of [l.a, l.b]) if (!knot(e) && !liste.some(x => x.t === e.t && x.p === e.p)) liste.push(e);
+            gruppen.set(g, liste); gLeit.set(g, (gLeit.get(g) || []).concat([l]));
         }
         const soll = [];
         const da = (A, B) => (window.pneuConnections || []).some(c => !c._broken && !c._fp && ((c.aObjId === A[0] && String(c.aPortId) === A[1] && c.bObjId === B[0] && String(c.bPortId) === B[1]) || (c.aObjId === B[0] && String(c.aPortId) === B[1] && c.bObjId === A[0] && String(c.bPortId) === A[1])));
-        for (const ends of gruppen.values()) {
+        for (const [g, ends] of gruppen) {
             if (ends.every(e => abgedeckt.has(e.t) || ['quelle', 'wartung'].includes((teil(e.t) || {}).typ))) continue;
-            const m = ends.map(e => ende2D(F, e, gast)).filter(Boolean);
-            const eind = []; for (const x of m) if (!eind.some(y => y[0] === x[0] && y[1] === x[1])) eind.push(x);
+            const eind = [];
+            for (const e of ends) {
+                const x = ende2D(F, e, gast); if (!x) continue;
+                const d = eind.find(y => y.k[0] === x[0] && y.k[1] === x[1]);
+                if (d) d.e.push(e); else eind.push({ k: x, e: [e] });
+            }
             // Stern vom Verteiler/Kompressor aus, sonst vom ersten Anschluss
-            eind.sort((x, y) => { const r = q => { const o = F.find(z => z.id === q[0]); return o && (o.type === 'manifold' || o.type === 'compressor') ? 0 : 1; }; return r(x) - r(y); });
-            for (let i = 1; i < eind.length; i++) if (!da(eind[0], eind[i])) soll.push([eind[0], eind[i]]);
+            eind.sort((x, y) => { const r = q => { const o = F.find(z => z.id === q.k[0]); return o && (o.type === 'manifold' || o.type === 'compressor') ? 0 : 1; }; return r(x) - r(y); });
+            for (let i = 1; i < eind.length; i++) {
+                // Leitungen des Plans hinter diesem Schlauch (zum Löschen aus der 2D-Anlage)
+                const ls = g.startsWith('L') ? gLeit.get(g).map(l => l.id)
+                    : gLeit.get(g).filter(l => eind[i].e.some(e => (l.a.t === e.t && l.a.p === e.p) || (l.b.t === e.t && l.b.p === e.p))).map(l => l.id);
+                if (!da(eind[0].k, eind[i].k)) soll.push([eind[0].k, eind[i].k, ls]);
+            }
         }
         const key = (A, B) => [A.join(':'), B.join(':')].sort().join('|');
         const sollK = new Set(soll.map(([A, B]) => key(A, B)));
@@ -3252,15 +3264,100 @@
         for (let i = C.length - 1; i >= 0; i--) if (C[i]._fp && !sollK.has(key([C[i].aObjId, String(C[i].aPortId)], [C[i].bObjId, String(C[i].bPortId)]))) { C.splice(i, 1); anders = true; }
         const ist = new Set(C.filter(c => c._fp).map(c => key([c.aObjId, String(c.aPortId)], [c.bObjId, String(c.bPortId)])));
         for (const [A, B] of soll) if (!ist.has(key(A, B))) { C.push({ aObjId: A[0], aPortId: A[1], bObjId: B[0], bPortId: B[1], _fp: true }); ist.add(key(A, B)); anders = true; }
-        schlauchSpiegel = [...ist].sort().join(',');
+        schlauchLeit = new Map(soll.map(([A, B, ls]) => [key(A, B), ls]));
         if (anders) try { if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
     }
-    let schlauchSpiegel = '';
+    let schlauchLeit = new Map();   // Schlüssel des Schlauchs → Leitungen im Plan
+    const schlauchKey = c => [c.aObjId + ':' + c.aPortId, c.bObjId + ':' + c.bPortId].sort().join('|');
+    // Anschluss in der 2D-Anlage → Anschluss im verbundenen Plan
+    function planEnde(F, oid, port) {
+        const o = F.find(q => q.id === oid); if (!o) return null;
+        port = String(port);
+        const mit = f => plan.teile.find(f);
+        if (o.type === 'pneu_fp') { const t = mit(q => q.o && q.o.anlage === o.id); return t ? { t: t.id, p: port } : null; }
+        if (/^zylinder_/.test(o.type) || o.type === 'gate_pneu') { const t = mit(q => (q.typ === 'zyl_dw' || q.typ === 'zyl_ew') && q.o.anlage === o.id); return t ? { t: t.id, p: port === '2' ? 'S' : 'K' } : null; }
+        if (o.type === 'manifold') { const w = mit(q => q.typ === 'wartung'); if (w) return { t: w.id, p: '2' }; const q = mit(x => x.typ === 'quelle'); return q ? { t: q.id, p: '1' } : null; }
+        if (o.type === 'compressor') { const q = mit(x => x.typ === 'quelle'); return q ? { t: q.id, p: '1' } : null; }
+        const w = spiegel.get(o.id); if (!w) return null;
+        if (w.ventil) { const vt = teil(w.ventil); return vt ? { t: vt.id, p: /^5/.test(vt.o.wege || '') ? ({ '4': '2', '2': '4', '5': '3', '3': '5' })[port] || port : port } : null; }
+        if (w.offen != null) return { t: w.teil, p: port };
+        return null;
+    }
+    // 2D-Teil → Optionen des Planteils (Rollen zeigen wieder auf Planzylinder)
+    function oAus2D(fp) {
+        const o = Object.assign({}, (TYP[fp.typ] || {}).optionen, fp.o || {});
+        for (const k of ['zyl', 'zylR']) if (o[k]) { const z = plan.teile.find(q => (q.typ === 'zyl_dw' || q.typ === 'zyl_ew') && q.o.anlage === o[k]); o[k] = z ? z.id : ''; }
+        return o;
+    }
+    const ohneRot = sig => { try { const f = JSON.parse(sig); delete f.rot; return JSON.stringify(f); } catch (e) { return sig; } };
+    // Änderungen an Fluidplan-Teilen und Schläuchen der 2D-Anlage → Plan
+    function rueck2D(F, neu) {
+        let masse = false;
+        for (const [id, w] of spiegel2D) {
+            const o = F.find(q => q.id === id), t = teil(w.teil);
+            if (!t) { spiegel2D.delete(id); continue; }
+            if (!o) {
+                // in der 2D-Anlage gelöscht
+                spiegel2D.delete(id); masse = true;
+                neu.push(() => {
+                    const gast = gaesteKarte(), weg = new Set([t.id].concat(Object.keys(gast).filter(g => gast[g] === t.id)));
+                    plan.teile = plan.teile.filter(q => !weg.has(q.id));
+                    plan.leitungen = plan.leitungen.filter(l => !weg.has(l.a.t) && !weg.has(l.b.t));
+                    plan.erzeugt = (plan.erzeugt || []).filter(x => x !== id);
+                });
+                continue;
+            }
+            const jetzt = JSON.stringify(fp2d(o));
+            if (ohneRot(jetzt) === ohneRot(w.sig)) continue;
+            w.sig = jetzt; masse = true;
+            const fp = JSON.parse(jetzt);
+            neu.push(() => {
+                t.typ = fp.typ; const anlage = t.o.anlage; t.o = oAus2D(fp); t.o.anlage = anlage;
+                if (t.typ === 'ventil') for (const p of geo(t).ports) if (p.art === 'r') abschlussSetzen(t, p.id, (fp.ab || {})[p.id] || { art: 'offen' });
+            });
+        }
+        // neue Fluidplan-Teile, in der 2D-Anlage gesetzt
+        for (const o of F) {
+            if (o.type !== 'pneu_fp' || spiegel2D.has(o.id) || plan.teile.some(q => q.o && q.o.anlage === o.id)) continue;
+            masse = true;
+            const fp = JSON.parse(JSON.stringify(fp2d(o)));
+            spiegel2D.set(o.id, { teil: null, sig: JSON.stringify(fp) });
+            neu.push(() => {
+                let b = [Infinity, -Infinity, -Infinity]; for (const q of plan.teile) { const w2 = boxWelt(q); b = [Math.min(b[0], w2[1]), Math.max(b[1], w2[2]), Math.max(b[2], w2[3])]; }
+                const x = isFinite(b[1]) ? snap(b[1] + 80) : 0, y = isFinite(b[0]) ? snap(b[0] + 40) : 0;
+                const t = { id: neueId(), typ: fp.typ, x, y, rot: 0, bez: o.normLabel || bezFuer(fp.typ, fp.o), o: oAus2D(fp) };
+                t.o.anlage = o.id; plan.teile.push(t); (plan.erzeugt = plan.erzeugt || []).push(o.id);
+                spiegel2D.get(o.id).teil = t.id;
+                if (t.typ === 'ventil') for (const p of geo(t).ports) if (p.art === 'r' && (fp.ab || {})[p.id]) abschlussSetzen(t, p.id, fp.ab[p.id]);
+            });
+        }
+        // Schläuche: abgezogen/gelöscht → Leitung weg; neu gesteckt → Leitung neu
+        const C = window.pneuConnections || [];
+        const da = new Set(C.filter(c => c._fp).map(schlauchKey));
+        for (const [k, ls] of [...schlauchLeit]) {
+            if (da.has(k)) continue;
+            schlauchLeit.delete(k); masse = true;
+            neu.push(() => { plan.leitungen = plan.leitungen.filter(l => !ls.includes(l.id)); });
+        }
+        for (const c of C) {
+            if (c._fp || c._auto || c._broken) continue;
+            const a = F.find(q => q.id === c.aObjId), b2 = F.find(q => q.id === c.bObjId);
+            const frei = q => q && (q.type === 'pneu_fp' || ((/^zylinder_/.test(q.type)) && !F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === q.id)));
+            if (!frei(a) && !frei(b2)) continue;
+            const A = planEnde(F, c.aObjId, c.aPortId), B = planEnde(F, c.bObjId, c.bPortId);
+            if (!A || !B) continue;
+            c._fp = true; masse = true;
+            const k = schlauchKey(c), lid = neueId();
+            schlauchLeit.set(k, [lid]);
+            neu.push(() => { plan.leitungen.push({ id: lid, a: A, b: B }); });
+        }
+        return masse;
+    }
     // Umgekehrt: vorhandene 2D-Pneumatik als Startplan übernehmen
     // Plan aus der Pneumatik der 2D-Anlage (für „⇐ Aus 2D-Anlage“ und den Schattenplan).
     // karte: je 2D-Zylinder { zyl, ventil, drv: {ext, ret}, seite: {ext: [Leitungen], ret: [...]} }
-    function planAus2D(F, zyl, comp, ab) {
-        const teile = [], leitungen = [], karte = {};
+    function planAus2D(F, zyl, comp, ab, fpListe) {
+        const teile = [], leitungen = [], karte = {}, karte2 = {};
         const nid = () => neueId();
         const q = { id: nid(), typ: 'quelle', x: 0, y: 360, rot: 0, bez: (comp && comp.normLabel) || '', o: Object.assign({}, TYP.quelle.optionen, { p: comp && comp.pressure || 6 }) };
         teile.push(q);
@@ -3276,6 +3373,12 @@
             const v = F.find(q2 => q2.type === 'valve_pneu' && q2.targetCylinderId === o.id);
             const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: o.normLabel || '',
                 o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id }) };
+            if (!v) {
+                // Zylinder an freien Schläuchen (Ventile als Fluidplan-Teile)
+                teile.push(zt);
+                karte[o.id] = { zyl: zt.id, ventil: null, ventil2d: null, drv: {}, seite: { ext: [], ret: [] } };
+                return;
+            }
             const wege = !dw ? '3/2' : (v && v.isTriple) ? '5/3' : '5/2';
             const doppelt = v && v.isDouble;
             const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: (v && v.normLabel) || '',
@@ -3318,11 +3421,48 @@
             wa.x = q.x - 60; wa.y = q.y; q.x = wa.x - 80; q.rot = 90;
             L(q.id, '1', wa.id, '1');
         }
+        // Fluidplan-Teile der 2D-Anlage (pneu_fp) und ihre Schläuche
+        const fpo = fpListe || [];
+        fpo.forEach((o, i) => {
+            const fp = fp2d(o), T = TYP[fp.typ]; if (!T) return;
+            const oo = Object.assign({}, T.optionen, JSON.parse(JSON.stringify(fp.o || {})));
+            for (const k of ['zyl', 'zylR']) if (oo[k]) oo[k] = karte[oo[k]] ? karte[oo[k]].zyl : '';
+            const t = { id: nid(), typ: fp.typ, x: 140 + zyl.length * 260 + (i % 4) * 140, y: 60 + Math.floor(i / 4) * 140, rot: 0, bez: o.normLabel || '', o: oo };
+            teile.push(t); karte2[o.id] = t.id;
+            for (const pid of Object.keys(fp.ab || {})) { const n = abschlussBauen(t, pid, fp.ab[pid], nid); if (n) { teile.push(n.t); leitungen.push(n.l); } }
+        });
+        if (fpo.length) {
+            const fpIds = new Set(fpo.map(o => o.id));
+            const ende = (oid, port) => {
+                port = String(port);
+                if (karte2[oid]) return [karte2[oid], port];
+                const o = F.find(x => x.id === oid); if (!o) return null;
+                if (karte[oid]) return [karte[oid].zyl, port === '2' ? 'S' : '1' === port ? 'K' : 'K'];
+                if (o.type === 'manifold') return wa ? [wa.id, '2'] : [q.id, '1'];
+                if (o.type === 'compressor') return [q.id, '1'];
+                if (o.type === 'valve_pneu' && karte[o.targetCylinderId] && karte[o.targetCylinderId].ventil) {
+                    const vt = teile.find(x => x.id === karte[o.targetCylinderId].ventil);
+                    return [vt.id, /^5/.test(vt.o.wege || '') ? ({ '4': '2', '2': '4', '5': '3', '3': '5' })[port] || port : port];
+                }
+                if (o.type === 'throttle' && karte[o.targetCylinderId] && karte[o.targetCylinderId].drv[o.role]) return [karte[o.targetCylinderId].drv[o.role].id, port];
+                return null;
+            };
+            const gesehenL = new Set();
+            for (const c of window.pneuConnections || []) {
+                if (c._broken) continue;
+                const frei = id => fpIds.has(id) || (karte[id] && !karte[id].ventil);
+                if (!frei(c.aObjId) && !frei(c.bObjId)) continue;
+                const A = ende(c.aObjId, c.aPortId), B = ende(c.bObjId, c.bPortId);
+                if (!A || !B) continue;
+                const k = [A.join(':'), B.join(':')].sort().join('|'); if (gesehenL.has(k)) continue; gesehenL.add(k);
+                L(A[0], A[1], B[0], B[1]);
+            }
+        }
         // Kennzeichen aus der 2D-Anlage (-MM1, -QM1, -RN1 …); fehlende und doppelte neu vergeben
         const gesehen = new Set();
         teile.forEach(t => { if (!/^-[A-Z]+\d+$/.test(t.bez || '') || gesehen.has(t.bez)) t.bez = ''; else gesehen.add(t.bez); });
         kennzeichenAuffrischen({ teile });
-        return { teile, leitungen, karte, quelle: q.id, versorgung };
+        return { teile, leitungen, karte, karte2, quelle: q.id, versorgung };
     }
     function ausAnlage() {
         const F = fabrik(); if (!F) return 0;
@@ -3330,7 +3470,9 @@
         if (!zyl.length) { status('In der 2D-Anlage gibt es keinen Zylinder mit Pneumatik.'); return 0; }
         if (plan.teile.length && !W().confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
         aendern(() => {
-            const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'));
+            const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'), null, F.filter(o => o.type === 'pneu_fp'));
+            // Fluidplan-Teile der 2D-Anlage gehören jetzt zum Plan
+            r.teile.forEach(t => { for (const id in r.karte2) if (r.karte2[id] === t.id) t.o.anlage = id; });
             // Reed-Schalter der 2D-Zylinder werden Endlagensensoren im Plan (sonst
             // würde der Abgleich sie in der 2D-Anlage wieder entfernen)
             zyl.forEach(o => {
@@ -3366,7 +3508,12 @@
     function schattenZylinder(F) {
         const eigen = plan.anlage ? new Set(plan.teile.filter(t => t.o && t.o.anlage).map(t => t.o.anlage)) : new Set();
         return F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics && !eigen.has(o.id)
-            && F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === o.id));
+            && (F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === o.id)
+                || (window.pneuConnections || []).some(c => !c._broken && (c.aObjId === o.id || c.bObjId === o.id))));
+    }
+    function schattenFp(F) {
+        const eigen = plan.anlage ? new Set(plan.teile.filter(t => t.o && t.o.anlage).map(t => t.o.anlage)) : new Set();
+        return F.filter(o => o.type === 'pneu_fp' && !eigen.has(o.id));
     }
     function schattenTakt(dt) {
         const F = fabrik(); if (!F) return;
@@ -3385,7 +3532,10 @@
                 ab('2', o.type !== 'zylinder_single' ? tR : tE, '1'), o.type !== 'zylinder_single' && ab('4', tE, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0, v && JSON.stringify(v.abschluss || null)].join(',');
         };
         const versorgungAb = pneuAb(comp, '1', mf, '1') || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
-        const sig = (comp ? comp.id : '-') + '|' + versorgungAb + '|' + zyl.map(lage).join('|');
+        const fpo = schattenFp(F);
+        const fpSig = fpo.map(o => o.id + JSON.stringify(o.pneu && o.pneu.fp && Object.assign({}, o.pneu.fp, { rot: 0 }))).join(';') + '#'
+            + (fpo.length ? (window.pneuConnections || []).filter(c => !c._broken).map(c => schlauchKey(c)).sort().join(',') : '');
+        const sig = (comp ? comp.id : '-') + '|' + versorgungAb + '|' + zyl.map(lage).join('|') + '|' + fpSig;
         const neu = !schatten || schatten.sig !== sig;
         if (neu) {
             const abK = {};
@@ -3399,7 +3549,7 @@
                 abK[o.id] = { ext: ab('2', dw ? tR : tE, '1'), ret: dw && ab('4', tE, '2') };
                 fehlerVorher.push([o, v]);
             });
-            const r = planAus2D(F, zyl, comp, abK);
+            const r = planAus2D(F, zyl, comp, abK, fpo);
             const p = { v: 2, teile: r.teile, leitungen: r.leitungen, fehler: {} };
             // Undichte Kolbendichtung und Ventile der 2D-Anlage als Fehler im Schattenplan
             fehlerVorher.forEach(([o, v]) => {
@@ -3407,7 +3557,7 @@
                 if ((o.leakRate || 0) > 0) p.fehler[k.zyl] = 'dichtung';
                 if (v && (v.leakRate || 0) > 0) p.fehler[k.ventil] = 'leck';
             });
-            schatten = { plan: p, sim: null, sig, karte: r.karte, quelle: r.quelle, versorgungAb };
+            schatten = { plan: p, sim: null, sig, karte: r.karte, fp2d: r.karte2, quelle: r.quelle, versorgungAb };
         }
         const S = schatten;
         // Werte, die sich ohne Umbau ändern: Netzdruck, Drosseln, Ventilstellungen
@@ -3594,6 +3744,7 @@
                 for (const r in k.drv) if (k.drv[r]) map[k.drv[r].id] = k.drv[r].th;
             }
             const comp = F.find(o => o.type === 'compressor'); if (comp && sch.quelle) map[sch.quelle] = comp.id;
+            for (const oid in (sch.fp2d || {})) map[sch.fp2d[oid]] = oid;
             quellen.push({ p: sch.plan, s: sch.sim, map });
         }
         if (!quellen.length) return null;

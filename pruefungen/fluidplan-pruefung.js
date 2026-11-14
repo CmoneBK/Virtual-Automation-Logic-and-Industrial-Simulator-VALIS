@@ -230,6 +230,17 @@ const FAELLE = {
     R.push(['Aufgabenbedingung fluid_fehler erfüllt', _checkCondition({ type: 'fluid_fehler' }) === true, '']);
     return R;
   },
+  'Beispielpläne laden und sind vollständig verbunden': () => {
+    const F = Fluidplan, R = [];
+    F.beispiele().forEach((n, i) => { F.beispielLaden(i); const p = F.pruefen(); R.push([n, p.length === 0 && F.plan().teile.length > 1, JSON.stringify(p).slice(0, 120)]); });
+    // Pendelhub läuft
+    F.beispielLaden(F.beispiele().findIndex(n => /Pendelhub/.test(n)));
+    const pl = F.plan(), z = pl.teile.find(t => t.typ === 'zyl_dw'), h = pl.teile.find(t => t.o.links === 'hebel');
+    F._neu(); F._schritt(0.5); F.druecken(h.id, 'L', true);
+    let max = 0, min = 1; for (let i = 0; i < 40; i++) { F._schritt(0.1); const a = F.zustand().teile[z.id].anteil; max = Math.max(max, a); if (i > 20) min = Math.min(min, a); }
+    R.push(['Beispiel Pendelhub pendelt', max > 0.95 && min < 0.05, `${max.toFixed(2)}/${min.toFixed(2)}`]);
+    return R;
+  },
   'Export / Import und Speichern in der Anlage': () => {
     const F = Fluidplan, R = [];
     const q = F.setzen('quelle', 0, 300);

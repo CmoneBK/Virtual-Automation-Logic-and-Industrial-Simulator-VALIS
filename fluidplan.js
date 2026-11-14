@@ -873,6 +873,7 @@
         h('span', { class: 'fp-trenner' }, leiste);
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
+        k('📂 Beispiele', 'Fertige Beispielschaltungen laden', () => { auswahl.clear(); zeichnen(); beispieleZeigen(); });
         k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess');
         k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
         k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
@@ -1648,6 +1649,78 @@
         else f.innerHTML = `${plan.teile.length} Bauteile, ${plan.leitungen.length} Leitungen · Leitung: von Anschluss zu Anschluss ziehen · Doppelklick: Eigenschaften`;
     }
 
+
+    // ------------------------------------------------------------
+    // Beispielpläne
+    // ------------------------------------------------------------
+    // Jeder Bau bekommt T(typ, x, y, bez, o) und L(a, ap, b, bp) und baut den Plan auf.
+    const BEISPIELE = [
+        { name: 'Direkt: Taster fährt einfachwirkenden Zylinder', text: 'Solange 1S1 gedrückt ist, fährt 1A1 aus.',
+          bau(T, L) { const q = T('quelle', 0, 300, '0Z1'), s = T('ventil', -20, 140, '1S1', { wege: '3/2', links: 'taster' }), z = T('zyl_ew', -20, -60, '1A1');
+            L(q, '1', s, '1'); L(s, '2', z, 'K'); } },
+        { name: 'Indirekt: Impulsventil mit Abluftdrosselung', text: '1S1 fährt aus, 1S2 fährt ein. Die Drosselrückschlagventile bremsen die Abluft.',
+          bau(T, L) { const q = T('quelle', 60, 420, '0Z1'), z = T('zyl_dw', 40, -200, '1A1'), v = T('ventil', 40, 80, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
+            d1 = T('drv', 50, -60, '1V2', { offen: 40 }), d2 = T('drv', 170, -60, '1V3', { offen: 40 }),
+            s1 = T('ventil', -160, 240, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 260, 240, '1S2', { wege: '3/2', links: 'taster' });
+            [v, s1, s2].forEach(x => L(q, '1', x, '1')); L(s1, '2', v, '14'); L(s2, '2', v, '12');
+            L(v, '4', d1, '2'); L(d1, '1', z, 'K'); L(v, '2', d2, '2'); L(d2, '1', z, 'S'); } },
+        { name: 'UND: Zweihandbedienung', text: 'Nur wenn 1S1 und 1S2 gedrückt sind, fährt 1A1 aus (Zweidruckventil).',
+          bau(T, L) { const q = T('quelle', 40, 420, '0Z1'), z = T('zyl_dw', 20, -200, '1A1'), v = T('ventil', 20, 0, '1V1', { wege: '5/2', links: 'pneu', rechts: 'feder' }),
+            u = T('zweidruck', 40, 140, '1V2'), s1 = T('ventil', -170, 240, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 200, 240, '1S2', { wege: '3/2', links: 'taster' });
+            [v, s1, s2].forEach(x => L(q, '1', x, '1')); L(s1, '2', u, 'X'); L(s2, '2', u, 'Y'); L(u, '2', v, '14'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'ODER: von zwei Stellen', text: '1S1 oder 1S2 fährt den einfachwirkenden Zylinder aus (Wechselventil).',
+          bau(T, L) { const q = T('quelle', 40, 400, '0Z1'), z = T('zyl_ew', 20, -100, '1A1'), w = T('wechsel', 40, 60, '1V1'),
+            s1 = T('ventil', -170, 220, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 200, 220, '1S2', { wege: '3/2', links: 'pilz' });
+            L(q, '1', s1, '1'); L(q, '1', s2, '1'); L(s1, '2', w, 'X'); L(s2, '2', w, 'Y'); L(w, '2', z, 'K'); } },
+        { name: 'Pendelhub mit Rollenventilen', text: 'Hebel 1S1 rastet: 1A1 pendelt zwischen den Endlagen, bis der Hebel wieder aus ist.',
+          bau(T, L) { const q = T('quelle', 60, 460, '0Z1'), z = T('zyl_dw', 40, -200, '1A1'), v = T('ventil', 40, 20, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
+            u = T('zweidruck', -80, 170, '1V2'), s1 = T('ventil', -260, 280, '1S1', { wege: '3/2', links: 'hebel' }),
+            s2 = T('ventil', -60, 280, '1S2', { wege: '3/2', links: 'rolle', pos: 'hinten' }), s3 = T('ventil', 240, 280, '1S3', { wege: '3/2', links: 'rolle', pos: 'vorne' });
+            s2.o.zyl = z.id; s3.o.zyl = z.id;
+            [v, s1, s2, s3].forEach(x => L(q, '1', x, '1')); L(s1, '2', u, 'X'); L(s2, '2', u, 'Y'); L(u, '2', v, '14'); L(s3, '2', v, '12');
+            L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Zeitverzögerung: vorne 2 s halten', text: '1S1 startet. Vorne betätigt 1A1 die Rolle 1S2, nach 2 s schaltet 1V2 und 1A1 fährt zurück.',
+          bau(T, L) { const q = T('quelle', 60, 460, '0Z1'), z = T('zyl_dw', 40, -200, '1A1'), v = T('ventil', 40, 20, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
+            s1 = T('ventil', -200, 280, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 60, 280, '1S2', { wege: '3/2', links: 'rolle', pos: 'vorne' }),
+            zt = T('zeit', 250, 160, '1V2', { zeit: 2 });
+            s2.o.zyl = z.id;
+            [v, s1, s2, zt].forEach(x => L(q, '1', x, '1')); L(s1, '2', v, '14'); L(s2, '2', zt, '12'); L(zt, '2', v, '12');
+            L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Ablauf A+ B+ A− B−', text: 'Zwei Zylinder nacheinander, Signale von Rollenventilen. Mit dem Diagramm ansehen.',
+          bau(T, L) { const q = T('quelle', 260, 520, '0Z1'), A = T('zyl_dw', 0, -220, '1A1'), B = T('zyl_dw', 420, -220, '2A1'),
+            vA = T('ventil', 0, 0, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }), vB = T('ventil', 420, -40, '2V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
+            u = T('zweidruck', -60, 170, '1V2'), st = T('ventil', -260, 300, '1S1', { wege: '3/2', links: 'taster' }),
+            a0 = T('ventil', -40, 380, '1S2', { wege: '3/2', links: 'rolle', pos: 'hinten' }), a1 = T('ventil', 140, 380, '1S3', { wege: '3/2', links: 'rolle', pos: 'vorne' }),
+            b0 = T('ventil', 320, 380, '2S1', { wege: '3/2', links: 'rolle', pos: 'hinten' }), b1 = T('ventil', 500, 380, '2S2', { wege: '3/2', links: 'rolle', pos: 'vorne' });
+            a0.o.zyl = A.id; a1.o.zyl = A.id; b0.o.zyl = B.id; b1.o.zyl = B.id;
+            [vA, vB, st, a0, a1, b0, b1].forEach(x => L(q, '1', x, '1'));
+            L(st, '2', u, 'X'); L(b0, '2', u, 'Y'); L(u, '2', vA, '14'); L(b1, '2', vA, '12'); L(a1, '2', vB, '14'); L(a0, '2', vB, '12');
+            L(vA, '4', A, 'K'); L(vA, '2', A, 'S'); L(vB, '4', B, 'K'); L(vB, '2', B, 'S'); } },
+        { name: 'Elektropneumatik: Magnetventil mit Sensoren', text: '1M1 hängt an der VALIS-Variable Y1, die Endlagen melden B1 (hinten) und B2 (vorne). Im Code z. B. Y1 := START.',
+          bau(T, L) { const q = T('quelle', 40, 300, '0Z1'), z = T('zyl_dw', 20, -160, '1A1', { sensH: 'B1', sensV: 'B2' }), v = T('ventil', 20, 80, '1M1', { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'Y1' });
+            L(q, '1', v, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } }
+    ];
+    function beispielLaden(i) {
+        const b = BEISPIELE[i]; if (!b) return;
+        if (plan.teile.length && !confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
+        const neu = { v: 1, teile: [], leitungen: [] };
+        const T = (typ, x, y, bez, o) => { const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: bez || '', o: Object.assign({}, TYP[typ].optionen, o || {}) }; neu.teile.push(t); return t; };
+        const L = (a, ap, c, cp) => neu.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: c.id, p: cp } });
+        b.bau(T, L);
+        aendern(() => { plan = neu; auswahl.clear(); geoCache.clear(); });
+        sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + b.text);
+    }
+    function beispieleZeigen() {
+        const box = document.getElementById('fp-eigen'); if (!box) return;
+        box.innerHTML = ''; box.classList.add('offen');
+        h('h4', { text: '📂 Beispiele' }, box);
+        h('div', { class: 'fp-hinw', text: 'Ein Beispiel ersetzt den aktuellen Plan. Danach ▶ Simulation starten und Taster oder Hebel im Plan anklicken.' }, box);
+        BEISPIELE.forEach((b, i) => {
+            const d = h('div', { style: 'margin:7px 0;padding:6px 7px;border:1px solid #444;border-radius:4px;cursor:pointer', title: b.text, onclick: () => beispielLaden(i) }, box);
+            h('div', { text: b.name, style: 'color:#ffb74d;font-weight:600' }, d);
+            h('div', { text: b.text, style: 'color:#9e9e9e;font-size:10.5px;margin-top:2px' }, d);
+        });
+    }
     // ------------------------------------------------------------
     // Messen: Manometer an eine Leitung anstecken (bleibt, bis man es abzieht)
     // ------------------------------------------------------------
@@ -2590,6 +2663,8 @@
         verdacht: (key) => verdachtUmschalten(key),
         messen: (lt, x, y) => messKlick(lt, x, y, null),
         messwerte: () => messpunkte.map(m => { const l = plan.leitungen.find(q => q.id === m.l); const n = sim && l ? sim.netzVon[l.a.t + ':' + l.a.p] : null; return n != null ? +druckVon(n).toFixed(3) : null; }),
+        beispiele: () => BEISPIELE.map(b => b.name),
+        beispielLaden: (i) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i); } finally { window.confirm = c; } },
         _leeren: () => { planImport(null); gedrueckt.clear(); },
         typen: () => Object.keys(TYP),
         offen: () => offen

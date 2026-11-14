@@ -235,6 +235,29 @@ const FAELLE = {
     F.verbinden2D(false);
     return R;
   },
+  '2D-Pneumatik ohne Fluidplan läuft mit demselben Rechenkern': async () => {
+    const R = [];
+    window.loadExample('code');
+    await new Promise(r => setTimeout(r, 800));
+    const c = document.getElementById('code'); c.value = 'ZYL_AUS := START\nZYL_EIN := STOP'; c.dispatchEvent(new Event('input', { bubbles: true }));
+    const cyl = factoryObjects.find(o => o.id === 'cyl1');
+    if (!isSimulationActive) window.toggleSimulation();
+    spsState.STOP = true; await new Promise(r => setTimeout(r, 600)); spsState.STOP = false;
+    spsState.START = true;
+    let gefuehrt = false;
+    await new Promise(res => { const t0 = performance.now(); const f = () => { if (window._fpZylinder(cyl)) gefuehrt = true; if ((cyl.extension || 0) >= 99.5 || performance.now() - t0 > 4000) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
+    spsState.START = false;
+    R.push(['2D-Zylinder fährt aus', (cyl.extension || 0) >= 99.5, (cyl.extension || 0).toFixed(1)]);
+    R.push(['bewegt vom Schattenplan (nicht vom alten Modell)', gefuehrt, gefuehrt]);
+    // Schlauch ab: Zylinder bleibt stehen
+    spsState.STOP = true; await new Promise(r => setTimeout(r, 800)); spsState.STOP = false;
+    const eingefahren = (cyl.extension || 0);
+    (window.pneuConnections || []).filter(k => k.aObjId === 'cyl1' || k.bObjId === 'cyl1').forEach(k => { k._broken = true; });
+    spsState.START = true; await new Promise(r => setTimeout(r, 800)); spsState.START = false;
+    R.push(['abgezogene Schläuche: fährt nicht aus', eingefahren < 1 && (cyl.extension || 0) < 20, eingefahren.toFixed(1) + ' → ' + (cyl.extension || 0).toFixed(1) + ' ' + (window.pneuConnections || []).filter(k => k._broken).length]);
+    window.toggleSimulation();
+    return R;
+  },
   'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {
     const F = Fluidplan, R = [];
     const bau = () => {

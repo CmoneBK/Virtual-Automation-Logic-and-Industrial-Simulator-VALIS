@@ -805,6 +805,12 @@
     .fp-eigen input,.fp-eigen select{width:100%;padding:3px 5px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:12px}
     .fp-eigen input[type=checkbox]{width:auto}
     .fp-eigen .fp-hinw{color:#888;font-size:10.5px;margin-top:8px;line-height:1.35}
+    .fp-diag{display:none;height:170px;flex:none;background:#fff;border-top:1px solid #3a3a3a;position:relative;overflow:hidden}
+    .fp-diag.offen{display:block}
+    .fp-diag > svg{width:100%;height:100%;display:block;font-family:'Segoe UI',sans-serif}
+    .fp-diag .fp-dkopf{position:absolute;right:6px;bottom:3px;display:flex;gap:4px;z-index:1}
+    .fp-diag .fp-dkopf button{all:unset;box-sizing:border-box;font:11px/1.5 'Segoe UI',sans-serif;padding:1px 8px;border:1px solid #b0bec5;background:#eceff1;border-radius:3px;cursor:pointer;color:#263238}
+    .fp-diag .fp-dkopf button.an{background:#ff6f00;border-color:#ff6f00;color:#fff}
     .fp-fuss{padding:4px 10px;font-size:11px;color:#9e9e9e;background:#252526;border-top:1px solid #3a3a3a;min-height:22px;border-radius:0 0 8px 8px}
     .fp-fuss b{color:#ffb74d}
     .fp-griffecke{position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;
@@ -867,13 +873,14 @@
         h('span', { class: 'fp-trenner' }, leiste);
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
+        k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
         k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
         h('span', { class: 'fp-trenner' }, leiste);
         k('🏭 2D-Anlage: aus', 'Plan mit der 2D-Anlage verbinden: Zylinder, Stellglieder, Drosseln und Versorgung entstehen dort als 2D-Teile, der Auto-Schaltplan passt dann zum Fluidplan. Eine Wahrheit: geändert wird nur hier.', anlageUmschalten, 'fp-anlage');
         k('⇐ Aus 2D-Anlage', 'Pneumatik der 2D-Anlage als Startplan übernehmen (ersetzt den Plan)', () => { const n = ausAnlage(); if (n) status(n + ' Zylinder aus der 2D-Anlage übernommen.'); });
         h('span', { class: 'fp-trenner' }, leiste);
         k('▶ Simulation', 'Simulation starten/stoppen (wie der Knopf oben rechts). Beim Start beginnt der Plan in der Grundstellung.', () => { if (typeof window.toggleSimulation === 'function') window.toggleSimulation(); }, 'fp-sim');
-        k('⟲ Grundstellung', 'Drücke, Zylinder und Ventile auf den Anfang zurücksetzen', () => { sim = null; simInit(); darstellen(); });
+        k('⟲ Grundstellung', 'Drücke, Zylinder und Ventile auf den Anfang zurücksetzen', () => { sim = null; simInit(); aufzNeu(); darstellen(); diagZeichnen(true); });
 
         const haupt = h('div', { class: 'fp-haupt' }, fenster);
         const pal = h('div', { class: 'fp-palette' }, haupt);
@@ -892,6 +899,12 @@
         ebUi = el('g', {}, welt);
         const eigen = h('div', { class: 'fp-eigen', id: 'fp-eigen' }, haupt);
         void eigen;
+        diagBox = h('div', { class: 'fp-diag', id: 'fp-diag' }, fenster);
+        const dk = h('div', { class: 'fp-dkopf' }, diagBox);
+        h('button', { text: 'Weg-Schritt', id: 'fp-d-schritt', class: 'an', title: 'Waagrecht die Schritte: ein neuer Schritt beginnt, sobald ein Zylinder eine Endlage erreicht', onclick: () => { diagArt = 'schritt'; diagZeichnen(true); } }, dk);
+        h('button', { text: 'Weg-Zeit', id: 'fp-d-zeit', title: 'Waagrecht die Zeit in Sekunden', onclick: () => { diagArt = 'zeit'; diagZeichnen(true); } }, dk);
+        h('button', { text: '📸 SVG', title: 'Diagramm als SVG-Bild speichern', onclick: diagSvgSpeichern }, dk);
+        diagSvg = el('svg', {}, diagBox);
         h('div', { class: 'fp-fuss', id: 'fp-fuss' }, fenster);
         h('div', { class: 'fp-griffecke' }, fenster).addEventListener('pointerdown', groesseZiehen);
         zeigerEinrichten();
@@ -1990,12 +2003,119 @@
 
     // Laufschleife: rechnet, solange die VALIS-Simulation läuft
     let letzte = 0, warLaufend = false;
+
+    // ------------------------------------------------------------
+    // Weg-Schritt- und Weg-Zeit-Diagramm (zeichnet während der Simulation mit)
+    // ------------------------------------------------------------
+    let diagBox = null, diagSvg = null, diagArt = 'schritt', aufz = null, diagBild = 0;
+    const antriebe = () => plan.teile.filter(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'schwenk');
+    function aufzNeu() { aufz = { t0: sim ? sim.zeit : 0, proben: [], ids: antriebe().map(t => t.id) }; }
+    function aufzeichnen() {
+        if (!sim) return;
+        if (!aufz) aufzNeu();
+        const p = aufz.proben, letzte = p[p.length - 1];
+        if (letzte && sim.zeit - letzte.t < 0.02) return;
+        const x = {};
+        for (const id of aufz.ids) { const t = teil(id), z = sim.zust[id]; if (t && z) x[id] = Math.max(0, Math.min(1, z.x / zylHub(t))); }
+        p.push({ t: sim.zeit, x });
+        if (p.length > 6000) p.splice(0, p.length - 6000);
+    }
+    // Schritte: Grenze, sobald ein Zylinder aus der Bewegung eine Endlage erreicht.
+    // Ist er zusammen mit dem Zylinder der letzten Grenze losgefahren (gleichzeitige
+    // Bewegung), gehört seine Ankunft noch zum selben Schritt.
+    function schritte() {
+        if (!aufz || !aufz.proben.length) return [];
+        const P = aufz.proben, ids = aufz.ids, out = [P[0]];
+        const ende = v => v <= 0.01 || v >= 0.99;
+        const start = {};          // Zeitpunkt, an dem der Zylinder seine Endlage verlassen hat
+        let grenzeStart = null;    // Startzeit der Bewegung, die die letzte Grenze gesetzt hat
+        for (let i = 1; i < P.length; i++) {
+            const ank = [];
+            for (const id of ids) {
+                const a = P[i - 1].x[id], b = P[i].x[id];
+                if (a == null || b == null) continue;
+                if (Math.abs(b - a) > 0.002 && start[id] == null) start[id] = P[i - 1].t;
+                if (!ende(a) && ende(b)) ank.push(id);
+            }
+            if (!ank.length) continue;
+            const s0 = Math.min(...ank.map(id => start[id] != null ? start[id] : P[i].t));
+            const gleichzeitig = grenzeStart != null && Math.abs(s0 - grenzeStart) < 0.06;
+            if (gleichzeitig) out[out.length - 1] = P[i]; else { out.push(P[i]); grenzeStart = s0; }
+            ank.forEach(id => { delete start[id]; });
+        }
+        return out;
+    }
+    function diagZeichnen(sofort) {
+        if (!diagBox || !diagBox.classList.contains('offen')) return;
+        if (!sofort && ++diagBild % 6) return;
+        const sb = document.getElementById('fp-d-schritt'), zb = document.getElementById('fp-d-zeit');
+        if (sb) sb.classList.toggle('an', diagArt === 'schritt'); if (zb) zb.classList.toggle('an', diagArt === 'zeit');
+        const svgD = diagSvg; svgD.innerHTML = '';
+        diagBox.style.height = Math.min(360, Math.max(170, 54 + antriebe().length * 36)) + 'px';
+        const W = diagBox.clientWidth || 600, H = diagBox.clientHeight || 170;
+        svgD.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        const zyl = antriebe();
+        const T = (x, y, txt, a) => { const e = el('text', Object.assign({ x, y, 'font-size': 10.5, fill: '#37474f' }, a || {}), svgD); e.textContent = txt; return e; };
+        if (!zyl.length) { T(12, 24, 'Keine Zylinder im Plan.'); return; }
+        const L = 70, R = W - 14, O = 26, zeileH = Math.max(28, Math.min(54, (H - O - 28) / zyl.length));
+        const hoehe = zeileH * 0.62;
+        const st = schritte();
+        let n, xVon;
+        if (diagArt === 'schritt') {
+            n = Math.max(st.length, 2);
+            const spalte = (R - L) / Math.max(n - 1, 4);
+            xVon = i => L + i * spalte;
+            for (let i = 0; i < Math.max(n, 5); i++) {
+                const x = xVon(i); if (x > R + 1) break;
+                el('line', { x1: x, y1: O - 4, x2: x, y2: O + zeileH * zyl.length, stroke: '#cfd8dc', 'stroke-width': 1 }, svgD);
+                T(x, O - 8, String(i + 1), { 'text-anchor': 'middle', 'font-size': 10, fill: '#78909c' });
+            }
+            T(4, O - 8, 'Schritt', { 'font-size': 10, fill: '#78909c' });
+        } else {
+            const P = aufz ? aufz.proben : [];
+            const t0 = P.length ? P[0].t : 0, t1 = P.length ? P[P.length - 1].t : 1;
+            const dauer = Math.max(1, t1 - t0);
+            xVon = t => L + (t - t0) / dauer * (R - L);
+            const schrittS = dauer > 20 ? 5 : dauer > 8 ? 2 : dauer > 3 ? 1 : 0.5;
+            for (let s = 0; s <= dauer + 1e-6; s += schrittS) {
+                const x = L + s / dauer * (R - L);
+                el('line', { x1: x, y1: O - 4, x2: x, y2: O + zeileH * zyl.length, stroke: '#eceff1', 'stroke-width': 1 }, svgD);
+                T(x, O - 8, String(+s.toFixed(1)).replace('.', ',') + ' s', { 'text-anchor': 'middle', 'font-size': 9.5, fill: '#78909c' });
+            }
+        }
+        zyl.forEach((t, k) => {
+            const y0 = O + k * zeileH + (zeileH - hoehe) / 2 + hoehe, y1 = y0 - hoehe;
+            T(6, y0 - hoehe / 2 + 4, t.bez || '?', { 'font-weight': 'bold', fill: '#263238' });
+            T(L - 6, y1 + 4, '1', { 'text-anchor': 'end', 'font-size': 9, fill: '#90a4ae' });
+            T(L - 6, y0 + 3, '0', { 'text-anchor': 'end', 'font-size': 9, fill: '#90a4ae' });
+            el('line', { x1: L, y1: y0, x2: R, y2: y0, stroke: '#b0bec5', 'stroke-width': 1 }, svgD);
+            el('line', { x1: L, y1: y1, x2: R, y2: y1, stroke: '#eceff1', 'stroke-width': 1 }, svgD);
+            let pts = [];
+            if (diagArt === 'schritt') pts = st.map((p, i) => [xVon(i), y0 - (p.x[t.id] != null ? p.x[t.id] : 0) * hoehe]);
+            else if (aufz) pts = aufz.proben.filter(p => p.x[t.id] != null).map(p => [xVon(p.t), y0 - p.x[t.id] * hoehe]);
+            if (pts.length) el('path', { d: 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L'), fill: 'none', stroke: '#1565c0', 'stroke-width': 2.2, 'stroke-linejoin': 'round' }, svgD);
+        });
+        if (!aufz || aufz.proben.length < 2) T(L, H - 9, 'Simulation starten: das Diagramm zeichnet mit.', { fill: '#90a4ae' });
+    }
+    function diagSvgSpeichern() {
+        if (!diagSvg) return;
+        diagZeichnen(true);
+        const k = diagSvg.cloneNode(true);
+        k.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        const vb = (k.getAttribute('viewBox') || '0 0 600 170').split(' ');
+        k.setAttribute('width', vb[2]); k.setAttribute('height', vb[3]);
+        el('rect', { x: 0, y: 0, width: vb[2], height: vb[3], fill: '#fff' }, k).parentNode.insertBefore(k.lastChild, k.firstChild);
+        const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(k)], { type: 'image/svg+xml' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (diagArt === 'schritt' ? 'weg-schritt-diagramm' : 'weg-zeit-diagramm') + '.svg';
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }
+
     function schleife(ts) {
         requestAnimationFrame(schleife);
         const laeuft = simLaeuft();
         if (laeuft !== warLaufend) {
             warLaufend = laeuft;
-            if (laeuft) { sim = null; simInit(); gedrueckt.clear(); }
+            if (laeuft) { sim = null; simInit(); gedrueckt.clear(); aufzNeu(); }
             if (svg) { svg.classList.toggle('sim', laeuft); eigenschaften(); }
             knopfZustand(); status();
         }
@@ -2011,7 +2131,8 @@
             for (const v in sim.schreib) { const w = !!sim.schreib[v]; if (s[v] !== w) { s[v] = w; geaendert = true; } }
             if (geaendert && typeof runSimulationTick === 'function') { try { runSimulationTick(); } catch (e) {} }
         }
-        if (offen) darstellen();
+        if (laeuft && sim) aufzeichnen();
+        if (offen) { darstellen(); diagZeichnen(); }
     }
 
     // Zylinder der 2D-Anlage, der einem Planzylinder folgt (Hook in der Zylinder-Mechanik)
@@ -2237,12 +2358,14 @@
         },
         verbinden: (a, ap, b, bp) => { leitungAnlegen({ t: a, p: ap }, { t: b, p: bp }); },
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); }); },
-        _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
-        _neu: () => { sim = null; simInit(); },
+        _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
+        _neu: () => { sim = null; simInit(); aufzNeu(); },
         abgleichen: anlageAbgleichen,
         _entfernen: (id) => aendern(() => teilEntfernen(id)),
         ausAnlage,
         verbinden2D: (an) => { aendern(() => { plan.anlage = an !== false; }); },
+        _diagramm: () => ({ schritte: schritte().map(p => Object.assign({}, p.x)), proben: aufz ? aufz.proben.length : 0 }),
+        _aufzNeu: () => aufzNeu(),
         _leeren: () => { planImport(null); gedrueckt.clear(); },
         typen: () => Object.keys(TYP),
         offen: () => offen

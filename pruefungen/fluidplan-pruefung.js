@@ -637,6 +637,8 @@ const FAELLE = {
     const x0 = v2().x;
     F.aendern(s, { pos: 50 });
     R.push(['Plan → 2D: Lage der Rolle 50 %, Ventil wandert an der Stange', v2().pneu.fp.o.pos === 50 && v2().x < x0, v2().pneu.fp.o.pos + ' / ' + x0 + ' → ' + v2().x]);
+    await warte(700);   // die 2D-Anlage liest die neue Lage der Rolle nach (bleibt 50 %)
+    R.push(['… die 2D-Anlage bestätigt 50 % aus der Lage der Rolle', Math.abs(Fluidplan._posProzent(v2().pneu.fp.o.pos) - 50) <= 2 && v2().pneu.fp.o.zyl === 'cyl1', v2().pneu.fp.o.zyl + ' ' + v2().pneu.fp.o.pos]);
     v2().pneu.fp.o.pos = 70;
     await warte(500);
     R.push(['2D → Plan: Lage 70 %', F.plan().teile.find(t => t.id === s).o.pos === 70, F.plan().teile.find(t => t.id === s).o.pos]);
@@ -713,7 +715,59 @@ const FAELLE = {
     window.toggleSimulation(); await warte(200);
     if (fw) fw.style.display = fwAlt;
     R.push(['Beidseitig Hebel: Klick rechts schaltet rechts, links schaltet links (löst rechts), nochmal links → Mitte', s1 === 2 && s2 === 0 && s3 === 1, [s1, s2, s3].join(' ')]);
+    // Darstellung 3/4: echtes Ventil aufgeschnitten und geschlossen – gleiche Anschlüsse, Schieber wandert
+    for (const bild of ['schnitt', 'aussen']) {
+      v().pneu.fp.bild = bild; ComponentRegistry.pneu_fp.refreshLabel(v());
+      await warte(200);
+      R.push(['Darstellung ' + bild + ': eigenes Bild, Anschlüsse 1-5', !!v().el.querySelector('svg.fp-echt') && ids() === '1,2,3,4,5', ids()]);
+    }
+    v().pneu.fp.bild = 'schnitt'; ComponentRegistry.pneu_fp.refreshLabel(v());
+    if (fw) fw.style.display = 'block';
+    window.toggleSimulation(); await warte(500);
+    klick('R'); await warte(400);
+    const tr = (v().el.querySelector('.fp-r-schieber') || { style: {} }).style.transform, blau = [...v().el.querySelectorAll('.fp-r-nut')].some(e => /rgba\(41,182,246/.test(e.getAttribute('fill')));
+    klick('R'); await warte(200);
+    window.toggleSimulation(); await warte(200);
+    if (fw) fw.style.display = fwAlt;
+    R.push(['Schnitt: Hebel rechts schiebt den Kolbenschieber, die Nut an 1 führt Druckluft', /-14px/.test(tr) && blau, tr + ' ' + blau]);
+    delete v().pneu.fp.bild; ComponentRegistry.pneu_fp.refreshLabel(v());
     F.verbinden2D(false); F._leeren();
+    return R;
+  },
+  'Rollenhebel und altes Magnetventil in der 2D-Anlage': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = [];
+    window.loadExample('code'); await warte(800);
+    // Altes Magnetventil: volles Menü, die erste Änderung macht ein freies Fluidplan-Teil daraus
+    const alt = factoryObjects.find(o => o.type === 'valve_pneu');
+    const ctx = document.createElement('div'); document.body.appendChild(ctx);
+    window._fpVentilMenue(alt, ctx, () => {});
+    const wegeSel = [...ctx.querySelectorAll('select')].find(x => /Wegeventil/.test(x.textContent));
+    R.push(['Altes Magnetventil: Rechtsklick zeigt Wege, Betätigungen, Spulen', !!wegeSel && /Spule links/.test(ctx.textContent), ctx.textContent.slice(0, 80)]);
+    wegeSel.value = '5/3'; wegeSel.dispatchEvent(new Event('change'));
+    await warte(300); ctx.remove();
+    const nv = factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'ventil');
+    R.push(['… Wahl 5/3: frei konfigurierbares Ventil, Spulen behalten', !factoryObjects.some(o => o.type === 'valve_pneu') && !!nv && nv.pneu.fp.o.wege === '5/3' && nv.pneu.fp.o.varL === 'ZYL_AUS' && nv.pneu.fp.o.varR === 'ZYL_EIN' && nv.normLabel === '-QM1', nv && JSON.stringify(nv.pneu.fp.o).slice(0, 120)]);
+    // Rollenhebel: Wirkung aus der Lage in der 2D-Anlage
+    const rv = Fluidplan._neu2D('ventil'); rv.pneu.fp.o = Object.assign(rv.pneu.fp.o, { wege: '3/2', links: 'rolle', rechts: 'feder' });
+    rv.x = 900; rv.y = 900; updateObjTransform(rv); ComponentRegistry.pneu_fp.refreshLabel(rv);
+    await warte(900);
+    R.push(['Rolle abseits jedes Zylinders: keinem Zylinder zugeordnet', !rv.pneu.fp.o.zyl, rv.pneu.fp.o.zyl]);
+    const z = factoryObjects.find(o => o.id === 'cyl1'), h = z.height || 30;
+    const fw = document.getElementById('factory-wrapper'), fwAlt = fw && fw.style.display; if (fw) fw.style.display = 'block';
+    rv.pneu.fp.rot = 90; ComponentRegistry.pneu_fp.refreshLabel(rv);
+    const c = rv.el.querySelector('.fp-g-bet[data-seite="L"] circle');
+    const rr = rv.el.getBoundingClientRect(), rc = c.getBoundingClientRect(), sk = rr.width / rv.width;
+    const dx = (rc.left + rc.width / 2 - rr.left) / sk, dy = (rc.top + rc.height / 2 - rr.top) / sk;
+    rv.x = Math.round(z.x + z.width * 1.5 - 3 - dx); rv.y = Math.round(z.y + h / 2 + 9 - dy); updateObjTransform(rv);
+    await warte(900);
+    R.push(['Rolle von Hand unter die Stange bei 50 % gestellt: Zylinder und Lage übernommen', rv.pneu.fp.o.zyl === 'cyl1' && Math.abs(Fluidplan._posProzent(rv.pneu.fp.o.pos) - 50) <= 2, rv.pneu.fp.o.zyl + ' ' + rv.pneu.fp.o.pos]);
+    rv.y += 200; updateObjTransform(rv);
+    await warte(900);
+    if (fw) fw.style.display = fwAlt;
+    R.push(['… wieder weggezogen: wirkt nicht mehr', !rv.pneu.fp.o.zyl, rv.pneu.fp.o.zyl]);
     return R;
   },
   'Export / Import und Speichern in der Anlage': () => {

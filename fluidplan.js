@@ -156,19 +156,36 @@
             el('path', { d: `M${x2 - s * 4},${cy - 8} A8,8 0 0 ${s < 0 ? 0 : 1} ${x2 - s * 4},${cy + 8} Z`, fill: aktiv ? 'var(--fp-aktiv)' : 'none', stroke: 'currentColor', 'stroke-width': lw, class: 'fp-griff' }, g);
         } else if (b === 'hebel') {
             el('line', { x1: x, y1: cy, x2: x + s * 6, y2: cy, stroke: 'currentColor', 'stroke-width': lw }, g);
-            el('line', { x1: x + s * 6, y1: cy, x2: x2, y2: cy - 10, stroke: 'currentColor', 'stroke-width': lw, class: 'fp-griff' }, g);
-            el('circle', { cx: x2, cy: cy - 10, r: 2.5, fill: 'currentColor' }, g);
+            el('line', { x1: x + s * 6, y1: cy, x2: x2, y2: cy - 10, stroke: 'currentColor', 'stroke-width': lw, class: 'fp-griff', 'data-dreh': `${x + s * 6},${cy},${-s * 30}` }, g);
+            el('circle', { cx: x2, cy: cy - 10, r: 2.5, fill: 'currentColor', class: 'fp-griff', 'data-dreh': `${x + s * 6},${cy},${-s * 30}` }, g);
             // Raste
             el('path', { d: `M${x + s * 3},${cy + 4} l${s * 2},4 l${s * 2},-4`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1 }, g);
         } else if (b === 'pedal') {
             el('line', { x1: x, y1: cy, x2: x + s * 8, y2: cy, stroke: 'currentColor', 'stroke-width': lw }, g);
-            el('line', { x1: x + s * 8, y1: cy + 8, x2: x2, y2: cy - 8, stroke: 'currentColor', 'stroke-width': 2.2, class: 'fp-griff' }, g);
+            el('line', { x1: x + s * 8, y1: cy + 8, x2: x2, y2: cy - 8, stroke: 'currentColor', 'stroke-width': 2.2, class: 'fp-griff', 'data-dreh': `${x + s * 8},${cy + 8},${-s * 20}` }, g);
         } else if (b === 'rolle' || b === 'rolle_leer') {
             el('line', { x1: x, y1: cy, x2: x + s * 10, y2: cy, stroke: 'currentColor', 'stroke-width': lw }, g);
-            el('circle', { cx: x + s * 14, cy: cy, r: 4, fill: aktiv ? 'var(--fp-aktiv)' : 'none', stroke: 'currentColor', 'stroke-width': lw }, g);
+            el('circle', { cx: x + s * 14, cy: cy, r: 4, fill: aktiv ? 'var(--fp-aktiv)' : 'none', stroke: 'currentColor', 'stroke-width': lw, class: 'fp-rolle' }, g);
             if (b === 'rolle_leer') el('path', { d: `M${x + s * 7},${cy - 6} l${s * 3},6 l${-s * 3},6`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
         }
         return w;
+    }
+
+    // Betätiger in Bewegung zeigen (alle Darstellungen): Taster, Pilz und Rolle werden zum
+    // Ventil hin eingedrückt, Hebel und Pedal kippen; farbe = Farbe der betätigten Seite.
+    function betZeigen(g, b, s, an, farbe) {
+        if (!g || b === 'magnet' || b === 'feder') return;
+        const k = an ? '1' : '0'; if (g.getAttribute('data-an') === k) return;
+        g.setAttribute('data-an', k);
+        const kippt = b === 'hebel' || b === 'pedal';
+        g.style.transition = 'transform .12s ease';
+        g.style.transform = an && !kippt ? `translate(${-s * 3}px,0)` : '';
+        g.style.color = an ? farbe : '';
+        g.querySelectorAll('.fp-griff[data-dreh]').forEach(e => {
+            const [px, py, w] = e.getAttribute('data-dreh').split(',');
+            if (an) e.setAttribute('transform', `rotate(${w} ${px} ${py})`); else e.removeAttribute('transform');
+        });
+        g.querySelectorAll('.fp-rolle').forEach(e => e.setAttribute('fill', an ? farbe : 'none'));
     }
 
     // Katalog: je Typ Name, Grundoptionen, Geometrie (Anschlüsse), Zeichnung
@@ -2196,6 +2213,7 @@
                 const st = ventilStellungen(t.o), n = st.length;
                 const L = betaetigt(t, z, 'L', z.stellung === 0);
                 const R = betaetigt(t, z, 'R', z.stellung === n - 1);
+                z.betL = L; z.betR = R;   // für die Anzeige (Taster gedrückt, Rolle eingedrückt …)
                 let neu = z.stellung;
                 if (n === 3) neu = L && !R ? 0 : R && !L ? 2 : 1;
                 else if (t.o.rechts === 'feder') neu = L ? 0 : 1;
@@ -2408,6 +2426,8 @@
                     const x2 = seite === 'L' ? -betBreite(t.o.links) + (ruhe - k) * KASTEN : n * KASTEN + betBreite(t.o.rechts) + (ruhe - k) * KASTEN;
                     s.setAttribute('x2', x2);
                 });
+                betZeigen(r.g.querySelector('.fp-bet-l'), t.o.links, -1, !!(z && z.betL), 'var(--fp-aktiv)');
+                betZeigen(r.g.querySelector('.fp-bet-r'), t.o.rechts, 1, !!(z && z.betR), 'var(--fp-aktiv)');
                 // aktive Magnetspule hervorheben
                 const s = sps();
                 r.g.querySelectorAll('.fp-bet-magnet').forEach((m, i) => {
@@ -2957,7 +2977,8 @@
     // ihren Drosseln zeigen? Nur wenn der Plan genau das ist: Magnetventil am Verteiler,
     // dazwischen höchstens eine Drossel je Leitung, Abluft offen oder mit Schalldämpfer.
     // Sonst steht jedes Planteil in 2D als 'pneu_fp', jede Leitung als Schlauch.
-    const magnetVentil = v => !!v && v.typ === 'ventil' && v.o.links === 'magnet' && (v.o.rechts === 'magnet' || v.o.rechts === 'feder') && ['3/2', '5/2', '5/3'].includes(v.o.wege);
+    // o.frei: in der 2D-Anlage frei konfigurierbares Fluidplan-Teil, auch als reines Magnetventil
+    const magnetVentil = v => !!v && v.typ === 'ventil' && !v.o.frei && v.o.links === 'magnet' && (v.o.rechts === 'magnet' || v.o.rechts === 'feder') && ['3/2', '5/2', '5/3'].includes(v.o.wege);
     function altbau(t, v, dw) {
         if (!magnetVentil(v)) return null;
         const nb = nachbarn(), teile = new Set([t.id, v.id]);
@@ -3847,7 +3868,7 @@
     // Ruhestellung, Kasten 1) mit den Kammern dahinter, die Betätigungen sitzen fest am
     // Gehäuse. f.bild === 'symbol' zeigt stattdessen das Normsymbol wie im Plan.
     const G2D = 1;
-    const gehaeuse = obj => { const f = fp2d(obj); return f.typ === 'ventil' && f.bild !== 'symbol'; };
+    const gehaeuse = obj => darst(obj) === 'gehaeuse';
     // Planpunkt des Ventils (ungedreht) → Gehäusepunkt: Betätiger rücken ans Fenster
     function gLokal(t, x, y) {
         const n = ventilStellungen(t.o).length;
@@ -3866,6 +3887,10 @@
     }
     // Planpunkt des Ventils (ungedreht, Teilkoordinaten) → Pixel im 2D-Element
     function punkt2D(obj, x, y) {
+        if (echt(obj)) {
+            const R = echtRoh(obj), [gx, gy] = echtLokal(R, x, y), [wx, wy] = trafo(R.t, gx, gy);
+            return [(wx - R.b[0]) * G2D, (wy - R.b[1]) * G2D];
+        }
         if (gehaeuse(obj)) {
             const R = gehaeuseRoh(obj), [gx, gy] = gLokal(R.t, x, y), [wx, wy] = trafo(R.t, gx, gy);
             return [(wx - R.b[0]) * G2D, (wy - R.b[1]) * G2D];
@@ -3874,6 +3899,14 @@
         return [(rx - B[0]) * S2D, (ry - B[1]) * S2D];
     }
     function lage2D(obj) {
+        if (echt(obj)) {
+            const R = echtRoh(obj), t = R.t;
+            const ports = geo(t).ports.filter(p => !(R.ab[p.id] && R.ab[p.id].art && R.ab[p.id].art !== 'offen')).map(p => {
+                const [gx, gy] = R.portXY(p), [x, y] = trafo(t, gx, gy);
+                return { id: p.id, nr: p.nr || p.id, lx: (x - R.b[0]) * G2D, ly: (y - R.b[1]) * G2D, art: p.art, dir: trafoDir(t, p.dir) };
+            });
+            return { b: R.b, w: (R.b[2] - R.b[0]) * G2D, h: (R.b[3] - R.b[1]) * G2D, ports, echt: true };
+        }
         if (gehaeuse(obj)) {
             const R = gehaeuseRoh(obj), t = R.t;
             const ports = geo(t).ports.filter(p => !(R.ab[p.id] && R.ab[p.id].art && R.ab[p.id].art !== 'offen')).map(p => {
@@ -3910,7 +3943,7 @@
         const L = lage2D(obj);
         // Der Körper bleibt stehen, wenn das Bild wächst (Schalldämpfer, Betätigung, Darstellung):
         // Weltlage des Teilursprungs festhalten
-        const sk = L.gehaeuse ? G2D : S2D, ur = [-L.b[0] * sk, -L.b[1] * sk];
+        const flach = L.gehaeuse || L.echt, sk = flach ? G2D : S2D, ur = [-L.b[0] * sk, -L.b[1] * sk];
         if (obj._fpUr && (obj._fpUr[0] !== ur[0] || obj._fpUr[1] !== ur[1]) && typeof obj.x === 'number') {
             obj.x = Math.round(obj.x + obj._fpUr[0] - ur[0]); obj.y = Math.round(obj.y + obj._fpUr[1] - ur[1]);
             try { updateObjTransform(obj); } catch (e) {}
@@ -3919,11 +3952,13 @@
         obj.width = Math.round(L.w); obj.height = Math.round(L.h);
         elx.style.width = obj.width + 'px'; elx.style.height = obj.height + 'px';
         let s = elx.querySelector('svg.fp2d'); if (s) s.remove();
-        elx.style.background = L.gehaeuse ? 'transparent' : 'rgba(255,255,255,.92)';
-        elx.style.border = L.gehaeuse ? 'none' : '1px solid #90a4ae';
-        elx.style.boxShadow = L.gehaeuse ? 'none' : '';
-        elx.classList.toggle('fp-geh', !!L.gehaeuse);
-        if (L.gehaeuse) { const alt = bildDok; bildDok = doc; try { s = gehaeuseZeichnen(obj, doc, L); } finally { bildDok = alt; } }
+        elx.style.background = flach ? 'transparent' : 'rgba(255,255,255,.92)';
+        elx.style.border = flach ? 'none' : '1px solid #90a4ae';
+        elx.style.boxShadow = flach ? 'none' : '';
+        elx.classList.toggle('fp-geh', !!flach);
+        obj._echtR = null; obj._fpSig = null; obj._echtLuft = null;
+        if (L.echt) { const alt = bildDok; bildDok = doc; try { s = echtZeichnen(obj, doc, L); } finally { bildDok = alt; } }
+        else if (L.gehaeuse) { const alt = bildDok; bildDok = doc; try { s = gehaeuseZeichnen(obj, doc, L); } finally { bildDok = alt; } }
         else mitMini(obj, doc, P => {
             s = el('svg', { class: 'fp2d', width: obj.width, height: obj.height, viewBox: `${L.b[0]} ${L.b[1]} ${L.b[2] - L.b[0]} ${L.b[3] - L.b[1]}`,
                 style: 'position:absolute;left:0;top:0;overflow:visible;color:#263238;--fp-papier:#fff;--fp-aktiv:#ffb300;pointer-events:none' });
@@ -4013,6 +4048,253 @@
         }
         return s;
     }
+    // ------------------------------------------------------------
+    // Darstellung 3/4: das Ventil, wie es wirklich aussieht – aufgeschnitten ('schnitt', mit
+    // Kolbenschieber, Dichtungen, Luftwegen und Endlagen) oder geschlossen ('aussen').
+    // Der Schieber ist EIN Teil, das beim Schalten um eine Teilung wandert.
+    // ------------------------------------------------------------
+    const RP = 14, RBH = 2.6, RG = 0.25, RW = 26;   // Teilung, halbe Bohrung, Nutüberstand (Teilungen), Betätigerbreite
+    // Schieber je Wegeart: Reihenfolge der Anschlüsse entlang der Achse, je Stellung Verschiebung s
+    // (Teilungen) und Nuten n (relativ zum Schieber, in Teilungen)
+    function schieber(o) {
+        const w = o.wege || '3/2', n = ventilStellungen(o).length;
+        if (w === '2/2') return { ord: ['1', '2'], pos: o.ruhe === 'offen' ? [{ s: 1, n: [[0, 1]] }, { s: 0, n: [[0, 1]] }] : [{ s: 0, n: [[0, 1]] }, { s: -1, n: [[0, 1]] }] };
+        if (w === '3/2') return o.ruhe === 'offen' ? { ord: ['1', '2', '3'], pos: [{ s: 1, n: [[0, 1]] }, { s: 0, n: [[0, 1]] }] }
+            : { ord: ['3', '2', '1'], pos: [{ s: 0, n: [[1, 2]] }, { s: -1, n: [[1, 2]] }] };
+        // 4/2 wie 5/2: der zweite Abluftkanal (vorn) ist innen mit 3 verbunden
+        const ord = ['5', '4', '1', '2', '3'], a = { s: 0, n: [[1, 2], [3, 4]] }, b = { s: -1, n: [[1, 2], [3, 4]] };
+        if (n !== 3) return { ord, pos: [a, b] };
+        const m = o.mitte === 'entlueftet' ? { s: -0.5, n: [[0.5, 1.5], [3.5, 4.5]] } : o.mitte === 'belueftet' ? { s: -0.5, n: [[1.5, 3.5]] } : { s: -0.5, n: [[1, 2], [3, 4]] };
+        return { ord, pos: [a, m, b] };
+    }
+    const darst = obj => { const f = fp2d(obj); if (f.typ !== 'ventil') return 'symbol'; return f.bild === 'symbol' || f.bild === 'schnitt' || f.bild === 'aussen' ? f.bild : 'gehaeuse'; };
+    const echt = obj => { const d = darst(obj); return d === 'schnitt' || d === 'aussen'; };
+    function echtRoh(obj) {
+        const t = teilAus2D(obj), o = t.o, f = fp2d(obj), ab = f.ab || {};
+        const S = schieber(o), N = S.ord.length;
+        const xi = i => 60 + (i - (N - 1) / 2) * RP;
+        const sh = S.pos.map(p => p.s), sMin = Math.min(...sh), sMax = Math.max(...sh);
+        const spL = -0.9, spR = N - 1 + 0.9;
+        const boL = xi(spL + sMin - 0.15), boR = xi(spR + sMax + 0.15);
+        const kL = boL - 5, kR = boR + 5;
+        const lage = VLAGE[o.wege] || VLAGE['3/2'];
+        const oben = id => lage.oben[id] != null;
+        let unten = 52;
+        for (const pid of Object.keys(ab)) if (ab[pid] && ab[pid].art && ab[pid].art !== 'offen') unten = Math.max(unten, 50 + (ab[pid].art === 'stopfen' ? 14 : 36));
+        const ecken = [[kL - RW - 14, -16], [kR + RW + 14, -16], [kL - RW - 14, unten], [kR + RW + 14, unten]].map(([x, y]) => trafo(t, x, y));
+        const b = [Math.min(...ecken.map(e => e[0])), Math.min(...ecken.map(e => e[1])), Math.max(...ecken.map(e => e[0])), Math.max(...ecken.map(e => e[1]))];
+        const portXY = p => {
+            if (p.art === 's') return p.seite === 'L' ? [kL - RW - 10, 20] : [kR + RW + 10, 20];
+            const i = S.ord.indexOf(p.id); return [xi(i), oben(p.id) ? -10 : 50];
+        };
+        return { t, o, ab, S, N, xi, sMin, sMax, spL, spR, boL, boR, kL, kR, oben, b, portXY };
+    }
+    // Planpunkt (Rolle) → lokaler Punkt der echten Darstellung
+    function echtLokal(R, x, y) {
+        const n = ventilStellungen(R.o).length;
+        if (x < 0) return [R.kL - 18, 20];
+        if (x > n * KASTEN) return [R.kR + 18, 20];
+        return [(R.kL + R.kR) / 2, y];
+    }
+    const luftFarbe = p => p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : '#eceff1';
+    function echtZeichnen(obj, doc, L) {
+        const R = echtRoh(obj), t = R.t, o = R.o, G = geo(t), S = R.S, schnitt = darst(obj) === 'schnitt';
+        const uid = String(obj.id).replace(/[^\w-]/g, '');
+        const mk = (tag, a, p) => { const e = doc.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+        const s = mk('svg', { class: 'fp2d fp-echt', width: Math.round(L.w), height: Math.round(L.h), viewBox: `${L.b[0]} ${L.b[1]} ${L.b[2] - L.b[0]} ${L.b[3] - L.b[1]}`,
+            style: 'position:absolute;left:0;top:0;overflow:visible;color:#37474f;--fp-papier:#fff;--fp-aktiv:#2196f3;pointer-events:none' });
+        const defs = mk('defs', {}, s);
+        const pat = mk('pattern', { id: 'fps-' + uid, patternUnits: 'userSpaceOnUse', width: 4, height: 4 }, defs);
+        mk('rect', { width: 4, height: 4, fill: '#cfd8dc' }, pat);
+        mk('path', { d: 'M-1,1 L1,-1 M0,4 L4,0 M3,5 L5,3', stroke: '#78909c', 'stroke-width': 0.6 }, pat);
+        const grad = mk('linearGradient', { id: 'fpa-' + uid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+        mk('stop', { offset: '0', 'stop-color': '#eceff1' }, grad); mk('stop', { offset: '0.45', 'stop-color': '#b0bec5' }, grad); mk('stop', { offset: '1', 'stop-color': '#78909c' }, grad);
+        const fuell = schnitt ? `url(#fps-${uid})` : `url(#fpa-${uid})`;
+        const r = ((t.rot || 0) % 360 + 360) % 360;
+        const g = mk('g', { transform: `rotate(${r})${t.sp ? ' scale(-1,1)' : ''}`, 'data-t': t.id }, s);
+        const txt = (x, y, str, a) => { const e = mk('text', Object.assign({ x, y, 'font-size': 7, 'font-family': 'sans-serif', 'text-anchor': 'middle', fill: '#263238', transform: r ? `rotate(${-r} ${x} ${y})` : '' }, a || {}), g); e.textContent = str; return e; };
+        // Anschlüsse: Verschraubung außen, Kanal im Gehäuse
+        for (const p of G.ports) {
+            if (p.art === 's') continue;
+            const [x, y] = R.portXY(p), ob = y < 20;
+            mk('rect', { x: x - 2, y: ob ? y : 38, width: 4, height: ob ? 2 - y : y - 38, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.6 }, g);
+            mk('rect', { class: 'fp-r-ring', 'data-p': p.id, x: x - 5, y: ob ? -3 : 38, width: 10, height: 5, rx: 1, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.8 }, g);
+            txt(x + 9, ob ? 0 : 45, p.id, { 'font-weight': 'bold' });
+        }
+        // Gehäuse
+        mk('rect', { x: R.kL, y: 2, width: R.kR - R.kL, height: 36, rx: schnitt ? 1 : 3, fill: fuell, stroke: '#37474f', 'stroke-width': 1.4 }, g);
+        if (!schnitt) {
+            mk('line', { x1: R.kL + 2, y1: 4, x2: R.kR - 2, y2: 4, stroke: '#fff', 'stroke-opacity': 0.7, 'stroke-width': 1 }, g);
+            // Deckelfugen und Schrauben
+            for (const x of [R.boL - 1, R.boR + 1]) mk('line', { x1: x, y1: 2, x2: x, y2: 38, stroke: '#546e7a', 'stroke-width': 0.8 }, g);
+            for (const x of [R.kL + 2.5, R.kR - 2.5]) for (const y of [7, 33]) mk('circle', { cx: x, cy: y, r: 1.3, fill: '#546e7a' }, g);
+            txt((R.kL + R.kR) / 2, 23, (o.wege || '') + '-Wegeventil', { fill: '#546e7a', 'font-size': 6.5 });
+        }
+        if (schnitt) {
+            // Kanäle (Farbe = Druck), Bohrung, Endlagen
+            S.ord.forEach((id, i) => {
+                const innen = !G.ports.some(p => p.id === id);
+                const ob = !innen && R.oben(id), x = R.xi(i);
+                mk('rect', { class: 'fp-r-kanal', 'data-p': innen ? '3' : id, x: x - RBH, y: ob ? 2 : 27, width: RBH * 2, height: 11, fill: '#eceff1', stroke: '#455a64', 'stroke-width': 0.5 }, g);
+                if (innen) {
+                    // innen mit 3 verbunden
+                    mk('path', { class: 'fp-r-kanal', 'data-p': '3', d: `M${x - RBH},38 V41 H${R.xi(S.ord.indexOf('3')) + RBH} V38`, fill: 'none', stroke: '#90a4ae', 'stroke-width': 1.5, 'stroke-dasharray': '2 1.5' }, g);
+                }
+            });
+            mk('rect', { x: R.boL, y: 13, width: R.boR - R.boL, height: 14, fill: '#f5f5f5', stroke: '#37474f', 'stroke-width': 0.8 }, g);
+            for (const x of [R.boL, R.boR - 1.6]) mk('rect', { class: 'fp-r-anschlag', x, y: 13, width: 1.6, height: 14, fill: '#455a64' }, g);
+            // Schieber (wandert als Ganzes)
+            const nS = R.S.pos.length, ruhe = nS === 3 ? 1 : nS - 1;
+            const sg = mk('g', { class: 'fp-r-schieber', style: `transform:translateX(${R.S.pos[ruhe].s * RP}px);transition:transform .25s cubic-bezier(.4,0,.2,1)` }, g);
+            schieberInhalt(R, sg, ruhe, doc, mk);
+        }
+        // Betätiger links und rechts
+        for (const [seite, b, x0, sg, v] of [['L', o.links, R.kL, -1, o.varL], ['R', o.rechts, R.kR, 1, o.varR]]) {
+            const bg = mk('g', { class: 'fp-g-bet', 'data-seite': seite }, g);
+            echtBetaetiger(bg, b, x0, sg, schnitt, fuell, mk, R, seite);
+            if (b === 'magnet' && v) txt(x0 + sg * RW / 2, -7, v, { fill: '#1565c0', 'font-size': 8 });
+        }
+        // Angedockte Schalldämpfer und Stopfen
+        for (const pid of Object.keys(R.ab)) {
+            const a = R.ab[pid]; if (!a || !a.art || a.art === 'offen') continue;
+            const p = G.ports.find(q => q.id === pid); if (!p) continue;
+            const typ = a.art === 'stopfen' ? 'stopfen' : 'daempfer', [x, y] = R.portXY(p);
+            const gt = { typ, o: Object.assign({}, TYP[typ].optionen, { drossel: a.art === 'drossel' }) };
+            const gg = mk('g', { transform: `translate(${x},${y + (typ === 'stopfen' ? 12 : 14)})` }, g);
+            TYP[typ].zeichne(gt, gg, TYP[typ].geometrie(gt));
+        }
+        return s;
+    }
+    // Kolbenschieber für Stellung k: Nuten (Luft), Steuerkolben mit O-Ringen, Stößel, Federteller
+    function schieberInhalt(R, sg, k, doc, mk) {
+        while (sg.firstChild) sg.removeChild(sg.firstChild);
+        const P = R.S.pos[k] || R.S.pos[0], nut = P.n.slice().sort((a, b) => a[0] - b[0]);
+        sg.setAttribute('data-nut', JSON.stringify(nut));
+        for (const [a, c] of nut) mk('rect', { class: 'fp-r-nut', 'data-a': a, 'data-c': c, x: R.xi(a - RG), y: 13.6, width: (c - a + 2 * RG) * RP, height: 12.8, fill: '#eceff1' }, sg);
+        mk('rect', { x: R.xi(R.spL), y: 17.6, width: (R.spR - R.spL) * RP, height: 4.8, fill: '#78909c', stroke: '#37474f', 'stroke-width': 0.6 }, sg);
+        // Kolben (Stege) zwischen den Nuten
+        const stege = []; let x = R.spL;
+        for (const [a, c] of nut) { if (a - RG > x) stege.push([x, a - RG]); x = Math.max(x, c + RG); }
+        if (x < R.spR) stege.push([x, R.spR]);
+        for (const [a, c] of stege) {
+            const x1 = R.xi(a), x2 = R.xi(c);
+            mk('rect', { x: x1, y: 13.7, width: x2 - x1, height: 12.6, rx: 0.8, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.8 }, sg);
+            mk('line', { x1: x1 + 0.8, y1: 15, x2: x2 - 0.8, y2: 15, stroke: '#fff', 'stroke-opacity': 0.8, 'stroke-width': 0.8 }, sg);
+            // O-Ringe an beiden Enden des Kolbens
+            for (const xr of (x2 - x1 > 7 ? [x1 + 2.4, x2 - 2.4] : [(x1 + x2) / 2])) for (const yr of [14.4, 25.6]) mk('ellipse', { cx: xr, cy: yr, rx: 1.4, ry: 1.1, fill: '#212121' }, sg);
+        }
+        // Stößel durch die Deckel zu den Betätigern
+        mk('rect', { x: R.kL - 3 - Math.max(0, R.sMax) * RP, y: 18.5, width: R.xi(R.spL) - R.kL + 3 + Math.max(0, R.sMax) * RP, height: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 0.5 }, sg);
+        mk('rect', { x: R.xi(R.spR), y: 18.5, width: R.kR + 3 - R.xi(R.spR) - Math.min(0, R.sMin) * RP, height: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 0.5 }, sg);
+    }
+    function echtBetaetiger(bg, b, x0, s, schnitt, fuell, mk, R, seite) {
+        const X = d => x0 + s * d, rx = (a, c) => Math.min(X(a), X(c)), bw = (a, c) => Math.abs(c - a);
+        const bew = mk('g', { class: 'fp-r-bew' }, bg);
+        if (b === 'magnet') {
+            mk('rect', { x: rx(0, RW), y: 6, width: RW, height: 28, rx: 2, fill: schnitt ? fuell : '#37474f', stroke: '#263238', 'stroke-width': 1.2 }, bg);
+            if (schnitt) {
+                for (const y of [9, 25]) {
+                    mk('rect', { class: 'fp-r-wicklung', x: rx(3, RW - 3), y, width: RW - 6, height: 6, fill: '#b87333', stroke: '#6d4c41', 'stroke-width': 0.6 }, bg);
+                    for (let d = 5; d < RW - 3; d += 2.5) mk('line', { x1: X(d), y1: y, x2: X(d), y2: y + 6, stroke: '#6d4c41', 'stroke-width': 0.4 }, bg);
+                }
+                mk('rect', { class: 'fp-r-anker', x: rx(2, RW - 5), y: 16, width: RW - 7, height: 8, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.8 }, bew);
+            } else {
+                mk('rect', { x: rx(RW / 2 - 6, RW / 2 + 6), y: -2, width: 12, height: 8, rx: 1, fill: '#212121' }, bg);
+                mk('circle', { class: 'fp-r-led', cx: X(RW - 6), cy: 11, r: 2.2, fill: '#5d4037', stroke: '#212121', 'stroke-width': 0.5 }, bg);
+                mk('circle', { cx: X(RW - 6), cy: 28, r: 2.4, fill: '#ffb300', stroke: '#6d4c41', 'stroke-width': 0.5 }, bg);   // Handhilfsbetätigung
+            }
+        } else if (b === 'feder') {
+            mk('rect', { x: rx(0, RW - 4), y: 8, width: RW - 4, height: 24, rx: 3, fill: schnitt ? fuell : '#b0bec5', stroke: '#37474f', 'stroke-width': 1.2 }, bg);
+            if (schnitt) {
+                mk('rect', { x: rx(0, RW - 8), y: 12, width: RW - 8, height: 16, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.5 }, bg);
+                const L = RW - 11, pts = [];
+                for (let i = 0; i <= 8; i++) pts.push((X(RW - 8) - s * i * L / 8) + ',' + (20 + (i === 0 || i === 8 ? 0 : (i % 2 ? -6 : 6))));
+                mk('polyline', { class: 'fp-r-feder', points: pts.join(' '), fill: 'none', stroke: '#455a64', 'stroke-width': 1.3, style: `transform-box:view-box;transform-origin:${X(RW - 8)}px 20px;transition:transform .25s cubic-bezier(.4,0,.2,1)` }, bg);
+            } else mk('circle', { cx: X(RW - 4), cy: 20, r: 1.2, fill: '#37474f' }, bg);
+        } else if (b === 'pneu') {
+            mk('rect', { x: rx(0, RW - 4), y: 8, width: RW - 4, height: 24, rx: 2, fill: schnitt ? fuell : '#b0bec5', stroke: '#37474f', 'stroke-width': 1.2 }, bg);
+            if (schnitt) {
+                mk('rect', { class: 'fp-r-steuer', x: rx(2, RW - 7), y: 11, width: RW - 9, height: 18, fill: '#eceff1', stroke: '#455a64', 'stroke-width': 0.5 }, bg);
+                mk('rect', { x: rx(3, 6), y: 11.5, width: 3, height: 17, fill: '#78909c', stroke: '#455a64', 'stroke-width': 0.5 }, bew);
+                for (const y of [12.3, 27.7]) mk('ellipse', { cx: X(4.5), cy: y, rx: 1.1, ry: 0.9, fill: '#212121' }, bew);
+            }
+            mk('rect', { x: rx(RW - 4, RW + 10), y: 18, width: 14, height: 4, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.6 }, bg);
+            mk('rect', { class: 'fp-r-ring', 'data-p': (geo(R.t).ports.find(p => p.art === 's' && p.seite === seite) || {}).id || '', x: rx(RW + 4, RW + 9), y: 15, width: 5, height: 10, rx: 1, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.8 }, bg);
+        } else {
+            // Handbetätigung oder Rolle: Führungsbuchse, Stößel, Kopf
+            mk('rect', { x: rx(0, 7), y: 14, width: 7, height: 12, fill: schnitt ? fuell : '#90a4ae', stroke: '#37474f', 'stroke-width': 1 }, bg);
+            mk('rect', { x: rx(1, 14), y: 18, width: 13, height: 4, fill: '#b0bec5', stroke: '#546e7a', 'stroke-width': 0.6 }, bew);
+            if (b === 'taster') mk('rect', { x: rx(13, 19), y: 10, width: 6, height: 20, rx: 2, fill: '#1565c0', stroke: '#0d47a1', 'stroke-width': 0.8 }, bew);
+            else if (b === 'pilz') mk('path', { d: `M${X(13)},8 A12,12 0 0 ${s < 0 ? 0 : 1} ${X(13)},32 Z`, fill: '#c62828', stroke: '#8e0000', 'stroke-width': 0.8 }, bew);
+            else if (b === 'hebel') {
+                mk('circle', { cx: X(14), cy: 20, r: 2.2, fill: '#455a64' }, bew);
+                mk('line', { class: 'fp-griff', 'data-dreh': `${X(14)},20,${-s * 25}`, x1: X(14), y1: 20, x2: X(24), y2: 2, stroke: '#455a64', 'stroke-width': 2.6, 'stroke-linecap': 'round' }, bew);
+                mk('circle', { class: 'fp-griff', 'data-dreh': `${X(14)},20,${-s * 25}`, cx: X(24), cy: 2, r: 3.4, fill: '#212121' }, bew);
+            } else if (b === 'pedal') {
+                mk('rect', { x: rx(10, 26), y: 32, width: 16, height: 3, fill: '#455a64' }, bg);
+                mk('line', { class: 'fp-griff', 'data-dreh': `${X(14)},20,${-s * 15}`, x1: X(10), y1: 30, x2: X(26), y2: 12, stroke: '#37474f', 'stroke-width': 3.2, 'stroke-linecap': 'round' }, bew);
+            } else if (b === 'rolle' || b === 'rolle_leer') {
+                mk('line', { x1: X(14), y1: 20, x2: X(18), y2: 20, stroke: '#546e7a', 'stroke-width': 2 }, bew);
+                mk('circle', { class: 'fp-rolle', cx: X(18), cy: 20, r: 4.5, fill: 'none', stroke: '#37474f', 'stroke-width': 1.6 }, bew);
+                mk('circle', { cx: X(18), cy: 20, r: 1.1, fill: '#37474f' }, bew);
+                if (b === 'rolle_leer') mk('path', { d: `M${X(11)},14 l${s * 2},6 l${-s * 2},6`, fill: 'none', stroke: '#37474f', 'stroke-width': 1 }, bg);
+            }
+        }
+    }
+    // Drücke an den Anschlüssen aus dem Rechenkern (verbundener Plan oder Schattenplan)
+    function echtDruecke(st, ids) {
+        const f = () => ids.map(id => { const nz = sim && sim.netzVon[st.t.id + ':' + id]; return nz != null ? Math.max(0, druckVon(nz)) : 0; });
+        return st.p === plan && st.s === sim ? f() : mitPlan(st.p, st.s, f);
+    }
+    function echtAnimieren(obj, st, k, ruhe, n, o, anL, anR) {
+        const el2 = obj.el, R = obj._echtR || (obj._echtR = echtRoh(obj));
+        const schnitt = darst(obj) === 'schnitt';
+        const sig = k + '|' + anL + anR;
+        if (obj._fpSig !== sig) {
+            const altK = obj._fpStand;
+            obj._fpStand = k; obj._fpSig = sig;
+            const sg = el2.querySelector('.fp-r-schieber');
+            if (sg) {
+                const P = R.S.pos[k] || R.S.pos[0];
+                if (sg.getAttribute('data-nut') !== JSON.stringify(P.n.slice().sort((a, b) => a[0] - b[0]))) {
+                    const doc = el2.ownerDocument;
+                    schieberInhalt(R, sg, k, doc, (tag, a, p) => { const e = doc.createElementNS(NS, tag); for (const kk in a) e.setAttribute(kk, a[kk]); if (p) p.appendChild(e); return e; });
+                }
+                sg.style.transform = `translateX(${P.s * RP}px)`;
+                // Feder: zwischen Federteller (am Schieber) und Deckel gestaucht
+                const fd = el2.querySelector('.fp-r-feder');
+                if (fd) { const PR = R.S.pos[ruhe] || P, d = (P.s - PR.s) * RP, Lf = RW - 11; fd.style.transform = `scaleX(${Math.max(0.35, (Lf - Math.abs(d)) / Lf)})`; }
+            }
+            el2.querySelectorAll('.fp-g-bet').forEach(g => {
+                const L = g.getAttribute('data-seite') === 'L', an = L ? anL : anR, b = L ? o.links : o.rechts;
+                if (b === 'magnet') {
+                    g.querySelectorAll('.fp-r-wicklung').forEach(w => { w.setAttribute('fill', an ? '#ff9800' : '#b87333'); w.style.filter = an ? 'drop-shadow(0 0 3px #ff9800)' : ''; });
+                    const a = g.querySelector('.fp-r-anker'); if (a) { a.style.transition = 'transform .12s'; a.style.transform = an ? `translateX(${(L ? 1 : -1) * 2}px)` : ''; }
+                    const led = g.querySelector('.fp-r-led'); if (led) { led.setAttribute('fill', an ? '#ffeb3b' : '#5d4037'); led.style.filter = an ? 'drop-shadow(0 0 3px #ffeb3b)' : ''; }
+                } else if (b !== 'feder') betZeigen(g.querySelector('.fp-r-bew'), b, L ? -1 : 1, an, '#2196f3');
+            });
+            if (altK != null && altK !== k && st && typeof SoundEngine !== 'undefined') { try { SoundEngine.clack(); } catch (e) {} }
+            obj.isActive = k !== ruhe;
+        }
+        // Luft: Kanäle, Nuten und Steuerkammern nach Druck färben (jedes dritte Bild)
+        obj._echtTakt = ((obj._echtTakt || 0) + 1) % 3;
+        if (obj._echtTakt && obj._echtLuft) return;
+        const ids = geo(R.t).ports.map(p => p.id), pd = st ? echtDruecke(st, ids) : ids.map(() => 0), P = {};
+        ids.forEach((id, i) => { P[id] = pd[i]; });
+        const key = ids.map(id => (P[id] > P_AN ? Math.round(P[id] * 4) : 0)).join(',') + '|' + k;
+        if (obj._echtLuft === key) return;
+        obj._echtLuft = key;
+        el2.querySelectorAll('.fp-r-kanal').forEach(e => { const f = luftFarbe(P[e.getAttribute('data-p')] || 0); if (e.tagName === 'path') e.setAttribute('stroke', P[e.getAttribute('data-p')] > P_AN ? f : '#90a4ae'); else e.setAttribute('fill', f); });
+        el2.querySelectorAll('.fp-r-ring').forEach(e => { const p = P[e.getAttribute('data-p')] || 0; e.setAttribute('stroke', p > P_AN ? '#0288d1' : '#455a64'); e.setAttribute('stroke-width', p > P_AN ? 1.6 : 0.8); });
+        const Ps = R.S.pos[k] || R.S.pos[0];
+        el2.querySelectorAll('.fp-r-nut').forEach(e => {
+            const a = +e.getAttribute('data-a') + Ps.s, c = +e.getAttribute('data-c') + Ps.s;
+            let p = 0; R.S.ord.forEach((id, i) => { if (i >= a - 0.01 && i <= c + 0.01) p = Math.max(p, P[G2Dport(R, id)] || 0); });
+            e.setAttribute('fill', luftFarbe(p));
+        });
+        el2.querySelectorAll('.fp-r-steuer').forEach(e => { const g = e.closest('.fp-g-bet'), sd = g && g.getAttribute('data-seite'); const pp = geo(R.t).ports.find(q => q.art === 's' && q.seite === sd); e.setAttribute('fill', luftFarbe(pp ? P[pp.id] || 0 : 0)); });
+    }
+    const G2Dport = (R, id) => R.S.ord.indexOf(id) >= 0 && !geo(R.t).ports.some(p => p.id === id) ? '3' : id;
     // Zustand aus dem Rechenkern: verbundener Plan oder Schattenplan
     function stand2D(obj) {
         if (!simLaeuft()) return null;
@@ -4029,23 +4311,31 @@
         const st = stand2D(obj);
         const o = Object.assign({}, TYP.ventil.optionen, f.o), n = ventilStellungen(o).length, ruhe = n === 3 ? 1 : n - 1;
         const k = st ? st.z.stellung : ruhe;
-        if (obj._fpStand === k) return;
-        obj._fpStand = k;
+        // Betätigt? Aus dem Rechenkern; ohne Simulation aus der Stellung
+        const anL = st ? !!st.z.betL : false, anR = st ? !!st.z.betR : false;
+        if (echt(obj)) { echtAnimieren(obj, st, k, ruhe, n, o, anL, anR); return; }
+        const sig = k + '|' + anL + anR;
+        if (obj._fpStand === k && obj._fpSig === sig) return;
+        obj._fpStand = k; obj._fpSig = sig;
         const b = obj.el.querySelector('svg.fp2d g[data-t="2d:' + obj.id + '"] .fp-block');
         if (b) {
             if (gehaeuse(obj)) b.style.transform = `translateX(${(ruhe - k) * KASTEN}px)`;
             else b.setAttribute('transform', `translate(${(ruhe - k) * KASTEN},0)`);
         }
-        // Gehäuse: die schiebende Seite leuchtet (Spule orange, Handbetätigung/Rolle blau)
+        // Gehäuse: Spule leuchtet orange, Handbetätigung/Rolle wird blau eingedrückt, Feder gestaucht
         if (gehaeuse(obj)) obj.el.querySelectorAll('.fp-g-bet').forEach(g => {
-            const L = g.getAttribute('data-seite') === 'L', an = L ? (k === 0 && ruhe !== 0) : (k === n - 1 && ruhe !== n - 1);
+            const L = g.getAttribute('data-seite') === 'L', an = L ? anL : anR;
             const sp = g.querySelector('.fp-g-spule');
             if (sp) { sp.setAttribute('fill', an ? '#ff9800' : '#fff'); sp.setAttribute('stroke', an ? '#e65100' : '#333'); sp.style.filter = an ? 'drop-shadow(0 0 4px #ff9800)' : ''; }
-            else { const c = g.firstChild; if (c) { c.style.color = an ? '#2196f3' : '#333'; c.style.filter = an ? 'drop-shadow(0 0 3px #2196f3)' : ''; } }
-            // Feder: wird zusammengedrückt, solange die andere Seite schaltet
+            else { const c = g.firstChild; betZeigen(c, L ? o.links : o.rechts, L ? -1 : 1, an, '#2196f3'); if (c) c.style.filter = an ? 'drop-shadow(0 0 3px #2196f3)' : ''; }
             const fd = g.querySelector('.fp-g-feder');
             if (fd) { const gedr = L ? k !== 0 && ruhe === 0 : k !== n - 1 && ruhe === n - 1; fd.style.transform = gedr ? 'scaleX(0.5)' : ''; fd.style.color = gedr ? '#2196f3' : ''; }
         });
+        else {
+            betZeigen(obj.el.querySelector('.fp-bet-l'), o.links, -1, anL, 'var(--fp-aktiv)');
+            betZeigen(obj.el.querySelector('.fp-bet-r'), o.rechts, 1, anR, 'var(--fp-aktiv)');
+            obj.el.querySelectorAll('.fp-bet-magnet').forEach(m => { const an = m.closest('.fp-bet-l') ? anL : anR; m.setAttribute('fill', an ? 'var(--fp-aktiv)' : 'none'); });
+        }
         if (obj.isActive !== (k !== ruhe) && st && typeof SoundEngine !== 'undefined') { try { SoundEngine.clack(); } catch (e) {} }
         obj.isActive = k !== ruhe;
     }
@@ -4079,13 +4369,14 @@
     window._fpPorts2D = obj => lage2D(obj).ports.map(p => ({ id: p.id, label: String(p.nr), lx: p.lx, ly: p.ly, ptype: ART2D[p.art] || 'work', rot: true }));
     // Einstellungen im Rechtsklickmenü der 2D-Anlage
     const OPT_NAME = { p: ['Druck', 'bar', 0.5, 10, 0.5], offen: ['Öffnung', '%', 1, 100, 1], zeit: ['Zeit', 's', 0.1, 60, 0.1] };
-    function menue2D(obj, ctx, sichern) {
+    function menue2D(obj, ctx, sichern, umbau, platz) {
         const f = fp2d(obj), doc = ctx.ownerDocument || document;
         const mk = (tag, txt, st) => { const e = doc.createElement(tag); if (txt != null) e.textContent = txt; if (st) e.style.cssText = st; return e; };
         const box = mk('div', null, 'padding:5px 15px;border-top:1px solid #555;margin-top:5px');
         box.onclick = e => e.stopPropagation(); box.onmousedown = e => e.stopPropagation();
         box.appendChild(mk('div', '⚙️ ' + ((TYP[f.typ] || {}).name || 'Bauteil'), 'color:#03a9f4;font-size:10px;font-weight:bold;margin-bottom:4px'));
         const neu = () => {
+            if (umbau) return umbau();
             symbol2D(obj);
             try { if (rolleAnZylinder(obj, fabrik() || [])) updateObjTransform(obj); } catch (e) {}
             try { if (typeof _updatePneuPortLayer === 'function') _updatePneuPortLayer(); if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
@@ -4109,7 +4400,8 @@
         };
         const ausg = () => { try { return (globalOutputs || []).slice(); } catch (e) { return []; } };
         const eing = () => { try { return (globalInputs || []).slice(); } catch (e) { return []; } };
-        function menueNeu() { box.remove(); menue2D(obj, ctx, sichern); }
+        // Neu zeichnen an derselben Stelle (das Menü kann mehrspaltig umbrochen sein)
+        function menueNeu() { const ph = doc.createElement('div'); box.parentNode ? box.parentNode.insertBefore(ph, box) : ctx.appendChild(ph); box.remove(); menue2D(obj, ctx, sichern, umbau, ph); }
         if (f.typ === 'ventil') {
             const o = f.o = Object.assign({}, TYP.ventil.optionen, f.o);
             auswahl('Wege', Object.keys(VLAGE).map(w => [w, w + '-Wegeventil']), o.wege, v => { o.wege = v; });
@@ -4148,9 +4440,9 @@
                 else if (k === 'kurz') auswahl('Darstellung', [['n', 'ausführlich'], ['j', 'Kurzform']], f.o.kurz ? 'j' : 'n', v => { f.o.kurz = v === 'j'; });
             }
         }
-        if (f.typ === 'ventil') auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)']], f.bild === 'symbol' ? 'symbol' : 'gehaeuse', v => { if (v === 'symbol') f.bild = 'symbol'; else delete f.bild; });
+        if (f.typ === 'ventil') auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)'], ['schnitt', 'Echtes Ventil, aufgeschnitten'], ['aussen', 'Echtes Ventil, geschlossen']], darst(obj), v => { if (v === 'gehaeuse') delete f.bild; else f.bild = v; });
         auswahl('Drehen', [['0', '0°'], ['90', '90°'], ['180', '180°'], ['270', '270°']], String(f.rot || 0), v => { f.rot = +v; });
-        ctx.appendChild(box);
+        if (platz && platz.parentNode) platz.replaceWith(box); else ctx.appendChild(box);
     }
     // Ein 2D-Teil wurde in der Anlage geändert: im verbundenen Plan nachziehen
     function geaendert2D(obj) { void obj; rueckZeit = 0; }
@@ -4171,7 +4463,65 @@
             symbol2D(obj);
         }
     }
+    // Rollenhebel in der 2D-Anlage: welcher Zylinder und welche Stelle des Hubs ergibt sich aus der
+    // Lage der Rolle. Außerhalb jedes Stangenwegs schaltet sie nicht (zyl = '').
+    let mausUnten = false;
+    function rolleWelt(o, L) {
+        const t = teilAus2D(o), n = ventilStellungen(t.o).length;
+        const [px, py] = punkt2D(o, L === 'L' ? -14 : n * KASTEN + 14, 20);
+        const r = (o.rotation || 0) * Math.PI / 180, cx = (o.width || 0) / 2, cy = (o.height || 0) / 2;
+        const dx = px - cx, dy = py - cy;
+        return [o.x + cx + dx * Math.cos(r) - dy * Math.sin(r), o.y + cy + dx * Math.sin(r) + dy * Math.cos(r)];
+    }
+    function rolleAmZylinder(F, wx, wy) {
+        let best = null;
+        for (const z of F) {
+            if (!/^zylinder_/.test(z.type) || !z.width) continue;
+            const h = z.height || 30, c = { x: z.x + z.width / 2, y: z.y + h / 2 }, r = -(z.rotation || 0) * Math.PI / 180;
+            const dx = wx - c.x, dy = wy - c.y;
+            const lx = z.width / 2 + dx * Math.cos(r) - dy * Math.sin(r), ly = h / 2 + dx * Math.sin(r) + dy * Math.cos(r);
+            const anteil = (lx - (z.width - 3)) / z.width, quer = Math.abs(ly - h / 2);
+            // Rolle muss den Nocken am Stangenende treffen: entlang des Stangenwegs, quer nah an der Stange
+            if (anteil < -0.06 || anteil > 1.06 || quer > h / 2 + 12) continue;
+            if (!best || quer < best.quer) best = { z, quer, pos: Math.max(0, Math.min(100, Math.round(anteil * 100))) };
+        }
+        return best;
+    }
+    function rollenLage2D() {
+        if (mausUnten) return;
+        const F = fabrik(); if (!F) return;
+        let geaendert = false;
+        // Nur wenn Ventil oder Zylinder bewegt wurden (Einstellungen im Menü setzen die Lage selbst)
+        const zk = F.filter(z => /^zylinder_/.test(z.type)).map(z => [z.id, Math.round(z.x), Math.round(z.y), z.rotation || 0, z.width].join(':')).join(';');
+        for (const o of F) {
+            if (o.type !== 'pneu_fp' || !o.el) continue;
+            const f = fp2d(o); if (f.typ !== 'ventil') continue;
+            if (!['rolle', 'rolle_leer'].includes(f.o.links) && !['rolle', 'rolle_leer'].includes(f.o.rechts)) continue;
+            const key = [Math.round(o.x), Math.round(o.y), o.rotation || 0, f.rot || 0, o.width, o.height, zk].join('|');
+            if (o._rolleOrt === key) continue;
+            o._rolleOrt = key;
+            for (const [L, kb, kz, kp] of [['L', 'links', 'zyl', 'pos'], ['R', 'rechts', 'zylR', 'posR']]) {
+                const b = f.o[kb]; if (b !== 'rolle' && b !== 'rolle_leer') continue;
+                const [wx, wy] = rolleWelt(o, L), m = rolleAmZylinder(F, wx, wy);
+                const zyl = m ? m.z.id : '', alt = f.o[kz] || '';
+                const posAlt = posProzent(f.o[kp]);
+                if (zyl === alt && (!m || Math.abs(m.pos - posAlt) < 2)) continue;
+                f.o[kz] = zyl; if (m) f.o[kp] = m.pos === 0 ? 'hinten' : m.pos === 100 ? 'vorne' : m.pos;
+                geaendert = true;
+                if (m) nockenSetzen(m.z);
+            }
+        }
+        if (geaendert) { rueckZeit = 0; try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {} }
+    }
     function registrieren2D() {
+        if (!window._fpRolleTakt) {
+            window._fpRolleTakt = setInterval(() => { try { rollenLage2D(); } catch (e) {} }, 400);
+            const W = window;
+            W.addEventListener('pointerdown', () => { mausUnten = true; }, true);
+            W.addEventListener('pointerup', () => { mausUnten = false; }, true);
+            W.addEventListener('mousedown', () => { mausUnten = true; }, true);
+            W.addEventListener('mouseup', () => { mausUnten = false; }, true);
+        }
         window._fp2d = {
             build: bau2D,
             onLoadState(obj) { symbol2D(obj); },
@@ -4195,19 +4545,39 @@
     // Wegeventil der 2D-Anlage auf eine andere Betätigung umbauen (Rechtsklickmenü).
     // Magnetventile bleiben das 2D-Wegeventil; alles andere wird ein Fluidplan-Teil,
     // die Schläuche bleiben stecken.
-    function ventilUmbauen(v, links) {
-        const F = fabrik(); if (!F || !v || v.type !== 'valve_pneu' || links === 'magnet') return null;
+    // Das alte 2D-Magnetventil als Fluidplan-Teil beschrieben (Spulen = Zylindervariablen)
+    function fpVonVentil(v) {
+        const F = fabrik() || [];
         const wege = v.isTriple ? '5/3' : v.isDouble ? '5/2' : '3/2';
-        const rechts = wege === '5/3' ? links : 'feder';
+        const zyl0 = v.targetCylinderId && F.find(q => q.id === v.targetCylinderId);
+        const varL = (zyl0 && zyl0.linkedVarExt) || v.linkedVarExt || '';
+        const varR = v.isDouble ? ((zyl0 && zyl0.linkedVarRet) || v.linkedVarRet || '') : '';
+        const ab = {};
+        for (const [p2d, a] of Object.entries(v.abschluss || {})) { const pp = /^5/.test(wege) ? ({ '3': '5', '5': '3' })[p2d] || p2d : p2d; if (a && a.art && a.art !== 'offen') ab[pp] = a.art === 'drossel' ? { art: 'drossel', offen: a.offen || 50 } : { art: a.art }; }
+        return { typ: 'ventil', o: Object.assign({}, TYP.ventil.optionen, { wege, links: 'magnet', rechts: v.isDouble ? 'magnet' : 'feder', varL, varR, frei: true }), rot: 0, ab };
+    }
+    // Wegeventil der 2D-Anlage umbauen: arg = neue Betätigung links (Text) oder ein ganzes
+    // Fluidplan-Teil { typ: 'ventil', o, ab }. Danach ist es ein frei konfigurierbares Fluidplan-Teil.
+    function ventilUmbauen(v, arg) {
+        const F = fabrik(); if (!F || !v || v.type !== 'valve_pneu' || !arg) return null;
+        const wege = v.isTriple ? '5/3' : v.isDouble ? '5/2' : '3/2';
+        let fp = fpVonVentil(v);
+        if (typeof arg === 'string') { fp.o.links = arg; if (arg !== 'magnet') { fp.o.rechts = wege === '5/3' ? arg : 'feder'; fp.o.varL = ''; fp.o.varR = ''; } }
+        else fp = JSON.parse(JSON.stringify(arg));
+        fp.o.frei = true;
         // Mit dem Fluidplan verbunden: der Plan ist die Wahrheit, der Abgleich baut die 2D-Anlage um
         const w = plan.anlage && spiegel.get(v.id);
         if (w && w.ventil && teil(w.ventil)) {
-            aendern(() => { const vt = teil(w.ventil); vt.o.links = links; vt.o.rechts = rechts; vt.bez = ''; kennzeichenAuffrischen(plan); });
+            aendern(() => {
+                const vt = teil(w.ventil), alt = kennCode('ventil', vt.o);
+                vt.o = Object.assign(oAus2D(fp), { frei: true });
+                for (const p of geo(vt).ports) if (p.art === 'r') abschlussSetzen(vt, p.id, (fp.ab || {})[p.id] || { art: 'offen' });
+                if (kennCode('ventil', vt.o) !== alt) vt.bez = '';
+                kennzeichenAuffrischen(plan);
+            });
             return true;
         }
-        const ab = {};
-        for (const [p2d, a] of Object.entries(v.abschluss || {})) { const pp = /^5/.test(wege) ? ({ '3': '5', '5': '3' })[p2d] || p2d : p2d; if (a && a.art && a.art !== 'offen') ab[pp] = a.art === 'drossel' ? { art: 'daempfer' } : { art: a.art }; }
-        const fp = { typ: 'ventil', o: Object.assign({}, TYP.ventil.optionen, { wege, links, rechts, varL: '', varR: '' }), rot: 0, ab };
+        const ab = fp.ab || {};
         const n = createFactoryObject('pneu_fp', fp);
         n.x = v.x; n.y = v.y; try { updateObjTransform(n); } catch (e) {}
         const tauschV = p => /^5/.test(wege) ? ({ '2': '4', '4': '2', '3': '5', '5': '3' })[p] || p : p;
@@ -4238,6 +4608,20 @@
         return n;
     }
     window._fpVentilUmbauen = ventilUmbauen;
+    // Rechtsklickmenü des alten 2D-Magnetventils: dasselbe volle Menü wie bei jedem Wegeventil.
+    // Die erste Änderung baut es zum Fluidplan-Teil um und öffnet dessen Menü wieder.
+    window._fpVentilMenue = function (v, ctx, sichern) {
+        const vorlage = { id: v.id, el: v.el, pneu: { fp: fpVonVentil(v) } };
+        menue2D(vorlage, ctx, sichern, () => {
+            try { ctx.style.display = 'none'; } catch (e) {}
+            const w = plan.anlage && spiegel.get(v.id), vid = w && w.ventil;
+            const n = ventilUmbauen(v, vorlage.pneu.fp);
+            const oeffne = q => { if (!q || !q.el) return; const r = q.el.getBoundingClientRect(); q.el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
+            if (n && n.el) setTimeout(() => oeffne(n), 60);
+            // Mit dem Plan verbunden: der Abgleich baut das Teil, danach sein Menü öffnen
+            else if (n === true && vid) setTimeout(() => { try { anlageAbgleichen(); } catch (e) {} const t = teil(vid); oeffne(t && t.o.anlage && (fabrik() || []).find(q => q.id === t.o.anlage)); }, 80);
+        });
+    };
 
     window.Fluidplan = {
         oeffnen, schliessen, umschalten,

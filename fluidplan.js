@@ -1951,8 +1951,9 @@
                 else if (t.o.rechts === 'feder') neu = L ? 0 : 1;
                 else if (t.o.links === 'feder') neu = R ? 1 : 0;
                 else { if (L && !R) neu = 0; else if (R && !L) neu = 1; }
+                if (t.o._stellung != null) neu = t.o._stellung;   // Schattenplan: Stellung aus der 2D-Anlage
                 if (fehlerAktiv(t.id) === 'klemmt') neu = n === 3 ? 1 : (t.o.links === 'feder' ? 0 : n - 1);
-                if (neu !== z.stellung) { z.stellung = neu; klick(); }
+                if (neu !== z.stellung) { z.stellung = neu; if (!schattenLauf) klick(); }
             } else if (t.typ === 'zeit') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
                 const tau = Math.max(0.05, zahl(t.o.zeit, 3) / Math.LN2);
@@ -2314,16 +2315,20 @@
     }
     // Aufruf aus der 2D-Anlage vor der Zylinder-Mechanik, dt in s (schon mit simSpeed)
     window._fpTakt = function (dt) {
-        if (!plan.anlage || !plan.teile.length || !simLaeuft() || !(dt > 0)) return;
-        if (!warLaufend) return;   // Start/Init macht die eigene Schleife
-        taktZeit = performance.now();
-        planTakt(Math.min(0.1, dt));
+        if (!simLaeuft() || !(dt > 0)) return;
+        if (plan.anlage && plan.teile.length && warLaufend) {
+            taktZeit = performance.now();
+            planTakt(Math.min(0.1, dt));
+        }
+        if (window._fpOhneSchatten) { schatten = null; return; }
+        try { schattenTakt(dt); } catch (e) { schatten = null; console.warn('Pneumatik (Schattenplan)', e); }
     };
     function schleife(ts) {
         requestAnimationFrame(schleife);
         const laeuft = simLaeuft();
         if (laeuft !== warLaufend) {
             warLaufend = laeuft;
+            schatten = null;
             if (laeuft) { sim = null; simInit(); gedrueckt.clear(); aufzNeu(); }
             if (svg) { svg.classList.toggle('sim', laeuft); eigenschaften(); }
             knopfZustand(); status();
@@ -2341,17 +2346,20 @@
 
     // Zylinder der 2D-Anlage, der einem Planzylinder folgt (Hook in der Zylinder-Mechanik)
     window._fpZylinder = function (obj) {
-        if (!sim || !simLaeuft() || !plan.anlage) return null;
-        const t = plan.teile.find(q => (q.typ === 'zyl_dw' || q.typ === 'zyl_ew') && q.o.anlage === obj.id);
-        if (!t) return null;
-        const z = sim.zust[t.id]; if (!z) return null;
-        const ziel = z.x / zylHub(t) * 100;
-        const ist = obj.extension || 0;
-        const diff = ziel - ist;
+        if (!simLaeuft()) return null;
+        let r = null;
+        if (sim && plan.anlage) {
+            const t = plan.teile.find(q => (q.typ === 'zyl_dw' || q.typ === 'zyl_ew') && q.o.anlage === obj.id);
+            const z = t && sim.zust[t.id];
+            if (z) r = { ziel: z.x / zylHub(t) * 100, v: Math.abs(z.v) / zylHub(t) * (obj.stroke || 100) };
+        }
+        if (!r) r = schattenZiel(obj);
+        if (!r) return null;
+        const diff = r.ziel - (obj.extension || 0);
         if (Math.abs(diff) < 0.05) return { dir: 0, v: 0 };
         // Die 2D-Anlage übernimmt die Stellung des Planzylinders in jedem Bild genau
         // (ziel), damit Zeitpunkte wie beim Auswerfen eines fallenden Teils stimmen.
-        return { dir: diff > 0 ? 1 : -1, v: Math.abs(z.v) / zylHub(t) * (obj.stroke || 100), ziel };
+        return { dir: diff > 0 ? 1 : -1, v: r.v, ziel: r.ziel };
     };
 
 
@@ -2574,42 +2582,153 @@
         try { if (window._syncCircuitFromFactory) window._syncCircuitFromFactory(); } catch (e) {}
     }
     // Umgekehrt: vorhandene 2D-Pneumatik als Startplan übernehmen
+    // Plan aus der Pneumatik der 2D-Anlage (für „⇐ Aus 2D-Anlage“ und den Schattenplan).
+    // karte: je 2D-Zylinder { zyl, ventil, drv: {ext, ret}, seite: {ext: [Leitungen], ret: [...]} }
+    function planAus2D(F, zyl, comp, ab) {
+        const teile = [], leitungen = [], karte = {};
+        const nid = () => neueId();
+        const q = { id: nid(), typ: 'quelle', x: 0, y: 360, rot: 0, bez: '0Z1', o: Object.assign({}, TYP.quelle.optionen, { p: comp && comp.pressure || 6 }) };
+        teile.push(q);
+        const L = (a, ap, b, bp) => { const l = { id: nid(), a: { t: a, p: ap }, b: { t: b, p: bp } }; leitungen.push(l); return l.id; };
+        const versorgung = [];
+        zyl.forEach((o, i) => {
+            const dw = o.type === 'zylinder_double', x = 140 + i * 260, nr = i + 1;
+            const v = F.find(q2 => q2.type === 'valve_pneu' && q2.targetCylinderId === o.id);
+            const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: nr + 'A1',
+                o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id }) };
+            const wege = !dw ? '3/2' : (v && v.isTriple) ? '5/3' : '5/2';
+            const doppelt = v && v.isDouble;
+            const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: nr + 'V1',
+                o: Object.assign({}, TYP.ventil.optionen, { wege, links: 'magnet', rechts: doppelt ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: doppelt ? (o.linkedVarRet || '') : '' }) };
+            teile.push(zt, vt);
+            versorgung.push(L(q.id, '1', vt.id, '1'));
+            const k = karte[o.id] = { zyl: zt.id, ventil: vt.id, ventil2d: v ? v.id : null, drv: {}, seite: { ext: [], ret: [] } };
+            const thr = rolle => F.find(q2 => q2.type === 'throttle' && q2.targetCylinderId === o.id && q2.role === rolle);
+            // Abluftdrosselung: Drossel der Ausfahrbewegung sitzt in der Stangenseite.
+            // seite: Leitungen der Kammer, die die jeweilige Bewegung antreibt (2D: Schlauch ab)
+            // Schlauch in der 2D-Anlage abgezogen: Leitung zum Zylinder fehlt, beide Enden blasen ab
+            const los = antrieb => !!(ab && ab[o.id] && ab[o.id][antrieb]);
+            const zuweg = (vp, zp, th, dx, rolle, antrieb) => {
+                if (!th) { if (!los(antrieb)) k.seite[antrieb].push(L(vt.id, vp, zt.id, zp)); return; }
+                const d = { id: nid(), typ: 'drv', x: x + dx, y: 100, rot: 0, bez: nr + 'V' + (teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
+                teile.push(d); k.drv[rolle] = { id: d.id, th: th.id };
+                k.seite[antrieb].push(L(vt.id, vp, d.id, '2'));
+                if (!los(antrieb)) k.seite[antrieb].push(L(d.id, '1', zt.id, zp));
+            };
+            if (dw) { zuweg('4', 'K', thr('ret'), 10, 'ret', 'ext'); zuweg('2', 'S', thr('ext'), 90, 'ext', 'ret'); }
+            else zuweg('2', 'K', thr('ext'), 10, 'ext', 'ext');
+        });
+        return { teile, leitungen, karte, quelle: q.id, versorgung };
+    }
     function ausAnlage() {
         const F = fabrik(); if (!F) return 0;
         const zyl = F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics);
         if (!zyl.length) { status('In der 2D-Anlage gibt es keinen Zylinder mit Pneumatik.'); return 0; }
         if (plan.teile.length && !confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
         aendern(() => {
-            plan.teile = []; plan.leitungen = []; plan.erzeugt = []; plan.anlage = true;
-            const comp = F.find(o => o.type === 'compressor');
-            const nid = () => neueId();
-            const q = { id: nid(), typ: 'quelle', x: 0, y: 360, rot: 0, bez: '0Z1', o: Object.assign({}, TYP.quelle.optionen, { p: comp && comp.pressure || 6 }) };
-            plan.teile.push(q);
-            const L = (a, ap, b, bp) => plan.leitungen.push({ id: nid(), a: { t: a, p: ap }, b: { t: b, p: bp } });
-            zyl.forEach((o, i) => {
-                const dw = o.type === 'zylinder_double', x = 140 + i * 260, nr = i + 1;
-                const v = F.find(q2 => q2.type === 'valve_pneu' && q2.targetCylinderId === o.id);
-                const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: nr + 'A1',
-                    o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id }) };
-                const wege = !dw ? '3/2' : (v && v.isTriple) ? '5/3' : '5/2';
-                const doppelt = v && v.isDouble;
-                const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: nr + 'V1',
-                    o: Object.assign({}, TYP.ventil.optionen, { wege, links: 'magnet', rechts: doppelt ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: doppelt ? (o.linkedVarRet || '') : '' }) };
-                plan.teile.push(zt, vt);
-                L(q.id, '1', vt.id, '1');
-                const thr = rolle => F.find(q2 => q2.type === 'throttle' && q2.targetCylinderId === o.id && q2.role === rolle);
-                // Abluftdrosselung: Drossel der Ausfahrbewegung sitzt in der Stangenseite
-                const zuweg = (vp, zp, th, dx) => {
-                    if (!th) { L(vt.id, vp, zt.id, zp); return; }
-                    const d = { id: nid(), typ: 'drv', x: x + dx, y: 100, rot: 0, bez: nr + 'V' + (plan.teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
-                    plan.teile.push(d); L(vt.id, vp, d.id, '2'); L(d.id, '1', zt.id, zp);
-                };
-                if (dw) { zuweg('4', 'K', thr('ret'), 10); zuweg('2', 'S', thr('ext'), 90); }
-                else zuweg('2', 'K', thr('ext'), 10);
-            });
+            const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'));
+            plan.teile = r.teile; plan.leitungen = r.leitungen; plan.erzeugt = []; plan.anlage = true;
         });
         einpassen();
         return zyl.length;
+    }
+
+    // ------------------------------------------------------------
+    // Schattenplan: Die Pneumatik der 2D-Anlage läuft mit diesem Rechenkern,
+    // auch ohne sichtbaren Fluidplan (eine Wahrheit). VALIS baut dafür unsichtbar
+    // denselben Plan wie „⇐ Aus 2D-Anlage“ und stellt die Ventile nach der 2D-Anlage.
+    // ------------------------------------------------------------
+    let schatten = null, schattenLauf = false;
+    function mitPlan(p, s, fn) {
+        const ap = plan, as = sim;
+        plan = p; sim = s; schattenLauf = true;
+        try { return fn(); } finally { const ns = sim; plan = ap; sim = as; schattenLauf = false; if (schatten && schatten.plan === p) schatten.sim = ns; }
+    }
+    const pneuAb = (a, ap, b, bp) => {
+        if (!a || !b) return false;
+        const m = (window.pneuConnections || []).filter(c =>
+            (c.aObjId === a.id && String(c.aPortId) === ap && c.bObjId === b.id && String(c.bPortId) === bp) ||
+            (c.aObjId === b.id && String(c.aPortId) === bp && c.bObjId === a.id && String(c.bPortId) === ap));
+        return m.length > 0 && m.every(c => c._broken);
+    };
+    function schattenZylinder(F) {
+        const eigen = plan.anlage ? new Set(plan.teile.filter(t => t.o && t.o.anlage).map(t => t.o.anlage)) : new Set();
+        return F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics && !eigen.has(o.id)
+            && F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === o.id));
+    }
+    function schattenTakt(dt) {
+        const F = fabrik(); if (!F) return;
+        const zyl = schattenZylinder(F);
+        if (!zyl.length) { schatten = null; return; }
+        const comp = F.find(o => o.type === 'compressor');
+        const mf = F.find(o => o.type === 'manifold');
+        // Aufbau-Schlüssel: ändert er sich, wird der Schattenplan neu gebaut
+        const lage = o => {
+            const v = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
+            const tE = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ext');
+            const tR = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ret');
+            const ab = (vp, th, cp) => th ? (pneuAb(v, vp, th, '2') || pneuAb(th, '1', o, cp)) : pneuAb(v, vp, o, cp);
+            return [o.id, o.type, o.pistonD, o.rodD, o.stroke, v && v.id, v && v.isDouble, v && v.isTriple, tE && tE.id, tR && tR.id,
+                ab('2', tE, '1'), o.type !== 'zylinder_single' && ab('4', tR, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0].join(',');
+        };
+        const versorgungAb = pneuAb(comp, '1', mf, '1') || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
+        const sig = (comp ? comp.id : '-') + '|' + versorgungAb + '|' + zyl.map(lage).join('|');
+        const neu = !schatten || schatten.sig !== sig;
+        if (neu) {
+            const abK = {};
+            const fehlerVorher = [];
+            zyl.forEach(o => {
+                const v = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
+                const tE = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ext');
+                const tR = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ret');
+                const ab = (vp, th, cp) => th ? (pneuAb(v, vp, th, '2') || pneuAb(th, '1', o, cp)) : pneuAb(v, vp, o, cp);
+                abK[o.id] = { ext: ab('2', tE, '1'), ret: o.type !== 'zylinder_single' && ab('4', tR, '2') };
+                fehlerVorher.push([o, v]);
+            });
+            const r = planAus2D(F, zyl, comp, abK);
+            const p = { v: 2, teile: r.teile, leitungen: r.leitungen, fehler: {} };
+            // Undichte Kolbendichtung und Ventile der 2D-Anlage als Fehler im Schattenplan
+            fehlerVorher.forEach(([o, v]) => {
+                const k = r.karte[o.id];
+                if ((o.leakRate || 0) > 0) p.fehler[k.zyl] = 'dichtung';
+                if (v && (v.leakRate || 0) > 0) p.fehler[k.ventil] = 'leck';
+            });
+            schatten = { plan: p, sim: null, sig, karte: r.karte, quelle: r.quelle, versorgungAb };
+        }
+        const S = schatten;
+        // Werte, die sich ohne Umbau ändern: Netzdruck, Drosseln, Ventilstellungen
+        const q = S.plan.teile.find(t => t.id === S.quelle);
+        let p = comp ? (comp.pressure || 6) : 0;
+        try { if (comp && typeof window._pneuNetzAktiv === 'function' && window._pneuNetzAktiv(comp) && comp._pNetz != null) p = comp._pNetz; } catch (e) {}
+        if (S.versorgungAb) p = 0;
+        q.o.p = Math.max(0, p);
+        for (const o of zyl) {
+            const k = S.karte[o.id]; if (!k) continue;
+            for (const rolle of ['ext', 'ret']) {
+                const d = k.drv[rolle]; if (!d) continue;
+                const th = F.find(x => x.id === d.th), t = S.plan.teile.find(x => x.id === d.id);
+                if (th && t) t.o.offen = drosselAus2D(th.opening != null ? th.opening : 100);
+            }
+            const v = F.find(x => x.id === k.ventil2d), vt = S.plan.teile.find(x => x.id === k.ventil);
+            if (v && vt) vt.o._stellung = (v.isTriple && v.valveState === 'center') ? 1 : v.isActive ? 0 : (v.isTriple ? 2 : 1);
+        }
+        mitPlan(S.plan, S.sim, () => {
+            if (!sim) {
+                // Start: Stellungen aus der 2D-Anlage, Leitungen bei stehendem Kolben füllen
+                simInit();
+                const lage0 = () => { for (const o of zyl) { const k = S.karte[o.id], t = plan.teile.find(x => x.id === k.zyl), z = sim.zust[k.zyl]; z.x = (o.extension || 0) / 100 * zylHub(t); z.v = 0; } };
+                lage0(); for (let i = 0; i < 25; i++) { simSchritt(0.02); lage0(); }
+            }
+            simSchritt(Math.min(0.1, dt));
+        });
+    }
+    // 2D-Zylinder, den der Schattenplan bewegt: Stellung in % (oder null)
+    function schattenZiel(obj) {
+        if (!schatten || !schatten.sim) return null;
+        const k = schatten.karte[obj.id]; if (!k) return null;
+        const t = schatten.plan.teile.find(x => x.id === k.zyl), z = schatten.sim.zust[k.zyl];
+        if (!t || !z) return null;
+        return { ziel: z.x / zylHub(t) * 100, v: Math.abs(z.v) / zylHub(t) * (obj.stroke || 100) };
     }
 
     // ------------------------------------------------------------

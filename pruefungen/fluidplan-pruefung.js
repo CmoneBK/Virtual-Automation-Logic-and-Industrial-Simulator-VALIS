@@ -328,6 +328,27 @@ const FAELLE = {
     const neuD = p.teile.find(t => t.typ === 'drv');
     const anK = neuD && p.leitungen.some(l => (l.a.t === neuD.id && l.a.p === '1' && l.b.t === z && l.b.p === 'K') || (l.b.t === neuD.id && l.b.p === '1' && l.a.t === z && l.a.p === 'K'));
     R.push(['2D-Drossel eingesetzt → Plan-DRV 30 % an K (1 zum Zylinder)', !!neuD && neuD.o.offen === 30 && anK, neuD && [neuD.o.offen, anK]]);
+    // Endlagensensor im Plan → Reed-Schalter in 2D, und zurück
+    F._leeren();
+    const z2 = F.setzen('zyl_dw', 0, -100, { sensV: 'FP_B2' }, '1A1');
+    const q2 = F.setzen('quelle', 0, 300), v2 = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_SC' }, '1V1');
+    F.verbinden(q2, '1', v2, '1'); F.verbinden(v2, '4', z2, 'K'); F.verbinden(v2, '2', z2, 'S');
+    F.verbinden2D(true);
+    const o2 = factoryObjects.find(x => x.id === F.plan().teile.find(t => t.id === z2).o.anlage);
+    const reeds = () => factoryObjects.filter(x => x.type === 'sensor_reed' && x.parent === o2).map(x => x.linkedVar);
+    R.push(['Plan-Sensor vorne → Reed-Schalter in 2D', reeds().includes('FP_B2'), JSON.stringify(reeds())]);
+    window.attachReed(o2, 'FP_B1', 'left'); await warte();
+    R.push(['Reed hinten in 2D → Plan-Sensor hinten', F.plan().teile.find(t => t.id === z2).o.sensH === 'FP_B1', F.plan().teile.find(t => t.id === z2).o.sensH]);
+    // Schlauch in 2D abgezogen: verbundener Plan fährt nicht aus
+    window.toggleSimulation(); await new Promise(r => setTimeout(r, 500));
+    (window.pneuConnections || []).filter(k => k.aObjId === o2.id || k.bObjId === o2.id).forEach(k => { k._broken = true; });
+    spsState.FP_SC = true; await new Promise(r => setTimeout(r, 900));
+    R.push(['Schlauch in 2D ab → Plan-Zylinder bleibt stehen', (F.zustand().teile[z2].anteil || 0) < 0.3, F.zustand().teile[z2].anteil]);
+    // Drücke für Sensoren kommen aus dem Rechenkern
+    const k = window._fpDruckKarte && window._fpDruckKarte();
+    R.push(['Druckkarte des Rechenkerns für 2D-Zylinder', !!k && k[o2.id + ':1'] != null, k && k[o2.id + ':1']]);
+    spsState.FP_SC = false; window.toggleSimulation();
+    (window.pneuConnections || []).forEach(k => { k._broken = false; });
     F.verbinden2D(false);
     return R;
   },

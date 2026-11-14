@@ -2133,6 +2133,9 @@
                 }
             }
         }
+        // Schlauch in der 2D-Anlage abgezogen (verbundener Plan): die Leitung bläst ab
+        const lf = laufFehler.get(plan);
+        if (lf) for (const k in lf) if (lf[k] === 'ab') { const l = plan.leitungen.find(q => 'L:' + q.id === k); const n = l && sim.netzVon[l.a.t + ':' + l.a.p]; if (n != null) fluss(n, 'ATM', G_VENTIL * 3, 1); }
         // Offene Anschlüsse
         for (let i = 0; i < N.length; i++) for (const o of N[i].offen) fluss(i, 'ATM', o.g, 0);
         // Kolben bewegen
@@ -2398,6 +2401,7 @@
         if (!simLaeuft() || !(dt > 0)) return;
         if (plan.anlage && plan.teile.length && warLaufend) {
             taktZeit = performance.now();
+            try { laufFehlerSetzen(); } catch (e) { console.warn('Fluidplan ← 2D (Fehler)', e); }
             planTakt(Math.min(0.1, dt));
         }
         if (window._fpOhneSchatten) { schatten = null; return; }
@@ -2469,7 +2473,9 @@
         dschalter: [['defekt', 'Druckschalter defekt (meldet nie)']],
         daempfer: [['zu', 'Schalldämpfer zugesetzt']]
     };
-    const fehlerVon = id => (plan.fehler && plan.fehler[id]) || null;
+    // Laufzeit-Fehler aus der 2D-Anlage (abgezogener Schlauch, Leckage) für den verbundenen Plan
+    const laufFehler = new WeakMap();
+    const fehlerVon = id => (plan.fehler && plan.fehler[id]) || (laufFehler.get(plan) || {})[id] || null;
     const fehlerAktiv = id => { const f = fehlerVon(id); return f && !(plan.behoben || []).includes(id) ? f : null; };
     function fehlerName(key) {
         const f = fehlerVon(key); if (!f) return '';
@@ -2621,6 +2627,36 @@
             plan.leitungen.push({ id: neueId(), a: { t: y.t, p: y.p }, b: { t: x.t, p: x.p } });
         }
     }
+    function laufFehlerSetzen() {
+        const F = fabrik(); if (!F) return;
+        const m = {};
+        for (const t of plan.teile) {
+            if ((t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew') || !t.o.anlage) continue;
+            const o = F.find(q => q.id === t.o.anlage); if (!o) continue;
+            if ((o.leakRate || 0) > 0) m[t.id] = 'dichtung';
+            for (const [p2d, pp] of [['1', 'K'], ['2', 'S']]) {
+                const ab = (window.pneuConnections || []).some(c => c._broken && ((c.aObjId === o.id && String(c.aPortId) === p2d) || (c.bObjId === o.id && String(c.bPortId) === p2d)));
+                if (ab) plan.leitungen.filter(l => (l.a.t === t.id && l.a.p === pp) || (l.b.t === t.id && l.b.p === pp)).forEach(l => { m['L:' + l.id] = 'ab'; });
+            }
+            const v2 = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
+            const w = v2 && spiegel.get(v2.id);
+            if (w && w.ventil && (v2.leakRate || 0) > 0) m[w.ventil] = 'leck';
+        }
+        laufFehler.set(plan, m);
+    }
+    // Reed-Schalter eines 2D-Zylinders: H = hintere Endlage (links), V = vordere
+    function reeds2D(o, F) {
+        const r = {};
+        for (const q of F) {
+            if (q.type !== 'sensor_reed' || q.parent !== o) continue;
+            const w = (o.rotation || 0) * Math.PI / 180;
+            const dx = (q.x + q.width / 2) - (o.x + o.width / 2), dy = (q.y + q.height / 2) - (o.y + o.height / 2);
+            const lx = dx * Math.cos(w) + dy * Math.sin(w);
+            const seite = lx < 0 ? 'H' : 'V';
+            if (!r[seite]) r[seite] = { obj: q, var: q.linkedVar || '' };
+        }
+        return r;
+    }
     const ventilTyp2D = q => q.isTriple ? 'triple' : q.isDouble ? 'double' : 'single';
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage || !spiegel.size) return;
@@ -2656,6 +2692,10 @@
                 continue;
             }
             const t = plan.teile.find(q => q.id === w.teil); if (!t) continue;
+            if (w.reed != null) {
+                const R = reeds2D(o, F), jetzt = JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' });
+                if (jetzt !== w.reed) { w.reed = jetzt; neu.push(() => { t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; }); }
+            }
             if (w.dr) {
                 const dw = t.typ === 'zyl_dw';
                 // Spulen-Variablen
@@ -2761,7 +2801,17 @@
             dr('ext', drExt);
             dr('ret', drRet);
             // Spiegel: was der Plan in die 2D-Anlage geschrieben hat
-            spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke, vt: v ? v.id : null, linksExt,
+            // Endlagensensoren des Plans = Reed-Schalter am 2D-Zylinder
+            let R = reeds2D(o, F);
+            for (const [key, seite, pos] of [['sensH', 'H', 'left'], ['sensV', 'V', 'right']]) {
+                const soll = t.o[key] || '', ist = R[seite];
+                if (soll && !ist && typeof window.attachReed === 'function') { try { window.attachReed(o, soll, pos); } catch (e) {} }
+                else if (soll && ist && ist.var !== soll && typeof window.attachReed === 'function') { try { deleteObjRecursive(ist.obj); window.attachReed(o, soll, pos); } catch (e) {} }
+                else if (!soll && ist) { try { deleteObjRecursive(ist.obj); } catch (e) {} }
+            }
+            R = reeds2D(o, fabrik() || F);
+            const reed = JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' });
+            spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke, vt: v ? v.id : null, linksExt, reed,
                 ext: dw ? o.linkedVarExt || '' : o.linkedVar || '', ret: dw ? o.linkedVarRet || '' : '',
                 dr: { ext: drExt != null, ret: drRet != null }, drT: { ext: drExtT, ret: drRetT } });
             for (const [rolle, wt] of [['ext', drExtT], ['ret', drRetT]]) {
@@ -2960,6 +3010,36 @@
         const t = id && schatten.plan.teile.find(x => x.id === id);
         if (!t) return null;
         return mitPlan(schatten.plan, schatten.sim, () => ({ p1: pPort(t, '1'), p2: pPort(t, '2') }));
+    };
+
+    // Drücke des Rechenkerns an den Anschlüssen der 2D-Teile ('objId:port' → bar), damit Drucksensor,
+    // Durchflusssensor, Schlauch- und Schaltplanfarben dieselben Werte zeigen (eine Wahrheit).
+    window._fpDruckKarte = function () {
+        if (!simLaeuft()) return null;
+        const m = {};
+        const ventilPorts = vt => /^5/.test(vt.o.wege || '') ? [['1', '1'], ['2', '4'], ['4', '2'], ['3', '5'], ['5', '3']] : [['1', '1'], ['2', '2'], ['3', '3']];
+        const eintragen = (zt, o2, vt, v2) => {
+            m[o2 + ':1'] = pPort(zt, 'K');
+            if (zt.typ === 'zyl_dw') m[o2 + ':2'] = pPort(zt, 'S');
+            if (vt && v2) for (const [a, b] of ventilPorts(vt)) if (sim.netzVon[vt.id + ':' + b] != null) m[v2 + ':' + a] = pPort(vt, b);
+        };
+        if (sim && plan.anlage) {
+            for (const [id, w] of spiegel) if (w.ventil) {
+                const vt = plan.teile.find(q => q.id === w.ventil);
+                const zw = [...spiegel.values()].find(x => x.vt === w.ventil && x.teil);
+                const zt = zw && plan.teile.find(q => q.id === zw.teil);
+                const o2 = zt && zt.o.anlage;
+                if (vt && zt && o2) eintragen(zt, o2, vt, id);
+            }
+        }
+        if (schatten && schatten.sim) mitPlan(schatten.plan, schatten.sim, () => {
+            for (const o2 in schatten.karte) {
+                const k = schatten.karte[o2];
+                const zt = plan.teile.find(q => q.id === k.zyl), vt = plan.teile.find(q => q.id === k.ventil);
+                if (zt) eintragen(zt, o2, vt, k.ventil2d);
+            }
+        });
+        return m;
     };
 
     // ------------------------------------------------------------

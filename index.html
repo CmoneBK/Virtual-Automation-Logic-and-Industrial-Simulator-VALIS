@@ -3686,6 +3686,28 @@
                             <div onclick="addFactoryDevice('manifold')">🔧 Wartungseinheit</div>
                             <div onclick="addFactoryDevice('valve_pneu')">🔀 Wegeventil</div>
                             <div onclick="addFactoryDevice('throttle')">🔩 Drosselrückschlagventil</div>
+                            <div style="color:#78909c;font-size:10px;padding:2px 12px 4px;">Betätigung des Wegeventils (Taster, Hebel, Rolle, Steuerdruck …): Rechtsklick</div>
+                            <div class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-pneu-sperr');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'Sperr- und Stromventile';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ Sperr- und Stromventile</div>
+                            <div id="menu-pneu-sperr" class="tb-inline-group" style="display:none;">
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('rueck')" title="Lässt die Luft nur in eine Richtung durch.">⏚ Rückschlagventil</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('wechsel')" title="Ausgang 2 bekommt Druck, sobald 1 ODER 1(3) Druck hat.">∨ Wechselventil (ODER)</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('zweidruck')" title="Ausgang 2 bekommt Druck, wenn 1 UND 1(3) Druck haben.">∧ Zweidruckventil (UND)</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('schnell')" title="Entlüftet den Zylinder direkt am Anschluss: fährt schneller zurück.">⇥ Schnellentlüftungsventil</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('drossel')" title="Drosselt in beide Richtungen.">⧖ Drosselventil</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('druckregel')" title="Hält den Druck hinter dem Ventil auf dem eingestellten Wert.">⇲ Druckregelventil</div>
+                            </div>
+                            <div class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-pneu-signal');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'Signal und Zeit';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ Signal und Zeit</div>
+                            <div id="menu-pneu-signal" class="tb-inline-group" style="display:none;">
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('zeit')" title="Schaltet nach der eingestellten Zeit, wenn der Steuerdruck ansteht.">⏱ Zeitglied (Verzögerung)</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('folge')" title="Schaltet, sobald der Steuerdruck den eingestellten Wert erreicht.">⇧ Folgeventil (Druckzuschaltung)</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('dschalter')" title="Meldet einen Druck als Eingang an die Steuerung (pneumatisch → elektrisch).">📟 Druckschalter</div>
+                            </div>
+                            <div class="tb-menu-cat-toggle" onclick="(function(h){var c=document.getElementById('menu-pneu-zubehoer');var open=c.style.display!=='none';c.style.display=open?'none':'block';h.textContent=(open?'▶ ':'▼ ')+'Anzeigen und Zubehör';adjustDropdownLayout(h.closest('.tb-dropdown'));})(this)">▶ Anzeigen und Zubehör</div>
+                            <div id="menu-pneu-zubehoer" class="tb-inline-group" style="display:none;">
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('manometer')" title="Zeigt den Druck an seinem Anschluss.">⏲ Manometer</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('daempfer')" title="Für freie Abluft. Am Wegeventil: Rechtsklick → Abluftanschlüsse.">🔇 Schalldämpfer</div>
+                                <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('stopfen')" title="Verschließt einen Anschluss.">⊥ Blindstopfen</div>
+                            </div>
                             <div class="tb-menu-cat">Pneumatik-Sensoren (analog)</div>
                             <div onclick="addFactoryDevice('pressure_sensor_pneu')" title="Drucksensor mit Anzeige: 0 … 10 bar, Analogausgang 0 … 10 V an einen Analogeingang (EW64 …), dazu ein PNP-Schaltausgang mit Schaltpunkt und Hysterese.">🧭 Drucksensor mit Anzeige</div>
                             <div onclick="addFactoryDevice('valve_prop')" title="Proportionalventil (Stetigventil): fährt einen Zylinder stetig, 0 … 100 % = 0 … 10 V, 50 % = Mitte. Für die Lageregelung.">🎚 Proportionalventil (Zylinder)</div>
@@ -31639,6 +31661,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             },
+            // Fluidplan-Teil (fluidplan.js): Ventile mit Taster, Hebel, Pedal, Rolle oder
+            // Steuerdruck, Rückschlag-, Wechsel-, Zweidruckventil, Zeitglied … mit dem
+            // Symbol und den Anschlüssen des Fluidplans. Die Arbeit macht window._fp2d.
+            'pneu_fp': {
+                directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                build: function(obj, el, var1) {
+                    if (window._fp2d) return window._fp2d.build(obj, el, var1);
+                    el.className = 'f2d-obj f2d-pneu-fp';
+                    if (var1 && typeof var1 === 'object') (obj.pneu = obj.pneu || {}).fp = JSON.parse(JSON.stringify(var1));
+                    obj.width = 40; obj.height = 40; obj.useCollision = false;
+                },
+                onLoadState: function(obj, o) { if (window._fp2d) window._fp2d.onLoadState(obj, o); },
+                animate: function(obj, s) { if (window._fp2d) window._fp2d.animate(obj, s); },
+                clickSimulate: function(obj, e) { if (window._fp2d) window._fp2d.clickSimulate(obj, e); },
+                contextMenu: function(obj, ctx, save) { if (window._fp2d) window._fp2d.contextMenu(obj, ctx, save); },
+                refreshLabel: function(obj) { if (window._fp2d) window._fp2d.refreshLabel(obj); }
+            },
             'valve_pneu': {
                 directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
                 build: function(obj, el, var1, var2) {
@@ -40408,6 +40447,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let _lkValV = document.createElement('div'); _lkValV.style.cssText = 'color:#fff;font-size:11px;text-align:center;'; _lkValV.textContent = (obj.leakRate || 0) + '%';
                     _lkSldV.oninput = e => { obj.leakRate = parseInt(e.target.value); _lkValV.textContent = obj.leakRate + '%'; saveFactoryState(); };
                     _lkWrapV.appendChild(_lkSldV); _lkWrapV.appendChild(_lkValV); ctxMenu.appendChild(_lkWrapV);
+                    if (obj.type === 'valve_pneu' && typeof window._fpVentilUmbauen === 'function') {
+                        // Betätigung: Magnetspule bleibt dieses Wegeventil; Taster, Hebel, Pedal, Rolle oder
+                        // Steuerdruck machen es zu einem Ventil wie im Fluidplan (Schläuche bleiben stecken)
+                        let _btW = document.createElement('div'); _btW.style.padding = '5px 15px'; _btW.onclick = e => e.stopPropagation();
+                        _btW.innerHTML = '<div style="color:#90caf9;font-size:10px;margin-bottom:3px;">🔀 Betätigung</div>';
+                        let _btS = document.createElement('select'); _btS.style.cssText = 'width:100%;font-size:11px;';
+                        [['magnet', 'Magnetspule (VALIS-Ausgang)'], ['taster', 'Taster'], ['pilz', 'Pilztaster'], ['hebel', 'Hebel mit Raste'], ['pedal', 'Pedal'],
+                         ['rolle', 'Rollenhebel'], ['rolle_leer', 'Rollenhebel mit Leerrücklauf'], ['pneu', 'Pneumatisch (Steuerdruck)']].forEach(([v, n]) => {
+                            let op = document.createElement('option'); op.value = v; op.textContent = n; _btS.appendChild(op);
+                        });
+                        _btS.value = 'magnet';
+                        _btS.onchange = () => { const nv = _btS.value; if (nv === 'magnet') return; try { ctxMenu.style.display = 'none'; } catch (e) {} window._fpVentilUmbauen(obj, nv); };
+                        _btW.appendChild(_btS); ctxMenu.appendChild(_btW);
+                    }
                     if (obj.type === 'valve_pneu') {
                         // Abschluss der Abluftanschlüsse 3/5 – derselbe Wert wie im Fluidplan
                         let _abW = document.createElement('div'); _abW.style.padding = '5px 15px'; _abW.onclick = e => e.stopPropagation();
@@ -42903,7 +42956,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let forceRet = false;
                         // 🌟 AUTO-HEAL: Prüfen, ob das Wegeventil auf dem Spielfeld gelöscht wurde!
                         if (obj.hasPneumatics) {
-                            let valveExists = factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === obj.id);
+                            // Ventil als Fluidplan-Teil (pneu_fp): Zylinder hängt an freien Schläuchen
+                            let valveExists = factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === obj.id)
+                                || (window.pneuConnections || []).some(c => (c.aObjId === obj.id || c.bObjId === obj.id) && !c._broken);
                             if (!valveExists) {
                                 obj.hasPneumatics = false;
                                 obj.normLabel = null;
@@ -52506,6 +52561,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Port-Bezeichnungen nach DIN ISO 1219-2 (ehem. DIN 11727 / DIN 5599)
             // Ungerade: Versorgung (1) und Entlüftung (3, 5)
             // Gerade:   Arbeitsanschlüsse (2 = A-Seite, 4 = B-Seite)
+            // Fluidplan-Teil (Ventile mit beliebiger Betätigung, Rückschlag-, Wechselventil …)
+            if (obj.type === 'pneu_fp') return typeof window._fpPorts2D === 'function' ? window._fpPorts2D(obj) : [];
             if (obj.type === 'compressor') return [
                 { id:'1', label:'1', lx:80, ly:50, ptype:'pressure', rot:true }
             ];
@@ -52546,7 +52603,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         // --- Port-Layer Renderer ---
         const _HYD_TYPES  = ['hydraulic_unit','oil_tank','hydraulic_manifold','valve_hyd','throttle_hyd','check_valve_hyd','pressure_switch_hyd','manometer_hyd','accumulator_hyd'];
-        const _PNEU_TYPES = ['compressor','manifold','valve_pneu','throttle'];
+        const _PNEU_TYPES = ['compressor','manifold','valve_pneu','throttle','pneu_fp'];
 
         function _updatePortLayer(system, defsFn, layerId) {
             const _facDoc = (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)
@@ -77995,6 +78052,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114t"></script>
+<script src="fluidplan.js?v=20261114u"></script>
 </body>
 </html>

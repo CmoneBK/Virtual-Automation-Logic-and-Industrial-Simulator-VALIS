@@ -2635,6 +2635,15 @@
             const doppelt = v && v.isDouble;
             const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: nr + 'V1',
                 o: Object.assign({}, TYP.ventil.optionen, { wege, links: 'magnet', rechts: doppelt ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: doppelt ? (o.linkedVarRet || '') : '' }) };
+            // Sauberes Bild: Der Ventilanschluss zur Kolbenseite steht genau unter Anschluss K,
+            // die Drosseln stehen aufrecht senkrecht unter ihrem Zylinderanschluss.
+            const zgeo = TYP[zt.typ].geometrie(zt), vgeo = TYP.ventil.geometrie(vt);
+            const zpx = pid => x + zgeo.ports.find(p => p.id === pid).x;
+            const vK = vgeo.ports.find(p => p.id === (dw ? '4' : '2'));
+            if (vK) vt.x = zpx('K') - vK.x;
+            // Quelle senkrecht unter dem Anschluss 1 des ersten Ventils
+            const v1 = vgeo.ports.find(p => p.id === '1');
+            if (i === 0 && v1) { q.x = vt.x + v1.x; q.y = 330; }
             teile.push(zt, vt);
             versorgung.push(L(q.id, '1', vt.id, '1'));
             const k = karte[o.id] = { zyl: zt.id, ventil: vt.id, ventil2d: v ? v.id : null, drv: {}, seite: { ext: [], ret: [] } };
@@ -2643,15 +2652,16 @@
             // seite: Leitungen der Kammer, die die jeweilige Bewegung antreibt (2D: Schlauch ab)
             // Schlauch in der 2D-Anlage abgezogen: Leitung zum Zylinder fehlt, beide Enden blasen ab
             const los = antrieb => !!(ab && ab[o.id] && ab[o.id][antrieb]);
-            const zuweg = (vp, zp, th, dx, rolle, antrieb) => {
+            const zuweg = (vp, zp, th, rolle, antrieb) => {
                 if (!th) { if (!los(antrieb)) k.seite[antrieb].push(L(vt.id, vp, zt.id, zp)); return; }
-                const d = { id: nid(), typ: 'drv', x: x + dx, y: 100, rot: 0, bez: nr + 'V' + (teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
+                // rot 180: Anschluss 1 oben zum Zylinder, 2 unten zum Ventil
+                const d = { id: nid(), typ: 'drv', x: zpx(zp), y: 100, rot: 180, bez: nr + 'V' + (teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
                 teile.push(d); k.drv[rolle] = { id: d.id, th: th.id };
                 k.seite[antrieb].push(L(vt.id, vp, d.id, '2'));
                 if (!los(antrieb)) k.seite[antrieb].push(L(d.id, '1', zt.id, zp));
             };
-            if (dw) { zuweg('4', 'K', thr('ret'), 10, 'ret', 'ext'); zuweg('2', 'S', thr('ext'), 90, 'ext', 'ret'); }
-            else zuweg('2', 'K', thr('ext'), 10, 'ext', 'ext');
+            if (dw) { zuweg('4', 'K', thr('ret'), 'ret', 'ext'); zuweg('2', 'S', thr('ext'), 'ext', 'ret'); }
+            else zuweg('2', 'K', thr('ext'), 'ext', 'ext');
         });
         return { teile, leitungen, karte, quelle: q.id, versorgung };
     }

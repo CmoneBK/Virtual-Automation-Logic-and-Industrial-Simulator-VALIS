@@ -341,6 +341,58 @@
             if (t.o.drossel) el('line', { x1: -9, y1: 10, x2: 9, y2: -2, stroke: 'currentColor', 'stroke-width': 1, 'marker-end': 'url(#fp-pfeil)' }, g);
         }
     };
+    TYP.stopfen = {
+        name: 'Blindstopfen', buchstabe: '', ohneBez: true,
+        optionen: {},
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -12, dir: [0, -1], art: 'a', ohneNr: true }], box: [-9, -14, 9, 4] }; },
+        zeichne(t, g) {
+            // verschlossener Anschluss (DIN ISO 1219-1): Leitung endet an einem Querstrich
+            el('line', { x1: 0, y1: 0, x2: 0, y2: -12, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            el('line', { x1: -7, y1: 0, x2: 7, y2: 0, stroke: 'currentColor', 'stroke-width': 2 }, g);
+        }
+    };
+    // Abschluss eines freien Anschlusses: offen, Schalldämpfer, Drosselschalldämpfer, Blindstopfen.
+    // Im Plan sind das echte Teile an einer Leitung; die 2D-Anlage führt sie als ventil.abschluss.
+    const ABSCHLUSS = [['offen', 'offen (bläst frei ab)'], ['daempfer', 'Schalldämpfer'], ['drossel', 'Drosselschalldämpfer'], ['stopfen', 'Blindstopfen (verschlossen)']];
+    function abschlussBauen(vt, pid, a, nid) {
+        if (!a || !a.art || a.art === 'offen') return null;
+        const p = TYP[vt.typ].geometrie(vt).ports.find(q => q.id === pid); if (!p) return null;
+        const [x, y] = trafo(vt, p.x, p.y), d = trafoDir(vt, p.dir) || [0, 1];
+        const typ = a.art === 'stopfen' ? 'stopfen' : 'daempfer';
+        const rot = d[1] > 0 ? 0 : d[1] < 0 ? 180 : d[0] > 0 ? 270 : 90;
+        const abst = typ === 'stopfen' ? 40 : 46;   // unter der Beschriftung der Spulen
+        const t = { id: nid(), typ, x: x + d[0] * abst, y: y + d[1] * abst, rot, bez: '',
+            o: typ === 'daempfer' ? Object.assign({}, TYP.daempfer.optionen, { drossel: a.art === 'drossel', offen: a.art === 'drossel' ? Math.max(1, Math.min(100, zahl(a.offen, 50))) : 100 }) : {} };
+        return { t, l: { id: nid(), a: { t: vt.id, p: pid }, b: { t: t.id, p: '1' } } };
+    }
+    // Was hängt an diesem Anschluss? null = eine richtige Leitung (kein Abschluss)
+    function abschlussVon(vt, pid) {
+        const ls = plan.leitungen.filter(l => (l.a.t === vt.id && l.a.p === pid) || (l.b.t === vt.id && l.b.p === pid));
+        if (!ls.length) return { art: 'offen' };
+        if (ls.length > 1) return null;
+        const l = ls[0], ot = l.a.t === vt.id && l.a.p === pid ? l.b.t : l.a.t;
+        const t = plan.teile.find(q => q.id === ot); if (!t) return null;
+        if (t.typ === 'stopfen') return { art: 'stopfen', teil: t.id, leitung: l.id };
+        if (t.typ === 'daempfer') return t.o.drossel ? { art: 'drossel', offen: zahl(t.o.offen, 100), teil: t.id, leitung: l.id } : { art: 'daempfer', teil: t.id, leitung: l.id };
+        return null;
+    }
+    function abschlussSetzen(vt, pid, a) {
+        const alt = abschlussVon(vt, pid); if (!alt) return false;
+        if (alt.art === (a && a.art || 'offen') && (alt.art !== 'drossel' || alt.offen === zahl(a.offen, 50))) return false;
+        if (alt.teil) { plan.teile = plan.teile.filter(q => q.id !== alt.teil); plan.leitungen = plan.leitungen.filter(l => l.id !== alt.leitung); }
+        const n = abschlussBauen(vt, pid, a, neueId);
+        if (n) { plan.teile.push(n.t); plan.leitungen.push(n.l); }
+        return true;
+    }
+    // Abluftanschluss der 2D-Anlage → Anschluss im Plan. Die 2D-Anlage schaltet beim Ausfahren
+    // 1→2 und entlüftet 2 über 3; im Plan (ISO 5599) liegt der Kolbenraum an 4 mit Abluft 5.
+    const planAbluft = (vt, p2d) => /^5/.test(vt.o.wege || '') ? ({ '3': '5', '5': '3' })[p2d] : p2d;
+    // Abschlüsse der Abluftanschlüsse eines Planventils in der Form der 2D-Anlage
+    function abschluss2D(vt, ports) {
+        const ab = {};
+        for (const pid of ports) { const a = abschlussVon(vt, planAbluft(vt, pid)); if (a && a.art !== 'offen') ab[pid] = a.art === 'drossel' ? { art: 'drossel', offen: a.offen } : { art: a.art }; }
+        return Object.keys(ab).length ? ab : null;
+    }
     TYP.knoten = {
         name: 'Verbindung', buchstabe: '', ohneBez: true,
         optionen: {},
@@ -572,6 +624,7 @@
             { name: 'Druckregelventil', typ: 'druckregel' },
             { name: 'Manometer', typ: 'manometer' },
             { name: 'Schalldämpfer', typ: 'daempfer' },
+            { name: 'Blindstopfen', typ: 'stopfen' },
             { name: 'Verbindung (T-Stück)', typ: 'knoten' }
         ] },
         { kat: 'Antriebe', teile: [
@@ -899,7 +952,7 @@
         k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
         k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; } if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
         h('span', { class: 'fp-trenner' }, leiste);
-        k('🏭 2D-Anlage: aus', 'Plan mit der 2D-Anlage verbinden: Zylinder, Stellglieder, Drosseln und Versorgung entstehen dort als 2D-Teile, der Auto-Schaltplan passt dann zum Fluidplan. Eine Wahrheit: geändert wird nur hier.', anlageUmschalten, 'fp-anlage');
+        k('🏭 2D-Anlage: aus', 'Plan mit der 2D-Anlage verbinden: Zylinder, Stellglieder, Drosseln und Versorgung entstehen dort als 2D-Teile, der Auto-Schaltplan passt dann zum Fluidplan. Eine Wahrheit: Änderungen hier, in der 2D-Anlage und im Auto-Schaltplan gleichen sich gegenseitig ab.', anlageUmschalten, 'fp-anlage');
         k('⇐ Aus 2D-Anlage', 'Pneumatik der 2D-Anlage als Startplan übernehmen (ersetzt den Plan)', () => { const n = ausAnlage(); if (n) status(n + ' Zylinder aus der 2D-Anlage übernommen.'); });
         h('span', { class: 'fp-trenner' }, leiste);
         k('▶ Simulation', 'Simulation starten/stoppen (wie der Knopf oben rechts). Beim Start beginnt der Plan in der Grundstellung.', () => { if (typeof window.toggleSimulation === 'function') window.toggleSimulation(); }, 'fp-sim');
@@ -1543,6 +1596,19 @@
                 if (t.o.rechts === 'rolle_leer') wahl('betätigt beim', 'richtR', [['aus', 'Ausfahren'], ['ein', 'Einfahren']]);
             }
             const st = ventilStellungen(t.o);
+            // Freie Anschlüsse: was kommt dran?
+            for (const p of geo(t).ports) {
+                if (p.art === 's') continue;
+                const a = abschlussVon(t, p.id); if (!a) continue;
+                const s2 = fld('Anschluss ' + p.id + (p.art === 'r' ? ' (Abluft)' : p.art === 'v' ? ' (Versorgung)' : ' (Arbeitsanschluss)') + ': Abschluss', h('select'));
+                for (const [v2, n2] of ABSCHLUSS) h('option', { value: v2, text: n2 }, s2);
+                s2.value = a.art;
+                s2.onchange = () => setze(() => { abschlussSetzen(t, p.id, { art: s2.value, offen: a.offen || 50 }); });
+                if (a.art === 'drossel') {
+                    const i2 = fld('Drosselschalldämpfer ' + p.id + ': Öffnung (%)', h('input', { type: 'number', min: 1, max: 100, value: a.offen }));
+                    i2.onchange = () => setze(() => { const d = teil(a.teil); if (d) d.o.offen = Math.max(1, Math.min(100, zahl(i2.value, 50))); });
+                }
+            }
             h('div', { class: 'fp-hinw', html: `Steueranschlüsse heißen nach ISO 5599-3 so, wie sie das Ventil schalten: links <b>${steuerNummer(st[0])}</b>, rechts <b>${steuerNummer(st[st.length - 1])}</b>. ` + (t.o.rechts !== 'feder' && t.o.wege !== '5/3' ? 'Ohne Feder bleibt das Ventil in der zuletzt geschalteten Stellung (Impulsventil).' : '') }, box);
         } else if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') {
             num('Kolbendurchmesser', 'd', 8, 200, 1, 'mm');
@@ -1602,7 +1668,7 @@
             const n = t.bez || TYP[t.typ].name;
             for (const p of geo(t).ports) {
                 if (belegt.has(t.id + ':' + p.id)) continue;
-                if (p.art === 'r' || t.typ === 'daempfer') continue;
+                if (p.art === 'r' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
                 if (t.typ === 'knoten') { meld.push(`Verbindungspunkt ohne Leitung`); continue; }
                 if (p.art === 's') meld.push(`${n}: Steueranschluss ${p.id} ist frei – das Ventil bekommt nie Steuerdruck.`);
                 else meld.push(`${n}: Anschluss ${p.nr || p.id} ist offen – hier bläst Luft ab.`);
@@ -1841,7 +1907,7 @@
         for (const t of plan.teile) for (const p of geo(t).ports) {
             const k = t.id + ':' + p.id;
             if (anzahl[k]) continue;
-            if (t.typ === 'knoten' || t.typ === 'daempfer') continue;
+            if (t.typ === 'knoten' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
             if (t.typ === 'quelle' || t.typ === 'manometer' || t.typ === 'dschalter') continue;
             if (p.art === 's') continue; // freier Steueranschluss: kein Druck
             netze[netzVon[k]].offen.push({ t: t.id, p: p.id, g: p.art === 'r' ? G_VENTIL : G_VENTIL * 0.8 });
@@ -2532,12 +2598,88 @@
     // statt beim nächsten Abgleich still überschrieben zu werden.
     const spiegel = new Map();
     let rueckZeit = 0;
+    // DRV in die Leitung zwischen Zylinderanschluss und Ventil setzen (1 zum Zylinder: Abluftdrosselung)
+    function drvEinsetzen(zt, port, offen) {
+        const l = plan.leitungen.find(q => (q.a.t === zt.id && q.a.p === port) || (q.b.t === zt.id && q.b.p === port));
+        if (!l) return;
+        const an = l.a.t === zt.id && l.a.p === port ? l.b : l.a;
+        const ot = teil(an.t); if (!ot) return;
+        const A = portLage(zt, port), B = portLage(ot, an.p); if (!A || !B) return;
+        const d = { id: neueId(), typ: 'drv', x: snap(A.x), y: snap((A.y + B.y) / 2), rot: A.y <= B.y ? 180 : 0, bez: neueBezeichnung('drv'), o: Object.assign({}, TYP.drv.optionen, { offen: Math.max(1, Math.min(100, offen)) }) };
+        plan.teile.push(d);
+        plan.leitungen = plan.leitungen.filter(q => q.id !== l.id);
+        plan.leitungen.push({ id: neueId(), a: { t: an.t, p: an.p }, b: { t: d.id, p: '2' } }, { id: neueId(), a: { t: d.id, p: '1' }, b: { t: zt.id, p: port } });
+    }
+    function drvEntfernen(id) {
+        const an = pid => plan.leitungen.filter(q => (q.a.t === id && q.a.p === pid) || (q.b.t === id && q.b.p === pid));
+        const l1 = an('1'), l2 = an('2');
+        const ende = (l, pid) => l.a.t === id && l.a.p === pid ? l.b : l.a;
+        plan.teile = plan.teile.filter(q => q.id !== id);
+        plan.leitungen = plan.leitungen.filter(q => q.a.t !== id && q.b.t !== id);
+        if (l1.length === 1 && l2.length === 1) {
+            const x = ende(l1[0], '1'), y = ende(l2[0], '2');
+            plan.leitungen.push({ id: neueId(), a: { t: y.t, p: y.p }, b: { t: x.t, p: x.p } });
+        }
+    }
+    const ventilTyp2D = q => q.isTriple ? 'triple' : q.isDouble ? 'double' : 'single';
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage || !spiegel.size) return;
         const neu = []; let masse = false;
         for (const [id, w] of spiegel) {
             const o = F.find(q => q.id === id); if (!o) continue;
+            if (w.ventil) {
+                const vt = plan.teile.find(q => q.id === w.ventil); if (!vt) continue;
+                const typ = ventilTyp2D(o);
+                if (typ !== w.typ) {
+                    // Ventiltyp in der 2D-Anlage oder im Auto-Schaltplan geändert (5/2 ↔ 5/3, Impuls ↔ Feder)
+                    masse = true; w.typ = typ;
+                    neu.push(() => {
+                        if (typ === 'triple') { vt.o.wege = '5/3'; if (vt.o.rechts === 'feder') vt.o.rechts = 'magnet'; }
+                        else {
+                            if (vt.o.wege === '5/3') vt.o.wege = '5/2';
+                            if (typ === 'double' && vt.o.rechts === 'feder') vt.o.rechts = 'magnet';
+                            if (typ === 'single' && vt.o.wege !== '3/2') vt.o.rechts = 'feder';
+                        }
+                        if (vt.o.rechts === 'magnet' && !vt.o.varR) vt.o.varR = o.linkedVarRet || '';
+                    });
+                }
+                const now = JSON.stringify(o.abschluss || null);
+                if (now !== w.ab) {
+                    masse = true; w.ab = now;
+                    neu.push(() => { for (const pid of ['3', '5']) { const pp = planAbluft(vt, pid); if (geo(vt).ports.some(p => p.id === pp)) abschlussSetzen(vt, pp, (o.abschluss || {})[pid] || { art: 'offen' }); } });
+                }
+                continue;
+            }
+            if (w.quelle) {
+                const qu = plan.teile.find(q => q.id === w.quelle);
+                if (qu && o.pressure != null && o.pressure !== w.p) { w.p = o.pressure; masse = true; neu.push(() => { qu.o.p = o.pressure; }); }
+                continue;
+            }
             const t = plan.teile.find(q => q.id === w.teil); if (!t) continue;
+            if (w.dr) {
+                const dw = t.typ === 'zyl_dw';
+                // Spulen-Variablen
+                const ext = dw ? o.linkedVarExt || '' : o.linkedVar || o.linkedVarExt || '', ret = dw ? o.linkedVarRet || '' : '';
+                const vt = w.vt && plan.teile.find(q => q.id === w.vt);
+                if (vt && (ext !== w.ext || ret !== w.ret)) {
+                    w.ext = ext; w.ret = ret;
+                    neu.push(() => {
+                        const [l, r] = w.linksExt ? [ext, ret] : [ret, ext];
+                        if (vt.o.links === 'magnet') vt.o.varL = l;
+                        if (vt.o.rechts === 'magnet') vt.o.varR = r;
+                    });
+                }
+                // Drosseln in der 2D-Anlage eingebaut oder entfernt
+                for (const rolle of ['ext', 'ret']) {
+                    if (rolle === 'ret' && !dw) continue;
+                    const th = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
+                    if (!!th === w.dr[rolle]) continue;
+                    w.dr[rolle] = !!th; masse = true;
+                    const port = !dw || rolle === 'ret' ? 'K' : 'S';
+                    if (th) neu.push(() => drvEinsetzen(t, port, th.opening != null ? th.opening : 50));
+                    else if (w.drT[rolle]) { const id = w.drT[rolle]; neu.push(() => drvEntfernen(id)); }
+                }
+            }
             if (w.offen != null) { if (o.opening != null && o.opening !== w.offen) neu.push(() => { t.o.offen = o.opening; }); }
             else if (o.pistonD !== w.d || o.rodD !== w.ds || o.stroke !== w.hub) { masse = true; neu.push(() => { t.o.d = o.pistonD || 20; t.o.dStange = o.rodD || t.o.dStange; t.o.hub = o.stroke || 100; }); }
         }
@@ -2568,11 +2710,11 @@
             const drExtT = quelleVon(K && K.zu, K && K.zuT, S && S.ab, S && S.abT);
             const drRetT = dw ? quelleVon(K && K.ab, K && K.abT, S && S.zu, S && S.zuT) : null;
             // Variablen der Spulen: Seite, die den Kolbenraum belüftet = Ausfahren
-            let ext = '', ret = '';
+            let ext = '', ret = '', linksExt = true;
             if (v) {
                 const linksBeluftetK = K && K.ventil && K.ventil === v ? K.port === '4' || v.o.wege === '3/2' || v.o.wege === '2/2' : !(S && S.port === '4');
                 const vl = v.o.links === 'magnet' ? v.o.varL || '' : '', vr = v.o.rechts === 'magnet' ? v.o.varR || '' : '';
-                ext = linksBeluftetK ? vl : vr; ret = linksBeluftetK ? vr : vl;
+                ext = linksBeluftetK ? vl : vr; ret = linksBeluftetK ? vr : vl; linksExt = linksBeluftetK;
             }
             const wahl = !v ? 'single' : v.o.wege === '5/3' ? 'triple' : (v.o.links !== 'feder' && v.o.rechts !== 'feder') ? 'double' : 'single';
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
@@ -2604,6 +2746,10 @@
             if (!o.hasPneumatics && typeof window.generatePneumaticSetup === 'function') { try { window.generatePneumaticSetup(o, wahl, { drosseln: { ext: drExt != null, ret: drRet != null } }); } catch (e) { console.warn('Fluidplan → 2D', e); } }
             ventil = F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id);
             if (ventil) { ventil.linkedVarExt = o.linkedVarExt; ventil.linkedVarRet = o.linkedVarRet; }
+            if (ventil && v) {
+                ventil.abschluss = abschluss2D(v, ventil.isDouble ? ['3', '5'] : ['3']);
+                spiegel.set(ventil.id, { ventil: v.id, ab: JSON.stringify(ventil.abschluss || null), typ: ventilTyp2D(ventil) });
+            }
             const dr = (rolle, wert) => {
                 const th = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
                 if (!th || wert == null) return;
@@ -2615,12 +2761,17 @@
             dr('ext', drExt);
             dr('ret', drRet);
             // Spiegel: was der Plan in die 2D-Anlage geschrieben hat
-            spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke });
+            spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke, vt: v ? v.id : null, linksExt,
+                ext: dw ? o.linkedVarExt || '' : o.linkedVar || '', ret: dw ? o.linkedVarRet || '' : '',
+                dr: { ext: drExt != null, ret: drRet != null }, drT: { ext: drExtT, ret: drRetT } });
             for (const [rolle, wt] of [['ext', drExtT], ['ret', drRetT]]) {
                 const th = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
                 if (th && wt) spiegel.set(th.id, { teil: wt, offen: th.opening });
             }
         }
+        // Druck der Quelle = Druck des Kompressors
+        const komp = F.find(q => q.type === 'compressor'), qu = plan.teile.find(q => q.typ === 'quelle');
+        if (komp && qu) { komp.pressure = zahl(qu.o.p, 6); spiegel.set(komp.id, { quelle: qu.id, p: komp.pressure }); }
         // Vom Plan erzeugte 2D-Zylinder, die es im Plan nicht mehr gibt, wieder entfernen
         plan.erzeugt = plan.erzeugt.filter(id => {
             if (benutzt.has(id)) return true;
@@ -2676,6 +2827,11 @@
             };
             if (dw) { zuweg('4', 'K', thr('ret'), 'ret', 'ext'); zuweg('2', 'S', thr('ext'), 'ext', 'ret'); }
             else zuweg('2', 'K', thr('ext'), 'ext', 'ext');
+            // Abschlüsse der Abluftanschlüsse (Schalldämpfer, Blindstopfen …) aus der 2D-Anlage
+            if (v && v.abschluss) for (const pid of ['3', '5']) {
+                const n = v.abschluss[pid] && abschlussBauen(vt, planAbluft(vt, pid), v.abschluss[pid], nid);
+                if (n) { teile.push(n.t); leitungen.push(n.l); }
+            }
         });
         return { teile, leitungen, karte, quelle: q.id, versorgung };
     }
@@ -2728,7 +2884,7 @@
             const tR = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ret');
             const ab = (vp, th, cp) => th ? (pneuAb(v, vp, th, '2') || pneuAb(th, '1', o, cp)) : pneuAb(v, vp, o, cp);
             return [o.id, o.type, o.pistonD, o.rodD, o.stroke, v && v.id, v && v.isDouble, v && v.isTriple, tE && tE.id, tR && tR.id,
-                ab('2', tE, '1'), o.type !== 'zylinder_single' && ab('4', tR, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0].join(',');
+                ab('2', tE, '1'), o.type !== 'zylinder_single' && ab('4', tR, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0, v && JSON.stringify(v.abschluss || null)].join(',');
         };
         const versorgungAb = pneuAb(comp, '1', mf, '1') || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
         const sig = (comp ? comp.id : '-') + '|' + versorgungAb + '|' + zyl.map(lage).join('|');
@@ -2844,6 +3000,7 @@
         exportieren: planExport,
         importieren: planImport,
         plan: () => kopie(plan),
+        _schatten: () => schatten,
         // Für Prüfungen und die Brücke
         zustand: () => sim ? {
             zeit: sim.zeit,

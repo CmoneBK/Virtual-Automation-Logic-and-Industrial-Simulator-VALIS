@@ -27568,6 +27568,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'analog_band':     return 'Regelgröße einregeln';
                 case 'regler_parameter': return 'Regler einstellen';
                 case 'custom_js':       return 'Bedingung erfüllen';
+                case 'fluid_fehler':    return 'Fehler im Fluidplan finden';
                 default:                return cond.type;
             }
         }
@@ -27589,6 +27590,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'analog_band':     return `${cond.variable} bleibt ${cond.seconds || 10} s in ${cond.sollwert} ± ${cond.tol || 1}`;
                 case 'regler_parameter': return `${cond.variable}: ` + ['kp', 'tn', 'tv'].filter(k => cond[k + 'Min'] != null || cond[k + 'Max'] != null).map(k => `${k.toUpperCase()} ${cond[k + 'Min'] != null ? cond[k + 'Min'] : '…'} … ${cond[k + 'Max'] != null ? cond[k + 'Max'] : '…'}`).join(', ');
                 case 'custom_js':       return cond.expression || '(JS)';
+                case 'fluid_fehler':    return 'Fluidplan: alle versteckten Fehler gefunden';
                 default:                return '';
             }
         }
@@ -28376,6 +28378,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'sps_merker':      return window._isMerkerVar(cond.variable) && spsState[cond.variable] === cond.value;
                     case 'variable_exists': return (globalInputs||[]).includes(cond.variable) || (globalOutputs||[]).includes(cond.variable);
                     case 'code_contains':   return new RegExp(cond.pattern).test(document.getElementById('code').value);
+                    case 'fluid_fehler':    return !!(window.Fluidplan && window.Fluidplan.fehlerGefunden());
                     case 'component_type':  return (componentTypes[cond.variable] || 'taster') === cond.compType;
                     case 'logic_equivalent': {
                         const _refCode = (cond.refCode || '').trim();
@@ -28639,6 +28642,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             { value:'component_type',  group:'Aufbau & Zuordnung',    label:'Variable hat einen bestimmten Bauteiltyp' },
             { value:'factory_object',  group:'Aufbau & Zuordnung',    label:'Fabrikobjekt ist mit Variable verknüpft' },
             { value:'festo_train',     group:'Aufbau & Zuordnung',    label:'Steckaufbau (Trainingsmodus) abgeschlossen' },
+            { value:'fluid_fehler',    group:'Aufbau & Zuordnung',    label:'Fluidplan: alle versteckten Fehler gefunden', nurFluidplan: true },
             // Analogwerte & Regler
             { value:'analog_wert',     group:'Analogwerte & Regler',  label:'Analogwert ist größer/kleiner/etwa gleich' },
             { value:'analog_band',     group:'Analogwerte & Regler',  label:'Regelgröße bleibt X s im Toleranzband' },
@@ -28660,6 +28664,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             despawner_count: 'Erfüllt, wenn seit Aufgabenstart mindestens die angegebene Anzahl Werkstücke von einem Despawner (Auswerfer/Ziel) verarbeitet (entfernt) wurde. Nützlich als Funktionsnachweis: Ist die Anlage gesperrt und enthält Despawner, belegt eine erreichte Teile-Zahl, dass die selbst gebaute Steuerungslogik tatsächlich funktioniert.',
             component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
             factory_object:  'Erfüllt, wenn in der 2D-Anlage ein Objekt des gewählten Bauteils steht, das mit der angegebenen Variable verknüpft ist (Rechtsklick auf das Objekt → Variable zuweisen).',
+            fluid_fehler:    'Erfüllt, sobald im Fluidplan alle versteckten Fehler gemeldet und per „Befund prüfen“ bestätigt sind. Die Fehler baut die Lehrkraft im Fluidplan ein (🔍 Fehlersuche) und speichert die Anlage als Ausgangszustand der Aufgabe.',
             festo_train:     'Erfüllt, wenn im Steckaufbau-Panel der Trainingsmodus genutzt und der komplette Aufbau erfolgreich verkabelt wurde — also alle geforderten Kabel korrekt gesteckt sind.',
             analog_wert:     'Erfüllt, wenn die Zahl-Variable (z. B. ein Analogeingang wie TEMP oder eine Stellgröße Y) während der Simulation den Vergleich erfüllt. Der Vergleichswert darf eine Zahl oder eine Variable sein. „etwa gleich“ heißt: innerhalb der Toleranz.',
             analog_band:     'Erfüllt, sobald die Regelgröße ohne Unterbrechung die angegebene Zeit (Sim-Sekunden, Zeitraffer zählt mit) im Band Sollwert ± Toleranz bleibt. Verlässt sie das Band, beginnt die Zeit neu. Einmal erreicht, bleibt die Bedingung erfüllt. Sollwert als Zahl oder Variable (z. B. SOLL).',
@@ -28868,7 +28873,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const _grpOrder = [];
             _COND_TYPES.forEach(t => { const g = t.group || ''; if (_grpOrder.indexOf(g) === -1) _grpOrder.push(g); });
             let typeOpts = _grpOrder.map(g => {
-                const opts = _COND_TYPES.filter(t => (t.group || '') === g).map(t => `<option value="${t.value}" ${cond.type===t.value?'selected':''}>${_escHtml(t.label)}</option>`).join('');
+                const _fpFrei = (() => { try { return localStorage.getItem('valisFluidplan') === '1'; } catch (e) { return false; } })();
+                const opts = _COND_TYPES.filter(t => (t.group || '') === g && (!t.nurFluidplan || _fpFrei || cond.type === t.value)).map(t => `<option value="${t.value}" ${cond.type===t.value?'selected':''}>${_escHtml(t.label)}</option>`).join('');
                 return g ? `<optgroup label="${_escHtml(g)}">${opts}</optgroup>` : opts;
             }).join('');
             const hintEnabled = (cond.hintEnabled === undefined) ? true : !!cond.hintEnabled;
@@ -29636,6 +29642,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 component_type:  '{ "variable": "A_MOTOR", "compType": "motor" }',
                 factory_object:  '{ "objectType": "conveyor", "linkedVar": "A_BAND" }',
                 festo_train:     '{ }',
+                fluid_fehler:    '{ }',
                 analog_wert:     '{ "variable": "TEMP", "op": ">=", "value": 45, "tol": 1 }',
                 analog_band:     '{ "variable": "OELTEMP", "sollwert": 45, "tol": 2, "seconds": 60 }',
                 regler_parameter:'{ "variable": "VENTIL", "kpMin": 4, "kpMax": 12, "tnMin": 200, "tnMax": 900 }',
@@ -29643,7 +29650,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             let condBlock = '';
             try {
-                condBlock = _COND_TYPES.map(function (ct) {
+                condBlock = _COND_TYPES.filter(function (ct) { return !ct.nurFluidplan; }).map(function (ct) {
                     const spec = _condFieldSpec[ct.value] || '{ ... }';
                     const expl = String(_COND_EXPLAIN[ct.value] || '').replace(/\s+/g, ' ').trim();
                     return '• ' + ct.value + '  ' + spec + (expl ? '\n    ' + expl : '');
@@ -77730,6 +77737,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114c"></script>
+<script src="fluidplan.js?v=20261114d"></script>
 </body>
 </html>

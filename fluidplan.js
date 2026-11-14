@@ -873,9 +873,10 @@
         h('span', { class: 'fp-trenner' }, leiste);
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
-        if (window._fpFehlersuche) k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
+        k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess');
+        k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
         k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
-        k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
+        k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; } if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
         h('span', { class: 'fp-trenner' }, leiste);
         k('🏭 2D-Anlage: aus', 'Plan mit der 2D-Anlage verbinden: Zylinder, Stellglieder, Drosseln und Versorgung entstehen dort als 2D-Teile, der Auto-Schaltplan passt dann zum Fluidplan. Eine Wahrheit: geändert wird nur hier.', anlageUmschalten, 'fp-anlage');
         k('⇐ Aus 2D-Anlage', 'Pneumatik der 2D-Anlage als Startplan übernehmen (ersetzt den Plan)', () => { const n = ausAnlage(); if (n) status(n + ' Zylinder aus der 2D-Anlage übernommen.'); });
@@ -898,6 +899,7 @@
         ebLeitungen = el('g', {}, welt);
         ebTeile = el('g', {}, welt);
         ebUi = el('g', {}, welt);
+        ebMess = el('g', { class: 'fp-messen' }, welt);
         const eigen = h('div', { class: 'fp-eigen', id: 'fp-eigen' }, haupt);
         void eigen;
         diagBox = h('div', { class: 'fp-diag', id: 'fp-diag' }, fenster);
@@ -1040,11 +1042,32 @@
             const tt = teil(tid); if (!tt || tt.typ === 'knoten') continue;
             const pl = portLage(tt, pid); if (pl) el('circle', { cx: pl.x, cy: pl.y, r: 3.2, fill: 'currentColor' }, ebLeitungen);
         }
+        fehlerMarken();
         ansichtSetzen();
         eigenschaften();
         knopfZustand();
         status();
         darstellen();
+    }
+    // Fehlersuche: Lehrkraft sieht die Fehler (rot), Lernende ihre Meldungen (orange)
+    // und gefundene Fehler (grün)
+    function fehlerMarken() {
+        const markiere = (key, farbe, text) => {
+            let b;
+            if (key.startsWith('L:')) {
+                const l = plan.leitungen.find(q => 'L:' + q.id === key); const pts = l && leitungPunkte(l); if (!pts) return;
+                el('path', { d: 'M' + pts.map(p => p.join(',')).join(' L'), fill: 'none', stroke: farbe, 'stroke-width': 6, opacity: 0.35, 'pointer-events': 'none' }, ebUi);
+                const m = pts[Math.floor(pts.length / 2)]; b = [m[0] - 4, m[1] - 4, m[0] + 4, m[1] + 4];
+            } else {
+                const t = teil(key); if (!t) return;
+                b = boxWelt(t);
+                el('rect', { x: b[0] - 4, y: b[1] - 4, width: b[2] - b[0] + 8, height: b[3] - b[1] + 8, rx: 5, fill: 'none', stroke: farbe, 'stroke-width': 2, 'stroke-dasharray': '5 3', 'pointer-events': 'none' }, ebUi);
+            }
+            if (text) { const e = el('text', { x: b[0], y: b[3] + 14, 'font-size': 10, 'font-weight': 'bold', fill: farbe, 'pointer-events': 'none' }, ebUi); e.textContent = text; }
+        };
+        if (!plan.fehlersuche) { for (const k of Object.keys(plan.fehler || {})) markiere(k, '#d32f2f', '⚡ ' + fehlerName(k)); return; }
+        for (const k of plan.verdacht || []) markiere(k, '#ff6f00', '? Verdacht');
+        for (const k of plan.behoben || []) if ((plan.fehler || {})[k]) markiere(k, '#2e7d32', '✓ ' + fehlerName(k));
     }
     function boxWelt(t) {
         const b = geo(t).box;
@@ -1146,6 +1169,10 @@
                 svg.setPointerCapture(e.pointerId); return;
             }
             const ziel = e.target;
+            if (messModus || (ziel.closest && ziel.closest('.fp-messgeraet'))) {
+                const lt1 = ziel.getAttribute && ziel.getAttribute('data-l');
+                if (messKlick(lt1, wx, wy, ziel)) return;
+            }
             // Fehlersuche: Klick auf Bauteil/Leitung = Verdacht melden (Handbetätiger bleiben bedienbar)
             if (plan.fehlersuche && fehlerAnzahl() && !(ziel.closest && ziel.closest('.fp-hand') && simLaeuft())) {
                 const lt0 = ziel.getAttribute && ziel.getAttribute('data-l');
@@ -1378,6 +1405,7 @@
     }
     function tasten(e) {
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
+        if (plan.fehlersuche && fehlerAnzahl()) return;   // Fehlersuche: Plan bleibt unverändert
         const strg = e.ctrlKey || e.metaKey;
         if (e.key === 'Delete' || e.key === 'Backspace') { auswahlLoeschen(); e.preventDefault(); }
         else if (e.key === 'r' || e.key === 'R') { drehen(90); e.preventDefault(); }
@@ -1392,6 +1420,7 @@
     // Aus der Palette ziehen
     function paletteZiehen(e, v) {
         if (simLaeuft()) { status('Während der Simulation lässt sich der Plan nicht ändern.'); return; }
+        if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; }
         e.preventDefault();
         const geist = h('div', { style: 'position:fixed;pointer-events:none;z-index:9999;background:#fff;border:1px solid #ff6f00;border-radius:4px;padding:2px 6px;font-size:11px;color:#263238', text: v.name }, document.body);
         const bewege = ev => { geist.style.left = ev.clientX + 8 + 'px'; geist.style.top = ev.clientY + 8 + 'px'; };
@@ -1618,8 +1647,50 @@
         else if (werkzeug === 'loeschen') f.innerHTML = '<b>Löschen</b> · Bauteil oder Leitung anklicken';
         else f.innerHTML = `${plan.teile.length} Bauteile, ${plan.leitungen.length} Leitungen · Leitung: von Anschluss zu Anschluss ziehen · Doppelklick: Eigenschaften`;
     }
+
+    // ------------------------------------------------------------
+    // Messen: Manometer an eine Leitung anstecken (bleibt, bis man es abzieht)
+    // ------------------------------------------------------------
+    let ebMess = null, messModus = false, messpunkte = [];
+    const MESS_MAX = 3;
+    function messUmschalten() {
+        messModus = !messModus;
+        const b = document.getElementById('fp-mess'); if (b) b.classList.toggle('an', messModus);
+        status(messModus ? `<b>Messen</b>: Leitung anklicken steckt ein Manometer an (höchstens ${MESS_MAX}), Klick aufs Manometer zieht es ab.` : '');
+    }
+    function messKlick(lt, wx, wy, ziel) {
+        const m = ziel && ziel.closest && ziel.closest('.fp-messgeraet');
+        if (m) { messpunkte.splice(+m.getAttribute('data-i'), 1); messDarstellen(); return true; }
+        if (!lt) return false;
+        const l = plan.leitungen.find(q => q.id === lt); const pts = l && leitungPunkte(l); if (!pts) return false;
+        const tr = naechstesSegment(pts, wx, wy), a = pts[tr], b = pts[tr + 1];
+        const x = a[1] === b[1] ? Math.max(Math.min(a[0], b[0]), Math.min(Math.max(a[0], b[0]), wx)) : a[0];
+        const y = a[1] === b[1] ? a[1] : Math.max(Math.min(a[1], b[1]), Math.min(Math.max(a[1], b[1]), wy));
+        if (messpunkte.length >= MESS_MAX) messpunkte.shift();
+        messpunkte.push({ l: lt, x, y });
+        messDarstellen(); return true;
+    }
+    function messDarstellen() {
+        if (!ebMess) return;
+        ebMess.innerHTML = '';
+        messpunkte = messpunkte.filter(m => plan.leitungen.some(l => l.id === m.l));
+        messpunkte.forEach((m, i) => {
+            const l = plan.leitungen.find(q => q.id === m.l);
+            const n = sim ? sim.netzVon[l.a.t + ':' + l.a.p] : null;
+            const p = n != null ? Math.max(0, druckVon(n)) : 0;
+            const g = el('g', { class: 'fp-messgeraet', 'data-i': i, transform: `translate(${m.x},${m.y})`, style: 'cursor:pointer' }, ebMess);
+            el('line', { x1: 0, y1: 0, x2: 0, y2: -14, stroke: '#263238', 'stroke-width': 1.4 }, g);
+            el('circle', { cx: 0, cy: 0, r: 2.6, fill: '#263238' }, g);
+            el('circle', { cx: 0, cy: -27, r: 13, fill: '#fff', stroke: '#263238', 'stroke-width': 1.6 }, g);
+            const w = Math.min(10, p) / 10 * 270 - 135, r = w * Math.PI / 180;
+            el('line', { x1: 0, y1: -27, x2: Math.sin(r) * 10, y2: -27 - Math.cos(r) * 10, stroke: '#d32f2f', 'stroke-width': 1.6 }, g);
+            el('rect', { x: -25, y: -58, width: 50, height: 16, rx: 3, fill: '#263238' }, g);
+            const t = el('text', { x: 0, y: -46.5, 'text-anchor': 'middle', 'font-size': 10.5, 'font-family': 'monospace', fill: '#fff' }, g);
+            t.textContent = sim ? p.toFixed(2).replace('.', ',') + ' bar' : '– bar';
+        });
+    }
     function hoverStatus(e) {
-        if (!simLaeuft() || !sim) return;
+        if (!simLaeuft() || !sim || (plan.fehlersuche && fehlerAnzahl())) return;
         const lt = e.target.getAttribute && e.target.getAttribute('data-l');
         if (lt) {
             const l = plan.leitungen.find(q => q.id === lt);
@@ -1659,7 +1730,7 @@
         for (const l of plan.leitungen) {
             const a = l.a.t + ':' + l.a.p, b = l.b.t + ':' + l.b.p;
             if (vater[a] == null || vater[b] == null) continue;
-            vereine(a, b);
+            if (fehlerAktiv('L:' + l.id) !== 'zu') vereine(a, b);
             anzahl[a] = (anzahl[a] || 0) + 1; anzahl[b] = (anzahl[b] || 0) + 1;
         }
         const netzVon = {}, netze = [];
@@ -1680,6 +1751,8 @@
             if (p.art === 's') continue; // freier Steueranschluss: kein Druck
             netze[netzVon[k]].offen.push({ t: t.id, p: p.id, g: p.art === 'r' ? G_VENTIL : G_VENTIL * 0.8 });
         }
+        // Undichte Leitungen blasen ab
+        for (const l of plan.leitungen) if (fehlerAktiv('L:' + l.id) === 'leck') { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].offen.push({ t: l.a.t, p: l.a.p, g: G_VENTIL * 0.6 }); }
         const zust = {};
         for (const t of plan.teile) {
             const z = { };
@@ -1735,6 +1808,9 @@
     function betaetigt(t, z, seite, aktuell) {
         const b = seite === 'L' ? t.o.links : t.o.rechts;
         if (b === 'feder') return false;
+        const fe = fehlerAktiv(t.id);
+        if (fe === 'spule' && b === 'magnet') return false;
+        if (fe === 'rolle' && b !== 'magnet' && b !== 'pneu') return false;
         if (b === 'magnet') {
             const v = seite === 'L' ? t.o.varL : t.o.varR;
             const s = sps();
@@ -1783,22 +1859,24 @@
                 else if (t.o.rechts === 'feder') neu = L ? 0 : 1;
                 else if (t.o.links === 'feder') neu = R ? 1 : 0;
                 else { if (L && !R) neu = 0; else if (R && !L) neu = 1; }
+                if (fehlerAktiv(t.id) === 'klemmt') neu = n === 3 ? 1 : (t.o.links === 'feder' ? 0 : n - 1);
                 if (neu !== z.stellung) { z.stellung = neu; klick(); }
             } else if (t.typ === 'zeit') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
                 const tau = Math.max(0.05, zahl(t.o.zeit, 3) / Math.LN2);
-                if (p12 > z.pr) z.pr += (p12 - z.pr) * Math.min(1, dtGesamt / tau);
+                if (fehlerAktiv(t.id) === 'zu') { /* Zeitdrossel verstopft: Speicher füllt sich nicht */ }
+                else if (p12 > z.pr) z.pr += (p12 - z.pr) * Math.min(1, dtGesamt / tau);
                 else z.pr += (p12 - z.pr) * Math.min(1, dtGesamt / 0.04);
                 const an = z.an ? z.pr > 2.5 : z.pr >= 3;
                 if (an !== z.an) { z.an = an; klick(); }
             } else if (t.typ === 'folge') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
                 const ps = zahl(t.o.p, 4);
-                const an = z.an ? p12 > ps - 0.3 : p12 >= ps;
+                const an = fehlerAktiv(t.id) === 'klemmt' ? false : z.an ? p12 > ps - 0.3 : p12 >= ps;
                 if (an !== z.an) { z.an = an; klick(); }
             } else if (t.typ === 'dschalter') {
                 const p = pPort(t, '1'), ps = zahl(t.o.p, 4);
-                z.an = z.an ? p > ps - 0.3 : p >= ps;
+                z.an = fehlerAktiv(t.id) === 'defekt' ? false : z.an ? p > ps - 0.3 : p >= ps;
                 if (t.o.var) S.schreib[t.o.var] = z.an;
             }
         }
@@ -1809,8 +1887,9 @@
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
             const z = S.zust[t.id], hub = zylHub(t), tol = Math.max(0.6, hub * 0.01);
-            if (t.o.sensH) S.schreib[t.o.sensH] = z.x <= tol;
-            if (t.o.sensV) S.schreib[t.o.sensV] = z.x >= hub - tol;
+            const tot = fehlerAktiv(t.id) === 'sensor';
+            if (t.o.sensH) S.schreib[t.o.sensH] = !tot && z.x <= tol;
+            if (t.o.sensV) S.schreib[t.o.sensV] = !tot && z.x >= hub - tol;
         }
         S.zeit += dtGesamt;
     }
@@ -1831,7 +1910,7 @@
         }
         // Quellen
         for (const t of plan.teile) {
-            if (t.typ === 'quelle') fluss(netz(t, '1'), 'Q', G_QUELLE, 0, zahl(t.o.p, 6));
+            if (t.typ === 'quelle') fluss(netz(t, '1'), 'Q', G_QUELLE, 0, fehlerAktiv(t.id) === 'druck' ? 2.5 : zahl(t.o.p, 6));
         }
         // Bauteile
         for (const t of plan.teile) {
@@ -1840,6 +1919,7 @@
                 case 'ventil': {
                     const st = ventilStellungen(t.o)[z.stellung];
                     for (const [a, b] of st.w) fluss(netz(t, a), netz(t, b), G_VENTIL, 0);
+                    if (fehlerAktiv(t.id) === 'leck') fluss(netz(t, '1'), 'ATM', G_VENTIL * 0.3, 1);
                     break;
                 }
                 case 'zeit': case 'folge': {
@@ -1849,38 +1929,43 @@
                     break;
                 }
                 case 'wartung': case 'druckregel': {
-                    const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = zahl(t.o.p, 6);
+                    const fe = fehlerAktiv(t.id);
+                    const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = fe === 'druck' ? 2.5 : zahl(t.o.p, 6);
                     const p2 = n2 != null ? druckVon(n2) : 0;
                     const off = Math.max(0, Math.min(1, (ps - p2) / 0.4));
-                    if (off > 0) fluss(n1, n2, G_VENTIL * 1.5 * off, 1);
+                    if (off > 0) fluss(n1, n2, G_VENTIL * 1.5 * off * (fe === 'zu' ? 0.03 : 1), 1);
                     else if (p2 > ps + 0.15) fluss(n2, 'ATM', G_VENTIL * 0.5 * Math.min(1, (p2 - ps) / 0.4), 1);
                     break;
                 }
-                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), G_VENTIL * Math.pow(zahl(t.o.offen, 50) / 100, 2), 0); break;
+                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), G_VENTIL * Math.pow((fehlerAktiv(t.id) === 'zu' ? 0.5 : zahl(t.o.offen, 50)) / 100, 2), 0); break;
                 case 'drv': {
-                    const n1 = netz(t, '1'), n2 = netz(t, '2');
-                    fluss(n1, n2, G_VENTIL * Math.pow(zahl(t.o.offen, 50) / 100, 2), 0);
+                    const fe = fehlerAktiv(t.id);
+                    let n1 = netz(t, '1'), n2 = netz(t, '2');
+                    if (fe === 'verkehrt') [n1, n2] = [n2, n1];
+                    fluss(n1, n2, G_VENTIL * Math.pow((fe === 'zu' ? 0.5 : zahl(t.o.offen, 50)) / 100, 2), 0);
                     fluss(n2, n1, G_VENTIL, 1);   // Rückschlag: frei von 2 nach 1
                     break;
                 }
-                case 'rueck': fluss(netz(t, '1'), netz(t, '2'), G_VENTIL, 1); break;
+                case 'rueck': if (fehlerAktiv(t.id) === 'verkehrt') fluss(netz(t, '2'), netz(t, '1'), G_VENTIL, 1); else fluss(netz(t, '1'), netz(t, '2'), G_VENTIL, 1); break;
                 case 'wechsel': case 'zweidruck': {
                     const px = pPort(t, 'X'), py = pPort(t, 'Y');
                     let s;
                     if (t.typ === 'wechsel') s = Math.abs(px - py) < 0.05 ? z.seite : (px > py ? 'X' : 'Y');
                     else s = Math.abs(px - py) < 0.05 ? z.seite : (px < py ? 'X' : 'Y');
                     z.seite = s;
-                    fluss(netz(t, s), netz(t, '2'), G_VENTIL, 0);
+                    if (fehlerAktiv(t.id) !== 'klemmt') fluss(netz(t, s), netz(t, '2'), G_VENTIL, 0);
                     break;
                 }
                 case 'schnell': {
+                    if (fehlerAktiv(t.id) === 'klemmt') break;
                     const p1 = pPort(t, '1'), p2 = pPort(t, '2');
                     if (p1 >= p2 - 0.05) { fluss(netz(t, '1'), netz(t, '2'), G_VENTIL, 1); z.ab = false; }
                     else { fluss(netz(t, '2'), netz(t, '3'), G_VENTIL * 3, 1); z.ab = true; }
                     break;
                 }
                 case 'daempfer': {
-                    const g = t.o.drossel ? G_VENTIL * Math.pow(zahl(t.o.offen, 100) / 100, 2) : G_VENTIL * 2;
+                    let g = t.o.drossel ? G_VENTIL * Math.pow(zahl(t.o.offen, 100) / 100, 2) : G_VENTIL * 2;
+                    if (fehlerAktiv(t.id) === 'zu') g *= 0.002;
                     fluss(netz(t, '1'), 'ATM', g, 1);
                     break;
                 }
@@ -1892,6 +1977,8 @@
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
             const z = S.zust[t.id], k = flaechen(t), hub = zylHub(t);
+            const fz = fehlerAktiv(t.id);
+            if (fz === 'dichtung') { if (t.typ === 'zyl_ew') fluss(netz(t, 'K'), 'ATM', G_VENTIL * 0.35, 1); else fluss(netz(t, 'K'), netz(t, 'S'), G_VENTIL * 0.35, 0); }
             const pk = pPort(t, 'K'), ps = t.typ === 'zyl_ew' ? 0 : pPort(t, 'S');
             let F = 10 * (pk * k.AK - ps * k.AS);
             if (t.typ === 'zyl_ew') F -= k.feder0 + k.federC * z.x;
@@ -1899,7 +1986,7 @@
             const last = t.typ === 'schwenk' ? zahl(t.o.moment, 2) * 25 : zahl(t.o.last, 0);
             // Last wirkt gegen das Ausfahren, Reibung gegen die Bewegung
             F -= last;
-            const reib = k.reib;
+            const reib = fz === 'klemmt' ? k.reib * 9 : k.reib;
             let v = z.v;   // mm/s
             const m = k.m;
             // Haftreibung
@@ -1955,6 +2042,7 @@
     function darstellen() {
         if (!svg || !offen) return;
         const an = !!sim;
+        messDarstellen();
         for (const l of plan.leitungen) {
             const p = dyn.get('L:' + l.id); if (!p) continue;
             const n = an ? sim.netzVon[l.a.t + ':' + l.a.p] : null;
@@ -2158,9 +2246,11 @@
         const diff = ziel - ist;
         if (Math.abs(diff) < 0.4) return { dir: 0, v: 0 };
         const stroke = obj.stroke || 100;
-        // so schnell, dass die Anlage in einem Bild höchstens bis zum Ziel fährt
+        // Planzylinder-Geschwindigkeit plus Aufholen des Rückstands (Zeitkonstante ~0,1 s),
+        // höchstens so schnell, dass die Anlage in einem Bild bis zum Ziel fährt
         const vMax = Math.abs(diff) / 100 * stroke * 60;
-        return { dir: diff > 0 ? 1 : -1, v: Math.min(vMax, Math.max(Math.abs(z.v) / zylHub(t) * stroke, 20)) };
+        const v = Math.abs(z.v) / zylHub(t) * stroke + Math.abs(diff) / 100 * stroke * 10;
+        return { dir: diff > 0 ? 1 : -1, v: Math.min(vMax, Math.max(v, 20)) };
     };
 
 
@@ -2271,6 +2361,12 @@
     // erzeugt VALIS den Auto-Schaltplan wie gewohnt. Signalglieder ohne 2D-Gegenstück
     // bleiben im Plan; der 2D-Zylinder fährt während der Simulation dem Plan nach.
     const ZYL2D = ['zylinder_double', 'zylinder_single', 'gate_pneu'];
+    // Drosselöffnung umrechnen: Die 2D-Anlage rechnet die Öffnung linear als Anteil der
+    // Kompressorliefermenge (6 % ≈ normale Geschwindigkeit), der Plan als Querschnitt
+    // (Leitwert ~ Öffnung²). Umgerechnet so, dass der Zylinder gleich schnell fährt.
+    const DR_KAL = window._fpDrKal || 800;
+    const drosselNach2D = o => Math.max(1, Math.min(100, Math.round(o * o / DR_KAL)));
+    const drosselAus2D = o => Math.max(1, Math.min(100, Math.round(Math.sqrt(Math.max(1, o) * DR_KAL))));
     const fabrik = () => { try { return factoryObjects; } catch (e) { return null; } };
     function nachbarn() {
         const m = {};
@@ -2361,7 +2457,7 @@
             const dr = (rolle, wert) => {
                 const th = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
                 if (!th || wert == null) return;
-                th.opening = Math.max(1, Math.min(100, Math.round(wert)));
+                th.opening = drosselNach2D(wert);
                 const vd = th.el && th.el.querySelector('.f2d-throttle-val'), kn = th.el && th.el.querySelector('.f2d-throttle-knob');
                 if (vd) vd.textContent = th.opening + '%';
                 if (kn) kn.style.transform = `rotate(${th.opening * 2.7}deg)`;
@@ -2406,7 +2502,7 @@
                 // Abluftdrosselung: Drossel der Ausfahrbewegung sitzt in der Stangenseite
                 const zuweg = (vp, zp, th, dx) => {
                     if (!th) { L(vt.id, vp, zt.id, zp); return; }
-                    const d = { id: nid(), typ: 'drv', x: x + dx, y: 100, rot: 0, bez: nr + 'V' + (plan.teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: th.opening || 50 }) };
+                    const d = { id: nid(), typ: 'drv', x: x + dx, y: 100, rot: 0, bez: nr + 'V' + (plan.teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
                     plan.teile.push(d); L(vt.id, vp, d.id, '2'); L(d.id, '1', zt.id, zp);
                 };
                 if (dw) { zuweg('4', 'K', thr('ret'), 10); zuweg('2', 'S', thr('ext'), 90); }
@@ -2488,6 +2584,12 @@
         verbinden2D: (an) => { aendern(() => { plan.anlage = an !== false; }); },
         _diagramm: () => ({ schritte: schritte().map(p => Object.assign({}, p.x)), proben: aufz ? aufz.proben.length : 0 }),
         _aufzNeu: () => aufzNeu(),
+        fehlerGefunden,
+        fehlerAnzahl,
+        befundPruefen,
+        verdacht: (key) => verdachtUmschalten(key),
+        messen: (lt, x, y) => messKlick(lt, x, y, null),
+        messwerte: () => messpunkte.map(m => { const l = plan.leitungen.find(q => q.id === m.l); const n = sim && l ? sim.netzVon[l.a.t + ':' + l.a.p] : null; return n != null ? +druckVon(n).toFixed(3) : null; }),
         _leeren: () => { planImport(null); gedrueckt.clear(); },
         typen: () => Object.keys(TYP),
         offen: () => offen

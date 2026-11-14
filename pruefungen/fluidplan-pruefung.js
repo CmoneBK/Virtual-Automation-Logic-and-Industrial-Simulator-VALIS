@@ -147,7 +147,7 @@ const FAELLE = {
     const q = F.setzen('quelle', 0, 300);
     const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_Y1' }, '1V1');
     const z = F.setzen('zyl_dw', 0, -100, { d: 32, dStange: 12, hub: 200 }, '1A1');
-    const d = F.setzen('drv', 120, 40, { offen: 30 }, '1V2');
+    const d = F.setzen('drv', 120, 40, { offen: 60 }, '1V2');
     F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
     R.push(['ohne Verbindung keine 2D-Teile', zyl2d().length === vorher, zyl2d().length]);
     F.verbinden2D(true);
@@ -157,7 +157,8 @@ const FAELLE = {
     const vt = factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
     R.push(['2D-Ventil monostabil mit FP_Y1', vt && !vt.isDouble && vt.linkedVarExt === 'FP_Y1', vt && [vt.isDouble, vt.linkedVarExt]]);
     const th = factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ext');
-    R.push(['Drossel der Ausfahrbewegung 30 %', th && th.opening === 30, th && th.opening]);
+    // Plan rechnet mit dem Querschnitt, 2D mit dem Liefermengen-Anteil: 60 % im Plan = 60²/800 ≈ 5 % in 2D
+    R.push(['Drossel der Ausfahrbewegung (60 % Plan = 5 % 2D)', th && th.opening === 5, th && th.opening]);
     R.push(['keine Drossel fürs Einfahren (nicht im Plan)', !factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ret'), '']);
     R.push(['Maße übernommen', o && o.pistonD === 32 && o.rodD === 12 && o.stroke === 200, o && [o.pistonD, o.rodD, o.stroke]]);
     F.aendern(v, { links: 'magnet', rechts: 'magnet', varR: 'FP_Y2' });
@@ -184,6 +185,49 @@ const FAELLE = {
     F.importieren(Object.assign(F.exportieren(), {}));
     Fluidplan._entfernen(z2);
     R.push(['Planzylinder gelöscht → erzeugter 2D-Zylinder weg', !factoryObjects.find(x => x.id === id2), '']);
+    return R;
+  },
+  'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {
+    const F = Fluidplan, R = [];
+    const bau = () => {
+      F._leeren();
+      const q = F.setzen('quelle', 0, 300);
+      const s = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'hebel' }, '1V1');
+      const z = F.setzen('zyl_dw', 0, -100, { sensV: 'FP_B2' }, '1A1');
+      F.verbinden(q, '1', s, '1'); F.verbinden(s, '4', z, 'K'); F.verbinden(s, '2', z, 'S');
+      return { q, s, z };
+    };
+    const lauf = (fehler) => {
+      const { q, s, z } = bau();
+      const p = F.exportieren();
+      if (fehler) { const key = fehler[0] === 'L' ? 'L:' + p.leitungen.find(l => l.b.t === z && l.b.p === 'K').id : ({ q, s, z })[fehler[0]]; p.fehler = { [key]: fehler[1] }; F.importieren(p); }
+      F._neu(); F._schritt(0.5); F.druecken(s, 'L', true); F._schritt(2);
+      return { x: F.zustand().teile[z].anteil, b2: spsState.FP_B2, p: F.zustand().teile[z].p.K, ids: { q, s, z } };
+    };
+    const ok = lauf(null);
+    R.push(['ohne Fehler fährt aus', ok.x > 0.98, ok.x]);
+    R.push(['Ventil klemmt: bleibt hinten', lauf(['s', 'klemmt']).x < 0.02, '']);
+    R.push(['Leitung geknickt: bleibt hinten', lauf(['L', 'zu']).x < 0.02, '']);
+    const dr = lauf(['q', 'druck']);
+    R.push(['Versorgungsdruck niedrig: nur ~2,5 bar am Zylinder', dr.p < 2.7 && dr.p > 2.2, dr.p]);
+    const se = lauf(['z', 'sensor']);
+    R.push(['Sensor defekt: fährt aus, meldet aber nicht', se.x > 0.98 && se.b2 === false, String(se.b2)]);
+    // Befund: falsche Meldung, dann richtige
+    const { s, z } = lauf(['s', 'klemmt']).ids;
+    const p = F.exportieren(); p.fehlersuche = true; F.importieren(p);
+    R.push(['Anzahl 1, noch nicht gefunden', F.fehlerAnzahl() === 1 && !F.fehlerGefunden(), '']);
+    F.verdacht(z); let b = F.befundPruefen();
+    R.push(['falsche Meldung erkannt', b.falsch === 1 && b.offen === 1, JSON.stringify(b)]);
+    F.verdacht(s); b = F.befundPruefen();
+    R.push(['richtige Meldung: gefunden und instandgesetzt', b.treffer === 1 && b.offen === 0 && F.fehlerGefunden(), JSON.stringify(b)]);
+    F._neu(); F._schritt(0.5); F.druecken(s, 'L', true); F._schritt(2);
+    R.push(['nach der Instandsetzung fährt er aus', F.zustand().teile[z].anteil > 0.98, F.zustand().teile[z].anteil]);
+    // Manometer anstecken: Leitung zum Kolbenraum
+    const lk = F.plan().leitungen.find(l => l.b.t === z && l.b.p === 'K');
+    F.messen(lk.id, 0, 0);
+    const mw = F.messwerte()[0];
+    R.push(['Manometer am Kolbenraum zeigt ~6 bar', mw > 5.8 && mw < 6.1, mw]);
+    R.push(['Aufgabenbedingung fluid_fehler erfüllt', _checkCondition({ type: 'fluid_fehler' }) === true, '']);
     return R;
   },
   'Export / Import und Speichern in der Anlage': () => {

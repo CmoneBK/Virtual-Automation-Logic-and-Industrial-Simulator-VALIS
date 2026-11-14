@@ -42903,7 +42903,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let forceRet = false;
                         // 🌟 AUTO-HEAL: Prüfen, ob das Wegeventil auf dem Spielfeld gelöscht wurde!
                         if (obj.hasPneumatics) {
-                            let valveExists = factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === obj.id);
+                            // Ventil als Fluidplan-Teil (pneu_fp): Zylinder hängt an freien Schläuchen
+                            let valveExists = factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === obj.id)
+                                || (window.pneuConnections || []).some(c => (c.aObjId === obj.id || c.bObjId === obj.id) && !c._broken);
                             if (!valveExists) {
                                 obj.hasPneumatics = false;
                                 obj.normLabel = null;
@@ -52506,6 +52508,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Port-Bezeichnungen nach DIN ISO 1219-2 (ehem. DIN 11727 / DIN 5599)
             // Ungerade: Versorgung (1) und Entlüftung (3, 5)
             // Gerade:   Arbeitsanschlüsse (2 = A-Seite, 4 = B-Seite)
+            // Fluidplan-Teil (Ventile mit beliebiger Betätigung, Rückschlag-, Wechselventil …)
+            if (obj.type === 'pneu_fp') return typeof window._fpPorts2D === 'function' ? window._fpPorts2D(obj) : [];
             if (obj.type === 'compressor') return [
                 { id:'1', label:'1', lx:80, ly:50, ptype:'pressure', rot:true }
             ];
@@ -52546,7 +52550,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         // --- Port-Layer Renderer ---
         const _HYD_TYPES  = ['hydraulic_unit','oil_tank','hydraulic_manifold','valve_hyd','throttle_hyd','check_valve_hyd','pressure_switch_hyd','manometer_hyd','accumulator_hyd'];
-        const _PNEU_TYPES = ['compressor','manifold','valve_pneu','throttle'];
+        const _PNEU_TYPES = ['compressor','manifold','valve_pneu','throttle','pneu_fp'];
 
         function _updatePortLayer(system, defsFn, layerId) {
             const _facDoc = (window.popOutWindows?.['factory-wrapper'] && !window.popOutWindows['factory-wrapper'].closed)

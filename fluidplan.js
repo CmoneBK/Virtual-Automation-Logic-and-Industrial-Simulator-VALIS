@@ -2934,7 +2934,8 @@
             const tR = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ret');
             const ab = (vp, th, cp) => th ? (pneuAb(v, vp, th, '2') || pneuAb(th, '1', o, cp)) : pneuAb(v, vp, o, cp);
             return [o.id, o.type, o.pistonD, o.rodD, o.stroke, v && v.id, v && v.isDouble, v && v.isTriple, tE && tE.id, tR && tR.id,
-                ab('2', tE, '1'), o.type !== 'zylinder_single' && ab('4', tR, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0, v && JSON.stringify(v.abschluss || null)].join(',');
+                // Abluftdrosselung: doppeltwirkend sitzt ext in der Stangenleitung (2D-Ventil 4)
+                ab('2', o.type !== 'zylinder_single' ? tR : tE, '1'), o.type !== 'zylinder_single' && ab('4', tE, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0, v && JSON.stringify(v.abschluss || null)].join(',');
         };
         const versorgungAb = pneuAb(comp, '1', mf, '1') || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
         const sig = (comp ? comp.id : '-') + '|' + versorgungAb + '|' + zyl.map(lage).join('|');
@@ -2947,7 +2948,8 @@
                 const tE = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ext');
                 const tR = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === 'ret');
                 const ab = (vp, th, cp) => th ? (pneuAb(v, vp, th, '2') || pneuAb(th, '1', o, cp)) : pneuAb(v, vp, o, cp);
-                abK[o.id] = { ext: ab('2', tE, '1'), ret: o.type !== 'zylinder_single' && ab('4', tR, '2') };
+                const dw = o.type !== 'zylinder_single';
+                abK[o.id] = { ext: ab('2', dw ? tR : tE, '1'), ret: dw && ab('4', tE, '2') };
                 fehlerVorher.push([o, v]);
             });
             const r = planAus2D(F, zyl, comp, abK);

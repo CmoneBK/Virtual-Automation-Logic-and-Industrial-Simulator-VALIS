@@ -2610,6 +2610,7 @@
             knopfZustand(); status();
         }
         if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } }
+        if (ts - plakettenZeit > 500) { plakettenZeit = ts; try { plaketten2D(); } catch (e) {} }
         if (!plan.teile.length) { letzte = ts; return; }
         const dt = Math.min(0.05, Math.max(0, (ts - letzte) / 1000)) * (window.simSpeed || 1);
         letzte = ts;
@@ -2621,6 +2622,18 @@
         if (offen) { darstellen(); diagZeichnen(); }
     }
 
+    // Zylinder an freien Schläuchen: die Spulen-Plakette (▶ AUS | EIN ◀) des 2D-Magnetventils
+    // gibt es dort nicht, die Ventile stehen als eigene Teile daneben.
+    let plakettenZeit = 0;
+    function plaketten2D() {
+        const F = fabrik(); if (!F) return;
+        for (const o of F) {
+            if (!/^zylinder_/.test(o.type) || !o.el) continue;
+            const frei = o.hasPneumatics && !F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === o.id);
+            const b = o.el.querySelector('.f2d-valve'); if (b) { const d = frei ? 'none' : ''; if (b.style.display !== d) b.style.display = d; }
+            if (frei && o.normLabel) { const l = o.el.querySelector(':scope > .f2d-label'); if (l && l.textContent !== o.normLabel) l.textContent = o.normLabel; }
+        }
+    }
     // Zylinder der 2D-Anlage, der einem Planzylinder folgt (Hook in der Zylinder-Mechanik)
     window._fpZylinder = function (obj) {
         if (!simLaeuft()) return null;
@@ -3977,40 +3990,96 @@
     }
     // Ein 2D-Teil wurde in der Anlage geändert: im verbundenen Plan nachziehen
     function geaendert2D(obj) { void obj; rueckZeit = 0; }
+    // Die 2D-Anlage kennt 'pneu_fp' schon beim Laden (ComponentRegistry in index.html) und
+    // ruft hierher durch; Teile, die vor diesem Skript geladen wurden, zeichnen wir jetzt nach.
+    function bau2D(obj, elx, var1) {
+        elx.className = 'f2d-obj f2d-pneu-fp';
+        elx.style.background = 'rgba(255,255,255,.92)'; elx.style.border = '1px solid #90a4ae'; elx.style.borderRadius = '3px';
+        const pn = obj.pneu || (obj.pneu = {});
+        if (var1 && typeof var1 === 'object') pn.fp = JSON.parse(JSON.stringify(var1));
+        else if (typeof var1 === 'string' && TYP[var1]) pn.fp = { typ: var1, o: Object.assign({}, TYP[var1].optionen), rot: 0 };
+        fp2d(obj);
+        obj.useCollision = false;
+        symbol2D(obj);
+        if (!obj.normLabel && !TYP[fp2d(obj).typ].ohneBez && !obj._ladend) {
+            const belegt = new Set((fabrik() || []).map(q => q.normLabel).filter(Boolean));
+            obj.normLabel = freiesKennzeichen(kennCode(fp2d(obj).typ, teilAus2D(obj).o), belegt);
+            symbol2D(obj);
+        }
+    }
     function registrieren2D() {
-        let R; try { R = ComponentRegistry; } catch (e) { return false; }
-        if (!R || R.pneu_fp) return true;
-        R.pneu_fp = {
-            directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
-            build(obj, elx, var1) {
-                elx.className = 'f2d-obj f2d-pneu-fp';
-                elx.style.background = 'rgba(255,255,255,.92)'; elx.style.border = '1px solid #90a4ae'; elx.style.borderRadius = '3px';
-                const pn = obj.pneu || (obj.pneu = {});
-                if (var1 && typeof var1 === 'object') pn.fp = JSON.parse(JSON.stringify(var1));
-                else if (typeof var1 === 'string' && TYP[var1]) pn.fp = { typ: var1, o: Object.assign({}, TYP[var1].optionen), rot: 0 };
-                fp2d(obj);
-                obj.useCollision = false;
-                symbol2D(obj);
-                if (!obj.normLabel && !TYP[fp2d(obj).typ].ohneBez) {
-                    const belegt = new Set((fabrik() || []).map(q => q.normLabel).filter(Boolean));
-                    obj.normLabel = freiesKennzeichen(kennCode(fp2d(obj).typ, teilAus2D(obj).o), belegt);
-                    symbol2D(obj);
-                }
-            },
+        window._fp2d = {
+            build: bau2D,
             onLoadState(obj) { symbol2D(obj); },
             animate(obj) { try { animate2D(obj); } catch (e) {} },
             clickSimulate(obj, e) { klick2D(obj, e); },
             contextMenu(obj, ctx, sichern) { menue2D(obj, ctx, sichern); },
             refreshLabel(obj) { symbol2D(obj); }
         };
+        (fabrik() || []).forEach(o => { if (o.type === 'pneu_fp' && o.el) { try { if (!o.el.className.includes('f2d-pneu-fp')) bau2D(o, o.el); else symbol2D(o); } catch (e) {} } });
         return true;
     }
     if (!registrieren2D()) document.addEventListener('DOMContentLoaded', registrieren2D);
+    // Neues Fluidplan-Teil aus dem Menü Pneumatik der 2D-Anlage
+    function neu2D(typ) {
+        if (!TYP[typ] || typeof createFactoryObject !== 'function') return null;
+        const o = createFactoryObject('pneu_fp', typ);
+        try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
+        try { if (typeof _updatePneuPortLayer === 'function') _updatePneuPortLayer(); } catch (e) {}
+        return o;
+    }
+    // Wegeventil der 2D-Anlage auf eine andere Betätigung umbauen (Rechtsklickmenü).
+    // Magnetventile bleiben das 2D-Wegeventil; alles andere wird ein Fluidplan-Teil,
+    // die Schläuche bleiben stecken.
+    function ventilUmbauen(v, links) {
+        const F = fabrik(); if (!F || !v || v.type !== 'valve_pneu' || links === 'magnet') return null;
+        const wege = v.isTriple ? '5/3' : v.isDouble ? '5/2' : '3/2';
+        const rechts = wege === '5/3' ? links : 'feder';
+        // Mit dem Fluidplan verbunden: der Plan ist die Wahrheit, der Abgleich baut die 2D-Anlage um
+        const w = plan.anlage && spiegel.get(v.id);
+        if (w && w.ventil && teil(w.ventil)) {
+            aendern(() => { const vt = teil(w.ventil); vt.o.links = links; vt.o.rechts = rechts; vt.bez = ''; kennzeichenAuffrischen(plan); });
+            return true;
+        }
+        const ab = {};
+        for (const [p2d, a] of Object.entries(v.abschluss || {})) { const pp = /^5/.test(wege) ? ({ '3': '5', '5': '3' })[p2d] || p2d : p2d; if (a && a.art && a.art !== 'offen') ab[pp] = a.art === 'drossel' ? { art: 'daempfer' } : { art: a.art }; }
+        const fp = { typ: 'ventil', o: Object.assign({}, TYP.ventil.optionen, { wege, links, rechts, varL: '', varR: '' }), rot: 0, ab };
+        const n = createFactoryObject('pneu_fp', fp);
+        n.x = v.x; n.y = v.y; try { updateObjTransform(n); } catch (e) {}
+        const tauschV = p => /^5/.test(wege) ? ({ '2': '4', '4': '2', '3': '5', '5': '3' })[p] || p : p;
+        const C = window.pneuConnections = window.pneuConnections || [];
+        // Drosseln des Zylinders werden Drosselrückschlagventile als Fluidplan-Teile
+        const thr = F.filter(q => q.type === 'throttle' && v.targetCylinderId && q.targetCylinderId === v.targetCylinderId);
+        const ersatz = { [v.id]: [n.id, tauschV] };
+        for (const th of thr) {
+            const d = createFactoryObject('pneu_fp', { typ: 'drv', o: { offen: drosselAus2D(th.opening != null ? th.opening : 50) }, rot: 180 });
+            d.x = th.x; d.y = th.y; d.normLabel = th.normLabel || d.normLabel; try { symbol2D(d); updateObjTransform(d); } catch (e) {}
+            ersatz[th.id] = [d.id, p => p];
+        }
+        for (const c of C) {
+            for (const [ob, pp] of [['aObjId', 'aPortId'], ['bObjId', 'bPortId']]) {
+                const e = ersatz[c[ob]]; if (!e) continue;
+                c[ob] = e[0]; c[pp] = e[1](String(c[pp]));
+                delete c._auto;
+            }
+        }
+        const zyl = v.targetCylinderId && F.find(q => q.id === v.targetCylinderId);
+        // Kennzeichen bleibt, wenn der Kennbuchstabe passt (-QM1 bleibt -QM1)
+        if (v.normLabel && v.normLabel.startsWith('-' + kennCode('ventil', fp.o))) { n.normLabel = v.normLabel; symbol2D(n); }
+        [v].concat(thr).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
+        if (zyl) zyl.hasPneumatics = true;   // hängt jetzt an freien Schläuchen
+        try { if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections(); } catch (e) {}
+        try { if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
+        try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
+        return n;
+    }
+    window._fpVentilUmbauen = ventilUmbauen;
 
     window.Fluidplan = {
         oeffnen, schliessen, umschalten,
         _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
         _abkoppeln: abkoppeln,
+        _neu2D: neu2D, _ventilUmbauen: ventilUmbauen,
         _schaltbild: schaltbild, _posProzent: posProzent, _portLage: (id, p) => { const t = teil(id); return t ? portLage(t, p) : null; }, _andockAblegen: id => aendern(() => andockAblegen(teil(id))),
         exportieren: planExport,
         importieren: planImport,

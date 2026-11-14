@@ -613,6 +613,74 @@ const FAELLE = {
     F.verbinden2D(false);
     return R;
   },
+  'Pneumatik der 2D-Anlage: Fluidplan-Teile und Schläuche in beide Richtungen': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    window.loadExample('code');
+    await warte(800);
+    F._leeren(); F.ausAnlage(); F.verbinden2D(true);
+    const p = F.plan(); const z = p.teile.find(t => t.typ === 'zyl_dw'); const q = p.teile.find(t => t.typ === 'wartung') || p.teile.find(t => t.typ === 'quelle');
+    const z2 = F.setzen('zyl_ew', z.x + 600, z.y, {});
+    const s = F.setzen('ventil', z.x + 500, z.y + 340, { wege: '3/2', links: 'rolle', rechts: 'feder', pos: 95, richt: 'aus', zyl: z.id });
+    F.verbinden(q.id, q.typ === 'wartung' ? '2' : '1', s, '1'); F.verbinden(s, '2', z2, 'K');
+    F.verbinden(s, '3', F.setzen('daempfer', 0, 0), '1');
+    const v2 = () => factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'ventil');
+    const zz2 = () => factoryObjects.find(o => o.id === F.plan().teile.find(t => t.id === z2).o.anlage);
+    R.push(['Rollenventil steht in 2D als Fluidplan-Teil mit Rolle, Lage und Schalldämpfer', !!v2() && v2().pneu.fp.o.links === 'rolle' && v2().pneu.fp.o.zyl === 'cyl1' && v2().pneu.fp.ab['3'] && v2().pneu.fp.ab['3'].art === 'daempfer', v2() && JSON.stringify(v2().pneu.fp)]);
+    R.push(['… mit demselben Kennzeichen wie im Plan', v2() && v2().normLabel === F.plan().teile.find(t => t.id === s).bez, v2() && v2().normLabel]);
+    R.push(['-MM2 ohne 2D-Magnetventil, hängt an Schläuchen', !!zz2() && zz2().hasPneumatics && !factoryObjects.some(o => o.type === 'valve_pneu' && o.targetCylinderId === zz2().id)]);
+    const mf = factoryObjects.find(o => o.type === 'manifold');
+    const hat = (a, ap, b, bp) => window.pneuConnections.some(c => !c._broken && ((c.aObjId === a && c.aPortId === ap && c.bObjId === b && c.bPortId === bp) || (c.aObjId === b && c.aPortId === bp && c.bObjId === a && c.bPortId === ap)));
+    R.push(['Schläuche: Wartungseinheit → Ventil 1, Ventil 2 → -MM2', hat(mf.id, '1', v2().id, '1') && hat(v2().id, '2', zz2().id, '1')]);
+    const x0 = v2().x;
+    F.aendern(s, { pos: 50 });
+    R.push(['Plan → 2D: Lage der Rolle 50 %, Ventil wandert an der Stange', v2().pneu.fp.o.pos === 50 && v2().x < x0, v2().pneu.fp.o.pos + ' / ' + x0 + ' → ' + v2().x]);
+    v2().pneu.fp.o.pos = 70;
+    await warte(500);
+    R.push(['2D → Plan: Lage 70 %', F.plan().teile.find(t => t.id === s).o.pos === 70, F.plan().teile.find(t => t.id === s).o.pos]);
+    const an2 = () => F.plan().leitungen.filter(l => (l.a.t === s && l.a.p === '2') || (l.b.t === s && l.b.p === '2')).length;
+    window.pneuConnections = window.pneuConnections.filter(c => !(c._fp && ((c.aObjId === v2().id && c.aPortId === '2') || (c.bObjId === v2().id && c.bPortId === '2'))));
+    await warte(500);
+    R.push(['2D → Plan: Schlauch gezogen, Leitung weg', an2() === 0, an2()]);
+    window.pneuConnections.push({ aObjId: v2().id, aPortId: '2', bObjId: zz2().id, bPortId: '1' });
+    await warte(500);
+    R.push(['2D → Plan: Schlauch gesteckt, Leitung da', an2() === 1, an2()]);
+    const rv = Fluidplan._neu2D('rueck');
+    await warte(500);
+    const rt = () => F.plan().teile.find(t => t.o.anlage === rv.id);
+    R.push(['2D → Plan: neues Rückschlagventil', !!rt() && rt().typ === 'rueck', rt() && rt().bez]);
+    deleteObjRecursive(rv);
+    await warte(500);
+    R.push(['2D → Plan: gelöscht', !rt()]);
+    F.verbinden2D(false); F._leeren();
+    // Ohne Fluidplan: die 2D-Anlage rechnet ihre Fluidplan-Teile selbst (Schattenplan)
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = [];
+    const comp = createFactoryObject('compressor', ''), man = createFactoryObject('manifold', ''), zy = createFactoryObject('zylinder_single', '');
+    zy.hasPneumatics = true;
+    const tv = Fluidplan._neu2D('ventil'); tv.pneu.fp.o = Object.assign(tv.pneu.fp.o, { wege: '3/2', links: 'taster', rechts: 'feder' });
+    window.pneuConnections.push({ aObjId: comp.id, aPortId: '1', bObjId: man.id, bPortId: '1', _auto: true }, { aObjId: man.id, aPortId: '1', bObjId: tv.id, bPortId: '1' }, { aObjId: tv.id, aPortId: '2', bObjId: zy.id, bPortId: '1' });
+    window.toggleSimulation(); await warte(600);
+    ComponentRegistry.pneu_fp.clickSimulate(tv, {}); await warte(1200);
+    const e1 = zy.extension || 0;
+    window.dispatchEvent(new MouseEvent('mouseup')); await warte(1200);
+    const e2 = zy.extension || 0;
+    window.toggleSimulation(); await warte(200);
+    R.push(['Taster-Ventil in 2D ohne Fluidplan: gedrückt fährt aus, los fährt ein', e1 > 90 && e2 < 10, Math.round(e1) + ' / ' + Math.round(e2)]);
+    // Wegeventil per Rechtsklick auf Taster umbauen: Schläuche bleiben, Drosseln werden DRV
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = [];
+    window.loadExample('code'); await warte(800);
+    const alt = factoryObjects.find(o => o.type === 'valve_pneu');
+    const nv = Fluidplan._ventilUmbauen(alt, 'hebel');
+    R.push(['Umbau: Wegeventil → Hebelventil -QM1, Drosseln → DRV', !!nv && nv.normLabel === '-QM1' && !factoryObjects.some(o => o.type === 'valve_pneu' || o.type === 'throttle') && factoryObjects.filter(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'drv').length === 2]);
+    window.toggleSimulation(); await warte(600);
+    ComponentRegistry.pneu_fp.clickSimulate(nv, {}); await warte(1500);
+    const e3 = factoryObjects.find(o => o.id === 'cyl1').extension || 0;
+    window.toggleSimulation(); await warte(200);
+    R.push(['… Hebel rastet: Zylinder fährt aus', e3 > 90, Math.round(e3)]);
+    return R;
+  },
   'Export / Import und Speichern in der Anlage': () => {
     const F = Fluidplan, R = [];
     const q = F.setzen('quelle', 0, 300);

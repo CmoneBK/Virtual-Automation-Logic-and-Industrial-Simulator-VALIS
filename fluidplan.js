@@ -2333,6 +2333,7 @@
             if (svg) { svg.classList.toggle('sim', laeuft); eigenschaften(); }
             knopfZustand(); status();
         }
+        if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } }
         if (!plan.teile.length) { letzte = ts; return; }
         const dt = Math.min(0.05, Math.max(0, (ts - letzte) / 1000)) * (window.simSpeed || 1);
         letzte = ts;
@@ -2486,7 +2487,7 @@
     // zu/ab: Öffnung der Drossel, die die Zuluft (zum Zylinder) bzw. Abluft (vom Zylinder) drosselt.
     function stellgliedVon(zyl, port) {
         const nb = nachbarn(), gesehen = new Set();
-        let offen = null, zu = null, ab = null;
+        let offen = null, zu = null, ab = null, zuT = null, abT = null;
         const min = (a, b) => a == null ? b : Math.min(a, b);
         const stapel = [zyl.id + ':' + port];
         while (stapel.length) {
@@ -2496,20 +2497,44 @@
                 if (gesehen.has(n)) continue;
                 const [tid, pid] = n.split(':');
                 const t = teil(tid); if (!t) continue;
-                if (t.typ === 'ventil' && (pid === '2' || pid === '4')) return { ventil: t, port: pid, offen, zu, ab };
+                if (t.typ === 'ventil' && (pid === '2' || pid === '4')) return { ventil: t, port: pid, offen, zu, ab, zuT, abT };
                 if (t.typ === 'knoten') { gesehen.add(n); for (const w of nb[n] || []) stapel.push(w); continue; }
                 if (['drossel', 'drv', 'rueck', 'schnell'].includes(t.typ) && (pid === '1' || pid === '2')) {
                     const w = zahl(t.o.offen, 10);
-                    if (t.typ === 'drossel') { zu = min(zu, w); ab = min(ab, w); }
+                    const zuM = () => { if (zu == null || w < zu) { zu = w; zuT = t.id; } };
+                    const abM = () => { if (ab == null || w < ab) { ab = w; abT = t.id; } };
+                    if (t.typ === 'drossel') { zuM(); abM(); }
                     // DRV drosselt von 1 nach 2: von der Zylinderseite an 1 betreten = Abluft gedrosselt
-                    else if (t.typ === 'drv') { if (pid === '1') ab = min(ab, w); else zu = min(zu, w); }
+                    else if (t.typ === 'drv') { if (pid === '1') abM(); else zuM(); }
                     if ((t.typ === 'drossel' || t.typ === 'drv') && offen == null) offen = w;
                     gesehen.add(n);
                     stapel.push(tid + ':' + (pid === '1' ? '2' : '1'));
                 }
             }
         }
-        return { ventil: null, offen, zu, ab };
+        return { ventil: null, offen, zu, ab, zuT, abT };
+    }
+    // Änderungen in der 2D-Anlage (Kontextmenü: Maße, Drosseln) gehen zurück in den Plan,
+    // statt beim nächsten Abgleich still überschrieben zu werden.
+    const spiegel = new Map();
+    let rueckZeit = 0;
+    function rueckAbgleich() {
+        const F = fabrik(); if (!F || !plan.anlage || !spiegel.size) return;
+        const neu = []; let masse = false;
+        for (const [id, w] of spiegel) {
+            const o = F.find(q => q.id === id); if (!o) continue;
+            const t = plan.teile.find(q => q.id === w.teil); if (!t) continue;
+            if (w.offen != null) { if (o.opening != null && o.opening !== w.offen) neu.push(() => { t.o.offen = o.opening; }); }
+            else if (o.pistonD !== w.d || o.rodD !== w.ds || o.stroke !== w.hub) { masse = true; neu.push(() => { t.o.d = o.pistonD || 20; t.o.dStange = o.rodD || t.o.dStange; t.o.hub = o.stroke || 100; }); }
+        }
+        if (!neu.length) return;
+        if (masse) aendern(() => { neu.forEach(f => f()); });
+        else {
+            // Nur Drosseln: die laufende Simulation behält ihre Drücke
+            undoStapel.push(JSON.stringify(plan)); if (undoStapel.length > 100) undoStapel.shift(); redoStapel = [];
+            neu.forEach(f => f()); speichern(); zeichnen();
+        }
+        status('Änderung aus der 2D-Anlage in den Plan übernommen.');
     }
     function anlageAbgleichen() {
         const F = fabrik();
@@ -2524,6 +2549,10 @@
             // Drosseln: Ausfahren bremst die Zuluft an K oder die Abluft an S, Einfahren umgekehrt
             const mn = (...a) => { const b = a.filter(x => x != null); return b.length ? Math.min(...b) : null; };
             const drExt = mn(K && K.zu, S && S.ab), drRet = dw ? mn(K && K.ab, S && S.zu) : null;
+            // Welches Planteil liefert den Wert (für Änderungen aus der 2D-Anlage zurück in den Plan)
+            const quelleVon = (a, at, b, bt) => (a != null && (b == null || a <= b)) ? at : (b != null ? bt : null);
+            const drExtT = quelleVon(K && K.zu, K && K.zuT, S && S.ab, S && S.abT);
+            const drRetT = dw ? quelleVon(K && K.ab, K && K.abT, S && S.zu, S && S.zuT) : null;
             // Variablen der Spulen: Seite, die den Kolbenraum belüftet = Ausfahren
             let ext = '', ret = '';
             if (v) {
@@ -2571,6 +2600,12 @@
             };
             dr('ext', drExt);
             dr('ret', drRet);
+            // Spiegel: was der Plan in die 2D-Anlage geschrieben hat
+            spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke });
+            for (const [rolle, wt] of [['ext', drExtT], ['ret', drRetT]]) {
+                const th = F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle);
+                if (th && wt) spiegel.set(th.id, { teil: wt, offen: th.opening });
+            }
         }
         // Vom Plan erzeugte 2D-Zylinder, die es im Plan nicht mehr gibt, wieder entfernen
         plan.erzeugt = plan.erzeugt.filter(id => {

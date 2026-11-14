@@ -731,6 +731,56 @@
         return { x, y, dir: trafoDir(t, p.dir), art: p.art, p };
     }
     const teil = id => plan.teile.find(t => t.id === id);
+    // Schalldämpfer und Blindstopfen sitzen ohne Leitung direkt am Anschluss (Christoph,
+    // 14.11.2026). Im Plan bleibt es eine Leitung (für Rechenkern und 2D-Abgleich),
+    // nur liegt der Anschluss des Gastes genau auf dem des Wirts und wird nicht gezeichnet.
+    const ANDOCK = { daempfer: 1, stopfen: 1 };
+    function andockVon(l) {
+        const ta = teil(l.a.t), tb = teil(l.b.t); if (!ta || !tb) return null;
+        const frei = t => !ANDOCK[t.typ] && t.typ !== 'knoten';
+        if (ANDOCK[ta.typ] && frei(tb)) return { gast: ta, wirt: tb, wp: l.b.p };
+        if (ANDOCK[tb.typ] && frei(ta)) return { gast: tb, wirt: ta, wp: l.a.p };
+        return null;
+    }
+    // Lage der Gäste aus ihrem Wirt (vor dem Zeichnen). ohne: Gast-Ids, die gerade gezogen werden
+    function andocken(ohne) {
+        for (const l of plan.leitungen) {
+            const a = andockVon(l); if (!a) continue;
+            if (ohne && ohne[a.gast.id] && !ohne[a.wirt.id]) continue;
+            if (plan.leitungen.filter(q => q.a.t === a.gast.id || q.b.t === a.gast.id).length > 1) continue;
+            const W2 = portLage(a.wirt, a.wp); if (!W2 || !W2.dir) continue;
+            const d = W2.dir, g = a.gast;
+            g.sp = false;
+            g.rot = d[1] > 0 ? 0 : d[1] < 0 ? 180 : d[0] > 0 ? 270 : 90;
+            const p = TYP[g.typ].geometrie(g).ports[0];
+            const [ox, oy] = trafo({ x: 0, y: 0, rot: g.rot }, p.x, p.y);
+            g.x = W2.x - ox; g.y = W2.y - oy;
+        }
+    }
+    const angedockt = l => { const a = andockVon(l); return !!a && plan.leitungen.filter(q => q.a.t === a.gast.id || q.b.t === a.gast.id).length === 1; };
+    // Gast nach dem Ablegen: an einem freien Anschluss in der Nähe andocken, sonst lösen
+    function andockAblegen(g) {
+        if (!g || !ANDOCK[g.typ]) return;
+        const pl = portLage(g, '1'); if (!pl) return;
+        const meine = plan.leitungen.filter(q => q.a.t === g.id || q.b.t === g.id);
+        let best = null, bd = 14;
+        for (const t of plan.teile) {
+            if (t.id === g.id || ANDOCK[t.typ] || t.typ === 'knoten') continue;
+            for (const p of geo(t).ports) {
+                const belegt = plan.leitungen.some(q => ((q.a.t === t.id && q.a.p === p.id) || (q.b.t === t.id && q.b.p === p.id)) && q.a.t !== g.id && q.b.t !== g.id);
+                if (belegt || !p.dir) continue;
+                const [x, y] = trafo(t, p.x, p.y), d = Math.hypot(x - pl.x, y - pl.y);
+                if (d < bd) { bd = d; best = { t: t.id, p: p.id }; }
+            }
+        }
+        if (best) {
+            plan.leitungen = plan.leitungen.filter(q => !meine.includes(q));
+            plan.leitungen.push({ id: neueId(), a: { t: best.t, p: best.p }, b: { t: g.id, p: '1' } });
+        } else if (meine.length === 1 && angedockt(meine[0])) {
+            // weggezogen: Gast hängt frei, ohne Leitung
+            plan.leitungen = plan.leitungen.filter(q => q !== meine[0]);
+        }
+    }
 
     // ------------------------------------------------------------
     // Kennzeichen (DIN EN 81346-2, wie im Auto-Schaltplan): -MM1, -QM1, -RN1 …
@@ -878,6 +928,7 @@
     function leitungPunkte(l) {
         const ta = teil(l.a.t), tb = teil(l.b.t);
         if (!ta || !tb) return null;
+        if (angedockt(l)) return null;
         const A = portLage(ta, l.a.p), B = portLage(tb, l.b.p);
         if (!A || !B) return null;
         const a0 = [A.x, A.y], b0 = [B.x, B.y];
@@ -1114,6 +1165,7 @@
     // ------------------------------------------------------------
     const dyn = new Map();   // teilId -> Referenzen für die Live-Anzeige
     function zeichnen() {
+        andocken(zug && zug.art === 'teile' ? zug.start : null);
         if (!svg) return;
         ebLeitungen.innerHTML = ''; ebTeile.innerHTML = ''; ebUi.innerHTML = '';
         dyn.clear();
@@ -1122,7 +1174,7 @@
         const belegt = new Map();
         for (const l of plan.leitungen) {
             const pts = leitungPunkte(l);
-            if (!pts) continue;
+            if (!pts) { if (angedockt(l)) for (const e of [l.a, l.b]) { const k = e.t + ':' + e.p; belegt.set(k, (belegt.get(k) || 0) + 1); } continue; }
             const d = 'M' + pts.map(p => p.join(',')).join(' L');
             const gw = auswahl.has('L:' + l.id);
             const istSteuer = [l.a, l.b].some(e => { const tt = teil(e.t); const pl = tt && portLage(tt, e.p); return pl && pl.art === 's'; });
@@ -1171,7 +1223,10 @@
                 const sp = v => bild && v && bild.spule && bild.spule(v) ? bild.spule(v) + ' ' + v : (v || '?');
                 if (t.o.links === 'magnet') vs.push(sp(t.o.varL));
                 if (t.o.rechts === 'magnet') vs.push(sp(t.o.varR));
-                if (vs.length) el('text', { class: 'fp-var', x: bb[0], y: bb[3] + 12 }, ebTeile).textContent = vs.join(' · ');
+                // unter angedockten Schalldämpfern und Stopfen
+                let unten = bb[3];
+                for (const l of plan.leitungen) { const a = angedockt(l) && andockVon(l); if (a && a.wirt === t) unten = Math.max(unten, boxWelt(a.gast)[3]); }
+                if (vs.length) el('text', { class: 'fp-var', x: bb[0], y: unten + 12 }, ebTeile).textContent = vs.join(' · ');
             }
             if (t.typ === 'dschalter') {
                 const bb = boxWelt(t);
@@ -1429,7 +1484,10 @@
             const [wx, wy] = weltPunkt(e);
             if (z.art === 'hand') { handDruck(z.t, z.s, false); return; }
             if (z.art === 'teile') {
-                if (z.bewegt) { undoStapel.push(z.vorher); redoStapel = []; geoCache.clear(); speichern(); zeichnen(); }
+                if (z.bewegt) {
+                    for (const id in z.start) { const t = teil(id); if (t && ANDOCK[t.typ]) andockAblegen(t); }
+                    undoStapel.push(z.vorher); redoStapel = []; geoCache.clear(); speichern(); zeichnen();
+                }
                 return;
             }
             if (z.art === 'segment') {
@@ -1605,6 +1663,7 @@
             const o = Object.assign({}, TYP[v.typ].optionen, v.o || {});
             const t = { id: neueId(), typ: v.typ, x, y, rot: 0, bez: bezFuer(v.typ, o), o };
             plan.teile.push(t);
+            andockAblegen(t);
             auswahl.clear(); auswahl.add(t.id);
         });
     }
@@ -3378,7 +3437,7 @@
         oeffnen, schliessen, umschalten,
         _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
         _abkoppeln: abkoppeln,
-        _schaltbild: schaltbild, _posProzent: posProzent,
+        _schaltbild: schaltbild, _posProzent: posProzent, _portLage: (id, p) => { const t = teil(id); return t ? portLage(t, p) : null; }, _andockAblegen: id => aendern(() => andockAblegen(teil(id))),
         exportieren: planExport,
         importieren: planImport,
         plan: () => kopie(plan),

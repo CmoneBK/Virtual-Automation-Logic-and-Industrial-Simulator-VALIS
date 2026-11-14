@@ -39,14 +39,18 @@
     // ------------------------------------------------------------
     // Hilfen
     // ------------------------------------------------------------
+    // Das Panel kann in ein abgekoppeltes Fenster wandern: Elemente, Ereignisse
+    // und Dialoge immer im Dokument suchen, in dem der Plan gerade steht.
+    const D = () => (fenster && fenster.ownerDocument) || document;
+    const W = () => D().defaultView || window;
     const el = (tag, attrs, parent) => {
-        const e = document.createElementNS(NS, tag);
+        const e = D().createElementNS(NS, tag);
         if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
         if (parent) parent.appendChild(e);
         return e;
     };
     const h = (tag, attrs, parent) => {
-        const e = document.createElement(tag);
+        const e = D().createElement(tag);
         if (attrs) for (const k in attrs) {
             if (k === 'text') e.textContent = attrs[k];
             else if (k === 'html') e.innerHTML = attrs[k];
@@ -850,6 +854,10 @@
         background:#1e1e1e;border:1px solid #555;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.55);font-family:'Segoe UI',system-ui,sans-serif;color:#ddd;
         --fp-papier:#fff;--fp-linie:#263238;--fp-druck:#1565c0;--fp-aktiv:#ffb300;--fp-wahl:#ff6f00;}
     #fp-fenster.fp-max{left:0!important;top:0!important;width:100vw!important;height:100vh!important;border-radius:0}
+    #fp-fenster.fp-panel{position:relative;left:auto;top:auto;width:100%;height:100%;flex:1 1 auto;min-width:0;min-height:0;z-index:auto;display:flex;border:none;border-radius:0;box-shadow:none}
+    #fp-fenster.fp-panel .fp-kopf{cursor:default;border-radius:0}
+    #fp-fenster.fp-panel .fp-griffecke,#fp-fenster.fp-panel .fp-nur-fenster{display:none}
+    #fp-fenster .fp-leiste{flex-wrap:wrap}
     #fp-fenster *{box-sizing:border-box}
     .fp-kopf{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#2d2d30;border-bottom:1px solid #444;cursor:move;border-radius:8px 8px 0 0;user-select:none}
     .fp-kopf b{font-size:13px;color:#fff}
@@ -916,18 +924,29 @@
     .fp-hilfe kbd{background:#eceff1;border:1px solid #b0bec5;border-radius:3px;padding:0 4px;font-size:11px}
     `;
 
+    // Stil im Dokument, in dem der Plan gerade steht (Hauptfenster oder abgekoppelt)
+    function cssSicher() {
+        const d = D();
+        if (d.getElementById('fp-css')) return;
+        const st = d.createElement('style'); st.id = 'fp-css'; st.textContent = CSS; d.head.appendChild(st);
+    }
+    // Als Panel (#fluid-wrapper im Arbeitsbereich), sonst als schwebendes Fenster
+    const panelEl = () => document.getElementById('fluid-wrapper') || (fenster && fenster.ownerDocument.getElementById('fluid-wrapper'));
     function fensterBauen() {
         if (fenster) return;
-        const st = h('style', { id: 'fp-css' }); st.textContent = CSS; document.head.appendChild(st);
-        fenster = h('div', { id: 'fp-fenster', tabindex: '-1' }, document.body);
+        const host = panelEl();
+        fenster = h('div', { id: 'fp-fenster', tabindex: '-1' }, host || document.body);
+        if (host) fenster.classList.add('fp-panel');
+        cssSicher();
         const kopf = h('div', { class: 'fp-kopf' }, fenster);
         h('b', { text: '💨 Fluidplan' }, kopf);
         h('span', { class: 'fp-sub', text: 'Pneumatik nach DIN ISO 1219 · zeichnen und simulieren' }, kopf);
         const r = h('div', { class: 'fp-r' }, kopf);
         h('button', { class: 'fp-btn', title: 'Bedienung kurz erklärt', text: 'ℹ️ Hilfe', onclick: hilfeZeigen }, r);
-        h('button', { class: 'fp-btn', title: 'Fenster groß / klein', text: '⛶', onclick: () => { fenster.classList.toggle('fp-max'); } }, r);
+        h('button', { class: 'fp-btn fp-nur-fenster', title: 'Fenster groß / klein', text: '⛶', onclick: () => { fenster.classList.toggle('fp-max'); } }, r);
+        if (host) h('button', { class: 'fp-btn', title: 'In ein eigenes Fenster abkoppeln (Multi-Screen). Simulation und Abgleich laufen dort weiter.', text: '⏏ Abkoppeln', id: 'fp-abk', onclick: abkoppeln }, r);
         h('button', { class: 'fp-btn', title: 'Schließen (der Plan bleibt gespeichert und läuft in der Simulation weiter)', text: '✕', onclick: schliessen }, r);
-        ziehbar(kopf);
+        if (!host) ziehbar(kopf);
 
         const leiste = h('div', { class: 'fp-leiste' }, fenster);
         const k = (txt, title, fn, id) => h('button', { class: 'fp-btn', title, text: txt, onclick: fn, id }, leiste);
@@ -949,8 +968,8 @@
         k('📂 Beispiele', 'Fertige Beispielschaltungen laden', () => { auswahl.clear(); zeichnen(); beispieleZeigen(); });
         k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess');
         k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
-        k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = document.getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
-        k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; } if (plan.teile.length && confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
+        k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = D().getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
+        k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; } if (plan.teile.length && W().confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
         h('span', { class: 'fp-trenner' }, leiste);
         k('🏭 2D-Anlage: aus', 'Plan mit der 2D-Anlage verbinden: Zylinder, Stellglieder, Drosseln und Versorgung entstehen dort als 2D-Teile, der Auto-Schaltplan passt dann zum Fluidplan. Eine Wahrheit: Änderungen hier, in der 2D-Anlage und im Auto-Schaltplan gleichen sich gegenseitig ab.', anlageUmschalten, 'fp-anlage');
         k('⇐ Aus 2D-Anlage', 'Pneumatik der 2D-Anlage als Startplan übernehmen (ersetzt den Plan)', () => { const n = ausAnlage(); if (n) status(n + ' Zylinder aus der 2D-Anlage übernommen.'); });
@@ -995,16 +1014,16 @@
             if (e.target.closest('button') || fenster.classList.contains('fp-max')) return;
             const r = fenster.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
             const mv = ev => { fenster.style.left = Math.max(0, ev.clientX - dx) + 'px'; fenster.style.top = Math.max(0, ev.clientY - dy) + 'px'; };
-            const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
-            window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+            const up = () => { W().removeEventListener('pointermove', mv); W().removeEventListener('pointerup', up); };
+            W().addEventListener('pointermove', mv); W().addEventListener('pointerup', up);
         });
     }
     function groesseZiehen(e) {
         e.preventDefault();
         const r = fenster.getBoundingClientRect();
         const mv = ev => { fenster.style.width = Math.max(520, ev.clientX - r.left) + 'px'; fenster.style.height = Math.max(360, ev.clientY - r.top) + 'px'; ansichtSetzen(); };
-        const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
-        window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+        const up = () => { W().removeEventListener('pointermove', mv); W().removeEventListener('pointerup', up); };
+        W().addEventListener('pointermove', mv); W().addEventListener('pointerup', up);
     }
 
     function paletteBauen(pal) {
@@ -1229,7 +1248,7 @@
     let zug = null;   // laufende Zieh-Aktion
     function werkzeugSetzen(w) {
         werkzeug = w;
-        ['auswahl', 'loeschen'].forEach(x => { const b = document.getElementById('fp-w-' + x); if (b) b.classList.toggle('an', x === w); });
+        ['auswahl', 'loeschen'].forEach(x => { const b = D().getElementById('fp-w-' + x); if (b) b.classList.toggle('an', x === w); });
         status();
     }
     function zeigerEinrichten() {
@@ -1372,7 +1391,7 @@
         svg.addEventListener('pointercancel', ende);
         svg.addEventListener('dblclick', e => {
             const tg = e.target.closest && e.target.closest('.fp-teil');
-            if (tg && !simLaeuft()) { auswahl.clear(); auswahl.add(tg.getAttribute('data-t')); zeichnen(); const f = document.querySelector('#fp-eigen input, #fp-eigen select'); if (f) f.focus(); }
+            if (tg && !simLaeuft()) { auswahl.clear(); auswahl.add(tg.getAttribute('data-t')); zeichnen(); const f = D().querySelector('#fp-eigen input, #fp-eigen select'); if (f) f.focus(); }
         });
     }
     function zeichnenLeicht() { /* Rahmen bleibt in ebUi stehen */ }
@@ -1496,13 +1515,13 @@
         if (simLaeuft()) { status('Während der Simulation lässt sich der Plan nicht ändern.'); return; }
         if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; }
         e.preventDefault();
-        const geist = h('div', { style: 'position:fixed;pointer-events:none;z-index:9999;background:#fff;border:1px solid #ff6f00;border-radius:4px;padding:2px 6px;font-size:11px;color:#263238', text: v.name }, document.body);
+        const geist = h('div', { style: 'position:fixed;pointer-events:none;z-index:9999;background:#fff;border:1px solid #ff6f00;border-radius:4px;padding:2px 6px;font-size:11px;color:#263238', text: v.name }, D().body);
         const bewege = ev => { geist.style.left = ev.clientX + 8 + 'px'; geist.style.top = ev.clientY + 8 + 'px'; };
         bewege(e);
         let gezogen = false; const sx = e.clientX, sy = e.clientY;
         const mv = ev => { bewege(ev); if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 4) gezogen = true; };
         const up = ev => {
-            window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
+            W().removeEventListener('pointermove', mv); W().removeEventListener('pointerup', up);
             geist.remove();
             const r = svg.getBoundingClientRect();
             const drin = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
@@ -1513,7 +1532,7 @@
                 setzen(v, snap(mx + (plan.teile.length % 5) * 20), snap(my + (plan.teile.length % 5) * 20));
             }
         };
-        window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up);
+        W().addEventListener('pointermove', mv); W().addEventListener('pointerup', up);
     }
     function setzen(v, x, y) {
         aendern(() => {
@@ -1528,7 +1547,7 @@
     // Eigenschaften
     // ------------------------------------------------------------
     function eigenschaften() {
-        const box = document.getElementById('fp-eigen'); if (!box) return;
+        const box = D().getElementById('fp-eigen'); if (!box) return;
         if (plan.fehlersuche && fehlerAnzahl()) { fehlersucheZeigen(); return; }
         const ids = [...auswahl].filter(a => !a.startsWith('L:'));
         box.innerHTML = '';
@@ -1565,8 +1584,8 @@
         };
         const variable = (lbl, key, art) => {
             const id = 'fp-dl-' + art;
-            let dl = document.getElementById(id);
-            if (!dl) dl = h('datalist', { id }, document.body);
+            let dl = D().getElementById(id);
+            if (!dl) dl = h('datalist', { id }, D().body);
             dl.innerHTML = ''; varListe(art).forEach(v => h('option', { value: v }, dl));
             const i = fld(lbl, h('input', { value: t.o[key] || '', list: id, placeholder: art === 'in' ? 'z. B. B1' : 'z. B. Y1' }));
             i.onchange = () => setze(() => { t.o[key] = i.value.trim().replace(/\s+/g, '_'); });
@@ -1712,7 +1731,7 @@
         const txt = new XMLSerializer().serializeToString(c);
         const datei = 'fluidplan.svg';
         if (typeof window._saveAsFile === 'function') { try { window._saveAsFile(txt, datei, 'image/svg+xml', [{ description: 'SVG-Bild', ext: '.svg' }]); return; } catch (e) {} }
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'image/svg+xml' })); a.download = datei; a.click();
+        const a = D().createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'image/svg+xml' })); a.download = datei; a.click();
     }
     function hilfeZeigen() {
         const fl = svg.parentNode;
@@ -1728,7 +1747,7 @@
             <span style="color:#78909c">Klick auf diesen Kasten schließt ihn.</span>`, onclick: function () { this.remove(); } }, fl);
     }
     function status(txt) {
-        const f = document.getElementById('fp-fuss'); if (!f) return;
+        const f = D().getElementById('fp-fuss'); if (!f) return;
         if (txt) { f.innerHTML = txt; return; }
         if (simLaeuft()) f.innerHTML = '<b>Simulation läuft</b> · Taster und Hebel im Plan anklicken · blaue Leitungen stehen unter Druck';
         else if (werkzeug === 'loeschen') f.innerHTML = '<b>Löschen</b> · Bauteil oder Leitung anklicken';
@@ -1790,7 +1809,7 @@
     ];
     function beispielLaden(i) {
         const b = BEISPIELE[i]; if (!b) return;
-        if (plan.teile.length && !confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
+        if (plan.teile.length && !W().confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
         const neu = { v: 2, teile: [], leitungen: [] };
         const T = (typ, x, y, bez, o) => { const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: bez || '', o: Object.assign({}, TYP[typ].optionen, o || {}) }; neu.teile.push(t); return t; };
         const L = (a, ap, c, cp) => neu.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: c.id, p: cp } });
@@ -1799,7 +1818,7 @@
         sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + b.text);
     }
     function beispieleZeigen() {
-        const box = document.getElementById('fp-eigen'); if (!box) return;
+        const box = D().getElementById('fp-eigen'); if (!box) return;
         box.innerHTML = ''; box.classList.add('offen');
         h('h4', { text: '📂 Beispiele' }, box);
         h('div', { class: 'fp-hinw', text: 'Ein Beispiel ersetzt den aktuellen Plan. Danach ▶ Simulation starten und Taster oder Hebel im Plan anklicken.' }, box);
@@ -1816,7 +1835,7 @@
     const MESS_MAX = 3;
     function messUmschalten() {
         messModus = !messModus;
-        const b = document.getElementById('fp-mess'); if (b) b.classList.toggle('an', messModus);
+        const b = D().getElementById('fp-mess'); if (b) b.classList.toggle('an', messModus);
         status(messModus ? `<b>Messen</b>: Leitung anklicken steckt ein Manometer an (höchstens ${MESS_MAX}), Klick aufs Manometer zieht es ab.` : '');
     }
     function messKlick(lt, wx, wy, ziel) {
@@ -1861,18 +1880,17 @@
     }
     function anlageUmschalten() {
         if (!plan.anlage && !plan.teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew')) { status('Erst einen Zylinder in den Plan setzen.'); return; }
-        if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
+        if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !W().confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
         aendern(() => { plan.anlage = !plan.anlage; if (!plan.anlage) plan.erzeugt = []; });
     }
     function knopfZustand() {
-        const ab = document.getElementById('fp-anlage');
+        const ab = D().getElementById('fp-anlage');
         if (ab) { ab.textContent = plan.anlage ? '🏭 2D-Anlage: verbunden' : '🏭 2D-Anlage: aus'; ab.classList.toggle('an', !!plan.anlage); }
-        const s = document.getElementById('fp-sim');
+        const s = D().getElementById('fp-sim');
         if (s) { const an = simLaeuft(); s.classList.add('sim'); s.classList.toggle('an', an); s.textContent = an ? '■ Stopp' : '▶ Simulation'; }
-        const u = document.getElementById('fp-undo'); if (u) u.disabled = !undoStapel.length;
-        const r = document.getElementById('fp-redo'); if (r) r.disabled = !redoStapel.length;
-        const vb = document.getElementById('btn-view-fluid');
-        if (vb) vb.classList.toggle('active', offen);
+        const u = D().getElementById('fp-undo'); if (u) u.disabled = !undoStapel.length;
+        const r = D().getElementById('fp-redo'); if (r) r.disabled = !redoStapel.length;
+        // Den Ansicht-Knopf oben (aktiv / abgekoppelt) setzt updateWorkspace
     }
 
     // ------------------------------------------------------------
@@ -2324,7 +2342,7 @@
     function diagZeichnen(sofort) {
         if (!diagBox || !diagBox.classList.contains('offen')) return;
         if (!sofort && ++diagBild % 6) return;
-        const sb = document.getElementById('fp-d-schritt'), zb = document.getElementById('fp-d-zeit');
+        const sb = D().getElementById('fp-d-schritt'), zb = D().getElementById('fp-d-zeit');
         if (sb) sb.classList.toggle('an', diagArt === 'schritt'); if (zb) zb.classList.toggle('an', diagArt === 'zeit');
         const svgD = diagSvg; svgD.innerHTML = '';
         diagBox.style.height = Math.min(360, Math.max(170, 54 + antriebe().length * 36)) + 'px';
@@ -2382,8 +2400,8 @@
         k.setAttribute('width', vb[2]); k.setAttribute('height', vb[3]);
         el('rect', { x: 0, y: 0, width: vb[2], height: vb[3], fill: '#fff' }, k).parentNode.insertBefore(k.lastChild, k.firstChild);
         const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(k)], { type: 'image/svg+xml' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (diagArt === 'schritt' ? 'weg-schritt-diagramm' : 'weg-zeit-diagramm') + '.svg';
-        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        const a = D().createElement('a'); a.href = URL.createObjectURL(blob); a.download = (diagArt === 'schritt' ? 'weg-schritt-diagramm' : 'weg-zeit-diagramm') + '.svg';
+        D().body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
     let taktZeit = -1e9;
@@ -2409,6 +2427,17 @@
     };
     function schleife(ts) {
         requestAnimationFrame(schleife);
+        // Panel beim Laden schon sichtbar (gespeicherte Ansicht): Inhalt jetzt bauen
+        if (!fenster && document.getElementById('fluid-wrapper') && panelSichtbar()) sichtbarGeworden();
+        if (fenster) {
+            const war = offen;
+            offen = panelSichtbar();
+            if (offen && (!war || D() !== letztesDok)) sichtbarGeworden();
+            else if (offen && svg) {
+                const r = svg.getBoundingClientRect(), g = Math.round(r.width) + 'x' + Math.round(r.height);
+                if (g !== letzteGroesse) { letzteGroesse = g; if (r.width > 50) { if (!fenster._eingepasst) { einpassen(); fenster._eingepasst = true; } else ansichtSetzen(); } }
+            }
+        }
         const laeuft = simLaeuft();
         if (laeuft !== warLaufend) {
             warLaufend = laeuft;
@@ -2510,7 +2539,7 @@
         return { treffer: treffer.length, falsch: falsch.length, offen: n - gef };
     }
     function fehlersucheZeigen(meldung) {
-        const box = document.getElementById('fp-eigen'); if (!box) return;
+        const box = D().getElementById('fp-eigen'); if (!box) return;
         box.innerHTML = ''; box.classList.add('offen');
         const n = fehlerAnzahl();
         h('h4', { text: '🔍 Fehlersuche' }, box);
@@ -2523,7 +2552,7 @@
             v.forEach(k => h('div', { text: '• ' + (k.startsWith('L:') ? 'Leitung' : ((teil(k) || {}).bez || TYP[(teil(k) || {}).typ] && TYP[teil(k).typ].name || '?')), style: 'color:#ffb74d;margin:2px 0' }, box));
             h('button', { class: 'fp-btn', text: '✓ Befund prüfen', style: 'margin-top:8px', onclick: befundPruefen }, box);
             if (meldung) h('div', { class: 'fp-hinw', text: meldung, style: 'color:#e0e0e0;font-size:11.5px' }, box);
-            h('button', { class: 'fp-btn', text: 'Lehrkraft: Fehler zeigen', style: 'margin-top:14px', title: 'Fehlersuche beenden und die Fehler wieder einblenden', onclick: () => { if (confirm('Fehlersuche beenden und die versteckten Fehler zeigen?')) aendern(() => { plan.fehlersuche = false; plan.verdacht = []; }); } }, box);
+            h('button', { class: 'fp-btn', text: 'Lehrkraft: Fehler zeigen', style: 'margin-top:14px', title: 'Fehlersuche beenden und die Fehler wieder einblenden', onclick: () => { if (W().confirm('Fehlersuche beenden und die versteckten Fehler zeigen?')) aendern(() => { plan.fehlersuche = false; plan.verdacht = []; }); } }, box);
         } else {
             h('div', { class: 'fp-hinw', text: 'Lehrkraft: Bauteil oder Leitung anklicken und unter „Versteckter Fehler“ einen Fehler wählen. Dann die Fehlersuche starten: Die Fehler sind nicht mehr zu sehen, die Lernenden melden ihren Befund. Als Aufgabe speichern: Bedingung „Fluidplan: alle Fehler gefunden“.' }, box);
             h('label', { text: `Eingebaute Fehler (${n})` }, box);
@@ -2889,7 +2918,7 @@
         const F = fabrik(); if (!F) return 0;
         const zyl = F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics);
         if (!zyl.length) { status('In der 2D-Anlage gibt es keinen Zylinder mit Pneumatik.'); return 0; }
-        if (plan.teile.length && !confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
+        if (plan.teile.length && !W().confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
         aendern(() => {
             const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'));
             // Reed-Schalter der 2D-Zylinder werden Endlagensensoren im Plan (sonst
@@ -3055,19 +3084,48 @@
     // ------------------------------------------------------------
     // Öffnen / Schließen, Schnittstelle
     // ------------------------------------------------------------
+    const abgekoppelt = () => { const w = window.popOutWindows && window.popOutWindows['fluid-wrapper']; return !!(w && !w.closed); };
+    function panelSichtbar() {
+        const p = panelEl();
+        if (!p) return !!(fenster && fenster.style.display !== 'none' && fenster.style.display !== '');
+        if (abgekoppelt()) return true;
+        return p.style.display !== 'none' && p.style.getPropertyValue('display') !== 'none';
+    }
+    // Nach Einblenden, Abkoppeln oder Zurückholen: Stil, Größe, Ansicht neu
+    let letztesDok = null, letzteGroesse = '';
+    function sichtbarGeworden() {
+        fensterBauen();
+        cssSicher();
+        offen = panelSichtbar();
+        letztesDok = D(); letzteGroesse = '';
+        const ab = D().getElementById('fp-abk'); if (ab) ab.style.display = abgekoppelt() ? 'none' : '';
+        W().requestAnimationFrame(() => {
+            ansichtSetzen(); zeichnen(); eigenschaften(); status(); knopfZustand();
+            if (!fenster._eingepasst && svg && svg.getBoundingClientRect().width > 50) { einpassen(); fenster._eingepasst = true; }
+        });
+    }
     function oeffnen() {
         fensterBauen();
-        fenster.style.display = 'flex';
-        offen = true;
-        requestAnimationFrame(() => { zeichnen(); if (!fenster._eingepasst) { einpassen(); fenster._eingepasst = true; } });
-        knopfZustand();
+        const p = panelEl();
+        if (!p) { fenster.style.display = 'flex'; sichtbarGeworden(); return; }
+        if (abgekoppelt()) { try { window.popOutWindows['fluid-wrapper'].focus(); } catch (e) {} sichtbarGeworden(); return; }
+        if (!panelSichtbar() && typeof window.toggleWorkspaceView === 'function') window.toggleWorkspaceView('fluid-wrapper');
+        sichtbarGeworden();
     }
     function schliessen() {
-        if (fenster) fenster.style.display = 'none';
-        offen = false;
-        knopfZustand();
+        const p = panelEl();
+        if (!p) { if (fenster) fenster.style.display = 'none'; offen = false; return; }
+        if (panelSichtbar() && typeof window.toggleWorkspaceView === 'function') window.toggleWorkspaceView('fluid-wrapper');
+        offen = panelSichtbar();
     }
-    function umschalten() { if (offen) schliessen(); else oeffnen(); }
+    function umschalten() { if (panelSichtbar()) schliessen(); else oeffnen(); }
+    function abkoppeln() {
+        fensterBauen();
+        if (abgekoppelt()) { try { window.popOutWindows['fluid-wrapper'].focus(); } catch (e) {} return; }
+        if (typeof window.detachPanel !== 'function') return;
+        window.detachPanel('fluid-wrapper', 'Fluidplan');
+        sichtbarGeworden();
+    }
 
     // Vorerst nur auf Freischaltung sichtbar: einmal ?fluidplan=1 aufrufen (merkt sich der Browser),
     // ?fluidplan=0 blendet den Knopf wieder aus.
@@ -3082,11 +3140,15 @@
     function knopfSichtbar() {
         const b = document.getElementById('btn-view-fluid');
         if (b) b.style.display = freigeschaltet() ? '' : 'none';
+        const a = document.getElementById('detach-fluid-item');
+        if (a) a.style.display = freigeschaltet() ? '' : 'none';
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', knopfSichtbar); else knopfSichtbar();
 
     window.Fluidplan = {
         oeffnen, schliessen, umschalten,
+        _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
+        _abkoppeln: abkoppeln,
         exportieren: planExport,
         importieren: planImport,
         plan: () => kopie(plan),

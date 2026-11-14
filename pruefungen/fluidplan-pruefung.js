@@ -519,6 +519,60 @@ const FAELLE = {
     console.log('\n' + name);
     for (const [n, ok, d] of erg) { console.log(`  ${ok ? '✓' : '✗'} ${n}${d !== '' && d != null ? '  (' + (typeof d === 'number' ? d.toFixed(3) : d) + ')' : ''}`); ok ? gut++ : schlecht++; }
   }
+  // Panel im Arbeitsbereich und abgekoppeltes Fenster (echter Browser-Popup)
+  {
+    console.log('\nPanel und abgekoppeltes Fenster');
+    const R = [];
+    const ok = (n, b, d) => { R.push([n, !!b, d == null ? '' : d]); };
+    await page.evaluate(() => { Fluidplan._leeren(); window.loadExample('code'); });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => { Fluidplan.ausAnlage(); Fluidplan.verbinden2D(true); });
+    await page.evaluate(() => { try { if (typeof closeHub === 'function') closeHub(); } catch (e) {} Fluidplan.umschalten(); });
+    await page.waitForTimeout(800);
+    const a = await page.evaluate(() => { const p = document.getElementById('fluid-wrapper'), f = document.getElementById('fp-fenster');
+      return { im: !!f && f.parentElement === p, sichtbar: p.offsetWidth > 100, teile: f ? f.querySelectorAll('.fp-svg [data-t]').length : 0, knopf: document.getElementById('btn-view-fluid').classList.contains('active') }; });
+    ok('Fluidplan ist ein Panel im Arbeitsbereich', a.im && a.sichtbar, JSON.stringify(a));
+    ok('Ansicht-Knopf zeigt das Panel als aktiv', a.knopf);
+    ok('Plan wird im Panel gezeichnet', a.teile >= 5, a.teile);
+    const [pop] = await Promise.all([page.context().waitForEvent('page'), page.evaluate(() => Fluidplan._abkoppeln())]);
+    pop.on('pageerror', e => fehler.push('Abgekoppelt: ' + e));
+    await pop.setViewportSize({ width: 1200, height: 800 });
+    await page.waitForTimeout(1200);
+    const b = await pop.evaluate(() => { const f = document.getElementById('fp-fenster'), svg = f && f.querySelector('.fp-svg'), r = svg && svg.getBoundingClientRect();
+      return { da: !!f, css: !!document.getElementById('fp-css'), breite: r ? Math.round(r.width) : 0, teile: f ? f.querySelectorAll('.fp-svg [data-t]').length : 0, abk: (document.getElementById('fp-abk') || {}).style ? document.getElementById('fp-abk').style.display : '?' }; });
+    ok('abgekoppelt: Plan steht im eigenen Fenster mit Stil', b.da && b.css, JSON.stringify(b));
+    ok('abgekoppelt: gezeichnet und füllt das Fenster', b.teile >= 5 && b.breite > 700, b.teile + ' Teile, ' + b.breite + ' px');
+    ok('abgekoppelt: Knopf „Abkoppeln“ ausgeblendet', b.abk === 'none', b.abk);
+    ok('Ansicht-Knopf zeigt „abgekoppelt“', await page.evaluate(() => document.getElementById('btn-view-fluid').classList.contains('detached')));
+    // Simulation im Hauptfenster: Planzylinder und Darstellung im Popup laufen mit
+    await page.evaluate(() => { const c = document.getElementById('code'); c.value = 'ZYL_AUS := START\nZYL_EIN := STOP'; c.dispatchEvent(new Event('input', { bubbles: true })); window.toggleSimulation(); });
+    await page.waitForTimeout(600);
+    const h0 = await pop.evaluate(() => document.querySelector('#fp-fenster .fp-welt').innerHTML);
+    await page.evaluate(() => { spsState.START = true; }); await page.waitForTimeout(1500); await page.evaluate(() => { spsState.START = false; });
+    const c = await pop.evaluate(() => ({ h: document.querySelector('#fp-fenster .fp-welt').innerHTML, sim: document.getElementById('fp-sim').textContent, x: Object.values(opener.Fluidplan.zustand().teile).filter(t => t.anteil != null).map(t => t.anteil) }));
+    const ext = await page.evaluate(() => factoryObjects.find(o => o.id === 'cyl1').extension);
+    ok('abgekoppelt: Simulation bewegt Plan- und 2D-Zylinder', c.x[0] > 0.98 && ext > 98, c.x[0].toFixed(2) + ' / ' + ext.toFixed(1));
+    ok('abgekoppelt: Darstellung läuft mit (Drücke, Kolben)', c.h !== h0);
+    ok('abgekoppelt: Sim-Knopf zeigt den Lauf', /Stopp/.test(c.sim), c.sim);
+    await page.evaluate(() => window.toggleSimulation());
+    await page.waitForTimeout(300);
+    // Bedienen im Popup: Drossel der Ausfahrbewegung anklicken und mit Entf löschen → 2D-Drossel weg
+    const drvId = await page.evaluate(() => { const p = Fluidplan.plan(); const z = p.teile.find(t => t.typ === 'zyl_dw'); const l = p.leitungen.find(l => (l.a.t === z.id && l.a.p === 'S') || (l.b.t === z.id && l.b.p === 'S')); const o = l.a.t === z.id ? l.b.t : l.a.t; return p.teile.find(t => t.id === o && t.typ === 'drv') ? o : null; });
+    const bb = drvId && await (await pop.$('#fp-fenster .fp-svg [data-t="' + drvId + '"]')).boundingBox();
+    if (bb) { await pop.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await pop.keyboard.press('Delete'); await page.waitForTimeout(600); }
+    const d = await page.evaluate((id) => ({ imPlan: Fluidplan.plan().teile.some(t => t.id === id), th2d: !!factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === 'cyl1' && o.role === 'ext') }), drvId);
+    ok('abgekoppelt: Anklicken + Entf löscht die Drossel im Plan', drvId && !d.imPlan, drvId);
+    ok('… und der Abgleich nimmt sie aus der 2D-Anlage', !d.th2d);
+    // Zurück ins Hauptfenster
+    await pop.evaluate(() => document.querySelector('.detached-cell[data-panel-id="fluid-wrapper"] .detached-cell-reattach-btn').click());
+    await page.waitForTimeout(800);
+    await page.evaluate(() => { try { if (typeof closeHub === 'function') closeHub(); } catch (e) {} Fluidplan.umschalten(); }); await page.waitForTimeout(800);
+    const e = await page.evaluate(() => { const p = document.getElementById('fluid-wrapper'), f = document.getElementById('fp-fenster'); return { im: !!f && f.parentElement === p, w: p.offsetWidth, teile: f.querySelectorAll('.fp-svg [data-t]').length, abk: document.getElementById('fp-abk').style.display }; });
+    ok('zurückgeholt: wieder Panel im Hauptfenster und gezeichnet', e.im && e.w > 100 && e.teile >= 4, JSON.stringify(e));
+    ok('zurückgeholt: Knopf „Abkoppeln“ wieder da', e.abk === '', e.abk);
+    await page.evaluate(() => { Fluidplan.verbinden2D(false); Fluidplan._leeren(); });
+    for (const [n, g, dd] of R) { console.log(`  ${g ? '✓' : '✗'} ${n}${dd !== '' && dd != null ? '  (' + dd + ')' : ''}`); g ? gut++ : schlecht++; }
+  }
   if (fehler.length) { console.log('\nSeitenfehler:\n  ' + fehler.join('\n  ')); schlecht += fehler.length; }
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

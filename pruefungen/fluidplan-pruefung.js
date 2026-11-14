@@ -511,10 +511,17 @@ const FAELLE = {
       v: F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'magnet' }), t: F.setzen('ventil', 200, 150, { wege: '3/2', links: 'taster' }),
       r: F.setzen('ventil', 300, 150, { wege: '3/2', links: 'rolle' }), d: F.setzen('drv', 0, 80), u: F.setzen('zweidruck', 100, 200) };
     const b = id => F.plan().teile.find(t => t.id === id).bez;
-    const soll = { q: '-GQA1', w: '-GQ1', z: '-MM1', z2: '-MM2', v: '-QM1', t: '-SJ1', r: '-BG1', d: '-RN1', u: '-KH1' };
+    // Elektroplan vergibt schon -SJ/-BG (START, Sensoren): Plan nummeriert weiter, nie doppelt
+    const el = new Set(Object.values(window._spsIoLabels(currentGraph, globalInputs, globalOutputs).labels));
+    const frei = c => { let n = 1; while (el.has('-' + c + n)) n++; return '-' + c + n; };
+    const soll = { q: '-GQA1', w: '-GQ1', z: '-MM1', z2: '-MM2', v: '-QM1', t: frei('SJ'), r: frei('BG'), d: '-RN1', u: '-KH1' };
     for (const k in soll) R.push(['neues Teil: ' + soll[k], b(ids[k]) === soll[k], b(ids[k])]);
+    R.push(['kein Kennzeichen doppelt mit dem Elektroplan', F.plan().teile.every(t => !el.has(t.bez)), [...el].join(' ')]);
+    const rb = F.setzen('rueck', 0, 0), dr = F.setzen('drossel', 0, 0), dg = F.setzen('druckregel', 0, 0), se = F.setzen('schnell', 0, 0);
+    const buch = [b(rb), b(dr), b(dg), b(se)].join(' ');
+    R.push(['Kennbuchstaben nach Tabellenbuch: RMB, RNB, QN, QM', buch === '-RMB1 -RNB1 -QN1 -QM2', buch]);
     F.aendern(ids.t, { links: 'magnet' });
-    R.push(['Kennzeichen passt zur Betätigung (Taster → Magnet wird -QM2)', b(ids.t) === '-QM2', b(ids.t)]);
+    R.push(['Kennzeichen passt zur Betätigung (Taster → Magnet wird -QM)', /^-QM\d+$/.test(b(ids.t)), b(ids.t)]);
     // alte Pläne (1A1, 1V1 …) bekommen beim Laden die neuen Kennzeichen
     const alt = { v: 2, teile: [{ id: 'a', typ: 'zyl_dw', x: 0, y: 0, rot: 0, bez: '1A1', o: {} }, { id: 'b', typ: 'ventil', x: 0, y: 150, rot: 0, bez: '1V1', o: { wege: '5/2', links: 'magnet', rechts: 'feder' } },
       { id: 'c', typ: 'quelle', x: 0, y: 300, rot: 0, bez: '0Z1', o: {} }], leitungen: [] };
@@ -547,7 +554,7 @@ const FAELLE = {
     const g = bild();
     const sv = g && g.querySelector('[data-t="' + s + '"]');
     R.push(['Rollenventil steht im Auto-Schaltplan mit Rolle statt Magnet', !!sv && !sv.querySelector('.fp-bet-magnet'), sv ? 'da' : 'fehlt']);
-    R.push(['… mit seinem Kennzeichen -BG1', kz().includes('-BG1'), kz().join(' ')]);
+    R.push(['… mit -BG3 (-BG1/-BG2 sind S_METALL und S_ZYL_VORN im Elektroplan)', kz().includes('-BG3'), kz().join(' ')]);
     const o2 = factoryObjects.find(o => o.id === F.plan().teile.find(t => t.id === z2).o.anlage);
     R.push(['2D-Zylinder und Auto-Schaltplan tragen dasselbe Kennzeichen', o2 && o2.normLabel === '-MM2' && !!g.querySelector('[data-obj-id="' + o2.id + '"]'), o2 && o2.normLabel]);
     // Kennzeichen in der 2D-Anlage ändern → Plan

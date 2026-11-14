@@ -292,17 +292,19 @@
         geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'v' }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a' }], box: [-42, -26, 42, 18] }; },
         zeichne(t, g) {
             if (t.o.kurz) {
-                // Kurzform wie im Auto-Schaltplan: Rahmen, Filter (gestrichelt), Manometer, Ablass
+                // Kurzform (vereinfachtes Zeichen der Aufbereitungseinheit, DIN ISO 1219-1): Rahmen,
+                // Filter mit Ablass (gestrichelt, Pfeil nach unten), Manometer, Druckregler (Strich von oben)
                 const bw = 46, bh = 26, bx = -bw / 2, by = -bh / 2;
                 el('rect', { x: bx, y: by, width: bw, height: bh, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
                 el('line', { x1: -40, y1: 0, x2: bx, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
                 el('line', { x1: bx + bw, y1: 0, x2: 40, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
-                const fx = bx + bw * 0.30, mx = bx + bw * 0.62;
-                el('line', { x1: fx, y1: by + 3, x2: fx, y2: by + bh - 3, stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '2 2' }, g);
-                el('circle', { cx: mx, cy: 0, r: 6, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
-                el('line', { x1: mx, y1: 0, x2: mx + 4, y2: -4, stroke: 'currentColor', 'stroke-width': 1.1 }, g);
-                el('line', { x1: fx, y1: by + bh, x2: fx, y2: by + bh + 5, stroke: 'currentColor', 'stroke-width': 1 }, g);
-                el('path', { d: `M${fx - 3},${by + bh + 5} L${fx + 3},${by + bh + 5} L${fx},${by + bh + 9} Z`, fill: 'currentColor' }, g);
+                const fx = bx + 6, mx = 0, rx = bx + bw - 6;
+                el('line', { x1: fx, y1: by, x2: fx, y2: by + bh + 7, stroke: 'currentColor', 'stroke-width': 1.1, 'stroke-dasharray': '3 2' }, g);
+                el('path', { d: `M${fx - 2.5},${by + bh + 6} L${fx},${by + bh + 10} L${fx + 2.5},${by + bh + 6} Z`, fill: 'currentColor' }, g);
+                el('circle', { cx: mx, cy: 0, r: 7.5, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+                el('line', { x1: mx + 4, y1: 4, x2: mx - 3, y2: -3, stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+                el('path', { d: `M${mx - 4.5},${-4.5} L${mx - 0.6},${-3.4} L${mx - 3.4},${-0.6} Z`, fill: 'currentColor' }, g);
+                el('line', { x1: rx, y1: by, x2: rx, y2: by + 9, stroke: 'currentColor', 'stroke-width': 1.3 }, g);
                 return;
             }
             el('rect', { x: -30, y: -18, width: 60, height: 32, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.2, 'stroke-dasharray': '8 3 2 3' }, g);
@@ -351,13 +353,14 @@
     TYP.daempfer = {
         name: 'Schalldämpfer', buchstabe: '', ohneBez: true,
         optionen: { drossel: false, offen: 100 },
-        geometrie() { return { ports: [{ id: '1', x: 0, y: -14, dir: [0, -1], art: 'r', ohneNr: true }], box: [-10, -16, 10, 10] }; },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -14, dir: [0, -1], art: 'r', ohneNr: true }], box: [-10, -16, 10, 22] }; },
         zeichne(t, g) {
+            // DIN ISO 1219-1: Rechteck mit Prallwänden, Austritt als offenes Dreieck (hier senkrecht unter dem Anschluss)
             el('line', { x1: 0, y1: -4, x2: 0, y2: -14, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
-            el('path', { d: 'M0,-4 L8,4 L0,12 L-8,4 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
-            el('line', { x1: -4, y1: 4, x2: 4, y2: 4, stroke: 'currentColor', 'stroke-width': 1 }, g);
-            el('line', { x1: -2, y1: 7, x2: 2, y2: 7, stroke: 'currentColor', 'stroke-width': 1 }, g);
-            if (t.o.drossel) el('line', { x1: -9, y1: 10, x2: 9, y2: -2, stroke: 'currentColor', 'stroke-width': 1, 'marker-end': 'url(#fp-pfeil)' }, g);
+            el('rect', { x: -5, y: -4, width: 10, height: 20, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            el('path', { d: 'M-5,1 H0 M-5,11 H0 M5,6 H0', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+            el('path', { d: 'M-3.5,16 L0,20.5 L3.5,16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3 }, g);
+            if (t.o.drossel) el('line', { x1: -9, y1: 14, x2: 9, y2: -2, stroke: 'currentColor', 'stroke-width': 1, 'marker-end': 'url(#fp-pfeil)' }, g);
         }
     };
     TYP.stopfen = {
@@ -732,8 +735,9 @@
     // ------------------------------------------------------------
     // Kennzeichen (DIN EN 81346-2, wie im Auto-Schaltplan): -MM1, -QM1, -RN1 …
     // ------------------------------------------------------------
-    const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'RP', manometer: 'PG',
-        rueck: 'RM', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QN', drossel: 'RN', drv: 'RN', dschalter: 'BP' };
+    // Kennbuchstaben Pneumatik nach Tabellenbuch Metall, Kennzeichnung im Schaltplan (DIN EN 81346-2)
+    const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'QN', manometer: 'PG',
+        rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP' };
     function kennCode(typ, o) {
         if (typ === 'ventil') {
             // Signalglieder: Rollenventile erfassen eine Lage (BG), handbetätigte sind Bedienteile (SJ)
@@ -744,6 +748,24 @@
         return KENN[typ] || 'Q';
     }
     const ALT_BEZ = /^\d+[A-Z]\d+$/;   // altes Schema 1A1, 1V2, 0Z1 (DIN ISO 1219-2)
+    // Kennzeichen, die der Elektroplan schon vergibt (-BG1 für S_METALL, -SJ1 für START …)
+    function elektroKennzeichen() {
+        try {
+            if (typeof window._spsIoLabels !== 'function' || typeof currentGraph === 'undefined' || !currentGraph) return [];
+            const r = window._spsIoLabels(currentGraph, typeof globalInputs !== 'undefined' ? globalInputs : [], typeof globalOutputs !== 'undefined' ? globalOutputs : []);
+            return Object.values(r.labels || {});
+        } catch (e) { return []; }
+    }
+    // Plan-Kennzeichen, die mit dem Elektroplan zusammenfallen, neu nummerieren
+    function kennKonflikteLoesen() {
+        const el = new Set(elektroKennzeichen());
+        if (!el.size) return false;
+        const doppelt = plan.teile.filter(t => t.bez && el.has(t.bez) && /^-(BG|SJ|BP|KH)\d+$/.test(t.bez));
+        if (!doppelt.length) return false;
+        const belegt = new Set(plan.teile.map(t => t.bez).concat([...el]));
+        doppelt.forEach(t => { t.bez = freiesKennzeichen(kennCode(t.typ, t.o), belegt); });
+        return true;
+    }
     function freiesKennzeichen(code, belegt) {
         let n = 1;
         while (belegt.has('-' + code + n)) n++;
@@ -752,7 +774,7 @@
     function neueBezeichnung(typ, o) {
         const T = TYP[typ];
         if (T.ohneBez) return '';
-        return freiesKennzeichen(kennCode(typ, o), new Set(plan.teile.map(t => t.bez)));
+        return freiesKennzeichen(kennCode(typ, o), new Set(plan.teile.map(t => t.bez).concat(elektroKennzeichen())));
     }
     function bezFuer(typ, o) { return neueBezeichnung(typ, o); }
     // Wechselt ein Ventil seine Art (Taster → Magnet …), wechselt das automatische Kennzeichen mit
@@ -764,7 +786,7 @@
     // Teile ohne Kennzeichen oder mit altem Schema bekommen ein neues. Liefert alt → neu.
     function kennzeichenAuffrischen(p) {
         const map = {};
-        const belegt = new Set(p.teile.filter(t => t.bez && !ALT_BEZ.test(t.bez)).map(t => t.bez));
+        const belegt = new Set(p.teile.filter(t => t.bez && !ALT_BEZ.test(t.bez)).map(t => t.bez).concat(elektroKennzeichen()));
         // Zylinder links zuerst, damit -MM1 links steht
         const reihe = p.teile.slice().sort((a, b) => (a.x - b.x) || (a.y - b.y));
         for (const t of reihe) {
@@ -2070,7 +2092,10 @@
             const zyl = teil(zid); if (!zyl || !sim.zust[zid]) return false;
             const zz = sim.zust[zid], hub = zylHub(zyl);
             const ziel = posAnteil(zyl, pos) * hub;
-            const nah = Math.abs(zz.x - ziel) <= Math.max(1.5, hub * 0.02);
+            // Endlagen: Der Nocken drückt die Rolle auf den letzten Millimetern (Schaltweg wie ein
+            // Reed-Schalter, 6 % des Hubs, mind. 3 mm). Dazwischen: ±2 % um die eingestellte Stelle.
+            const fenster = Math.max(3, hub * 0.06);
+            const nah = pos === 'vorne' ? zz.x >= hub - fenster : pos === 'hinten' ? zz.x <= fenster : Math.abs(zz.x - ziel) <= Math.max(1.5, hub * 0.02);
             if (b === 'rolle') return nah;
             // Leerrücklauf: betätigt nur, wenn der Nocken in Wirkrichtung auf die
             // Rolle fährt. Bleibt er darauf stehen (Endlage), bleibt das Ventil
@@ -2849,6 +2874,7 @@
     function anlageAbgleichen() {
         const F = fabrik();
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
+        kennKonflikteLoesen();
         plan.erzeugt = plan.erzeugt || [];
         const benutzt = new Set();
         for (const t of plan.teile) {
@@ -3202,6 +3228,7 @@
     // Nach Einblenden, Abkoppeln oder Zurückholen: Stil, Größe, Ansicht neu
     let letztesDok = null, letzteGroesse = '';
     function sichtbarGeworden() {
+        if (kennKonflikteLoesen()) { geoCache.clear(); speichern(); }
         fensterBauen();
         cssSicher();
         offen = panelSichtbar();

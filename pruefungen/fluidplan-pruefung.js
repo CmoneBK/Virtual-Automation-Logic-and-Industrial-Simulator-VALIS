@@ -68,6 +68,27 @@ const FAELLE = {
     R.push(['Hebel aus: bleibt am Ende hinten stehen', a() < 0.02, a()]);
     return R;
   },
+  'Weg-Schritt-Diagramm: A+ B+ A- B-': () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 0, 600);
+    const A = F.setzen('zyl_dw', 0, -200, {}, '1A1'), B = F.setzen('zyl_dw', 400, -200, {}, '2A1');
+    const vA = F.setzen('ventil', 0, 0, { wege: '5/2', links: 'pneu', rechts: 'pneu' }, '1V1');
+    const vB = F.setzen('ventil', 400, 0, { wege: '5/2', links: 'pneu', rechts: 'pneu' }, '2V1');
+    const st = F.setzen('ventil', -100, 300, { wege: '3/2', links: 'taster' }, '1S1');
+    const r = (zyl, pos, x) => F.setzen('ventil', x, 400, { wege: '3/2', links: 'rolle', zyl, pos });
+    const a0 = r(A, 'hinten', 50), a1 = r(A, 'vorne', 200), b0 = r(B, 'hinten', 350), b1 = r(B, 'vorne', 500);
+    const und = F.setzen('zweidruck', 0, 200, {}, '1V2');
+    for (const v of [vA, vB, st, a0, a1, b0, b1]) F.verbinden(q, '1', v, '1');
+    F.verbinden(st, '2', und, 'X'); F.verbinden(b0, '2', und, 'Y'); F.verbinden(und, '2', vA, '14');
+    F.verbinden(b1, '2', vA, '12'); F.verbinden(a1, '2', vB, '14'); F.verbinden(a0, '2', vB, '12');
+    F.verbinden(vA, '4', A, 'K'); F.verbinden(vA, '2', A, 'S'); F.verbinden(vB, '4', B, 'K'); F.verbinden(vB, '2', B, 'S');
+    F._neu(); F._schritt(1); F._aufzNeu();
+    F.druecken(st, 'L', true); F._schritt(0.3); F.druecken(st, 'L', false); F._schritt(4);
+    const d = F._diagramm();
+    const r1 = d.schritte.map(s => (s[A] > 0.5 ? 1 : 0) + '' + (s[B] > 0.5 ? 1 : 0)).join(' ');
+    R.push(['Schritte 00 10 11 01 00', r1 === '00 10 11 01 00', r1]);
+    return R;
+  },
   'Abluftdrosselung macht langsamer': () => {
     const F = Fluidplan, R = [];
     const zeitBis = (offen) => {

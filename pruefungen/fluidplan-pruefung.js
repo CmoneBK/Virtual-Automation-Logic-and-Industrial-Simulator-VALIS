@@ -370,6 +370,23 @@ const FAELLE = {
     window.toggleSimulation(); v.abschluss = null;
     return R;
   },
+  'Aus 2D-Anlage übernehmen behält die Reed-Schalter': async () => {
+    const F = Fluidplan, R = [];
+    window.loadExample('code');
+    await new Promise(r => setTimeout(r, 800));
+    const reeds = () => factoryObjects.filter(o => o.type === 'sensor_reed' && o.parent && o.parent.id === 'cyl1').map(o => o.linkedVar).sort().join(',');
+    const vorher = reeds();
+    F._leeren();
+    F.ausAnlage();
+    const zt = F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.anlage === 'cyl1');
+    R.push(['Reed-Schalter werden Endlagensensoren im Plan', !!zt && [zt.o.sensH, zt.o.sensV].filter(Boolean).sort().join(',') === vorher, (zt ? zt.o.sensH + '/' + zt.o.sensV : '-') + ' ← ' + vorher]);
+    F.verbinden2D(true);
+    if (typeof window._fpTakt === 'function') window._fpTakt(0.05);
+    await new Promise(r => setTimeout(r, 300));
+    R.push(['nach dem Verbinden sind die Reed-Schalter in der 2D-Anlage noch da', vorher !== '' && reeds() === vorher, reeds()]);
+    F.verbinden2D(false);
+    return R;
+  },
   'Abluftdrosselung: Ausfahr-Drossel in 2D und Auto-Schaltplan auf der Stangenseite': async () => {
     const R = [];
     window.loadExample('code');

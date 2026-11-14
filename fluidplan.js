@@ -2892,6 +2892,14 @@
         if (plan.teile.length && !confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
         aendern(() => {
             const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'));
+            // Reed-Schalter der 2D-Zylinder werden Endlagensensoren im Plan (sonst
+            // würde der Abgleich sie in der 2D-Anlage wieder entfernen)
+            zyl.forEach(o => {
+                const k = r.karte[o.id], t = k && r.teile.find(q => q.id === k.zyl);
+                if (!t) return;
+                const R = reeds2D(o, F);
+                t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
+            });
             plan.teile = r.teile; plan.leitungen = r.leitungen; plan.erzeugt = []; plan.anlage = true;
         });
         einpassen();

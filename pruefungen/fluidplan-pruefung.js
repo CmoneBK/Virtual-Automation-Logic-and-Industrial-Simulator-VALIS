@@ -505,6 +505,32 @@ const FAELLE = {
     }
     return R;
   },
+  'Rolle an beliebiger Stelle des Hubs (% vom Hub, Schaltweg in mm)': () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 60, 460);
+    const z = F.setzen('zyl_dw', 40, -200, {});
+    const v = F.setzen('ventil', 40, 60, { wege: '5/2', links: 'taster', rechts: 'feder' });
+    const z2 = F.setzen('zyl_ew', 400, -200, {});
+    const s = F.setzen('ventil', 400, 140, { wege: '3/2', links: 'rolle', rechts: 'feder', pos: 60, schaltweg: 3, richt: 'aus', zyl: z });
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden(q, '1', s, '1'); F.verbinden(s, '2', z2, 'K');
+    F._neu(); F._schritt(0.5);
+    const a = id => F.zustand().teile[id].anteil;
+    F.druecken(v, 'L', true);
+    // ohne Last fährt der Kolben ~20 mm je Bild: auch übersprungen gibt es einen kurzen Impuls
+    let gesehen = 0;
+    for (let i = 0; i < 30; i++) { F._schritt(0.016); if (F.zustand().teile[s].stellung === 0) gesehen++; }
+    R.push(['Rolle bei 60 % wird beim Überfahren kurz betätigt', gesehen > 0 && gesehen <= 3, gesehen + ' Bilder']);
+    R.push(['in der Endlage ist sie wieder frei', a(z) > 0.98 && F.zustand().teile[s].stellung === 1, a(z).toFixed(2)]);
+    // langsam (Last) steht der Nocken länger auf der Rolle
+    F.druecken(v, 'L', false); F._schritt(2);
+    F.aendern(s, { pos: 100, schaltweg: 3 });
+    F.druecken(v, 'L', true); F._schritt(2);
+    R.push(['Rolle bei 100 % bleibt in der Endlage betätigt', F.zustand().teile[s].stellung === 0]);
+    R.push(['alte Pläne mit pos "vorne" gelten als 100 %', F._posProzent('vorne') === 100 && F._posProzent('hinten') === 0 && F._posProzent(95) === 95]);
+    F.druecken(v, 'L', false); F._schritt(2);
+    return R;
+  },
   'Kennzeichen wie im Auto-Schaltplan (DIN EN 81346-2)': () => {
     const F = Fluidplan, R = [];
     const ids = { q: F.setzen('quelle', 0, 300), w: F.setzen('wartung', 100, 300, { kurz: true }), z: F.setzen('zyl_dw', 0, 0), z2: F.setzen('zyl_ew', 300, 0),

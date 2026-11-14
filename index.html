@@ -25427,21 +25427,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     g.appendChild(createSvgElement('path', {d: `M ${cx+9} ${dyMid-9} L ${cx+5} ${dyMid-8} L ${cx+8} ${dyMid-4} Z`, fill: '#000', stroke: '#000', 'stroke-width': 1}));
                     // Rückschlagventil AUF dem Bypass: nach OBEN offene Schale (Sitz) + Kugel.
                     //   • Schale: U-förmige Kurve, Boden bei dyMid+9, Ränder bei dyMid-3
-                    //   • Kugel-Animation: bei Sperrrichtung (Druck am oberen Port > unten)
-                    //     wird die Kugel IN die Schale gedrückt (cy = dyMid+4 ≈ Schalen-Mitte);
-                    //     andernfalls schwebt sie minimal über dem Sitz (cy = dyMid-2).
+                    //   • Kugel-Animation: in Ruhe und in Sperrrichtung liegt die Kugel im Sitz
+                    //     (cy = dyMid+1); strömt es frei (Port 2 unten höher als Port 1 oben),
+                    //     hebt sie sichtbar ab (cy = dyMid-5).
                     g.appendChild(createSvgElement('path', {d: `M ${bypassX-4} ${dyMid-3} Q ${bypassX} ${dyMid+9} ${bypassX+4} ${dyMid-3}`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
-                    let _ballCy = dyMid - 2;  // Default: schwebt knapp über dem Sitz
+                    let _ballCy = dyMid + 1;  // Ruhe: Kugel liegt im Sitz
                     {
                         let _p1 = window._fluidPressures && window._fluidPressures.pneu && window._fluidPressures.pneu[thr.id+':1'];
                         let _p2 = window._fluidPressures && window._fluidPressures.pneu && window._fluidPressures.pneu[thr.id+':2'];
+                        // Pneumatik rechnet der Fluidplan-Kern (verbundener Plan oder Schattenplan)
+                        const _fp = window._fpDrv && window._fpDrv(thr.id);
+                        if (_fp) { _p1 = _fp.p1; _p2 = _fp.p2; }
                         if (_p1 == null || _p2 == null) {
                             _p1 = window._fluidPressures && window._fluidPressures.hyd && window._fluidPressures.hyd[thr.id+':1'];
                             _p2 = window._fluidPressures && window._fluidPressures.hyd && window._fluidPressures.hyd[thr.id+':2'];
                         }
                         // Sperrrichtung: oben (Aktor-Seite, Port 1) ist höher → Rückfluss
                         // wird durch Kugel auf den Sitz blockiert.
-                        if (_p1 != null && _p2 != null && _p1 > _p2 + 0.3) _ballCy = dyMid + 4;
+                        // Durchlassrichtung (unten, Ventil-Seite, Port 2 höher): Kugel hebt sichtbar vom Sitz ab.
+                        if (_p1 != null && _p2 != null && _p2 > _p1 + 0.005) _ballCy = dyMid - 5;
                     }
                     g.appendChild(createSvgElement('circle', {cx: bypassX, cy: _ballCy, r: 2.2, fill: '#fff', stroke: '#000', 'stroke-width': 1.2}));
                     // Port-Beschriftungen ('1' oben am Aktor, '2' unten am Ventil) seitlich versetzt
@@ -77768,6 +77772,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114j"></script>
+<script src="fluidplan.js?v=20261114k"></script>
 </body>
 </html>

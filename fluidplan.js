@@ -196,7 +196,7 @@
                 const x0 = i * KASTEN;
                 el('rect', { x: x0, y: 0, width: KASTEN, height: KASTEN, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, block);
                 const lage = VLAGE[o.wege] || VLAGE['3/2'];
-                const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 3] : [x0 + lage.unten[id], KASTEN - 3];
+                const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 0] : [x0 + lage.unten[id], KASTEN];
                 for (const [a, b] of st.w) {
                     const [x1, y1] = pos(a), [x2, y2] = pos(b);
                     const d = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / d, uy = (y2 - y1) / d;
@@ -205,7 +205,7 @@
                 }
                 for (const z of st.zu) {
                     const [x, y] = pos(z), dy = y < 20 ? 1 : -1;
-                    el('line', { x1: x, y1: y - dy * 3, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
+                    el('line', { x1: x, y1: y, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                     el('line', { x1: x - 5, y1: y + dy * 7, x2: x + 5, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                 }
             });
@@ -353,13 +353,14 @@
         name: 'Rückschlagventil', buchstabe: 'V',
         optionen: {},
         geometrie() { return { ports: [{ id: '1', x: 0, y: 24, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -24, dir: [0, -1], art: 'a' }], box: [-12, -26, 12, 26] }; },
-        zeichne(t, g) { rueckZeichnen(g, 0, 0); el('line', { x1: 0, y1: 6, x2: 0, y2: 24, stroke: 'currentColor', 'stroke-width': 1.6 }, g); el('line', { x1: 0, y1: -7, x2: 0, y2: -24, stroke: 'currentColor', 'stroke-width': 1.6 }, g); }
+        zeichne(t, g) { el('line', { x1: 0, y1: 8, x2: 0, y2: 24, stroke: 'currentColor', 'stroke-width': 1.6 }, g); el('line', { x1: 0, y1: -5, x2: 0, y2: -24, stroke: 'currentColor', 'stroke-width': 1.6 }, g); rueckZeichnen(g, 0, 0, -1); }
     };
-    function rueckZeichnen(g, x, y) {
-        // Kugel auf Sitz: Durchfluss von unten nach oben
-        el('circle', { cx: x, cy: y, r: 5, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
-        el('path', { d: `M${x - 7},${y - 9} L${x},${y - 2} M${x + 7},${y - 9} L${x},${y - 2}`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
-        el('line', { x1: x, y1: y + 5, x2: x, y2: y + 6, stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+    function rueckZeichnen(g, x, y, s) {
+        // Kugel im kegeligen Sitz (DIN ISO 1219-1). s = +1: Sitz oben, frei von oben nach unten;
+        // s = -1: Sitz unten, frei von unten nach oben. Strömt es frei, hebt die Kugel vom Sitz ab
+        // (Klasse fp-kugel, wird in der Simulation verschoben).
+        el('path', { d: `M${x - 7},${y - s} L${x},${y - s * 8} L${x + 7},${y - s}`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+        el('circle', { class: 'fp-kugel', 'data-frei': s, cx: x, cy: y, r: 5, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
     }
     TYP.wechsel = {
         name: 'Wechselventil (ODER)', buchstabe: 'V',
@@ -426,7 +427,7 @@
             el('path', { d: 'M-6,-10 Q-1,0 -6,10 M6,-10 Q1,0 6,10', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
             el('line', { x1: -9, y1: 10, x2: 9, y2: -10, stroke: 'currentColor', 'stroke-width': 1.1, 'marker-end': 'url(#fp-pfeil)' }, g);
             el('path', { d: 'M0,16 H20 V6 M20,-7 V-16 H0', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
-            rueckZeichnen(g, 20, 1);
+            rueckZeichnen(g, 20, 1, 1);
         }
     };
     TYP.zeit = {
@@ -458,7 +459,7 @@
                 const x0 = i * KASTEN;
                 el('rect', { x: x0, y: 0, width: KASTEN, height: KASTEN, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, block);
                 const lage = VLAGE['3/2'];
-                const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 3] : [x0 + lage.unten[id], KASTEN - 3];
+                const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 0] : [x0 + lage.unten[id], KASTEN];
                 for (const [a, b] of st.w) {
                     const [x1, y1] = pos(a), [x2, y2] = pos(b);
                     const d = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / d, uy = (y2 - y1) / d;
@@ -467,7 +468,7 @@
                 }
                 for (const z of st.zu) {
                     const [x, y] = pos(z), dy = y < 20 ? 1 : -1;
-                    el('line', { x1: x, y1: y - dy * 3, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
+                    el('line', { x1: x, y1: y, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                     el('line', { x1: x - 5, y1: y + dy * 7, x2: x + 5, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                 }
             });
@@ -520,7 +521,7 @@
             const x0 = i * KASTEN;
             el('rect', { x: x0, y: 0, width: KASTEN, height: KASTEN, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, block);
             const lage = VLAGE['3/2'];
-            const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 3] : [x0 + lage.unten[id], KASTEN - 3];
+            const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 0] : [x0 + lage.unten[id], KASTEN];
             for (const [a, b] of st.w) {
                 const [x1, y1] = pos(a), [x2, y2] = pos(b);
                 const d = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / d, uy = (y2 - y1) / d;
@@ -529,7 +530,7 @@
             }
             for (const z of st.zu) {
                 const [x, y] = pos(z), dy = y < 20 ? 1 : -1;
-                el('line', { x1: x, y1: y - dy * 3, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
+                el('line', { x1: x, y1: y, x2: x, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                 el('line', { x1: x - 5, y1: y + dy * 7, x2: x + 5, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
             }
         });
@@ -1570,7 +1571,7 @@
             const i = fld('Öffnung: ' + t.o.offen + ' %', h('input', { type: 'range', min: 1, max: 100, value: t.o.offen }));
             i.oninput = () => { i.previousSibling.textContent = 'Öffnung: ' + i.value + ' %'; t.o.offen = +i.value; };
             i.onchange = () => setze(() => { t.o.offen = +i.value; });
-            h('div', { class: 'fp-hinw', text: t.typ === 'drv' ? 'Gedrosselt wird von 1 nach 2, von 2 nach 1 öffnet das Rückschlagventil. Für Abluftdrosselung kommt die 2 an den Zylinder. Auch während der Simulation verstellbar.' : 'Auch während der Simulation verstellbar.' }, box);
+            h('div', { class: 'fp-hinw', text: t.typ === 'drv' ? 'Gedrosselt wird von 1 nach 2, von 2 nach 1 öffnet das Rückschlagventil. Für Abluftdrosselung kommt die 1 an den Zylinder. Auch während der Simulation verstellbar.' : 'Auch während der Simulation verstellbar.' }, box);
         } else if (t.typ === 'daempfer') {
             const c = fld('Drosselschalldämpfer', h('input', { type: 'checkbox' })); c.checked = !!t.o.drossel; c.onchange = () => setze(() => { t.o.drossel = c.checked; });
             if (t.o.drossel) num('Öffnung', 'offen', 1, 100, 1, '%');
@@ -1681,6 +1682,8 @@
           bau(T, L) { const q = T('quelle', 60, 420, '0Z1'), z = T('zyl_dw', 40, -200, '1A1'), v = T('ventil', 40, 80, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
             d1 = T('drv', 50, -60, '1V2', { offen: 2 }), d2 = T('drv', 170, -60, '1V3', { offen: 2 }),
             s1 = T('ventil', -160, 240, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 260, 240, '1S2', { wege: '3/2', links: 'taster' });
+            d1.rot = d2.rot = 180;   // Anschluss 1 oben zum Zylinder, 2 unten zum Ventil
+            d1.x = 54; d2.x = 136;   // senkrecht unter K und S
             [v, s1, s2].forEach(x => L(q, '1', x, '1')); L(s1, '2', v, '14'); L(s2, '2', v, '12');
             L(v, '4', d1, '2'); L(d1, '1', z, 'K'); L(v, '2', d2, '2'); L(d2, '1', z, 'S'); } },
         { name: 'UND: Zweihandbedienung', text: 'Nur wenn 1S1 und 1S2 gedrückt sind, fährt 1A1 aus (Zweidruckventil).',
@@ -2190,6 +2193,17 @@
             if (t.typ === 'wechsel' && r.kugel) r.kugel.setAttribute('cx', z ? (z.seite === 'X' ? 9 : -9) : 0);
             if (t.typ === 'zweidruck' && r.schieber) r.schieber.setAttribute('transform', `translate(${z ? (z.seite === 'X' ? 3 : -3) : 0},0)`);
             if (t.typ === 'schnell' && r.kugel) r.kugel.setAttribute('cy', z && z.ab ? 6 : -2);
+            if ((t.typ === 'drv' || t.typ === 'rueck') && r.kugel) {
+                // Rückschlag: frei bei drv von 2 nach 1, bei rueck von 1 nach 2 (verkehrt eingebaut: umgekehrt)
+                let auf = false;
+                if (an) {
+                    let [vor, nach] = t.typ === 'drv' ? ['2', '1'] : ['1', '2'];
+                    if (fehlerAktiv(t.id) === 'verkehrt') [vor, nach] = [nach, vor];
+                    auf = pPort(t, vor) > pPort(t, nach) + 0.005;
+                }
+                const sk = Number(r.kugel.getAttribute('data-frei')) || 1;
+                r.kugel.setAttribute('transform', auf ? `translate(0,${sk * 5})` : '');
+            }
             if (t.typ === 'dschalter') { const k = r.g.querySelector('.fp-kontakt'); if (k) k.setAttribute('d', z && z.an ? 'M12,2 H18 L26,-4' : 'M12,2 H18 L26,-8'); }
         }
     }
@@ -2775,6 +2789,22 @@
         if (!t || !z) return null;
         return { ziel: z.x / zylHub(t) * 100, v: Math.abs(z.v) / zylHub(t) * (obj.stroke || 100) };
     }
+
+    // Drücke an einem Drosselrückschlagventil der 2D-Anlage (Anschluss 1 Zylinder, 2 Ventil),
+    // aus dem verbundenen Plan oder dem Schattenplan. Der Auto-Schaltplan zeigt damit die Kugel.
+    window._fpDrv = function (thId) {
+        if (!simLaeuft()) return null;
+        if (sim && plan.anlage) {
+            const m = spiegel.get(thId), t = m && plan.teile.find(x => x.id === m.teil);
+            if (t && t.typ === 'drv') return { p1: pPort(t, '1'), p2: pPort(t, '2') };
+        }
+        if (!schatten || !schatten.sim) return null;
+        let id = null;
+        for (const k of Object.values(schatten.karte)) for (const r of ['ext', 'ret']) if (k.drv[r] && k.drv[r].th === thId) id = k.drv[r].id;
+        const t = id && schatten.plan.teile.find(x => x.id === id);
+        if (!t) return null;
+        return mitPlan(schatten.plan, schatten.sim, () => ({ p1: pPort(t, '1'), p2: pPort(t, '2') }));
+    };
 
     // ------------------------------------------------------------
     // Öffnen / Schließen, Schnittstelle

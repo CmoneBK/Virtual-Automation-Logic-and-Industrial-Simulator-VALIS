@@ -476,6 +476,13 @@
         }
         #workspace-container.layout-grid.has-festo > #festo-wrapper { grid-area: festo; }
         #workspace-container.layout-grid.has-festo > #ws-resizer-festo { grid-area: rF; }
+        /* Fluidplan-Panel: wie Steckaufbau ein optionaler Slot, Template dynamisch */
+        #workspace-container.layout-grid:not(.has-fluid) > #fluid-wrapper,
+        #workspace-container.layout-grid:not(.has-fluid) > #ws-resizer-fluid {
+            display: none !important;
+        }
+        #workspace-container.layout-grid.has-fluid > #fluid-wrapper { grid-area: fluid; }
+        #workspace-container.layout-grid.has-fluid > #ws-resizer-fluid { grid-area: rFl; }
         .grid-sim-bottom {
             grid-template-areas: "fbs r1 iec" "r2  r2 r2" "sim sim sim";
             grid-template-columns: var(--grid-col-1, minmax(0, 1fr)) 6px var(--grid-col-2, minmax(0, 1fr));
@@ -3228,6 +3235,7 @@
                             <div onclick="detachPanel('sk-wrapper', 'Schrittkette')" data-vi="v_ab_schritt" data-i18n="extra_detach_sk" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">Schrittkette</div>
                             <div onclick="detachPanel('festo-wrapper', 'Steckaufbau')" data-vi="v_ab_steck" data-i18n="extra_detach_festo" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">Steckaufbau</div>
                             <div onclick="detachPanel('analyzer-modal', 'Oszilloskop')" data-vi="v_ab_oszi" data-i18n="extra_detach_osc" style="padding:9px 14px;font-size:11px;cursor:pointer;border-bottom:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">Oszilloskop</div>
+                            <div id="detach-fluid-item" onclick="if (window.Fluidplan) Fluidplan._abkoppeln()" data-vi="v_ab_fluid" style="display:none;padding:9px 14px;font-size:11px;cursor:pointer;border-top:1px solid #444;font-weight:bold;color:white;transition:background 0.1s;" onmouseover="this.style.background='#007acc'" onmouseout="this.style.background=''">Fluidplan abkoppeln (Multi-Screen)</div>
                         </div>
                       </div><!-- /flex-row wrapper -->
                     </div>
@@ -4015,6 +4023,9 @@
                     </div>
                 </div>
             </div>
+            <!-- Freier Fluidplan (fluidplan.js) als Panel: fluidplan.js baut seinen Inhalt hier hinein -->
+            <div class="workspace-resizer" id="ws-resizer-fluid"></div>
+            <div id="fluid-wrapper" class="workspace-panel" style="display: none; position: relative; background: #1e1e1e; overflow: hidden;"></div>
         </div>
         <!-- ====== AUFGABEN-MODUS MODALS ====== -->
         <!-- Aufgaben-Panel (aktive Aufgabe) -->
@@ -22062,7 +22073,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // .grid-sim-*-Klassen erledigen den Rest (inkl. has-editor/has-sk).
             // Steckaufbau-Panel ist NICHT in den statischen Templates enthalten —
             // sobald `vis.festo` true ist, in den Dynamic-Path fallen.
-            if (vis.fbs && vis.iec && !vis.festo) {
+            if (vis.fbs && vis.iec && !vis.festo && !vis.fluid) {
                 removeAll();
                 LAYOUT_CLASSES.forEach(c => { if (c !== currentLayout) wcEl.classList.remove(c); });
                 if (!wcEl.classList.contains(currentLayout)) wcEl.classList.add(currentLayout);
@@ -22083,6 +22094,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (vis.ced) cells.push('ced');
             if (vis.sk)  cells.push('sk');
             if (vis.festo) cells.push('festo');
+            if (vis.fluid) cells.push('fluid');
             if (cells.length === 0) {
                 // Edge-Case: alle Code-Panels weg, sim noch da. (factory-close
                 // löst eigentlich flex-row aus — hier nur defensiv.)
@@ -22109,6 +22121,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { name: 're', el: document.getElementById('ws-resizer-iec-edit') },
                 { name: 'rS', el: document.getElementById('ws-resizer-sk') },
                 { name: 'rF', el: document.getElementById('ws-resizer-festo') },
+                { name: 'rFl', el: document.getElementById('ws-resizer-fluid') },
             ];
             const sepCount = Math.max(0, cells.length - 1);
             const sepUsed = sepAll.slice(0, sepCount);
@@ -22197,11 +22210,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let fac = checkState('factory-wrapper');
             let sk  = checkState('sk-wrapper');
             let festo = checkState('festo-wrapper');
+            let fluid = checkState('fluid-wrapper');
             const resizer1 = document.getElementById('ws-resizer-1');
             const resizer2 = document.getElementById('ws-resizer-2');
             const resizerEdit = document.getElementById('ws-resizer-iec-edit');
             const resizerSk   = document.getElementById('ws-resizer-sk');
             const resizerFesto = document.getElementById('ws-resizer-festo');
+            const resizerFluid = document.getElementById('ws-resizer-fluid');
             const isGrid = currentLayout.startsWith('grid-');
             // p0/p1/p2/pE/pS/pF = echte Sichtbarkeit. Wird für Button-Active-State
             // und für die dynamische Grid-Template-Berechnung verwendet. Frühere
@@ -22213,6 +22228,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             let p2 = fac.isMainVisible;
             let pS = sk.isMainVisible;
             let pF = festo.isMainVisible;
+            let pFl = fluid.isMainVisible;
             // Editor + SK-Panel als optionale Grid-Slots eintragen (per Klasse).
             // Beide werden NIE neben factory-wrapper platziert (.has-sk-Layouts
             // sortieren sk in die Code-Spalte ein, sim bleibt unverändert).
@@ -22228,10 +22244,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _wantEditor = isGrid && pE;
                 const _wantSk     = isGrid && pS;
                 const _wantFesto  = isGrid && pF;
+                const _wantFluid  = isGrid && pFl;
+                const _hadFluid   = _wcEl.classList.contains('has-fluid');
                 const _hadEditor  = _wcEl.classList.contains('has-editor');
                 const _hadSk      = _wcEl.classList.contains('has-sk');
                 const _hadFesto   = _wcEl.classList.contains('has-festo');
-                if (_hadEditor !== _wantEditor || _hadSk !== _wantSk || _hadFesto !== _wantFesto) {
+                if (_hadEditor !== _wantEditor || _hadSk !== _wantSk || _hadFesto !== _wantFesto || _hadFluid !== _wantFluid) {
                     _wcEl.style.removeProperty('--grid-col-1');
                     _wcEl.style.removeProperty('--grid-col-2');
                     _wcEl.style.removeProperty('--grid-col-3');
@@ -22239,6 +22257,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _wcEl.classList.toggle('has-editor', _wantEditor);
                 _wcEl.classList.toggle('has-sk',     _wantSk);
                 _wcEl.classList.toggle('has-festo',  _wantFesto);
+                _wcEl.classList.toggle('has-fluid',  _wantFluid);
             }
             // Grid-Resizer im "degraded"-Zustand verstecken: ist fbs ODER iec
             // ausgeblendet, baut _applyDynamicGridTemplate ein Template ohne
@@ -22264,6 +22283,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (_degraded || !pF) resizerFesto.style.setProperty('display', 'none', 'important');
                     else resizerFesto.style.removeProperty('display');
                 }
+                if (resizerFluid) {
+                    if (_degraded || !pFl) resizerFluid.style.setProperty('display', 'none', 'important');
+                    else resizerFluid.style.removeProperty('display');
+                }
             } else {
                 // In Flex-Modi keine !important-Overrides aktiv lassen.
                 if (resizer1) resizer1.style.removeProperty('display');
@@ -22271,6 +22294,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (resizerEdit) resizerEdit.style.removeProperty('display');
                 if (resizerSk) resizerSk.style.removeProperty('display');
                 if (resizerFesto) resizerFesto.style.removeProperty('display');
+                if (resizerFluid) resizerFluid.style.removeProperty('display');
                 if (resizer1) resizer1.style.display = (p0 && (p1 || pE || p2 || pS || pF)) ? 'block' : 'none';
                 // Editor-Resizer sichtbar wenn Editor aktiv UND ein Nachbar-Panel ebenfalls aktiv
                 if (resizerEdit) resizerEdit.style.display = (pE && (p1 || p0 || p2 || pS || pF)) ? 'block' : 'none';
@@ -22279,12 +22303,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (resizerSk) resizerSk.style.display = (pS && (p0 || p1 || pE || p2 || pF)) ? 'block' : 'none';
                 // Festo-Resizer trennt festo-wrapper vom Vorgänger-Panel
                 if (resizerFesto) resizerFesto.style.display = (pF && (p0 || p1 || pE || p2 || pS)) ? 'block' : 'none';
+                // Fluidplan-Resizer trennt fluid-wrapper vom Vorgänger-Panel
+                if (resizerFluid) resizerFluid.style.display = (pFl && (p0 || p1 || pE || p2 || pS || pF)) ? 'block' : 'none';
             }
             // Dynamisches Grid-Template einsetzen, wenn fbs/iec ausgeblendet sind ODER
             // festo aktiv ist (die statischen Templates kennen kein festo) —
             // sonst übernehmen die statischen .grid-sim-*-CSS-Klassen.
             _applyDynamicGridTemplate(_wcEl, currentLayout, {
-                fbs: p0, iec: p1, ced: pE, sk: pS, sim: p2, festo: pF,
+                fbs: p0, iec: p1, ced: pE, sk: pS, sim: p2, festo: pF, fluid: pFl,
             });
             // Button-Zustände: detached = blau, active = orange
             const updateBtn = (btnId, state, pVisible) => {
@@ -22300,6 +22326,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             updateBtn('btn-view-fac', fac, p2);
             updateBtn('btn-view-sk',  sk,    pS);
             updateBtn('btn-view-festo', festo, pF);
+            updateBtn('btn-view-fluid', fluid, pFl);
             requestAnimationFrame(() => {
                 if (fbs.isMainVisible && panZoomInstance && fbs.el.offsetWidth > 0 && fbs.el.offsetHeight > 0) {
                     try { panZoomInstance.resize(); panZoomInstance.fit(); panZoomInstance.center(); } catch(e) {}
@@ -22342,7 +22369,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function _saveViewState() {
             let vis = {}, sizes = {};
             let wc = document.getElementById('workspace-container');
-            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper'].forEach(id => {
+            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper', 'fluid-wrapper'].forEach(id => {
                 let el = document.getElementById(id);
                 vis[id] = el ? el.style.display !== 'none' : true;
                 if (el && el.style.flex && el.style.flex !== '1 1 0%' && el.style.flex !== '1 1 0') sizes[id] = el.style.flex;
@@ -22392,7 +22419,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!panel) return;
             // 3. Zählen: Wie viele sind HIER noch sichtbar? (nur lokale, nicht ausgelagerte Panels)
             let mainVisibleCount = 0;
-            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper'].forEach(id => {
+            ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper', 'fluid-wrapper'].forEach(id => {
                 let p = document.getElementById(id);
                 if (p && p.style.display !== 'none') mainVisibleCount++;
             });
@@ -22432,6 +22459,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         window._renderFestoPanel();
                     }
                     updateWorkspace();
+                    if (panelId === 'fluid-wrapper' && window.Fluidplan && window.Fluidplan._sichtbar) window.Fluidplan._sichtbar();
                 });
             } else {
                 panel.style.setProperty('display', 'none', 'important');
@@ -47184,6 +47212,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         window._renderFestoPanel();
                     } else if (pid === 'circuit-editor-wrapper' && typeof window.cedInit === 'function') {
                         window.cedInit();
+                    } else if (pid === 'fluid-wrapper' && window.Fluidplan && window.Fluidplan._sichtbar) {
+                        window.Fluidplan._sichtbar();
                     }
                 } catch(_) {}
             });
@@ -47191,6 +47221,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         // === Per-Panel Re-Init nach Frame-Wechsel (Detach UND Reattach) ===
         function _reInitDetachedPanel(panelId) {
+            // Fluidplan: Stil, Fenster-Ereignisse und Ansicht im neuen Dokument
+            if (panelId === 'fluid-wrapper' && window.Fluidplan && window.Fluidplan._sichtbar) window.Fluidplan._sichtbar();
             if (panelId === 'fbs-wrapper' && panZoomInstance) {
                 panZoomInstance.destroy();
                 panZoomInstance = svgPanZoom(customSvg, svgPanZoomOptions);
@@ -47222,6 +47254,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
         }
         function _reInitReattachedPanel(panelId) {
+            if (panelId === 'fluid-wrapper' && window.Fluidplan && window.Fluidplan._sichtbar) window.Fluidplan._sichtbar();
             const el = document.getElementById(panelId);
             if (!el || el.style.display === 'none') return;
             if (panelId === 'fbs-wrapper') {
@@ -48666,7 +48699,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let vis = JSON.parse(_savedPanels);
                         let wc = document.getElementById('workspace-container');
                         let isGrid = wc && wc.classList.contains('layout-grid');
-                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper'].forEach(id => {
+                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper', 'fluid-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
                             // Im Grid-Modus überschreibt .layout-grid .workspace-panel
                             // ein nacktes `display: none` per !important. Daher
@@ -48684,7 +48717,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (_savedSizes) {
                     try {
                         let sizes = JSON.parse(_savedSizes);
-                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper'].forEach(id => {
+                        ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper', 'factory-wrapper', 'sk-wrapper', 'festo-wrapper', 'fluid-wrapper'].forEach(id => {
                             let el = document.getElementById(id);
                             if (el && sizes[id]) el.style.flex = sizes[id];
                         });
@@ -56282,7 +56315,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // — der User hat sie bewusst ausgelagert.
             const _setLessonPanels = (neededIds) => {
                 const ALL = ['fbs-wrapper', 'circuit-wrapper', 'circuit-editor-wrapper',
-                             'factory-wrapper', 'sk-wrapper', 'festo-wrapper'];
+                             'factory-wrapper', 'sk-wrapper', 'festo-wrapper', 'fluid-wrapper'];
                 const needed = new Set(neededIds || []);
                 const isDetached = (id) => !!(window.popOutWindows
                     && window.popOutWindows[id] && !window.popOutWindows[id].closed);
@@ -77938,6 +77971,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114o"></script>
+<script src="fluidplan.js?v=20261114p"></script>
 </body>
 </html>

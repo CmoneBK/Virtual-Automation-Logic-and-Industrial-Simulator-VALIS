@@ -7788,6 +7788,19 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!choice) return;
                 obj.isTriple = !isTriple;
                 obj.isDouble = true;
+                // 2D-Ventil wie im Kontextmenü neu aufbauen, damit Bild und Verhalten übereinstimmen
+                try {
+                    const _reg = ComponentRegistry[obj.type];
+                    if (_reg && obj.el) {
+                        const _nl = obj.normLabel;
+                        obj.el.innerHTML = ''; obj.el.className = '';
+                        _reg.build(obj, obj.el, '', obj.isTriple ? 'triple' : 'double');
+                        if (_nl) { obj.normLabel = _nl; const _lb = obj.el.querySelector('.f2d-norm-label'); if (_lb) _lb.textContent = _nl; }
+                        updateObjTransform(obj);
+                        if (obj.type === 'valve_pneu') { if (typeof _updatePneuPortLayer === 'function') _updatePneuPortLayer(); if (typeof drawPneumaticHoses === 'function') drawPneumaticHoses(); }
+                        else { if (typeof _updateHydPortLayer === 'function') _updateHydPortLayer(); if (typeof drawHydraulicHoses === 'function') drawHydraulicHoses(); }
+                    }
+                } catch (e) { console.warn('Ventil neu aufbauen', e); }
                 if (typeof saveFactoryState === 'function') saveFactoryState();
                 return;
             }
@@ -26065,7 +26078,29 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             //   • Offenes Dreieck (Spitze nach unten = Atmosphäre)
                             // (Reines Dreieck-Symbol ohne extra Striche — die zuvor verwendeten
                             //  drei Auslass-Strichlein gehören NICHT zur Norm.)
-                            const _drawVent = (px) => {
+                            const _drawVent = (px, pid) => {
+                                if (px == null || isNaN(px)) return;
+                                const _ab = valve.abschluss && valve.abschluss[pid];
+                                const _art = _ab ? _ab.art : 'offen';
+                                const _L = (x1, y1, x2, y2, w) => circuitContent.appendChild(createSvgElement('line', {x1, y1, x2, y2, stroke: '#000', 'stroke-width': w || 1}));
+                                if (_art === 'stopfen') {
+                                    // Blindstopfen: Anschluss endet an einem Querstrich (verschlossen)
+                                    _L(px, portsBotY, px, portsBotY + 8);
+                                    _L(px - 5, portsBotY + 8, px + 5, portsBotY + 8, 2);
+                                    return;
+                                }
+                                if (_art === 'daempfer' || _art === 'drossel') {
+                                    // Schalldämpfer (DIN ISO 1219-1): Raute mit Querstrichen, Drosselschalldämpfer mit Pfeil
+                                    const top = portsBotY + 6, mid = top + 6, bot = top + 12;
+                                    _L(px, portsBotY, px, top);
+                                    circuitContent.appendChild(createSvgElement('path', {d: `M ${px} ${top} L ${px+6} ${mid} L ${px} ${bot} L ${px-6} ${mid} Z`, fill: '#fff', stroke: '#000', 'stroke-width': 1.1}));
+                                    _L(px - 3, mid, px + 3, mid, 0.8); _L(px - 1.5, mid + 2.5, px + 1.5, mid + 2.5, 0.8);
+                                    if (_art === 'drossel') {
+                                        _L(px - 7, bot + 1, px + 7, top - 1, 0.9);
+                                        circuitContent.appendChild(createSvgElement('path', {d: `M ${px+7} ${top-1} L ${px+3} ${top} L ${px+6} ${top+3} Z`, fill: '#000'}));
+                                    }
+                                    return;
+                                }
                                 let barY = portsBotY + 10;          // Anschluss-Querstrich
                                 let triTop = barY + 1;
                                 let triBot = triTop + 7;
@@ -26073,8 +26108,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 circuitContent.appendChild(createSvgElement('line', {x1: px-5, y1: barY, x2: px+5, y2: barY, stroke: '#000', 'stroke-width': 1}));
                                 circuitContent.appendChild(createSvgElement('path', {d: `M ${px-4} ${triTop} L ${px+4} ${triTop} L ${px} ${triBot} Z`, fill: 'none', stroke: '#000', 'stroke-width': 1.2}));
                             };
-                            _drawVent(pX.p3);
-                            _drawVent(pX.p5);
+                            _drawVent(pX.p3, '3');
+                            if (pX.p5 !== pX.p3) _drawVent(pX.p5, '5');
                         } else {
                             // Hydraulik: T1, T2 → T-Schiene
                             circuitContent.appendChild(createSvgElement('line', {x1: pX.p3, y1: portsBotY, x2: pX.p3, y2: railT, stroke: '#000', 'stroke-width': 1.5}));
@@ -40299,6 +40334,33 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let _lkValV = document.createElement('div'); _lkValV.style.cssText = 'color:#fff;font-size:11px;text-align:center;'; _lkValV.textContent = (obj.leakRate || 0) + '%';
                     _lkSldV.oninput = e => { obj.leakRate = parseInt(e.target.value); _lkValV.textContent = obj.leakRate + '%'; saveFactoryState(); };
                     _lkWrapV.appendChild(_lkSldV); _lkWrapV.appendChild(_lkValV); ctxMenu.appendChild(_lkWrapV);
+                    if (obj.type === 'valve_pneu') {
+                        // Abschluss der Abluftanschlüsse 3/5 – derselbe Wert wie im Fluidplan
+                        let _abW = document.createElement('div'); _abW.style.padding = '5px 15px'; _abW.onclick = e => e.stopPropagation();
+                        _abW.innerHTML = '<div style="color:#90caf9;font-size:10px;margin-bottom:3px;">🔇 Abluftanschlüsse: was kommt dran?</div>';
+                        const _arten = [['offen', 'offen (bläst frei ab)'], ['daempfer', 'Schalldämpfer'], ['drossel', 'Drosselschalldämpfer'], ['stopfen', 'Blindstopfen']];
+                        for (const pid of (obj.isDouble ? ['3', '5'] : ['3'])) {
+                            const a = (obj.abschluss && obj.abschluss[pid]) || { art: 'offen' };
+                            let row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:3px;font-size:11px;color:#ccc;';
+                            row.appendChild(document.createTextNode(pid + ':'));
+                            let sel = document.createElement('select'); sel.style.cssText = 'flex:1;font-size:11px;';
+                            _arten.forEach(([v, n]) => { let op = document.createElement('option'); op.value = v; op.textContent = n; sel.appendChild(op); });
+                            sel.value = a.art;
+                            let num = document.createElement('input'); num.type = 'number'; num.min = '1'; num.max = '100'; num.value = a.offen || 50; num.title = 'Öffnung des Drosselschalldämpfers in %';
+                            num.style.cssText = 'width:44px;font-size:11px;display:' + (a.art === 'drossel' ? 'inline-block' : 'none');
+                            const setze = () => {
+                                const ab = Object.assign({}, obj.abschluss || {});
+                                if (sel.value === 'offen') delete ab[pid];
+                                else ab[pid] = sel.value === 'drossel' ? { art: 'drossel', offen: Math.max(1, Math.min(100, parseInt(num.value) || 50)) } : { art: sel.value };
+                                obj.abschluss = Object.keys(ab).length ? ab : null;
+                                num.style.display = sel.value === 'drossel' ? 'inline-block' : 'none';
+                                saveFactoryState();
+                            };
+                            sel.onchange = setze; num.onchange = setze;
+                            row.appendChild(sel); row.appendChild(num); _abW.appendChild(row);
+                        }
+                        ctxMenu.appendChild(_abW);
+                    }
                 }
                 if (ComponentRegistry[obj.type] && ComponentRegistry[obj.type].contextMenu) {
                     ComponentRegistry[obj.type].contextMenu(obj, ctxMenu, saveFactoryState);
@@ -43712,7 +43774,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     hyd: (o.hyd && typeof o.hyd === 'object' && Object.keys(o.hyd).length) ? JSON.parse(JSON.stringify(o.hyd)) : null,
                     ana: (o.ana && typeof o.ana === 'object' && Object.keys(o.ana).length) ? JSON.parse(JSON.stringify(o.ana)) : null,
                     pneu: (o.pneu && typeof o.pneu === 'object' && Object.keys(o.pneu).length) ? JSON.parse(JSON.stringify(o.pneu)) : null,
-                    pressure: o.pressure, maxFlow: o.maxFlow, leakRate: o.leakRate || null, linkedVarLeak: o.linkedVarLeak || null, linkedVarPump: o.linkedVarPump || null,
+                    pressure: o.pressure, maxFlow: o.maxFlow, leakRate: o.leakRate || null, abschluss: o.abschluss || null, linkedVarLeak: o.linkedVarLeak || null, linkedVarPump: o.linkedVarPump || null,
                     fluidType: o.fluidType || null,
                     isTriple: o.isTriple || false,
                     pistonD: o.pistonD, rodD: o.rodD, stroke: o.stroke,
@@ -44960,6 +45022,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (o.maxFlow !== undefined) newObj.maxFlow = o.maxFlow;
                     if (o.leakRate != null) newObj.leakRate = o.leakRate;
+                    if (o.abschluss) newObj.abschluss = o.abschluss;
                     if (o.linkedVarLeak) newObj.linkedVarLeak = o.linkedVarLeak;
                     if (o.linkedVarPump) newObj.linkedVarPump = o.linkedVarPump;
                     if (o.linkedVarOpen) newObj.linkedVarOpen = o.linkedVarOpen;
@@ -52878,8 +52941,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             let portIds = (kind === 'mono') ? ['1','2','3'] : ['1','2','3','4','5'];
                             for (let pid of portIds) _addNode(nodes, o.id+':'+pid);
                             // Entlüftungsanschlüsse → atmosphärisch (0 bar)
-                            if (kind === 'mono') sources[o.id+':3'] = 0;
-                            else { sources[o.id+':3'] = 0; sources[o.id+':5'] = 0; }
+                            const _zu = pid => o.abschluss && o.abschluss[pid] && o.abschluss[pid].art === 'stopfen';
+                            if (!_zu('3')) sources[o.id+':3'] = 0;
+                            if (kind !== 'mono' && !_zu('5')) sources[o.id+':5'] = 0;
                             // Interne Pfade je Zustand
                             for (let [pa, pb] of (VALVE_INT_PNEU[kind][_vState(o)] || []))
                                 _addEdge(edges, o.id+':'+pa, o.id+':'+pb, G_VALVE_OPEN);
@@ -77772,6 +77836,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114k"></script>
+<script src="fluidplan.js?v=20261114l"></script>
 </body>
 </html>

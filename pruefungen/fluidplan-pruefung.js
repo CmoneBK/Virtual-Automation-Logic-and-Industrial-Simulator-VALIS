@@ -278,6 +278,79 @@ const FAELLE = {
     F.verbinden2D(false);
     return R;
   },
+  'Verbunden: jede Änderung gleicht sich in beide Richtungen ab': async () => {
+    const F = Fluidplan, R = [];
+    F._leeren();
+    const q = F.setzen('quelle', 0, 300);
+    const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_SA' }, '1V1');
+    const z = F.setzen('zyl_dw', 0, -100, {}, '1A1');
+    const d = F.setzen('drv', 120, 40, { offen: 6 }, '1V2');
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
+    F.verbinden2D(true);
+    const warte = () => new Promise(r => setTimeout(r, 900));
+    const id = F.plan().teile.find(t => t.id === z).o.anlage;
+    const o = factoryObjects.find(x => x.id === id);
+    const vt = () => factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
+    // Plan → 2D: Schalldämpfer an 3 im Plan
+    const sd = F.setzen('daempfer', -20, 260); F.verbinden(v, '3', sd, '1');
+    R.push(['Schalldämpfer im Plan → 2D-Ventil 3', vt() && vt().abschluss && vt().abschluss['3'] && vt().abschluss['3'].art === 'daempfer', vt() && JSON.stringify(vt().abschluss)]);
+    // 2D → Plan: Blindstopfen an 5
+    vt().abschluss = Object.assign({}, vt().abschluss, { '5': { art: 'stopfen' } });
+    await warte();
+    let p = F.plan();
+    const an5 = p.leitungen.find(l => (l.a.t === v && l.a.p === '5') || (l.b.t === v && l.b.p === '5'));
+    const st = an5 && p.teile.find(t => t.id === (an5.a.t === v ? an5.b.t : an5.a.t));
+    R.push(['Blindstopfen in 2D → Plan an 5', !!st && st.typ === 'stopfen', st && st.typ]);
+    // 2D → Plan: Drosselschalldämpfer 40 % an 3
+    vt().abschluss = Object.assign({}, vt().abschluss, { '3': { art: 'drossel', offen: 40 } });
+    await warte();
+    p = F.plan();
+    const an3 = p.leitungen.find(l => (l.a.t === v && l.a.p === '3') || (l.b.t === v && l.b.p === '3'));
+    const sd3 = an3 && p.teile.find(t => t.id === (an3.a.t === v ? an3.b.t : an3.a.t));
+    R.push(['Drosselschalldämpfer 40 % in 2D → Plan', !!sd3 && sd3.typ === 'daempfer' && sd3.o.drossel && sd3.o.offen === 40, sd3 && [sd3.typ, sd3.o.drossel, sd3.o.offen]]);
+    R.push(['nur ein Teil je Anschluss', p.leitungen.filter(l => (l.a.t === v && l.a.p === '3') || (l.b.t === v && l.b.p === '3')).length === 1, '']);
+    // 2D → Plan: Spulen-Variable
+    o.linkedVarExt = 'FP_NEU'; await warte();
+    R.push(['Variable in 2D → Plan-Spule', F.plan().teile.find(t => t.id === v).o.varL === 'FP_NEU', F.plan().teile.find(t => t.id === v).o.varL]);
+    // 2D → Plan: Kompressordruck
+    const komp = factoryObjects.find(x => x.type === 'compressor');
+    if (komp) { komp.pressure = 5; await warte(); R.push(['Kompressor 5 bar → Quelle 5 bar', F.plan().teile.find(t => t.id === q).o.p === 5, F.plan().teile.find(t => t.id === q).o.p]); }
+    // 2D → Plan: Ventiltyp 5/2 → 5/3 (wie Klick im Auto-Schaltplan)
+    vt().isTriple = true; vt().isDouble = true; await warte();
+    R.push(['5/3 in 2D → Plan-Ventil 5/3', F.plan().teile.find(t => t.id === v).o.wege === '5/3', F.plan().teile.find(t => t.id === v).o.wege]);
+    R.push(['und bleibt in 2D 5/3', !!vt() && vt().isTriple, vt() && vt().isTriple]);
+    // 2D → Plan: Drossel entfernen und wieder einsetzen
+    const th = factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ext');
+    deleteObjRecursive(th); await warte();
+    p = F.plan();
+    R.push(['2D-Drossel entfernt → Plan-DRV weg, Leitung durchgehend', !p.teile.some(t => t.typ === 'drv') && p.leitungen.some(l => (l.a.t === z && l.a.p === 'S') || (l.b.t === z && l.b.p === 'S')), p.teile.filter(t => t.typ === 'drv').length]);
+    const th2 = createFactoryObject('throttle'); th2.targetCylinderId = id; th2.role = 'ret'; th2.opening = 30;
+    await warte();
+    p = F.plan();
+    const neuD = p.teile.find(t => t.typ === 'drv');
+    const anK = neuD && p.leitungen.some(l => (l.a.t === neuD.id && l.a.p === '1' && l.b.t === z && l.b.p === 'K') || (l.b.t === neuD.id && l.b.p === '1' && l.a.t === z && l.a.p === 'K'));
+    R.push(['2D-Drossel eingesetzt → Plan-DRV 30 % an K (1 zum Zylinder)', !!neuD && neuD.o.offen === 30 && anK, neuD && [neuD.o.offen, anK]]);
+    F.verbinden2D(false);
+    return R;
+  },
+  'Schattenplan: Blindstopfen an den Abluftanschlüssen sperrt': async () => {
+    const R = [];
+    window.loadExample('code');
+    await new Promise(r => setTimeout(r, 800));
+    const c = document.getElementById('code'); c.value = 'ZYL_AUS := START\nZYL_EIN := STOP'; c.dispatchEvent(new Event('input', { bubbles: true }));
+    const cyl = factoryObjects.find(o => o.id === 'cyl1');
+    const v = factoryObjects.find(o => o.type === 'valve_pneu' && o.targetCylinderId === 'cyl1');
+    v.abschluss = { '3': { art: 'stopfen' }, '5': { art: 'stopfen' } };
+    if (!isSimulationActive) window.toggleSimulation();
+    await new Promise(r => setTimeout(r, 600));   // Grundstellung: Stangenseite unter Druck
+    spsState.START = true; await new Promise(r => setTimeout(r, 1200)); spsState.START = false;
+    R.push(['beide Abluftanschlüsse zu: Zylinder bleibt nach kurzem Weg stehen (Luftpolster)', (cyl.extension || 0) < 30, (cyl.extension || 0).toFixed(1)]);
+    v.abschluss = { '3': { art: 'daempfer' }, '5': { art: 'daempfer' } };
+    spsState.START = true; await new Promise(r => setTimeout(r, 1500)); spsState.START = false;
+    R.push(['mit Schalldämpfern fährt er aus', (cyl.extension || 0) > 95, (cyl.extension || 0).toFixed(1)]);
+    window.toggleSimulation(); v.abschluss = null;
+    return R;
+  },
   'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {
     const F = Fluidplan, R = [];
     const bau = () => {

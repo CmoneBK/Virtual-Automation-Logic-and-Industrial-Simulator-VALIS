@@ -3258,7 +3258,7 @@
                     <button class="panel-info-btn" onclick="showPanelInfo('fbs-wrapper', this)" title="Kontext-Hilfe zu diesem Fenster (Logikplan)">ℹ️</button>
                 </div>
                 <div id="fup-norm-host" style="display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:40;">
-                    <div style="position:sticky; top:0; left:0; display:flex; gap:8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px 'Segoe UI', Arial, sans-serif; color:#455a64; z-index:2;">
+                    <div style="position:sticky; top:0; left:0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px 'Segoe UI', Arial, sans-serif; color:#455a64; z-index:2;">
                         <span><b>FUP</b> nach IEC 61131-3 · Ansicht des Codes · in der Simulation: <span style="color:#2e7d32;font-weight:bold;">1 = grün</span>, <span style="color:#1565c0;">0 = blau gestrichelt</span></span>
                         <span style="margin-left:auto; display:inline-flex; gap:2px; align-items:center;">
                             <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(1/1.2)" title="Verkleinern (oder Mausrad)">−</button>
@@ -3267,6 +3267,7 @@
                             <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(0)" title="Zoom zurücksetzen (100 %)">⟲</button>
                             <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._fupZoom(-1)" title="An die Fensterbreite anpassen">⇲</button>
                         </span>
+                        <button id="btn-fup-breite" class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px; white-space:nowrap;" onclick="window._fupBreite()" title="Breite der Netzwerke: „gleich“ = alle gleich breit, die Zuweisungen stehen untereinander · „je Netzwerk“ = jedes Netzwerk nur so breit wie sein Inhalt. Feiner einstellen: am grauen Griff rechts im Netzwerk-Kopf ziehen, Doppelklick darauf = automatisch.">↔ Breite: gleich</button>
                         <button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._saveFupSvg()" title="FUP als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>
                     </div>
                     <svg id="fup-norm-svg" xmlns="http://www.w3.org/2000/svg" style="display:block;"></svg>
@@ -76609,6 +76610,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         try { fupOn = localStorage.getItem(LS_KEY) === '1'; } catch (_) {}
         window.fbsFupMode = fupOn;
         let fupZoom = 1, fupGroesse = null; // Zoom der FUP-Ansicht (siehe zoomAuf)
+        // Breite der Netzwerke (wie im TIA Portal einstellbar):
+        //   fupBreiteJeNetz = false → alle Netzwerke gleich breit, die „=“-Kästen
+        //                             stehen in einer Spalte (bisheriges Bild)
+        //   fupBreiteJeNetz = true  → jedes Netzwerk nur so breit wie sein Inhalt
+        //   fupMinRechts            → Mindestbreite, gezogen am rechten Rand des
+        //                             Netzwerk-Kopfs (0 = automatisch)
+        const LS_BREITE = 'valisFupBreite', LS_MIN = 'valisFupMinBreite';
+        let fupBreiteJeNetz = false, fupMinRechts = 0;
+        try { fupBreiteJeNetz = localStorage.getItem(LS_BREITE) === 'netz'; } catch (_) {}
+        try { fupMinRechts = Math.max(0, parseFloat(localStorage.getItem(LS_MIN)) || 0); } catch (_) {}
+        let opW = 150;           // Operandenfeld links, wächst mit dem längsten Namen
 
         // Maße
         const PIN_GAP = 30;      // Abstand zweier Eingänge am Kasten
@@ -76616,7 +76628,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         const BOX_W_FB = 74;     // Breite TON/CTU/SR/CMP
         const HEAD_H = 22;       // Kopfzeile im Kasten (Symbol)
         const STUB = 22;         // Leitungsstück vor einem Kasteneingang
-        const OP_W = 150;        // Platz für Operandentext links
+        const OP_W = 150;        // Mindestplatz für Operandentext links
+        const ZEICHEN_W = 7.4;   // Breite eines Zeichens (12 px Consolas, fett)
         const GAP_X = 26;        // Abstand Kasten zu nächstem Kasten
         const NET_HEAD = 34;     // Netzwerk-Kopf
         const NET_GAP = 18;
@@ -76901,10 +76914,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const isConst = item.kind === 'const';
                 const info = isConst ? { name: item.name, sub: '' } : operandInfo(item.name, ctx.bmk);
                 const x0 = ctx.left;
-                const line = el('line', { x1: x0 + OP_W - 6, y1: ly, x2: xOut, y2: ly, stroke: '#111', 'stroke-width': 1.6 }, g);
+                const line = el('line', { x1: x0 + opW - 6, y1: ly, x2: xOut, y2: ly, stroke: '#111', 'stroke-width': 1.6 }, g);
                 if (!isConst) ctx.wires.push({ el: line, src: item.src });
-                txt(g, x0 + OP_W - 10, ly - 4, info.name, { anchor: 'end', bold: !isConst, mono: true, size: 12, fill: isConst ? '#0d47a1' : '#111' });
-                if (info.sub) txt(g, x0 + OP_W - 10, ly - 17, info.sub, { anchor: 'end', size: 10, fill: '#666' });
+                txt(g, x0 + opW - 10, ly - 4, info.name, { anchor: 'end', bold: !isConst, mono: true, size: 12, fill: isConst ? '#0d47a1' : '#111' });
+                if (info.sub) txt(g, x0 + opW - 10, ly - 17, info.sub, { anchor: 'end', size: 10, fill: '#666' });
                 return;
             }
             const spec = item.spec;
@@ -76976,20 +76989,62 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 n.setAttribute('y', 14);
             }
             const ctx = { bmk, wires: lastLayout.wires, values: lastLayout.values, left: 20 };
-            // Breite: tiefster Baum aller Netzwerke → gleiche Ausgangsspalte überall
+            // Operandenfeld so breit wie der längste Operand (sonst ragt
+            // MOTOR_FOERDERBAND_LINKS links aus dem Bild)
+            let langName = 0;
+            const sammle = (item) => {
+                if (!item) return;
+                if (item.kind === 'op' || item.kind === 'const') {
+                    const info = item.kind === 'const' ? { name: item.name, sub: '' } : operandInfo(item.name, bmk);
+                    langName = Math.max(langName, String(info.name || '').length, String(info.sub || '').length * 0.8);
+                    return;
+                }
+                (item.ins || []).forEach(i => sammle(i.child));
+            };
+            // Breite: tiefster Baum je Netzwerk; im Modus „gleich“ gilt der
+            // tiefste aller Netzwerke → gleiche Ausgangsspalte überall
             let maxW = 0;
-            nets.forEach(net => net.items.forEach(it => {
-                prep(it.child);
-                if (it.kind === 'mem') it.child.ownerName = it.target;
-                measure(it.child);
-                maxW = Math.max(maxW, widthOf(it.child) + (it.kind === 'mem' ? 0 : 60));
-            }));
-            const right = ctx.left + OP_W + maxW + 40;
+            nets.forEach(net => {
+                net._w = 0;
+                net.items.forEach(it => {
+                    prep(it.child);
+                    if (it.kind === 'mem') it.child.ownerName = it.target;
+                    measure(it.child);
+                    sammle(it.child);
+                    net._w = Math.max(net._w, widthOf(it.child) + (it.kind === 'mem' ? 0 : 60));
+                });
+                maxW = Math.max(maxW, net._w);
+            });
+            opW = Math.max(OP_W, Math.ceil(langName * ZEICHEN_W + 24));
+            const rechtsVon = (w) => Math.max(ctx.left + opW + w + 40, fupMinRechts);
+            // Rechter Rand des Namens über/neben dem „=“-Kasten
+            const nameRechts = (net, right) => {
+                let r = right + 40;
+                net.items.forEach(it => {
+                    if (it.kind === 'mem') { r = Math.max(r, right + 50); return; }
+                    const w = String(operandInfo(it.target, bmk).name || '').length * ZEICHEN_W;
+                    r = Math.max(r, it.branchOf ? right + 34 + 6 + w + 10 : right + 17 + w / 2 + 10);
+                });
+                return r;
+            };
+            const rechtsGleich = rechtsVon(maxW);
+            let kopfGleich = 0;
+            nets.forEach(net => { kopfGleich = Math.max(kopfGleich, nameRechts(net, rechtsGleich)); });
+            let breite = 0;
             let y = /^\s*SCHRITTKETTE\b/im.test(graph._sourceText || '') ? 26 : 14;
             nets.forEach((net, ni) => {
+                const right = fupBreiteJeNetz ? rechtsVon(net._w) : rechtsGleich;
+                const kopfRechts = fupBreiteJeNetz ? nameRechts(net, right) : kopfGleich;
+                breite = Math.max(breite, kopfRechts + 20);
                 const g = el('g', { class: 'fup-net' }, svg);
                 const headY = y;
-                el('rect', { x: 8, y: headY, width: right + 40, height: 24, fill: '#eceff1', stroke: '#b0bec5' }, g);
+                el('rect', { x: 8, y: headY, width: kopfRechts - 8, height: 24, fill: '#eceff1', stroke: '#b0bec5' }, g);
+                // Griff am rechten Rand: Ziehen stellt die Breite ein, Doppelklick = automatisch
+                const griff = el('g', { class: 'fup-griff', 'data-rechts': right, style: 'cursor:ew-resize' }, g);
+                el('rect', { x: kopfRechts - 10, y: headY, width: 10, height: 24, fill: '#cfd8dc', stroke: '#90a4ae' }, griff);
+                [-3, 0, 3].forEach(dx => el('line', { x1: kopfRechts - 5 + dx, y1: headY + 7, x2: kopfRechts - 5 + dx, y2: headY + 17, stroke: '#546e7a', 'stroke-width': 1 }, griff));
+                const tip = el('title', {}, griff);
+                tip.textContent = 'Ziehen: Netzwerke breiter oder schmaler machen · Doppelklick: Breite automatisch';
                 txt(g, 16, headY + 16, 'Netzwerk ' + (ni + 1) + ':', { bold: true, size: 12 });
                 const title = net.title || (net.items.length === 1 ? net.items[0].target : '');
                 txt(g, 100, headY + 16, title + (net.comment ? '   // ' + net.comment : ''), { size: 12, fill: '#37474f' });
@@ -77048,14 +77103,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 y += NET_GAP;
             });
             // Breite: lange Ausgangsnamen (A_LAMPE_BEREIT) nicht abschneiden
-            let breite = right + 60;
-            nets.forEach(net => net.items.forEach(it => {
-                if (it.kind === 'mem') return;
-                const nm = operandInfo(it.target, bmk).name || '';
-                const w = String(nm).length * 7.4;
-                breite = Math.max(breite, it.branchOf ? right + 34 + 6 + w + 10 : right + 17 + w / 2 + 10);
-            }));
-            breite = Math.ceil(breite);
+            // (nameRechts oben), Speicher-Kästen ragen bis right + 50
+            breite = Math.ceil(Math.max(breite, 400));
             svg.setAttribute('width', breite);
             svg.setAttribute('height', y + 10);
             svg.style.width = breite + 'px';
@@ -77106,20 +77155,75 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 e.preventDefault();
                 zoomAuf(fupZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY);
             }, { passive: false });
-            let zug = null;
+            let zug = null, breiteZug = null, rahmen = 0, letzterGriff = 0;
             host.addEventListener('mousedown', (e) => {
                 if (e.button !== 0 || e.target.closest('button')) return;
+                const griff = e.target.closest && e.target.closest('.fup-griff');
+                if (griff) {
+                    // Breite ziehen: Mindestbreite ab dem rechten Rand dieses Netzwerks
+                    e.preventDefault();
+                    // Doppelklick selbst erkennen: das Neuzeichnen ersetzt den Griff,
+                    // ein dblclick-Ereignis käme nicht sicher an
+                    const jetzt = Date.now();
+                    if (jetzt - letzterGriff < 400) { letzterGriff = 0; window._fupBreite('auto'); return; }
+                    letzterGriff = jetzt;
+                    breiteZug = { x: e.clientX, r: parseFloat(griff.getAttribute('data-rechts')) || 0, bewegt: false };
+                    host.style.cursor = 'ew-resize';
+                    return;
+                }
                 zug = { x: e.clientX, y: e.clientY, l: host.scrollLeft, t: host.scrollTop };
                 host.style.cursor = 'grabbing';
             });
             const w = host.ownerDocument.defaultView;
             w.addEventListener('mousemove', (e) => {
+                if (breiteZug) {
+                    if (Math.abs(e.clientX - breiteZug.x) < 2 && !breiteZug.bewegt) return;
+                    breiteZug.bewegt = true;
+                    fupMinRechts = Math.max(0, Math.round(breiteZug.r + (e.clientX - breiteZug.x) / fupZoom));
+                    if (!rahmen) rahmen = w.requestAnimationFrame(() => { rahmen = 0; neuZeichnen(); });
+                    return;
+                }
                 if (!zug) return;
                 host.scrollLeft = zug.l - (e.clientX - zug.x);
                 host.scrollTop = zug.t - (e.clientY - zug.y);
             });
-            w.addEventListener('mouseup', () => { if (zug) { zug = null; host.style.cursor = ''; } });
+            w.addEventListener('mouseup', () => {
+                if (breiteZug) {
+                    const bewegt = breiteZug.bewegt;
+                    breiteZug = null; host.style.cursor = '';
+                    if (bewegt) {
+                        letzterGriff = 0;
+                        try { localStorage.setItem(LS_MIN, String(fupMinRechts)); } catch (_) {}
+                        neuZeichnen();
+                    }
+                }
+                if (zug) { zug = null; host.style.cursor = ''; }
+            });
         }
+        function neuZeichnen() {
+            const host = doc().getElementById('fup-norm-host');
+            const l = host ? host.scrollLeft : 0, t = host ? host.scrollTop : 0;
+            render(typeof currentGraph !== 'undefined' ? currentGraph : null);
+            if (host) { host.scrollLeft = l; host.scrollTop = t; }
+        }
+        function breiteKnopf() {
+            const b = doc().getElementById('btn-fup-breite');
+            if (!b) return;
+            b.textContent = fupBreiteJeNetz ? '↔ Breite: je Netzwerk' : '↔ Breite: gleich';
+        }
+        // 'umschalten' = gleich ↔ je Netzwerk, 'auto' = gezogene Breite vergessen
+        window._fupBreite = function (was) {
+            if (was === 'auto') {
+                fupMinRechts = 0;
+                try { localStorage.removeItem(LS_MIN); } catch (_) {}
+            } else {
+                fupBreiteJeNetz = was === 'netz' ? true : was === 'gleich' ? false : !fupBreiteJeNetz;
+                try { localStorage.setItem(LS_BREITE, fupBreiteJeNetz ? 'netz' : 'gleich'); } catch (_) {}
+            }
+            breiteKnopf();
+            neuZeichnen();
+        };
+        window._fupBreiteStand = function () { return { jeNetz: fupBreiteJeNetz, minRechts: fupMinRechts }; };
 
         function live() {
             if (!lastLayout || !window.fbsFupMode) return;
@@ -77165,6 +77269,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const clone = svg.cloneNode(true);
             clone.setAttribute('xmlns', NS);
             clone.removeAttribute('style'); // Zoom der Ansicht nicht mit speichern
+            clone.querySelectorAll('.fup-griff').forEach(g => g.remove()); // Ziehgriffe gehören nicht aufs Blatt
             const bg = doc().createElementNS(NS, 'rect');
             bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#fff');
             clone.insertBefore(bg, clone.firstChild);
@@ -77182,6 +77287,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         function init() {
             updateButton();
+            breiteKnopf();
             render(typeof currentGraph !== 'undefined' ? currentGraph : null);
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

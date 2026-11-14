@@ -384,10 +384,13 @@
         if (n) { plan.teile.push(n.t); plan.leitungen.push(n.l); }
         return true;
     }
+    // Abluftanschluss der 2D-Anlage → Anschluss im Plan. Die 2D-Anlage schaltet beim Ausfahren
+    // 1→2 und entlüftet 2 über 3; im Plan (ISO 5599) liegt der Kolbenraum an 4 mit Abluft 5.
+    const planAbluft = (vt, p2d) => /^5/.test(vt.o.wege || '') ? ({ '3': '5', '5': '3' })[p2d] : p2d;
     // Abschlüsse der Abluftanschlüsse eines Planventils in der Form der 2D-Anlage
     function abschluss2D(vt, ports) {
         const ab = {};
-        for (const pid of ports) { const a = abschlussVon(vt, pid); if (a && a.art !== 'offen') ab[pid] = a.art === 'drossel' ? { art: 'drossel', offen: a.offen } : { art: a.art }; }
+        for (const pid of ports) { const a = abschlussVon(vt, planAbluft(vt, pid)); if (a && a.art !== 'offen') ab[pid] = a.art === 'drossel' ? { art: 'drossel', offen: a.offen } : { art: a.art }; }
         return Object.keys(ab).length ? ab : null;
     }
     TYP.knoten = {
@@ -2643,7 +2646,7 @@
                 const now = JSON.stringify(o.abschluss || null);
                 if (now !== w.ab) {
                     masse = true; w.ab = now;
-                    neu.push(() => { for (const pid of ['3', '5']) if (geo(vt).ports.some(p => p.id === pid)) abschlussSetzen(vt, pid, (o.abschluss || {})[pid] || { art: 'offen' }); });
+                    neu.push(() => { for (const pid of ['3', '5']) { const pp = planAbluft(vt, pid); if (geo(vt).ports.some(p => p.id === pp)) abschlussSetzen(vt, pp, (o.abschluss || {})[pid] || { art: 'offen' }); } });
                 }
                 continue;
             }
@@ -2826,7 +2829,7 @@
             else zuweg('2', 'K', thr('ext'), 'ext', 'ext');
             // Abschlüsse der Abluftanschlüsse (Schalldämpfer, Blindstopfen …) aus der 2D-Anlage
             if (v && v.abschluss) for (const pid of ['3', '5']) {
-                const n = v.abschluss[pid] && abschlussBauen(vt, pid, v.abschluss[pid], nid);
+                const n = v.abschluss[pid] && abschlussBauen(vt, planAbluft(vt, pid), v.abschluss[pid], nid);
                 if (n) { teile.push(n.t); leitungen.push(n.l); }
             }
         });

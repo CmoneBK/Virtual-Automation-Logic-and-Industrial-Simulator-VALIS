@@ -282,7 +282,7 @@ const FAELLE = {
     const F = Fluidplan, R = [];
     F._leeren();
     const q = F.setzen('quelle', 0, 300);
-    const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_SA' }, '1V1');
+    const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'magnet', varL: 'FP_SA', varR: 'FP_SB' }, '1V1');   // Impulsventil: 2D-Ventil mit 3 und 5
     const z = F.setzen('zyl_dw', 0, -100, {}, '1A1');
     const d = F.setzen('drv', 120, 40, { offen: 6 }, '1V2');
     F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
@@ -291,23 +291,21 @@ const FAELLE = {
     const id = F.plan().teile.find(t => t.id === z).o.anlage;
     const o = factoryObjects.find(x => x.id === id);
     const vt = () => factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
-    // Plan → 2D: Schalldämpfer an 3 im Plan
+    // Plan 5 (Abluft des Kolbenraums an 4) entspricht 2D 3 (Abluft der Ausfahrseite 2), Plan 3 ↔ 2D 5
+    const am = (p, pid) => { const l = p.leitungen.find(l => (l.a.t === v && l.a.p === pid) || (l.b.t === v && l.b.p === pid)); return l && p.teile.find(t => t.id === (l.a.t === v ? l.b.t : l.a.t)); };
+    // Plan → 2D: Schalldämpfer an Plan-3
     const sd = F.setzen('daempfer', -20, 260); F.verbinden(v, '3', sd, '1');
-    R.push(['Schalldämpfer im Plan → 2D-Ventil 3', vt() && vt().abschluss && vt().abschluss['3'] && vt().abschluss['3'].art === 'daempfer', vt() && JSON.stringify(vt().abschluss)]);
-    // 2D → Plan: Blindstopfen an 5
-    vt().abschluss = Object.assign({}, vt().abschluss, { '5': { art: 'stopfen' } });
+    R.push(['Schalldämpfer an Plan-3 → 2D-Ventil 5', vt() && vt().abschluss && vt().abschluss['5'] && vt().abschluss['5'].art === 'daempfer', vt() && JSON.stringify(vt().abschluss)]);
+    // 2D → Plan: Blindstopfen an 2D-3
+    vt().abschluss = Object.assign({}, vt().abschluss, { '3': { art: 'stopfen' } });
     await warte();
-    let p = F.plan();
-    const an5 = p.leitungen.find(l => (l.a.t === v && l.a.p === '5') || (l.b.t === v && l.b.p === '5'));
-    const st = an5 && p.teile.find(t => t.id === (an5.a.t === v ? an5.b.t : an5.a.t));
-    R.push(['Blindstopfen in 2D → Plan an 5', !!st && st.typ === 'stopfen', st && st.typ]);
-    // 2D → Plan: Drosselschalldämpfer 40 % an 3
-    vt().abschluss = Object.assign({}, vt().abschluss, { '3': { art: 'drossel', offen: 40 } });
+    let p = F.plan(), st = am(p, '5');
+    R.push(['Blindstopfen an 2D-3 → Plan-5', !!st && st.typ === 'stopfen', st && st.typ]);
+    // 2D → Plan: Drosselschalldämpfer 40 % an 2D-5
+    vt().abschluss = Object.assign({}, vt().abschluss, { '5': { art: 'drossel', offen: 40 } });
     await warte();
-    p = F.plan();
-    const an3 = p.leitungen.find(l => (l.a.t === v && l.a.p === '3') || (l.b.t === v && l.b.p === '3'));
-    const sd3 = an3 && p.teile.find(t => t.id === (an3.a.t === v ? an3.b.t : an3.a.t));
-    R.push(['Drosselschalldämpfer 40 % in 2D → Plan', !!sd3 && sd3.typ === 'daempfer' && sd3.o.drossel && sd3.o.offen === 40, sd3 && [sd3.typ, sd3.o.drossel, sd3.o.offen]]);
+    p = F.plan(); const sd3 = am(p, '3');
+    R.push(['Drosselschalldämpfer 40 % an 2D-5 → Plan-3', !!sd3 && sd3.typ === 'daempfer' && sd3.o.drossel && sd3.o.offen === 40, sd3 && [sd3.typ, sd3.o.drossel, sd3.o.offen]]);
     R.push(['nur ein Teil je Anschluss', p.leitungen.filter(l => (l.a.t === v && l.a.p === '3') || (l.b.t === v && l.b.p === '3')).length === 1, '']);
     // 2D → Plan: Spulen-Variable
     o.linkedVarExt = 'FP_NEU'; await warte();

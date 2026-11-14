@@ -69,6 +69,13 @@ Die Symbolleiste über dem IEC-Stromlaufplan bietet mehrere Schalter zur Anpassu
 * **Erweiterte Pneumatik (DIN ISO 1219):** Echte Fluidik-Simulation. Generiere auf Knopfdruck normgerechte Pneumatik-Schaltungen mit Kompressoren (-GQA), Verteilern (-GQ), 5/2-Wege-Ventilen (-QM) und Drosselrückschlagventilen (-RN). Schläuche werden dynamisch geroutet und zeigen visuell an, ob sie unter Druck stehen. Die Zylindergeschwindigkeit berechnet sich in Echtzeit aus Druck und Volumenstrom.
 * **Thermodynamik & Schmelzphysik:** Heizelemente (Öfen) übertragen Temperatur auf Werkstücke. Je nach Material reagiert die Physik: Metall beginnt realistisch rot/gelb zu glühen, während Kunststoff ab einer definierten Temperatur physisch zu Tropfen zerschmilzt.
 
+### 💨 Freier Fluidplan (Pneumatik nach DIN ISO 1219)
+* **Freischaltung (vorerst):** Der Knopf ist ausgeblendet, bis die Seite einmal mit `?fluidplan=1` aufgerufen wurde (bleibt im Browser gespeichert, `?fluidplan=0` blendet wieder aus).
+* **Zeichnen:** Knopf „💨 Fluidplan“ öffnet ein eigenes Fenster. Bauteile aus der Palette ziehen (Quelle, Wartungseinheit, Zylinder, Schwenkantrieb, 2/2- bis 5/3-Wegeventile mit Taster, Pilz, Hebel, Pedal, Rolle, Leerrücklauf, Magnet oder Druckluft, Wechsel-, Zweidruck-, Rückschlag-, Schnellentlüftungs-, Drossel-, Drosselrückschlag-, Zeitverzögerungs- und Druckfolgeventil, Druckschalter, Manometer). Leitungen von Anschluss zu Anschluss ziehen, Leitung auf Leitung = T-Stück. R dreht, M spiegelt, Strg+Z/Y, Strg+C/V, SVG-Export.
+* **Simulation ohne Code:** Jede Leitung hat ihren Druck, Zylinder bewegen sich nach Kraft und Luftmenge (Drosseln wirken wirklich). Rein pneumatische Steuerungen laufen ohne Programm; Taster und Hebel im Plan anklicken.
+* **Mit VALIS gekoppelt:** Magnetspulen lesen VALIS-Ausgänge, Endlagensensoren und Druckschalter schreiben VALIS-Eingänge. Ein Zylinder der 2D-Anlage kann einem Planzylinder folgen (Eigenschaft „2D-Anlage: Zylinder fährt mit“). Der Auto-Schaltplan der 2D-Anlage bleibt davon unberührt.
+* **Speichern:** Der Plan steckt im Anlagenzustand (`fluidplan`) und reist mit .valisave, Link und Rückgängig. API `window.Fluidplan`, Prüfung `node pruefungen/fluidplan-pruefung.js`.
+
 ### 📊 Logik-Analysator (Oszilloskop)
 * **Echtzeit-Signalverfolgung:** Öffnen Sie das Oszilloskop, um Signalflanken (High/Low) aller Ein- und Ausgänge wie bei einem EKG präzise über die Zeit aufzuzeichnen und auszuwerten.
 

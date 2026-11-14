@@ -370,6 +370,51 @@ const FAELLE = {
     window.toggleSimulation(); v.abschluss = null;
     return R;
   },
+  'Abluftdrosselung: Ausfahr-Drossel in 2D und Auto-Schaltplan auf der Stangenseite': async () => {
+    const R = [];
+    window.loadExample('code');
+    await new Promise(r => setTimeout(r, 800));
+    const cyl = factoryObjects.find(o => o.id === 'cyl1');
+    const v = factoryObjects.find(o => o.type === 'valve_pneu' && o.targetCylinderId === 'cyl1');
+    const tE = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === 'cyl1' && o.role === 'ext');
+    const tR = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === 'cyl1' && o.role === 'ret');
+    const hat = (a, ap, b, bp) => (window.pneuConnections || []).some(c => !c._broken &&
+      ((c.aObjId === a.id && c.aPortId === ap && c.bObjId === b.id && c.bPortId === bp) || (c.aObjId === b.id && c.aPortId === bp && c.bObjId === a.id && c.bPortId === ap)));
+    R.push(['Beispiel (alter Stand) migriert: ext an Ventil 4 und Zylinder 2', !!(tE && hat(v, '4', tE, '2') && hat(tE, '1', cyl, '2')), '']);
+    R.push(['ret an Ventil 2 und Zylinder 1', !!(tR && hat(v, '2', tR, '2') && hat(tR, '1', cyl, '1')), '']);
+    R.push(['keine Direktleitung mehr daneben', !hat(v, '2', cyl, '1') && !hat(v, '4', cyl, '2'), '']);
+    R.push(['ext-Drossel steht rechts (über Ventil 4)', tE.x > tR.x, tE.x + ' / ' + tR.x]);
+    // Rollen aus dem Verlauf bleiben gleich (Verlauf gilt als Wahrheit)
+    _applyPneuManualConnections();
+    R.push(['Rollen aus dem Schlauchverlauf: ext/ret bleiben', tE.role === 'ext' && tR.role === 'ret', tE.role + '/' + tR.role]);
+    // Gespeichert und wieder geladen: keine zweite Migration
+    const x0 = tE.x, st = getFactoryStateObj();
+    R.push(['Zustand trägt drosselSeite', st.drosselSeite === 'stange', String(st.drosselSeite)]);
+    // Auto-Schaltplan: ext-Drossel rechts (Stangenleitung)
+    if (typeof window._syncCircuitFromFactory === 'function') window._syncCircuitFromFactory(true);
+    await new Promise(r => setTimeout(r, 300));
+    const lx = id => { const g = document.querySelector('#circuit-content [data-obj-id="' + id + '"] rect, [data-obj-id="' + id + '"] > rect'); return g ? parseFloat(g.getAttribute('x')) : null; };
+    const xe = lx(tE.id), xr = lx(tR.id);
+    R.push(['Auto-Schaltplan: Ausfahr-Drossel in der Stangenleitung (rechts)', xe != null && xr != null && xe > xr, xe + ' / ' + xr]);
+    // Ausfahren über ext-Drossel (20 %) schneller als Einfahren über ret (5 %)
+    const c = document.getElementById('code'); c.value = 'ZYL_AUS := START\nZYL_EIN := STOP'; c.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!isSimulationActive) window.toggleSimulation();
+    spsState.STOP = true; await new Promise(r => setTimeout(r, 2500)); spsState.STOP = false;
+    const zeit = (ziel) => new Promise(res => { const t0 = performance.now(); const f = () => { const e = cyl.extension || 0; if ((ziel ? e >= 99 : e <= 1) || performance.now() - t0 > 8000) res(performance.now() - t0); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
+    spsState.START = true; const tAus = await zeit(true); spsState.START = false;
+    spsState.STOP = true; const tEin = await zeit(false); spsState.STOP = false;
+    window.toggleSimulation();
+    R.push(['Ausfahren (20 %) schneller als Einfahren (5 %)', tAus < tEin && tAus < 8000, Math.round(tAus) + ' / ' + Math.round(tEin) + ' ms']);
+    // Neu aufgebaut: generatePneumaticSetup legt die Drossel gleich richtig an
+    const pl = factoryObjects.filter(o => o.type === 'valve_pneu' || o.type === 'throttle');
+    pl.forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    cyl.hasPneumatics = false;
+    window.generatePneumaticSetup(cyl, 'double', { drosseln: { ext: true, ret: true } });
+    const v2 = factoryObjects.find(o => o.type === 'valve_pneu' && o.targetCylinderId === 'cyl1');
+    const e2 = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === 'cyl1' && o.role === 'ext');
+    R.push(['Neuaufbau: ext an Ventil 4 / Zylinder 2', !!(v2 && e2 && hat(v2, '4', e2, '2') && hat(e2, '1', cyl, '2')), '']);
+    return R;
+  },
   'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {
     const F = Fluidplan, R = [];
     const bau = () => {

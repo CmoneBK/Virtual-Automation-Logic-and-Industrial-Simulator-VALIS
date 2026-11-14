@@ -3181,6 +3181,7 @@
                     </span>
                 </span>
                 <button id="btn-view-festo" class="btn-export view-btn" onclick="toggleWorkspaceView('festo-wrapper')" title="Steckaufbau nach FESTO-Didactic-Platinen: zeigt die konkrete Verkabelung des Schaltplans auf den realen Lehr-Boards (Taster-Panels, Relais-Panels, LED-Panel) — wo welches Kabel in welche Buchse muss. FESTO und Festo Didactic sind Marken der Festo SE &amp; Co. KG. Die Platinen sind zur Orientierung an der Schul-Hardware nachgezeichnet; VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.">🔌 Steckaufbau</button>
+                <button id="btn-view-fluid" class="btn-export view-btn" style="display:none;" onclick="Fluidplan.umschalten()" title="Freier Fluidplan: Pneumatik-Schaltpläne nach DIN ISO 1219 frei zeichnen und simulieren (rein pneumatisch oder mit Magnetventilen an den VALIS-Variablen)">💨 Fluidplan</button>
                 <button id="btn-view-fac" class="btn-export view-btn" onclick="toggleWorkspaceView('factory-wrapper')" data-i18n="btn_view_fac" title="Interaktive 2D-Anlage zum Aufbau und Live-Test der Steuerung mit Sensoren, Aktoren, Werkstücken und Materialfluss">2D Anlage</button>
                 <button id="btn-view-sk" class="btn-export view-btn" style="display:none;" onclick="toggleWorkspaceView('sk-wrapper')" title="Grafcet- bzw. S7-GRAPH-Darstellung der Schrittketten im Code. Wird nur sichtbar, wenn der Editor eine gültige SCHRITTKETTE oder eine erkennbare SR-Glied-Kette enthält.">Schrittkette</button>
             </div>
@@ -42766,7 +42767,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                         // Proportionalventil (Stetigventil) hat Vorrang: fährt den Zylinder
                         // stetig nach der Stellgröße, siehe window._propVentil (REGELSTRECKEN).
-                        const _pv = typeof window._propVentil === 'function' ? window._propVentil(obj) : null;
+                        // Zylinder, der einem Zylinder im freien Fluidplan folgt (fluidplan.js)
+                        const _pv = (typeof window._fpZylinder === 'function' ? window._fpZylinder(obj) : null)
+                            || (typeof window._propVentil === 'function' ? window._propVentil(obj) : null);
                         if (_pv) {
                             forceExt = _pv.dir > 0; forceRet = _pv.dir < 0;
                             baseSpeed = ((_pv.v / (obj.stroke || 100)) * 100) / 60;
@@ -43733,7 +43736,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 pneuConnections:     window.pneuConnections     || [],
                 fluidPipeConnections: window.fluidPipeConnections || [],
                 fluid: Array.from(fluidGrid.entries()).map(function(e) { return { k: e[0], m: e[1].mat }; }),
-                sand:  Array.from(sandGrid.keys())
+                sand:  Array.from(sandGrid.keys()),
+                // Freier Fluidplan (fluidplan.js): reist mit .valisave, #state und Undo
+                fluidplan: (window.Fluidplan ? window.Fluidplan.exportieren() : (window._fpRoh || null))
             };
         }
         // Zonen der Auslässe genau so, wie factoryLoop sie benutzt (gleiches Raster):
@@ -44739,6 +44744,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let _sc = document.createElement('canvas'); _sc.id = 'splash-canvas'; _sc.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;display:none;width:4000px;height:3000px;'; factoryCanvas.insertBefore(_sc, _fc.nextSibling);
                 if (_splashEngine) { _splashEngine.destroy(); _splashEngine = null; _splashActive = false; const _sfb = document.getElementById('btn-fluid-engine'); if (_sfb) _sfb.textContent = '💧 Klassisch'; }
                 factoryLayers = state.layers || [];
+                window._fpRoh = state.fluidplan || null;
+                if (window.Fluidplan) { try { window.Fluidplan.importieren(window._fpRoh); } catch (e) { console.warn('Fluidplan', e); } }
                 window.pneuConnections      = state.pneuConnections      || [];
                 window.fluidPipeConnections = state.fluidPipeConnections || [];
                 // Migrate legacy hydConnections: tag existing fluid entries, merge old hyd entries
@@ -51353,7 +51360,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             overlay.classList.add('open');
         };
 
-        window.generatePneumaticSetup = function(cylObj) {
+        // wahl ('single'|'double'|'triple') überspringt den Ventil-Dialog und das Scrollen
+        // (genutzt vom freien Fluidplan, der die 2D-Pneumatik aufbaut).
+        window.generatePneumaticSetup = function(cylObj, wahl) {
             let zone = factoryObjects.find(o => o.type === 'pneumatic_zone');
             if (!zone) { zone = createFactoryObject('pneumatic_zone', ''); zone.x = 20; zone.y = 600; }
             let comp = factoryObjects.find(o => o.type === 'compressor');
@@ -51450,10 +51459,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     else      _pushPneuAuto(valve, '4', cylObj, '2');
                 }
                 const scrollArea = document.getElementById('factory-canvas-area');
-                scrollArea.scrollTo({ left: zone.x * factoryScale - 50, top: zone.y * factoryScale - 50, behavior: 'smooth' });
+                if (!wahl && scrollArea) scrollArea.scrollTo({ left: zone.x * factoryScale - 50, top: zone.y * factoryScale - 50, behavior: 'smooth' });
                 saveFactoryState();
             };
-            if (isDouble) {
+            if (wahl) {
+                _doSetup(isDouble ? wahl : 'single');
+            } else if (isDouble) {
                 showValisChoiceDialog(
                     'Wegeventil wählen',
                     'Welches Wegeventil soll für den doppelwirkenden Zylinder verwendet werden?',
@@ -77714,5 +77725,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
+<script src="fluidplan.js?v=20261114"></script>
 </body>
 </html>

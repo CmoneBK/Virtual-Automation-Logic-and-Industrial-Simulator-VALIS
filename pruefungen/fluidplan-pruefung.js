@@ -104,8 +104,8 @@ const FAELLE = {
       for (let t = 0; t < 200; t++) { F._schritt(0.05); if (F.zustand().teile[z].anteil > 0.98) return (t + 1) * 0.05; }
       return 99;
     };
-    const schnell = zeitBis(100), langsam = zeitBis(10);
-    R.push(['Drossel 10 % deutlich langsamer als 100 %', langsam > schnell * 2 && langsam < 99, `${schnell.toFixed(2)} s gegen ${langsam.toFixed(2)} s`]);
+    const schnell = zeitBis(100), langsam = zeitBis(1);
+    R.push(['Drossel 1 % deutlich langsamer als 100 %', langsam > schnell * 2 && langsam < 99, `${schnell.toFixed(2)} s gegen ${langsam.toFixed(2)} s`]);
     return R;
   },
   'Zeitverzögerungsventil schaltet nach der Zeit': () => {
@@ -147,7 +147,7 @@ const FAELLE = {
     const q = F.setzen('quelle', 0, 300);
     const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_Y1' }, '1V1');
     const z = F.setzen('zyl_dw', 0, -100, { d: 32, dStange: 12, hub: 200 }, '1A1');
-    const d = F.setzen('drv', 120, 40, { offen: 60 }, '1V2');
+    const d = F.setzen('drv', 120, 40, { offen: 6 }, '1V2');
     F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
     R.push(['ohne Verbindung keine 2D-Teile', zyl2d().length === vorher, zyl2d().length]);
     F.verbinden2D(true);
@@ -157,8 +157,8 @@ const FAELLE = {
     const vt = factoryObjects.find(x => x.type === 'valve_pneu' && x.targetCylinderId === id);
     R.push(['2D-Ventil monostabil mit FP_Y1', vt && !vt.isDouble && vt.linkedVarExt === 'FP_Y1', vt && [vt.isDouble, vt.linkedVarExt]]);
     const th = factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ext');
-    // Plan rechnet mit dem Querschnitt, 2D mit dem Liefermengen-Anteil: 60 % im Plan = 60²/800 ≈ 5 % in 2D
-    R.push(['Drossel der Ausfahrbewegung (60 % Plan = 5 % 2D)', th && th.opening === 5, th && th.opening]);
+    // Plan und 2D verstehen die Öffnung gleich (Anteil am Nenndurchfluss): 6 % bleiben 6 %
+    R.push(['Drossel der Ausfahrbewegung (6 % Plan = 6 % 2D)', th && th.opening === 6, th && th.opening]);
     R.push(['keine Drossel fürs Einfahren (nicht im Plan)', !factoryObjects.find(x => x.type === 'throttle' && x.targetCylinderId === id && x.role === 'ret'), '']);
     R.push(['Maße übernommen', o && o.pistonD === 32 && o.rodD === 12 && o.stroke === 200, o && [o.pistonD, o.rodD, o.stroke]]);
     F.aendern(v, { links: 'magnet', rechts: 'magnet', varR: 'FP_Y2' });
@@ -185,6 +185,54 @@ const FAELLE = {
     F.importieren(Object.assign(F.exportieren(), {}));
     Fluidplan._entfernen(z2);
     R.push(['Planzylinder gelöscht → erzeugter 2D-Zylinder weg', !factoryObjects.find(x => x.id === id2), '']);
+    return R;
+  },
+  'Drossel-Öffnung überall gleich (Anteil am Nenndurchfluss)': () => {
+    const F = Fluidplan, R = [];
+    // Alter Plan (v1, Querschnitt): 60 % → 60²/800 ≈ 5 %, Standard 50 % → 3 %
+    F.importieren({ v: 1, teile: [{ id: 'a', typ: 'drv', x: 0, y: 0, rot: 0, bez: '1V2', o: { offen: 60 } }, { id: 'b', typ: 'drossel', x: 100, y: 0, rot: 0, bez: '1V3', o: {} }], leitungen: [] });
+    const p = F.plan();
+    R.push(['alter Plan: 60 % → 5 %, Standard → 3 %', p.v === 2 && p.teile[0].o.offen === 5 && p.teile[1].o.offen === 3, [p.v, p.teile[0].o.offen, p.teile[1].o.offen]]);
+    F.importieren(F.exportieren());
+    R.push(['neuer Plan wird nicht noch einmal umgerechnet', F.plan().teile[0].o.offen === 5, F.plan().teile[0].o.offen]);
+    F._leeren();
+    // Alter 2D-Stand mit 400-l/min-Kompressor: Öffnung verdoppelt, damit das Tempo bleibt
+    const st = JSON.parse(JSON.stringify(getFactoryStateObj()));
+    delete st.drosselModell;
+    st.objects = [
+      { id: 'k1', type: 'compressor', x: 40, y: 820, width: 100, height: 60, rotation: 0, pressure: 6, maxFlow: 400 },
+      { id: 'd1', type: 'throttle', x: 170, y: 740, width: 40, height: 35, rotation: 0, opening: 6, role: 'ext' }
+    ];
+    st.pneuConnections = []; st.fluidplan = null;
+    localStorage.setItem('logikFactoryState', JSON.stringify(st));
+    loadFactoryState();
+    const d1 = factoryObjects.find(o => o.id === 'd1');
+    R.push(['alter 2D-Stand (400 l/min): 6 % → 12 %', d1 && d1.opening === 12, d1 && d1.opening]);
+    R.push(['gespeichert mit drosselModell 2', getFactoryStateObj().drosselModell === 2, getFactoryStateObj().drosselModell]);
+    localStorage.setItem('logikFactoryState', JSON.stringify(getFactoryStateObj()));
+    loadFactoryState();
+    R.push(['neuer Stand bleibt bei 12 %', factoryObjects.find(o => o.id === 'd1').opening === 12, factoryObjects.find(o => o.id === 'd1').opening]);
+    return R;
+  },
+  'Verbunden: 2D-Zylinder steht in jedem Bild wie der Planzylinder': async () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 0, 300);
+    const v = F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'FP_GL' }, '1V1');
+    const z = F.setzen('zyl_dw', 0, -100, {}, '1A1');
+    const d = F.setzen('drv', 120, 40, { offen: 3 }, '1V2');
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', d, '2'); F.verbinden(d, '1', z, 'S');
+    F.verbinden2D(true);
+    const o = factoryObjects.find(x => x.id === F.plan().teile.find(t => t.id === z).o.anlage);
+    if (!isSimulationActive) window.toggleSimulation();
+    await new Promise(r => setTimeout(r, 400));
+    spsState.FP_GL = true;
+    let maxAbw = 0, bilder = 0, bewegt = false;
+    await new Promise(res => { const f = () => { const a = F.zustand().teile[z].anteil * 100, e = o.extension || 0; if (a > 1 && a < 99) { bewegt = true; bilder++; maxAbw = Math.max(maxAbw, Math.abs(a - e)); } if (a >= 99.5 || bilder > 200) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
+    spsState.FP_GL = false;
+    window.toggleSimulation();
+    R.push(['Planzylinder fährt aus', bewegt && bilder >= 3, bilder + ' Bilder']);
+    R.push(['2D weicht höchstens 1 % ab', maxAbw <= 1, maxAbw.toFixed(2) + ' %']);
+    F.verbinden2D(false);
     return R;
   },
   'Fehlersuche: versteckte Fehler wirken und lassen sich finden': () => {

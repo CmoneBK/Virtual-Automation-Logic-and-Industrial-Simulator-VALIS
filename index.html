@@ -17451,7 +17451,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
   <div class="tut-step"><div class="tut-step-n">1</div><p><strong>Rechtsklick auf den Kompressor:</strong> Netzdruck (bar) und Fördervolumen (l/min) einstellen</p></div>
   <div class="tut-step"><div class="tut-step-n">2</div><p><strong>Rechtsklick auf eine Drossel:</strong> Öffnungsgrad (0–100 %) einstellen → beeinflusst Fahrgeschwindigkeit direkt</p></div>
 </div>
-<div class="tut-tip">💡 Eine geringere Drossel-Öffnung = langsamerer Zylinder. 100 % = maximaler Durchfluss = maximale Geschwindigkeit.</div>
+<div class="tut-tip">💡 Eine geringere Drossel-Öffnung = langsamerer Zylinder. Die Öffnung ist der Anteil am Nenndurchfluss der voll geöffneten Drossel (pneumatisch 200 l/min bei 6 bar, hydraulisch 20 l/min): 10 % lassen also 20 l/min Luft durch, egal wie groß der Kompressor ist. Liefert der Kompressor oder das Aggregat weniger, begrenzt er.</div>
 <h3>Beispiel-Code</h3>
 <div class="tut-code-wrap"><div class="tut-code"><span style="color:#8b949e">// Kap.6: Pneumatik-Zyklus</span>
 <span style="color:#ff7b72">S3</span> <span style="color:#ff7b72">:=</span> <span style="color:#79c0ff">START</span> <span style="color:#d2a8ff">&amp;&amp;</span> <span style="color:#79c0ff">S_PNEU_HINTEN</span>
@@ -31396,6 +31396,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 		// Zeit-Management für Hardware-unabhängige Physik (Delta-Time)
 		let lastFrameTime = performance.now();
 		let timeScale = 1.0; // Basis: 60 FPS (Faktor 1.0)
+        // Drossel-Öffnung in % = Anteil am Nenndurchfluss der voll geöffneten Drossel
+        // (linear, überall in VALIS gleich, auch im freien Fluidplan).
+        window.DROSSEL_QN_PNEU = 200;   // l/min bei 6 bar
+        window.DROSSEL_QN_HYD = 20;     // l/min
         window.simSpeed = 1.0;
         // ==========================================
         // NEU: BAUTEIL REGISTRY (Plugin-Architektur)
@@ -42747,6 +42751,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 // =============================================
 
+                // Freier Fluidplan, mit der Anlage verbunden: im selben Bild rechnen (fluidplan.js)
+                if (isSimulationActive && typeof window._fpTakt === 'function') {
+                    try { window._fpTakt(deltaTime * (window.simSpeed || 1)); } catch (e) { console.warn('Fluidplan:', e); }
+                }
                 // Schleife für alle Aktoren (Zylinder und Förderbänder)
                 factoryObjects.forEach(obj => {
                     if (obj.type.startsWith('zylinder')) {
@@ -42779,7 +42787,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             || (typeof window._propVentil === 'function' ? window._propVentil(obj) : null);
                         if (_pv) {
                             forceExt = _pv.dir > 0; forceRet = _pv.dir < 0;
-                            baseSpeed = ((_pv.v / (obj.stroke || 100)) * 100) / 60;
+                            // ziel: Stellung in % genau in diesem Bild erreichen (Fluidplan)
+                            if (_pv.ziel != null) baseSpeed = Math.abs(_pv.ziel - (obj.extension || 0)) / Math.max(1e-6, (window.simSpeed || 1) * timeScale);
+                            else baseSpeed = ((_pv.v / (obj.stroke || 100)) * 100) / 60;
                         } else
                         // 🌟 ECHTE PNEUMATIK-STEUERUNG (Phase 3: Fluidik & Volumenstrom)
                         if (obj.hasPneumatics) {
@@ -42837,16 +42847,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     forceExt = false; forceRet = false;
                                 } else if (valve.isActive) {
                                     forceExt = true; // Druckluft strömt in die Ausfahr-Kammer
-                                    let opening = tExt ? (tExt.opening / 100) : 1.0;
-                                    let q_eff = q_max_mm3_s * opening * pressureFactor;
+                                    // Drossel: Öffnung = Anteil an ihrem Nenndurchfluss (DROSSEL_QN_PNEU),
+                                    // der Kompressor begrenzt mit seiner Liefermenge
+                                    let q_eff = Math.min(q_max_mm3_s, tExt ? DROSSEL_QN_PNEU * 16666.67 * tExt.opening / 100 : Infinity) * pressureFactor;
                                     let v_mm_s = q_eff / aExt;
                                     baseSpeed = ((v_mm_s / stroke) * 100) / 60;
                                 } else {
                                     forceRet = true; // Druckluft strömt in die Einfahr-Kammer
-                                    let opening = 1.0;
-                                    if (tRet) opening = (tRet.opening / 100);
-                                    else if (obj.type === 'zylinder_single' && tExt) opening = (tExt.opening / 100);
-                                    let q_eff = q_max_mm3_s * opening * pressureFactor;
+                                    let tR = tRet || (obj.type === 'zylinder_single' ? tExt : null);
+                                    let q_eff = Math.min(q_max_mm3_s, tR ? DROSSEL_QN_PNEU * 16666.67 * tR.opening / 100 : Infinity) * pressureFactor;
                                     let v_mm_s = q_eff / aRet;
                                     baseSpeed = ((v_mm_s / stroke) * 100) / 60;
                                 }
@@ -43744,6 +43753,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 fluidPipeConnections: window.fluidPipeConnections || [],
                 fluid: Array.from(fluidGrid.entries()).map(function(e) { return { k: e[0], m: e[1].mat }; }),
                 sand:  Array.from(sandGrid.keys()),
+                // Drossel-Öffnung = Anteil am Nenndurchfluss der Drossel (siehe DROSSEL_QN_PNEU)
+                drosselModell: 2,
                 // Freier Fluidplan (fluidplan.js): reist mit .valisave, #state und Undo
                 fluidplan: (window.Fluidplan ? window.Fluidplan.exportieren() : (window._fpRoh || null))
             };
@@ -45043,6 +45054,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 if (typeof _applyHydManualConnections  === 'function') _applyHydManualConnections();
                 if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
+                // Drosseln bis Modell 1 rechneten die Öffnung als Anteil der Liefermenge von
+                // Kompressor bzw. Aggregat. Ab Modell 2 ist sie der Anteil am Nenndurchfluss
+                // der Drossel selbst (wie im Fluidplan); gleiche Geschwindigkeit bei
+                // neu = alt · Liefermenge / Nenndurchfluss.
+                if (!(state.drosselModell >= 2)) {
+                    const _comp = factoryObjects.find(o => o.type === 'compressor');
+                    const _unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
+                    const _fP = (_comp ? (_comp.maxFlow || 200) : 200) / DROSSEL_QN_PNEU;
+                    const _fH = (_unit ? (_unit.maxFlow || 20) : 20) / DROSSEL_QN_HYD;
+                    factoryObjects.forEach(o => {
+                        const f = o.type === 'throttle' ? _fP : o.type === 'throttle_hyd' ? _fH : null;
+                        if (f == null || Math.abs(f - 1) < 1e-9 || o.opening == null) return;
+                        o.opening = Math.max(1, Math.min(100, Math.round(o.opening * f)));
+                        if (o.el) {
+                            o.el.querySelectorAll('.f2d-throttle-val, .f2d-throttle-val-hyd').forEach(v => { v.textContent = o.opening + '%'; });
+                            o.el.querySelectorAll('.f2d-throttle-knob, .f2d-throttle-knob-hyd').forEach(k => { k.style.transform = `rotate(${o.opening * 2.7}deg)`; });
+                        }
+                    });
+                }
                 // Stale-Cleanup: Verbindungen, deren Endpunkt-Objekt nicht mehr
                 // existiert (z.B. nach Demo-Laden + manuellem Löschen), entfernen.
                 const _liveIds = new Set(factoryObjects.map(o => o.id));
@@ -51419,7 +51449,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let target_Q_ret = target_v_mm_s * aRet;
                 let compPressure = comp.pressure || 6.0;
                 let compFlow = comp.maxFlow || 200;
-                let max_Q_mm3_s = compFlow * 16666.67 * (compPressure / 6.0);
+                // Drosselöffnung als Anteil am Nenndurchfluss der Drossel (nicht am Kompressor)
+                let max_Q_mm3_s = DROSSEL_QN_PNEU * 16666.67 * (compPressure / 6.0);
                 let reqOpenExt = Math.max(1, Math.min(100, Math.round((target_Q_ext / max_Q_mm3_s) * 100)));
                 let reqOpenRet = Math.max(1, Math.min(100, Math.round((target_Q_ret / max_Q_mm3_s) * 100)));
                 const applyThrottleVisuals = (throttleObj, openingVal) => {
@@ -51913,7 +51944,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let aExt = Math.PI * Math.pow(pistonD / 2, 2);
                 let aRet = aExt - (Math.PI * Math.pow(rodD / 2, 2));
                 let unitPressure = unit.pressure || 100; let unitFlow = unit.maxFlow || 20;
-                let max_Q_mm3_s = unitFlow * 16666.67;
+                let max_Q_mm3_s = DROSSEL_QN_HYD * 16666.67;
                 let reqOpenExt = Math.max(1, Math.min(100, Math.round(((target_v_mm_s * aExt) / max_Q_mm3_s) * 100)));
                 let reqOpenRet = Math.max(1, Math.min(100, Math.round(((target_v_mm_s * aRet) / max_Q_mm3_s) * 100)));
                 const applyThrottleVisuals = (t, val) => {
@@ -52774,8 +52805,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Tank) werden als Dirichlet-Randbedingungen festgelegt.
         // Iterative Gauss-Seidel-Relaxation auf G·p = b (KCL pro Knoten).
         //
-        // Throttle: Leitwert g = g_max · (opening/100)²  → quadratische Skalierung
-        // wie in Realität (Querschnitt linear, Volumenstrom ~ Querschnitt²).
+        // Throttle: Leitwert g = g_max · opening/100, linear wie überall in VALIS
+        // (Öffnung = Anteil am Nenndurchfluss der voll geöffneten Drossel).
         // Drosselrückschlagventil: bidirektionaler Drossel; Rückschlag-Zweig wird
         // hier (Schritt 1) noch nicht modelliert — Erweiterung geplant.
         //
@@ -52853,7 +52884,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         } else if (o.type === 'throttle') {
                             _addNode(nodes, o.id+':1'); _addNode(nodes, o.id+':2');
                             let opening = (o.opening != null ? o.opening : 100);
-                            let g = G_THROTTLE_MAX * Math.pow(opening / 100, 2);
+                            let g = G_THROTTLE_MAX * opening / 100;
                             _addEdge(edges, o.id+':1', o.id+':2', Math.max(g, 0.001));
                         } else if (o.hasPneumatics && (o.type === 'zylinder_single' || o.type === 'zylinder_double' || o.type === 'gate_pneu')) {
                             _addNode(nodes, o.id+':1');
@@ -52887,7 +52918,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         } else if (o.type === 'throttle_hyd') {
                             _addNode(nodes, o.id+':IN'); _addNode(nodes, o.id+':OUT');
                             let opening = (o.opening != null ? o.opening : 100);
-                            let g = G_THROTTLE_MAX * Math.pow(opening / 100, 2);
+                            let g = G_THROTTLE_MAX * opening / 100;
                             _addEdge(edges, o.id+':IN', o.id+':OUT', Math.max(g, 0.001));
                         } else if (o.type === 'check_valve_hyd') {
                             _addNode(nodes, o.id+':IN'); _addNode(nodes, o.id+':OUT');
@@ -53207,19 +53238,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const bZu = !single && rvB && !entsperrt(rvB);
                         it.pReq = it.F / (aK * ETA) * 10 + P_REIB;
                         it.gedrosselt = !!tE;
-                        it.Qset = (tE ? num(tE.opening, 100) / 100 : 1) * Qn;
+                        it.Qset = tE ? Math.min(Qn, num(tE.opening, 100) / 100 * DROSSEL_QN_HYD * LMIN) : Qn;
                         it.rolle = bZu ? 'gesperrt' : (ext >= 99.5 ? 'ende' : 'fahrt');
                         leck += dS;
                     } else if (dir < 0 && single) {
                         // Einfachwirkend: Feder (und ggf. Last) schiebt das Öl über A zurück
                         const aZu = rvA && !entsperrt(rvA);
                         it.rolle = aZu ? 'gesperrt' : (ext <= 0.5 ? 'unten' : 'feder');
-                        it.Qset = (tE ? num(tE.opening, 100) / 100 : 1) * Math.max(Qn, 20 * LMIN);
+                        it.Qset = tE ? num(tE.opening, 100) / 100 * DROSSEL_QN_HYD * LMIN : Math.max(Qn, 20 * LMIN);
                     } else if (dir < 0) {
                         const aZu = rvA && !entsperrt(rvA);
                         it.pReq = P_REIB;
                         it.gedrosselt = !!tR;
-                        it.Qset = (tR ? num(tR.opening, 100) / 100 : 1) * Qn;
+                        it.Qset = tR ? Math.min(Qn, num(tR.opening, 100) / 100 * DROSSEL_QN_HYD * LMIN) : Qn;
                         it.rolle = aZu ? 'gesperrt' : (ext <= 0.5 ? 'ende' : 'fahrt');
                         leck += dS;
                     } else {
@@ -77737,6 +77768,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114e"></script>
+<script src="fluidplan.js?v=20261114f"></script>
 </body>
 </html>

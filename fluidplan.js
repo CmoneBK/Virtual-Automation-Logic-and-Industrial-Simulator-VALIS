@@ -29,6 +29,10 @@
     const DT = 0.001;          // Teilschritt (s)
     const G_VENTIL = 1.0;        // Leitwert offener Ventilweg
     const G_QUELLE = 40;       // Leitwert der Druckluftquelle
+    // Drossel: Öffnung % = Anteil am Nenndurchfluss der voll geöffneten Drossel,
+    // linear, wie in der 2D-Anlage (dort 100 % = 200 l/min bei 6 bar).
+    const G_DROSSEL = window._fpGDr || 8;
+    const gDrossel = o => G_DROSSEL * Math.max(0, o) / 100;
     const G_LEITUNG = 60;      // Leitwert zwischen Knoten (nur intern)
     const V_LEITUNG = 0.004;   // Volumen je Leitung (l)
 
@@ -404,7 +408,7 @@
     // ---------- Strom- und Druckventile ----------
     TYP.drossel = {
         name: 'Drosselventil', buchstabe: 'V',
-        optionen: { offen: 50 },
+        optionen: { offen: 10 },
         geometrie() { return { ports: [{ id: '1', x: 0, y: 24, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -24, dir: [0, -1], art: 'a' }], box: [-14, -26, 14, 26] }; },
         zeichne(t, g) {
             el('line', { x1: 0, y1: 24, x2: 0, y2: -24, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
@@ -414,7 +418,7 @@
     };
     TYP.drv = {
         name: 'Drosselrückschlagventil', buchstabe: 'V',
-        optionen: { offen: 50 },
+        optionen: { offen: 10 },
         geometrie() { return { ports: [{ id: '1', x: 0, y: 34, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -34, dir: [0, -1], art: 'a' }], box: [-16, -36, 34, 36] }; },
         zeichne(t, g) {
             el('rect', { x: -12, y: -22, width: 42, height: 44, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.1, 'stroke-dasharray': '8 3 2 3' }, g);
@@ -611,7 +615,7 @@
     // ------------------------------------------------------------
     // Zustand
     // ------------------------------------------------------------
-    let plan = { v: 1, teile: [], leitungen: [] };
+    let plan = { v: 2, teile: [], leitungen: [] };
     let auswahl = new Set();          // Teile-IDs und 'L:'+Leitungs-ID
     let undoStapel = [], redoStapel = [];
     let ansicht = { x: -40, y: -40, z: 1 };
@@ -708,9 +712,24 @@
         if (!plan.teile.length && !plan.leitungen.length) return null;
         return kopie(plan);
     }
+    // Pläne bis v1 rechneten die Drossel als Querschnitt (Leitwert ~ Öffnung²), ab v2
+    // linear wie die 2D-Anlage: gleiche Wirkung bei neu = alt² / 800.
+    function drosselnUmstellen(p) {
+        if ((p.v || 1) >= 2) return;
+        const alt = { drossel: 50, drv: 50, daempfer: 100 };
+        for (const t of p.teile || []) {
+            if (!(t.typ in alt)) continue;
+            t.o = t.o || {};
+            if (t.typ === 'daempfer' && !t.o.drossel) continue;
+            const o = Number(t.o.offen != null ? t.o.offen : alt[t.typ]);
+            t.o.offen = Math.max(1, Math.min(100, Math.round(o * o / 800)));
+        }
+        p.v = 2;
+    }
     function planImport(p) {
-        plan = (p && Array.isArray(p.teile)) ? kopie(p) : { v: 1, teile: [], leitungen: [] };
+        plan = (p && Array.isArray(p.teile)) ? kopie(p) : { v: 2, teile: [], leitungen: [] };
         if (!Array.isArray(plan.leitungen)) plan.leitungen = [];
+        drosselnUmstellen(plan);
         plan.teile.forEach(t => { t.o = Object.assign({}, TYP[t.typ] ? TYP[t.typ].optionen : {}, t.o || {}); });
         plan.teile = plan.teile.filter(t => TYP[t.typ]);
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
@@ -1660,7 +1679,7 @@
             L(q, '1', s, '1'); L(s, '2', z, 'K'); } },
         { name: 'Indirekt: Impulsventil mit Abluftdrosselung', text: '1S1 fährt aus, 1S2 fährt ein. Die Drosselrückschlagventile bremsen die Abluft.',
           bau(T, L) { const q = T('quelle', 60, 420, '0Z1'), z = T('zyl_dw', 40, -200, '1A1'), v = T('ventil', 40, 80, '1V1', { wege: '5/2', links: 'pneu', rechts: 'pneu' }),
-            d1 = T('drv', 50, -60, '1V2', { offen: 40 }), d2 = T('drv', 170, -60, '1V3', { offen: 40 }),
+            d1 = T('drv', 50, -60, '1V2', { offen: 2 }), d2 = T('drv', 170, -60, '1V3', { offen: 2 }),
             s1 = T('ventil', -160, 240, '1S1', { wege: '3/2', links: 'taster' }), s2 = T('ventil', 260, 240, '1S2', { wege: '3/2', links: 'taster' });
             [v, s1, s2].forEach(x => L(q, '1', x, '1')); L(s1, '2', v, '14'); L(s2, '2', v, '12');
             L(v, '4', d1, '2'); L(d1, '1', z, 'K'); L(v, '2', d2, '2'); L(d2, '1', z, 'S'); } },
@@ -1703,7 +1722,7 @@
     function beispielLaden(i) {
         const b = BEISPIELE[i]; if (!b) return;
         if (plan.teile.length && !confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
-        const neu = { v: 1, teile: [], leitungen: [] };
+        const neu = { v: 2, teile: [], leitungen: [] };
         const T = (typ, x, y, bez, o) => { const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: bez || '', o: Object.assign({}, TYP[typ].optionen, o || {}) }; neu.teile.push(t); return t; };
         const L = (a, ap, c, cp) => neu.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: c.id, p: cp } });
         b.bau(T, L);
@@ -2006,16 +2025,16 @@
                     const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = fe === 'druck' ? 2.5 : zahl(t.o.p, 6);
                     const p2 = n2 != null ? druckVon(n2) : 0;
                     const off = Math.max(0, Math.min(1, (ps - p2) / 0.4));
-                    if (off > 0) fluss(n1, n2, G_VENTIL * 1.5 * off * (fe === 'zu' ? 0.03 : 1), 1);
+                    if (off > 0) fluss(n1, n2, G_VENTIL * 1.5 * off * (fe === 'zu' ? 0.001 : 1), 1);
                     else if (p2 > ps + 0.15) fluss(n2, 'ATM', G_VENTIL * 0.5 * Math.min(1, (p2 - ps) / 0.4), 1);
                     break;
                 }
-                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), G_VENTIL * Math.pow((fehlerAktiv(t.id) === 'zu' ? 0.5 : zahl(t.o.offen, 50)) / 100, 2), 0); break;
+                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), gDrossel(fehlerAktiv(t.id) === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0); break;
                 case 'drv': {
                     const fe = fehlerAktiv(t.id);
                     let n1 = netz(t, '1'), n2 = netz(t, '2');
                     if (fe === 'verkehrt') [n1, n2] = [n2, n1];
-                    fluss(n1, n2, G_VENTIL * Math.pow((fe === 'zu' ? 0.5 : zahl(t.o.offen, 50)) / 100, 2), 0);
+                    fluss(n1, n2, gDrossel(fe === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0);
                     fluss(n2, n1, G_VENTIL, 1);   // Rückschlag: frei von 2 nach 1
                     break;
                 }
@@ -2037,7 +2056,7 @@
                     break;
                 }
                 case 'daempfer': {
-                    let g = t.o.drossel ? G_VENTIL * Math.pow(zahl(t.o.offen, 100) / 100, 2) : G_VENTIL * 2;
+                    let g = t.o.drossel ? Math.min(G_VENTIL * 2, gDrossel(zahl(t.o.offen, 100))) : G_VENTIL * 2;
                     if (fehlerAktiv(t.id) === 'zu') g *= 0.002;
                     fluss(netz(t, '1'), 'ATM', g, 1);
                     break;
@@ -2089,7 +2108,7 @@
         const AK = Math.PI * d * d / 400;               // cm²
         const AS = AK - Math.PI * ds * ds / 400;
         const Fmax = 10 * 6 * AK;
-        return { AK, AS, tot: 0.0015 + AK * 0.5e-4, m: 0.3 + d / 80, d: Fmax / 2.5, reib: 0.04 * Fmax + 3,
+        return { AK, AS, tot: 0.0015 + AK * 0.5e-4, m: 0.3 + d / 80, d: Fmax / (window._fpDmp || 10), reib: 0.04 * Fmax + 3,
             feder0: 0.06 * Fmax, federC: 0.06 * Fmax / Math.max(10, zahl(t.o.hub, 50)) };
     }
     let letzterKlick = 0;
@@ -2283,6 +2302,23 @@
         document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
+    let taktZeit = -1e9;
+    function planTakt(dt) {
+        if (!sim) simInit();
+        sim.schreib = {};
+        simSchritt(dt);
+        // VALIS-Eingänge schreiben
+        const s = sps(); let geaendert = false;
+        for (const v in sim.schreib) { const w = !!sim.schreib[v]; if (s[v] !== w) { s[v] = w; geaendert = true; } }
+        if (geaendert && typeof runSimulationTick === 'function') { try { runSimulationTick(); } catch (e) {} }
+    }
+    // Aufruf aus der 2D-Anlage vor der Zylinder-Mechanik, dt in s (schon mit simSpeed)
+    window._fpTakt = function (dt) {
+        if (!plan.anlage || !plan.teile.length || !simLaeuft() || !(dt > 0)) return;
+        if (!warLaufend) return;   // Start/Init macht die eigene Schleife
+        taktZeit = performance.now();
+        planTakt(Math.min(0.1, dt));
+    };
     function schleife(ts) {
         requestAnimationFrame(schleife);
         const laeuft = simLaeuft();
@@ -2295,15 +2331,10 @@
         if (!plan.teile.length) { letzte = ts; return; }
         const dt = Math.min(0.05, Math.max(0, (ts - letzte) / 1000)) * (window.simSpeed || 1);
         letzte = ts;
-        if (laeuft && dt > 0) {
-            if (!sim) simInit();
-            sim.schreib = {};
-            simSchritt(dt);
-            // VALIS-Eingänge schreiben
-            const s = sps(); let geaendert = false;
-            for (const v in sim.schreib) { const w = !!sim.schreib[v]; if (s[v] !== w) { s[v] = w; geaendert = true; } }
-            if (geaendert && typeof runSimulationTick === 'function') { try { runSimulationTick(); } catch (e) {} }
-        }
+        // Mit der 2D-Anlage verbunden rechnet die 2D-Anlage den Takt (window._fpTakt),
+        // damit ihr Zylinder im selben Bild steht wie der Planzylinder.
+        const vomTakt = plan.anlage && performance.now() - taktZeit < 250;
+        if (laeuft && dt > 0 && !vomTakt) planTakt(dt);
         if (laeuft && sim) aufzeichnen();
         if (offen) { darstellen(); diagZeichnen(); }
     }
@@ -2317,13 +2348,10 @@
         const ziel = z.x / zylHub(t) * 100;
         const ist = obj.extension || 0;
         const diff = ziel - ist;
-        if (Math.abs(diff) < 0.4) return { dir: 0, v: 0 };
-        const stroke = obj.stroke || 100;
-        // Planzylinder-Geschwindigkeit plus Aufholen des Rückstands (Zeitkonstante ~0,1 s),
-        // höchstens so schnell, dass die Anlage in einem Bild bis zum Ziel fährt
-        const vMax = Math.abs(diff) / 100 * stroke * 60;
-        const v = Math.abs(z.v) / zylHub(t) * stroke + Math.abs(diff) / 100 * stroke * 10;
-        return { dir: diff > 0 ? 1 : -1, v: Math.min(vMax, Math.max(v, 20)) };
+        if (Math.abs(diff) < 0.05) return { dir: 0, v: 0 };
+        // Die 2D-Anlage übernimmt die Stellung des Planzylinders in jedem Bild genau
+        // (ziel), damit Zeitpunkte wie beim Auswerfen eines fallenden Teils stimmen.
+        return { dir: diff > 0 ? 1 : -1, v: Math.abs(z.v) / zylHub(t) * (obj.stroke || 100), ziel };
     };
 
 
@@ -2434,12 +2462,10 @@
     // erzeugt VALIS den Auto-Schaltplan wie gewohnt. Signalglieder ohne 2D-Gegenstück
     // bleiben im Plan; der 2D-Zylinder fährt während der Simulation dem Plan nach.
     const ZYL2D = ['zylinder_double', 'zylinder_single', 'gate_pneu'];
-    // Drosselöffnung umrechnen: Die 2D-Anlage rechnet die Öffnung linear als Anteil der
-    // Kompressorliefermenge (6 % ≈ normale Geschwindigkeit), der Plan als Querschnitt
-    // (Leitwert ~ Öffnung²). Umgerechnet so, dass der Zylinder gleich schnell fährt.
-    const DR_KAL = window._fpDrKal || 800;
-    const drosselNach2D = o => Math.max(1, Math.min(100, Math.round(o * o / DR_KAL)));
-    const drosselAus2D = o => Math.max(1, Math.min(100, Math.round(Math.sqrt(Math.max(1, o) * DR_KAL))));
+    // Drosselöffnung: Plan und 2D-Anlage verstehen sie gleich (Anteil am Nenndurchfluss
+    // der voll geöffneten Drossel, linear), also wird sie 1:1 übernommen.
+    const drosselNach2D = o => Math.max(1, Math.min(100, Math.round(o)));
+    const drosselAus2D = drosselNach2D;
     const fabrik = () => { try { return factoryObjects; } catch (e) { return null; } };
     function nachbarn() {
         const m = {};
@@ -2465,7 +2491,7 @@
                 if (t.typ === 'ventil' && (pid === '2' || pid === '4')) return { ventil: t, port: pid, offen, zu, ab };
                 if (t.typ === 'knoten') { gesehen.add(n); for (const w of nb[n] || []) stapel.push(w); continue; }
                 if (['drossel', 'drv', 'rueck', 'schnell'].includes(t.typ) && (pid === '1' || pid === '2')) {
-                    const w = zahl(t.o.offen, 50);
+                    const w = zahl(t.o.offen, 10);
                     if (t.typ === 'drossel') { zu = min(zu, w); ab = min(ab, w); }
                     // DRV drosselt von 1 nach 2: von der Zylinderseite an 1 betreten = Abluft gedrosselt
                     else if (t.typ === 'drv') { if (pid === '1') ab = min(ab, w); else zu = min(zu, w); }

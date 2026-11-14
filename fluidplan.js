@@ -41,7 +41,8 @@
     // ------------------------------------------------------------
     // Das Panel kann in ein abgekoppeltes Fenster wandern: Elemente, Ereignisse
     // und Dialoge immer im Dokument suchen, in dem der Plan gerade steht.
-    const D = () => (fenster && fenster.ownerDocument) || document;
+    let bildDok = null;   // gesetzt, solange der Plan als Bild in den Auto-Schaltplan gezeichnet wird
+    const D = () => bildDok || (fenster && fenster.ownerDocument) || document;
     const W = () => D().defaultView || window;
     const el = (tag, attrs, parent) => {
         const e = D().createElementNS(NS, tag);
@@ -287,9 +288,23 @@
     };
     TYP.wartung = {
         name: 'Wartungseinheit', buchstabe: 'Z', kette: 0,
-        optionen: { p: 6 },
+        optionen: { p: 6, kurz: false },
         geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'v' }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a' }], box: [-42, -26, 42, 18] }; },
         zeichne(t, g) {
+            if (t.o.kurz) {
+                // Kurzform wie im Auto-Schaltplan: Rahmen, Filter (gestrichelt), Manometer, Ablass
+                const bw = 46, bh = 26, bx = -bw / 2, by = -bh / 2;
+                el('rect', { x: bx, y: by, width: bw, height: bh, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+                el('line', { x1: -40, y1: 0, x2: bx, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+                el('line', { x1: bx + bw, y1: 0, x2: 40, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+                const fx = bx + bw * 0.30, mx = bx + bw * 0.62;
+                el('line', { x1: fx, y1: by + 3, x2: fx, y2: by + bh - 3, stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '2 2' }, g);
+                el('circle', { cx: mx, cy: 0, r: 6, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+                el('line', { x1: mx, y1: 0, x2: mx + 4, y2: -4, stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+                el('line', { x1: fx, y1: by + bh, x2: fx, y2: by + bh + 5, stroke: 'currentColor', 'stroke-width': 1 }, g);
+                el('path', { d: `M${fx - 3},${by + bh + 5} L${fx + 3},${by + bh + 5} L${fx},${by + bh + 9} Z`, fill: 'currentColor' }, g);
+                return;
+            }
             el('rect', { x: -30, y: -18, width: 60, height: 32, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.2, 'stroke-dasharray': '8 3 2 3' }, g);
             el('line', { x1: -40, y1: 0, x2: -30, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
             el('line', { x1: 30, y1: 0, x2: 40, y2: 0, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
@@ -625,6 +640,7 @@
         { kat: 'Versorgung', teile: [
             { name: 'Druckluftquelle', typ: 'quelle' },
             { name: 'Wartungseinheit', typ: 'wartung' },
+            { name: 'Wartungseinheit (Kurzform)', typ: 'wartung', o: { kurz: true } },
             { name: 'Druckregelventil', typ: 'druckregel' },
             { name: 'Manometer', typ: 'manometer' },
             { name: 'Schalldämpfer', typ: 'daempfer' },
@@ -684,6 +700,7 @@
     let gedrueckt = new Set();        // gehaltene Handbetätiger (teilId:Seite)
     let zwischenablage = null;
     let offen = false;
+    let bild = null;                  // Bildmodus (Auto-Schaltplan): { spule(var) → Kennzeichen, map: teilId → 2D-Id }
 
     function geo(t) {
         const key = t.id + '|' + JSON.stringify(t.o) + '|' + t.typ;
@@ -713,27 +730,53 @@
     const teil = id => plan.teile.find(t => t.id === id);
 
     // ------------------------------------------------------------
-    // Bezeichnungen (DIN ISO 1219-2: Kette, Buchstabe, Nummer)
+    // Kennzeichen (DIN EN 81346-2, wie im Auto-Schaltplan): -MM1, -QM1, -RN1 …
     // ------------------------------------------------------------
-    function neueBezeichnung(typ) {
+    const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'RP', manometer: 'PG',
+        rueck: 'RM', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QN', drossel: 'RN', drv: 'RN', dschalter: 'BP' };
+    function kennCode(typ, o) {
+        if (typ === 'ventil') {
+            // Signalglieder: Rollenventile erfassen eine Lage (BG), handbetätigte sind Bedienteile (SJ)
+            if (o && o.wege === '3/2' && (o.links === 'rolle' || o.links === 'rolle_leer')) return 'BG';
+            if (o && o.wege === '3/2' && MANUELL[o.links]) return 'SJ';
+            return 'QM';
+        }
+        return KENN[typ] || 'Q';
+    }
+    const ALT_BEZ = /^\d+[A-Z]\d+$/;   // altes Schema 1A1, 1V2, 0Z1 (DIN ISO 1219-2)
+    function freiesKennzeichen(code, belegt) {
+        let n = 1;
+        while (belegt.has('-' + code + n)) n++;
+        const k = '-' + code + n; belegt.add(k); return k;
+    }
+    function neueBezeichnung(typ, o) {
         const T = TYP[typ];
         if (T.ohneBez) return '';
-        const kette = T.kette != null ? T.kette : 1;
-        const b = T.buchstabe || 'V';
-        let n = 1;
-        const vorhanden = new Set(plan.teile.map(t => t.bez));
-        while (vorhanden.has(kette + b + n)) n++;
-        // Signalglieder (handbetätigte und Rollenventile) heißen S
-        return kette + b + n;
+        return freiesKennzeichen(kennCode(typ, o), new Set(plan.teile.map(t => t.bez)));
     }
-    function bezFuer(typ, o) {
-        if (typ === 'ventil' && o && (MANUELL[o.links] || o.links === 'rolle' || o.links === 'rolle_leer') && o.wege === '3/2') {
-            let n = 1; const v = new Set(plan.teile.map(t => t.bez));
-            while (v.has('1S' + n)) n++;
-            return '1S' + n;
+    function bezFuer(typ, o) { return neueBezeichnung(typ, o); }
+    // Wechselt ein Ventil seine Art (Taster → Magnet …), wechselt das automatische Kennzeichen mit
+    function kennNachArt(t) {
+        if (t.typ !== 'ventil') return;
+        const m = String(t.bez || '').match(/^-([A-Z]+)\d+$/);
+        if (m && ['QM', 'SJ', 'BG'].includes(m[1]) && m[1] !== kennCode(t.typ, t.o)) { t.bez = ''; t.bez = neueBezeichnung(t.typ, t.o); }
+    }
+    // Teile ohne Kennzeichen oder mit altem Schema bekommen ein neues. Liefert alt → neu.
+    function kennzeichenAuffrischen(p) {
+        const map = {};
+        const belegt = new Set(p.teile.filter(t => t.bez && !ALT_BEZ.test(t.bez)).map(t => t.bez));
+        // Zylinder links zuerst, damit -MM1 links steht
+        const reihe = p.teile.slice().sort((a, b) => (a.x - b.x) || (a.y - b.y));
+        for (const t of reihe) {
+            if (!TYP[t.typ] || TYP[t.typ].ohneBez) continue;
+            if (t.bez && !ALT_BEZ.test(t.bez)) continue;
+            const neu = freiesKennzeichen(kennCode(t.typ, t.o), belegt);
+            if (t.bez) map[t.bez] = neu;
+            t.bez = neu;
         }
-        return neueBezeichnung(typ);
+        return map;
     }
+    const kennTextNeu = (txt, map) => String(txt || '').replace(/\b\d+[A-Z]\d+\b/g, m => map[m] || m);
 
     // ------------------------------------------------------------
     // Ändern, Rückgängig, Speichern
@@ -790,6 +833,7 @@
         drosselnUmstellen(plan);
         plan.teile.forEach(t => { t.o = Object.assign({}, TYP[t.typ] ? TYP[t.typ].optionen : {}, t.o || {}); });
         plan.teile = plan.teile.filter(t => TYP[t.typ]);
+        kennzeichenAuffrischen(plan);   // alte Bezeichnungen 1A1/1V1 → -MM1/-QM1
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
         window._fpRoh = planExport();
         if (fenster) { zeichnen(); }
@@ -1051,7 +1095,7 @@
         if (!svg) return;
         ebLeitungen.innerHTML = ''; ebTeile.innerHTML = ''; ebUi.innerHTML = '';
         dyn.clear();
-        svg.classList.toggle('sim', simLaeuft());
+        if (!bild) svg.classList.toggle('sim', simLaeuft());
         // Leitungen
         const belegt = new Map();
         for (const l of plan.leitungen) {
@@ -1061,7 +1105,7 @@
             const gw = auswahl.has('L:' + l.id);
             const istSteuer = [l.a, l.b].some(e => { const tt = teil(e.t); const pl = tt && portLage(tt, e.p); return pl && pl.art === 's'; });
             const pfad = el('path', { d, class: 'fp-leitung' + (istSteuer ? ' steuer' : '') + (gw ? ' gewaehlt' : ''), 'data-l': l.id }, ebLeitungen);
-            el('path', { d, class: 'fp-treffer', 'data-l': l.id }, ebLeitungen);
+            if (!bild) el('path', { d, class: 'fp-treffer', 'data-l': l.id }, ebLeitungen);
             dyn.set('L:' + l.id, pfad);
             for (const e of [l.a, l.b]) { const k = e.t + ':' + e.p; belegt.set(k, (belegt.get(k) || 0) + 1); }
         }
@@ -1072,6 +1116,7 @@
             const r = ((t.rot || 0) % 360 + 360) % 360;
             const tr = `translate(${t.x},${t.y}) rotate(${r})${t.sp ? ' scale(-1,1)' : ''}`;
             const g = el('g', { class: 'fp-teil' + (auswahl.has(t.id) ? ' gewaehlt' : ''), transform: tr, 'data-t': t.id }, ebTeile);
+            if (bild && bild.map[t.id]) g.setAttribute('data-obj-id', bild.map[t.id]);
             el('rect', { x: gg.box[0], y: gg.box[1], width: gg.box[2] - gg.box[0], height: gg.box[3] - gg.box[1], fill: 'transparent' }, g);
             T.zeichne(t, g, gg);
             const ref = { g, block: g.querySelector('.fp-block'), kolben: g.querySelector('.fp-kolben'), feder: g.querySelector('.fp-feder'),
@@ -1079,7 +1124,7 @@
                 zeiger: g.querySelector('.fp-zeiger'), marken: g.querySelector('.fp-marken'), speicher: g.querySelector('.fp-speicher'), geo: gg };
             dyn.set(t.id, ref);
             // Handbetätiger anklickbar machen (Fläche über dem Betätiger)
-            if (t.typ === 'ventil') {
+            if (t.typ === 'ventil' && !bild) {
                 for (const seite of ['L', 'R']) {
                     const b = seite === 'L' ? t.o.links : t.o.rechts;
                     if (!MANUELL[b] && b !== 'magnet') continue;
@@ -1093,7 +1138,7 @@
             if (t.bez) {
                 const bb = boxWelt(t);
                 // Zylinder und Wegeventile: links über dem Symbol, kleine Teile rechts daneben
-                const oben = t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'ventil' || t.typ === 'zeit' || t.typ === 'folge';
+                const oben = t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'ventil' || t.typ === 'zeit' || t.typ === 'folge' || t.typ === 'wartung' || t.typ === 'quelle';
                 if (oben) el('text', { class: 'fp-bez', x: bb[0] + (t.typ === 'ventil' ? 10 : 0), y: bb[1] - 2 }, ebTeile).textContent = t.bez;
                 else el('text', { class: 'fp-bez', x: bb[2] + 2, y: bb[1] + 10 }, ebTeile).textContent = t.bez;
             }
@@ -1101,8 +1146,9 @@
             if (t.typ === 'ventil') {
                 const bb = boxWelt(t);
                 const vs = [];
-                if (t.o.links === 'magnet') vs.push(t.o.varL || '?');
-                if (t.o.rechts === 'magnet') vs.push(t.o.varR || '?');
+                const sp = v => bild && v && bild.spule && bild.spule(v) ? bild.spule(v) + ' ' + v : (v || '?');
+                if (t.o.links === 'magnet') vs.push(sp(t.o.varL));
+                if (t.o.rechts === 'magnet') vs.push(sp(t.o.varR));
                 if (vs.length) el('text', { class: 'fp-var', x: bb[0], y: bb[3] + 12 }, ebTeile).textContent = vs.join(' · ');
             }
             if (t.typ === 'dschalter') {
@@ -1121,7 +1167,7 @@
         // Rollen- und Sensormarken an den Zylindern
         markenZeichnen();
         // Anschlusskreise
-        for (const t of plan.teile) {
+        if (!bild) for (const t of plan.teile) {
             for (const p of geo(t).ports) {
                 const [x, y] = trafo(t, p.x, p.y);
                 const n = belegt.get(t.id + ':' + p.id) || 0;
@@ -1135,6 +1181,7 @@
             const tt = teil(tid); if (!tt || tt.typ === 'knoten') continue;
             const pl = portLage(tt, pid); if (pl) el('circle', { cx: pl.x, cy: pl.y, r: 3.2, fill: 'currentColor' }, ebLeitungen);
         }
+        if (bild) { darstellen(); return; }
         fehlerMarken();
         ansichtSetzen();
         eigenschaften();
@@ -1567,9 +1614,10 @@
         const T = TYP[t.typ];
         h('h4', { text: T.name }, box);
         const fld = (lbl, el2) => { h('label', { text: lbl }, box); box.appendChild(el2); return el2; };
-        const setze = (fn) => aendern(fn);
+        // Ändert sich die Art des Ventils (z. B. Taster → Magnet), passt das automatische Kennzeichen mit
+        const setze = (fn) => aendern(() => { fn(); kennNachArt(t); });
         if (!T.ohneBez) {
-            const i = fld('Bezeichnung (DIN ISO 1219-2)', h('input', { value: t.bez || '' }));
+            const i = fld('Kennzeichen (DIN EN 81346-2)', h('input', { value: t.bez || '' }));
             i.onchange = () => setze(() => { t.bez = i.value.trim(); });
         }
         const num = (lbl, key, min, max, step, einheit) => {
@@ -1652,6 +1700,12 @@
             num('Druck', 'p', 1, 12, 0.5, 'bar');
         } else if (t.typ === 'wartung' || t.typ === 'druckregel') {
             num('Ausgangsdruck', 'p', 0.5, 10, 0.5, 'bar');
+            if (t.typ === 'wartung') {
+                const c = fld('Darstellung', h('select', {}));
+                [['0', 'ausführlich (Filter, Regler, Manometer)'], ['1', 'Kurzform']].forEach(([v, n]) => h('option', { value: v, text: n }, c));
+                c.value = t.o.kurz ? '1' : '0';
+                c.onchange = () => setze(() => { t.o.kurz = c.value === '1'; });
+            }
         } else if (t.typ === 'drossel' || t.typ === 'drv') {
             const i = fld('Öffnung: ' + t.o.offen + ' %', h('input', { type: 'range', min: 1, max: 100, value: t.o.offen }));
             i.oninput = () => { i.previousSibling.textContent = 'Öffnung: ' + i.value + ' %'; t.o.offen = +i.value; };
@@ -1807,15 +1861,20 @@
           bau(T, L) { const q = T('quelle', 40, 300, '0Z1'), z = T('zyl_dw', 20, -160, '1A1', { sensH: 'B1', sensV: 'B2' }), v = T('ventil', 20, 80, '1M1', { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'Y1' });
             L(q, '1', v, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } }
     ];
-    function beispielLaden(i) {
-        const b = BEISPIELE[i]; if (!b) return;
-        if (plan.teile.length && !W().confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
+    function beispielBauen(b) {
         const neu = { v: 2, teile: [], leitungen: [] };
         const T = (typ, x, y, bez, o) => { const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: bez || '', o: Object.assign({}, TYP[typ].optionen, o || {}) }; neu.teile.push(t); return t; };
         const L = (a, ap, c, cp) => neu.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: c.id, p: cp } });
         b.bau(T, L);
+        return { neu, map: kennzeichenAuffrischen(neu) };
+    }
+    const beispielText = b => kennTextNeu(b.text, beispielBauen(b).map);
+    function beispielLaden(i) {
+        const b = BEISPIELE[i]; if (!b) return;
+        if (plan.teile.length && !W().confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
+        const { neu, map } = beispielBauen(b);
         aendern(() => { plan = neu; auswahl.clear(); geoCache.clear(); });
-        sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + b.text);
+        sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + kennTextNeu(b.text, map));
     }
     function beispieleZeigen() {
         const box = D().getElementById('fp-eigen'); if (!box) return;
@@ -1823,9 +1882,9 @@
         h('h4', { text: '📂 Beispiele' }, box);
         h('div', { class: 'fp-hinw', text: 'Ein Beispiel ersetzt den aktuellen Plan. Danach ▶ Simulation starten und Taster oder Hebel im Plan anklicken.' }, box);
         BEISPIELE.forEach((b, i) => {
-            const d = h('div', { style: 'margin:7px 0;padding:6px 7px;border:1px solid #444;border-radius:4px;cursor:pointer', title: b.text, onclick: () => beispielLaden(i) }, box);
+            const d = h('div', { style: 'margin:7px 0;padding:6px 7px;border:1px solid #444;border-radius:4px;cursor:pointer', title: beispielText(b), onclick: () => beispielLaden(i) }, box);
             h('div', { text: b.name, style: 'color:#ffb74d;font-weight:600' }, d);
-            h('div', { text: b.text, style: 'color:#9e9e9e;font-size:10.5px;margin-top:2px' }, d);
+            h('div', { text: beispielText(b), style: 'color:#9e9e9e;font-size:10.5px;margin-top:2px' }, d);
         });
     }
     // ------------------------------------------------------------
@@ -1912,6 +1971,8 @@
             if (fehlerAktiv('L:' + l.id) !== 'zu') vereine(a, b);
             anzahl[a] = (anzahl[a] || 0) + 1; anzahl[b] = (anzahl[b] || 0) + 1;
         }
+        // Wartungseinheit aus der 2D-Anlage: nur Bild, rechnet als durchgehende Leitung
+        for (const t of plan.teile) if (t.typ === 'wartung' && t.o.durch) vereine(t.id + ':1', t.id + ':2');
         const netzVon = {}, netze = [];
         const idx = {};
         for (const k of alle) {
@@ -1944,7 +2005,7 @@
                 z.kasten = z.stellung;
                 if (t.o.links === 'hebel') z.rasteL = false;
                 if (t.o.rechts === 'hebel') z.rasteR = false;
-                z.pulsL = 0; z.pulsR = 0;
+                z.pulsL = 0; z.pulsR = 0; z.pulsLH = z.pulsRH = false; z.pulsLX = z.pulsRX = null;
             }
             if (t.typ === 'zeit') { z.pr = 0; z.an = false; }
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
@@ -2011,12 +2072,21 @@
             const ziel = posAnteil(zyl, pos) * hub;
             const nah = Math.abs(zz.x - ziel) <= Math.max(1.5, hub * 0.02);
             if (b === 'rolle') return nah;
-            // Leerrücklauf: nur in einer Richtung, kurzer Impuls beim Überfahren
+            // Leerrücklauf: betätigt nur, wenn der Nocken in Wirkrichtung auf die
+            // Rolle fährt. Bleibt er darauf stehen (Endlage), bleibt das Ventil
+            // betätigt, bis er zurückfährt (dann klappt die Rolle weg). Wird die
+            // Rolle in einem Bild überfahren, gibt es einen kurzen Impuls.
             const richt = seite === 'L' ? t.o.richt : t.o.richtR;
-            const key = seite === 'L' ? 'pulsL' : 'pulsR';
-            const fahrt = richt === 'ein' ? zz.v < -1 : zz.v > 1;
-            if (nah && fahrt) z[key] = 0.12;
-            return z[key] > 0;
+            const key = seite === 'L' ? 'pulsL' : 'pulsR', kx = key + 'X', kh = key + 'H';
+            // Richtung aus dem Weg seit dem letzten Bild (in der Endlage ist v schon 0)
+            const vorher = z[kx]; z[kx] = zz.x;
+            const dx = vorher != null ? zz.x - vorher : zz.v * 0.016;
+            const fahrt = richt === 'ein' ? dx < -0.01 : dx > 0.01;
+            const gegen = richt === 'ein' ? dx > 0.01 : dx < -0.01;
+            if (!nah || gegen) z[kh] = false;
+            else if (fahrt) z[kh] = true;
+            if (!nah && fahrt && vorher != null && (vorher - ziel) * (zz.x - ziel) < 0) z[key] = 0.1;
+            return !!z[kh] || z[key] > 0;
         }
         return false;
     }
@@ -2109,6 +2179,7 @@
                     break;
                 }
                 case 'wartung': case 'druckregel': {
+                    if (t.o.durch) break;
                     const fe = fehlerAktiv(t.id);
                     const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = fe === 'druck' ? 2.5 : zahl(t.o.p, 6);
                     const p2 = n2 != null ? druckVon(n2) : 0;
@@ -2225,7 +2296,7 @@
     function darstellen() {
         if (!svg || !offen) return;
         const an = !!sim;
-        messDarstellen();
+        if (!bild) messDarstellen();
         for (const l of plan.leitungen) {
             const p = dyn.get('L:' + l.id); if (!p) continue;
             const n = an ? sim.netzVon[l.a.t + ':' + l.a.p] : null;
@@ -2687,9 +2758,23 @@
         return r;
     }
     const ventilTyp2D = q => q.isTriple ? 'triple' : q.isDouble ? 'double' : 'single';
+    // Kennzeichen: Plan → 2D (normLabel); ändert jemand das Kennzeichen in der 2D-Anlage
+    // oder im Auto-Schaltplan, holt rueckAbgleich es in den Plan zurück.
+    const kennSpiegel = new Map();
+    function kennNach2D(obj, t) {
+        if (!obj || !t || !t.bez) return;
+        if (obj.normLabel !== t.bez) obj.normLabel = t.bez;
+        kennSpiegel.set(obj.id, { teil: t.id, kz: t.bez });
+    }
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage || !spiegel.size) return;
         const neu = []; let masse = false;
+        for (const [id, w] of kennSpiegel) {
+            const o = F.find(q => q.id === id), t = teil(w.teil);
+            if (!o || !t) { kennSpiegel.delete(id); continue; }
+            const jetzt = String(o.normLabel || '').trim();
+            if (jetzt && jetzt !== w.kz) { w.kz = jetzt; neu.push(() => { t.bez = jetzt; }); }
+        }
         for (const [id, w] of spiegel) {
             const o = F.find(q => q.id === id); if (!o) continue;
             if (w.ventil) {
@@ -2829,6 +2914,13 @@
             };
             dr('ext', drExt);
             dr('ret', drRet);
+            // Kennzeichen wandern in die 2D-Anlage (und damit in den Auto-Schaltplan)
+            kennNach2D(o, t);
+            if (v) kennNach2D(ventil, v);
+            for (const [rolle, wt] of [['ext', drExtT], ['ret', drRetT]]) {
+                const tp = wt && teil(wt);
+                if (tp) kennNach2D(F.find(q => q.type === 'throttle' && q.targetCylinderId === o.id && q.role === rolle), tp);
+            }
             // Spiegel: was der Plan in die 2D-Anlage geschrieben hat
             // Endlagensensoren des Plans = Reed-Schalter am 2D-Zylinder
             let R = reeds2D(o, F);
@@ -2850,7 +2942,9 @@
         }
         // Druck der Quelle = Druck des Kompressors
         const komp = F.find(q => q.type === 'compressor'), qu = plan.teile.find(q => q.typ === 'quelle');
-        if (komp && qu) { komp.pressure = zahl(qu.o.p, 6); spiegel.set(komp.id, { quelle: qu.id, p: komp.pressure }); }
+        if (komp && qu) { komp.pressure = zahl(qu.o.p, 6); kennNach2D(komp, qu); spiegel.set(komp.id, { quelle: qu.id, p: komp.pressure }); }
+        const wa = plan.teile.find(q => q.typ === 'wartung');
+        if (wa) kennNach2D(F.find(q => q.type === 'manifold'), wa);
         // Vom Plan erzeugte 2D-Zylinder, die es im Plan nicht mehr gibt, wieder entfernen
         plan.erzeugt = plan.erzeugt.filter(id => {
             if (benutzt.has(id)) return true;
@@ -2866,18 +2960,23 @@
     function planAus2D(F, zyl, comp, ab) {
         const teile = [], leitungen = [], karte = {};
         const nid = () => neueId();
-        const q = { id: nid(), typ: 'quelle', x: 0, y: 360, rot: 0, bez: '0Z1', o: Object.assign({}, TYP.quelle.optionen, { p: comp && comp.pressure || 6 }) };
+        const q = { id: nid(), typ: 'quelle', x: 0, y: 360, rot: 0, bez: (comp && comp.normLabel) || '', o: Object.assign({}, TYP.quelle.optionen, { p: comp && comp.pressure || 6 }) };
         teile.push(q);
         const L = (a, ap, b, bp) => { const l = { id: nid(), a: { t: a, p: ap }, b: { t: b, p: bp } }; leitungen.push(l); return l.id; };
         const versorgung = [];
+        // Wartungseinheit der 2D-Anlage (Verteiler): Kurzform im Bild, rechnet wie eine Leitung
+        const mf = F.find(q2 => q2.type === 'manifold');
+        const wa = mf ? { id: nid(), typ: 'wartung', x: 0, y: 360, rot: 0, bez: mf.normLabel || '', o: Object.assign({}, TYP.wartung.optionen, { kurz: true, durch: true, p: comp && comp.pressure || 6 }) } : null;
+        if (wa) teile.push(wa);
+        const vsrc = wa ? [wa.id, '2'] : [q.id, '1'];
         zyl.forEach((o, i) => {
             const dw = o.type === 'zylinder_double', x = 140 + i * 260, nr = i + 1;
             const v = F.find(q2 => q2.type === 'valve_pneu' && q2.targetCylinderId === o.id);
-            const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: nr + 'A1',
+            const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: o.normLabel || '',
                 o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id }) };
             const wege = !dw ? '3/2' : (v && v.isTriple) ? '5/3' : '5/2';
             const doppelt = v && v.isDouble;
-            const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: nr + 'V1',
+            const vt = { id: nid(), typ: 'ventil', x: x - 20, y: 200, rot: 0, bez: (v && v.normLabel) || '',
                 o: Object.assign({}, TYP.ventil.optionen, { wege, links: 'magnet', rechts: doppelt ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: doppelt ? (o.linkedVarRet || '') : '' }) };
             // Sauberes Bild: Der Ventilanschluss zur Kolbenseite steht genau unter Anschluss K,
             // die Drosseln stehen aufrecht senkrecht unter ihrem Zylinderanschluss.
@@ -2889,7 +2988,7 @@
             const v1 = vgeo.ports.find(p => p.id === '1');
             if (i === 0 && v1) { q.x = vt.x + v1.x; q.y = 330; }
             teile.push(zt, vt);
-            versorgung.push(L(q.id, '1', vt.id, '1'));
+            versorgung.push(L(vsrc[0], vsrc[1], vt.id, '1'));
             const k = karte[o.id] = { zyl: zt.id, ventil: vt.id, ventil2d: v ? v.id : null, drv: {}, seite: { ext: [], ret: [] } };
             const thr = rolle => F.find(q2 => q2.type === 'throttle' && q2.targetCylinderId === o.id && q2.role === rolle);
             // Abluftdrosselung: Drossel der Ausfahrbewegung sitzt in der Stangenseite.
@@ -2899,7 +2998,7 @@
             const zuweg = (vp, zp, th, rolle, antrieb) => {
                 if (!th) { if (!los(antrieb)) k.seite[antrieb].push(L(vt.id, vp, zt.id, zp)); return; }
                 // rot 180: Anschluss 1 oben zum Zylinder, 2 unten zum Ventil
-                const d = { id: nid(), typ: 'drv', x: zpx(zp), y: 100, rot: 180, bez: nr + 'V' + (teile.length), o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
+                const d = { id: nid(), typ: 'drv', x: zpx(zp), y: 100, rot: 180, bez: th.normLabel || '', o: Object.assign({}, TYP.drv.optionen, { offen: drosselAus2D(th.opening || 6) }) };
                 teile.push(d); k.drv[rolle] = { id: d.id, th: th.id };
                 k.seite[antrieb].push(L(vt.id, vp, d.id, '2'));
                 if (!los(antrieb)) k.seite[antrieb].push(L(d.id, '1', zt.id, zp));
@@ -2912,6 +3011,15 @@
                 if (n) { teile.push(n.t); leitungen.push(n.l); }
             }
         });
+        if (wa) {
+            // Quelle links neben der Wartungseinheit, deren Ausgang unter dem ersten Ventil
+            wa.x = q.x - 60; wa.y = q.y; q.x = wa.x - 80; q.rot = 90;
+            L(q.id, '1', wa.id, '1');
+        }
+        // Kennzeichen aus der 2D-Anlage (-MM1, -QM1, -RN1 …); fehlende und doppelte neu vergeben
+        const gesehen = new Set();
+        teile.forEach(t => { if (!/^-[A-Z]+\d+$/.test(t.bez || '') || gesehen.has(t.bez)) t.bez = ''; else gesehen.add(t.bez); });
+        kennzeichenAuffrischen({ teile });
         return { teile, leitungen, karte, quelle: q.id, versorgung };
     }
     function ausAnlage() {
@@ -3145,10 +3253,97 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', knopfSichtbar); else knopfSichtbar();
 
+    // ------------------------------------------------------------
+    // Bild für den Auto-Schaltplan: Der Pneumatikteil dort IST der Fluidplan
+    // (eigener, verbundener Plan und Schattenplan der übrigen 2D-Zylinder),
+    // mit denselben Symbolen, Kennzeichen und dem laufenden Zustand.
+    // ------------------------------------------------------------
+    function schattenFuerBild(F) {
+        const zyl = schattenZylinder(F);
+        if (!zyl.length) return null;
+        if (schatten && schatten.plan && zyl.every(o => schatten.karte[o.id]) && Object.keys(schatten.karte).length === zyl.length) return schatten;
+        // ohne laufende Simulation: Bild aus der 2D-Anlage, gemerkt bis sich dort etwas ändert
+        const comp = F.find(o => o.type === 'compressor'), mf = F.find(o => o.type === 'manifold');
+        const rel = o => o && [o.id, o.type, o.normLabel, o.pistonD, o.rodD, o.stroke, o.isDouble, o.isTriple, o.role, o.opening, o.pressure, JSON.stringify(o.abschluss || null)].join('/');
+        const sig = [rel(comp), rel(mf)].concat(zyl.map(o => [rel(o)].concat(F.filter(q => (q.type === 'valve_pneu' || q.type === 'throttle') && q.targetCylinderId === o.id).map(rel)).join('+'))).join('|');
+        if (bildSchatten && bildSchatten.sig === sig) return bildSchatten;
+        const r = planAus2D(F, zyl, comp);
+        bildSchatten = { sig, plan: { v: 2, teile: r.teile, leitungen: r.leitungen, fehler: {} }, sim: null, karte: r.karte, quelle: r.quelle };
+        return bildSchatten;
+    }
+    let bildSchatten = null;
+    function schaltbild(ziel, opts) {
+        opts = opts || {};
+        const F = fabrik() || [];
+        const quellen = [];
+        if (plan.anlage && plan.teile.length) {
+            const map = {};
+            plan.teile.forEach(t => { if (t.o && t.o.anlage) map[t.id] = t.o.anlage; });
+            for (const [id, w] of kennSpiegel) if (F.some(o => o.id === id)) map[w.teil] = id;
+            quellen.push({ p: plan, s: sim, map });
+        }
+        const sch = schattenFuerBild(F);
+        if (sch) {
+            const map = {};
+            for (const oid in sch.karte) {
+                const k = sch.karte[oid];
+                map[k.zyl] = oid; if (k.ventil2d) map[k.ventil] = k.ventil2d;
+                for (const r in k.drv) if (k.drv[r]) map[k.drv[r].id] = k.drv[r].th;
+            }
+            const comp = F.find(o => o.type === 'compressor'); if (comp && sch.quelle) map[sch.quelle] = comp.id;
+            quellen.push({ p: sch.plan, s: sch.sim, map });
+        }
+        if (!quellen.length) return null;
+        const doc = ziel.ownerDocument || document;
+        const G = doc.createElementNS(NS, 'g');
+        const laeuft = quellen.some(q => q.s);
+        G.setAttribute('class', 'fp-sb' + (laeuft ? ' sim' : ''));
+        G.setAttribute('style', 'color:#000;--fp-papier:#fff;--fp-aktiv:#ffb300');
+        const st = doc.createElementNS(NS, 'style');
+        st.textContent = '.fp-sb .fp-leitung{fill:none;stroke:#000;stroke-width:1.5}.fp-sb.sim .fp-leitung{stroke:#1565c0}'
+            + '.fp-sb .fp-leitung.steuer{stroke-dasharray:6 4;stroke-width:1.2}.fp-sb .fp-leitung.druck{stroke:#c62828;stroke-width:2}'
+            + '.fp-sb .fp-bez{font:bold 10px monospace;fill:#000}.fp-sb .fp-pnr{font:8px monospace;fill:#000}'
+            + '.fp-sb .fp-var{font:8px monospace;fill:#0288d1}.fp-sb .fp-wert{font:8px monospace;fill:#c62828}.fp-sb .fp-marke{font:8px monospace;fill:#000}'
+            + '.fp-sb .fp-druckwert{font:bold 8px monospace;fill:#c62828}';
+        G.appendChild(st);
+        const alt = { svg, ebLeitungen, ebTeile, ebUi, plan, sim, offen, auswahl, bild, bildDok };
+        let x0 = 0, hoehe = 0;
+        try {
+            for (const q of quellen) {
+                plan = q.p; sim = q.s; offen = true; auswahl = new Set(); bildDok = doc;
+                bild = { map: q.map, spule: opts.spule };
+                const sub = el('g', {}, G);
+                svg = sub; ebLeitungen = el('g', {}, sub); ebTeile = el('g', {}, sub); ebUi = el('g', {}, sub);
+                const dynAlt = new Map(dyn);
+                try {
+                    zeichnen();
+                    // Drücke an den Leitungen (Pneumatik-Optionen: Drücke anzeigen)
+                    if (opts.druecke && sim) for (const l of plan.leitungen) {
+                        const n = sim.netzVon[l.a.t + ':' + l.a.p], pts = leitungPunkte(l);
+                        if (n == null || !pts || pts.length < 2) continue;
+                        const i = Math.floor((pts.length - 1) / 2), a = pts[i], b = pts[i + 1];
+                        el('text', { class: 'fp-druckwert', x: (a[0] + b[0]) / 2 + 3, y: (a[1] + b[1]) / 2 - 3 }, ebUi).textContent = druckVon(n).toFixed(2) + ' bar';
+                    }
+                    let b = [Infinity, Infinity, -Infinity, -Infinity];
+                    for (const t of plan.teile) { const w = boxWelt(t); b = [Math.min(b[0], w[0]), Math.min(b[1], w[1] - 16), Math.max(b[2], w[2] + 30), Math.max(b[3], w[3] + 16)]; }
+                    if (!isFinite(b[0])) { sub.remove(); continue; }
+                    sub.setAttribute('transform', `translate(${x0 - b[0]},${-b[1]})`);
+                    x0 += b[2] - b[0] + 60; hoehe = Math.max(hoehe, b[3] - b[1]);
+                } finally { dyn.clear(); dynAlt.forEach((v, k) => dyn.set(k, v)); }
+            }
+        } finally {
+            ({ svg, ebLeitungen, ebTeile, ebUi, plan, sim, offen, auswahl, bild, bildDok } = alt);
+        }
+        if (!x0) return null;
+        ziel.appendChild(G);
+        return { g: G, breite: x0 - 60, hoehe };
+    }
+
     window.Fluidplan = {
         oeffnen, schliessen, umschalten,
         _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
         _abkoppeln: abkoppeln,
+        _schaltbild: schaltbild,
         exportieren: planExport,
         importieren: planImport,
         plan: () => kopie(plan),
@@ -3177,7 +3372,7 @@
             return t.id;
         },
         verbinden: (a, ap, b, bp) => { leitungAnlegen({ t: a, p: ap }, { t: b, p: bp }); },
-        aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); }); },
+        aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },
         _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
         _neu: () => { sim = null; simInit(); aufzNeu(); },
         abgleichen: anlageAbgleichen,

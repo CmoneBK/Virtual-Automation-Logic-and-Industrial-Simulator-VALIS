@@ -26056,6 +26056,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             _drawPLabel(cyl.id, _cylPortA, actPortAx - 4, _kneeYa - 3, 'end');
                         if (isDouble && actPortBx != null)
                             _drawPLabel(cyl.id, _cylPortB, retDrosselX + 4, _kneeYb - 3, 'start');
+                        // Ohne Drossel läuft die Leitung durch (sonst bliebe an der Drosselstelle eine Lücke)
+                        if (!extDrosselG && actPortAx != null)
+                            circuitContent.appendChild(createSvgElement('line', {x1: extDrosselX, y1: throttleTopY, x2: extDrosselX, y2: throttleBotY, stroke: _colExt, 'stroke-width': 1.5}));
+                        if (!retDrosselG && isDouble && actPortBx != null)
+                            circuitContent.appendChild(createSvgElement('line', {x1: retDrosselX, y1: throttleTopY, x2: retDrosselX, y2: throttleBotY, stroke: _colRet, 'stroke-width': 1.5}));
                         // Ventil zeichnen
                         let valveG = _drawValveSym(cx, valveCenterY, valve, sys);
                         circuitContent.appendChild(valveG);
@@ -26176,7 +26181,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // dann den elektrischen Teil per <g translate(0, fluidHeight)> nach unten schieben.
                     const electricalChildren = Array.from(circuitContent.childNodes);
                     let fluidY = 40;
-                    if (pneuValves.length > 0) fluidY = _drawFluidSchema('pneu', pneuValves, fluidY) + 50;
+                    // Pneumatik: Der Fluidplan ist die eine Wahrheit. Sein Bild (verbundener Plan +
+                    // Schattenplan der übrigen 2D-Zylinder) steht hier mit allen Teilen und Symbolen.
+                    let _fpBild = null;
+                    // Vorerst nur mit freigeschaltetem Fluidplan (?fluidplan=1), wie der Fluidplan-Knopf
+                    const _fpFreiSb = (() => { try { return localStorage.getItem('valisFluidplan') === '1'; } catch (e) { return false; } })();
+                    if (_fpFreiSb && pneuValves.length > 0 && window.Fluidplan && typeof window.Fluidplan._schaltbild === 'function') {
+                        try {
+                            const gFp = createSvgElement('g', {});
+                            _fpBild = window.Fluidplan._schaltbild(gFp, { spule: v => _magnetLabels[v] || '', druecke: !!window.configPneuShowPressures });
+                            if (_fpBild) {
+                                let hdr = createSvgElement('text', { x: 25, y: fluidY, 'font-size': '14', 'font-weight': 'bold', fill: '#0288d1', 'font-family': 'Segoe UI, Tahoma, sans-serif' });
+                                hdr.textContent = '— Pneumatik-Schaltplan (DIN ISO 1219-1) —'; circuitContent.appendChild(hdr);
+                                gFp.setAttribute('transform', `translate(40, ${fluidY + 30})`);
+                                gFp.setAttribute('data-fluidplan-bild', '1');
+                                circuitContent.appendChild(gFp);
+                                fluidY = fluidY + 30 + _fpBild.hoehe + 50;
+                            }
+                        } catch (e) { console.warn('Fluidplan im Auto-Schaltplan', e); _fpBild = null; }
+                    }
+                    if (pneuValves.length > 0 && !_fpBild) fluidY = _drawFluidSchema('pneu', pneuValves, fluidY) + 50;
                     if (hydValves.length  > 0) fluidY = _drawFluidSchema('hyd',  hydValves,  fluidY);
                     const fluidHeight = fluidY + 30;  // kleine Lücke zum elektrischen Plan
                     let gElec = createSvgElement('g', {transform: `translate(0, ${fluidHeight})`});
@@ -77971,6 +77995,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261114p"></script>
+<script src="fluidplan.js?v=20261114q"></script>
 </body>
 </html>

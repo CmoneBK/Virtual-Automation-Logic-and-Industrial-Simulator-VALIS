@@ -410,7 +410,7 @@ const FAELLE = {
     // Auto-Schaltplan: ext-Drossel rechts (Stangenleitung)
     if (typeof window._syncCircuitFromFactory === 'function') window._syncCircuitFromFactory(true);
     await new Promise(r => setTimeout(r, 300));
-    const lx = id => { const g = document.querySelector('#circuit-content [data-obj-id="' + id + '"] rect, [data-obj-id="' + id + '"] > rect'); return g ? parseFloat(g.getAttribute('x')) : null; };
+    const lx = id => { const g = document.querySelector('#circuit-content [data-obj-id="' + id + '"]'); if (!g) return null; const m = String(g.getAttribute('transform') || '').match(/translate\(([-\d.]+)/); if (m) return +m[1]; const r = g.querySelector('rect'); return r ? parseFloat(r.getAttribute('x')) : null; };
     const xe = lx(tE.id), xr = lx(tR.id);
     R.push(['Auto-Schaltplan: Ausfahr-Drossel in der Stangenleitung (rechts)', xe != null && xr != null && xe > xr, xe + ' / ' + xr]);
     // Ausfahren über ext-Drossel (20 %) schneller als Einfahren über ret (5 %)
@@ -484,6 +484,78 @@ const FAELLE = {
     F._neu(); F._schritt(0.5); F.druecken(h.id, 'L', true);
     let max = 0, min = 1; for (let i = 0; i < 40; i++) { F._schritt(0.1); const a = F.zustand().teile[z.id].anteil; max = Math.max(max, a); if (i > 20) min = Math.min(min, a); }
     R.push(['Beispiel Pendelhub pendelt', max > 0.95 && min < 0.05, `${max.toFixed(2)}/${min.toFixed(2)}`]);
+    return R;
+  },
+  'Rollenhebel mit Leerrücklauf in der Endlage schaltet jedes Mal': () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 60, 460);
+    const z = F.setzen('zyl_dw', 40, -200, {});
+    const v = F.setzen('ventil', 40, 60, { wege: '5/2', links: 'taster', rechts: 'feder' });
+    const z2 = F.setzen('zyl_ew', 400, -200, {});
+    const s = F.setzen('ventil', 400, 140, { wege: '3/2', links: 'rolle_leer', rechts: 'feder', pos: 'vorne', richt: 'aus', zyl: z });
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden(q, '1', s, '1'); F.verbinden(s, '2', z2, 'K');
+    F._neu(); F._schritt(0.5);
+    const a = id => F.zustand().teile[id].anteil;
+    for (let r = 1; r <= 3; r++) {
+      F.druecken(v, 'L', true); F._schritt(2);
+      R.push([r + '. Mal: -MM1 vorne, Rolle bleibt betätigt, -MM2 fährt aus', a(z) > 0.98 && a(z2) > 0.98, a(z).toFixed(2) + ' / ' + a(z2).toFixed(2)]);
+      F.druecken(v, 'L', false); F._schritt(2);
+      R.push([r + '. Mal: zurück, Rolle klappt weg, -MM2 fährt ein', a(z) < 0.02 && a(z2) < 0.02, a(z).toFixed(2) + ' / ' + a(z2).toFixed(2)]);
+    }
+    return R;
+  },
+  'Kennzeichen wie im Auto-Schaltplan (DIN EN 81346-2)': () => {
+    const F = Fluidplan, R = [];
+    const ids = { q: F.setzen('quelle', 0, 300), w: F.setzen('wartung', 100, 300, { kurz: true }), z: F.setzen('zyl_dw', 0, 0), z2: F.setzen('zyl_ew', 300, 0),
+      v: F.setzen('ventil', 0, 150, { wege: '5/2', links: 'magnet', rechts: 'magnet' }), t: F.setzen('ventil', 200, 150, { wege: '3/2', links: 'taster' }),
+      r: F.setzen('ventil', 300, 150, { wege: '3/2', links: 'rolle' }), d: F.setzen('drv', 0, 80), u: F.setzen('zweidruck', 100, 200) };
+    const b = id => F.plan().teile.find(t => t.id === id).bez;
+    const soll = { q: '-GQA1', w: '-GQ1', z: '-MM1', z2: '-MM2', v: '-QM1', t: '-SJ1', r: '-BG1', d: '-RN1', u: '-KH1' };
+    for (const k in soll) R.push(['neues Teil: ' + soll[k], b(ids[k]) === soll[k], b(ids[k])]);
+    F.aendern(ids.t, { links: 'magnet' });
+    R.push(['Kennzeichen passt zur Betätigung (Taster → Magnet wird -QM2)', b(ids.t) === '-QM2', b(ids.t)]);
+    // alte Pläne (1A1, 1V1 …) bekommen beim Laden die neuen Kennzeichen
+    const alt = { v: 2, teile: [{ id: 'a', typ: 'zyl_dw', x: 0, y: 0, rot: 0, bez: '1A1', o: {} }, { id: 'b', typ: 'ventil', x: 0, y: 150, rot: 0, bez: '1V1', o: { wege: '5/2', links: 'magnet', rechts: 'feder' } },
+      { id: 'c', typ: 'quelle', x: 0, y: 300, rot: 0, bez: '0Z1', o: {} }], leitungen: [] };
+    F.importieren(alt);
+    const n = F.plan().teile.map(t => t.bez).join(',');
+    R.push(['alter Plan: 1A1/1V1/0Z1 → -MM1/-QM1/-GQA1', n === '-MM1,-QM1,-GQA1', n]);
+    const ws = F.plan().teile.length;
+    F.importieren(null);
+    const w = F.setzen('wartung', 0, 0, { kurz: true });
+    R.push(['Wartungseinheit in Kurzform', F.plan().teile.find(t => t.id === w).o.kurz === true, ws]);
+    return R;
+  },
+  'Auto-Schaltplan zeigt den Fluidplan mit allen Teilen': async () => {
+    const F = Fluidplan, R = [];
+    window.loadExample('code');
+    await new Promise(r => setTimeout(r, 800));
+    if (typeof toggleWorkspaceView === 'function' && document.getElementById('circuit-wrapper').style.display === 'none') toggleWorkspaceView('circuit-wrapper');
+    await new Promise(r => setTimeout(r, 500));
+    const bild = () => document.querySelector('#circuit-content [data-fluidplan-bild]');
+    R.push(['ohne eigenen Plan: Bild aus der 2D-Anlage (Schattenplan)', !!bild() && bild().querySelectorAll('.fp-teil').length >= 5, bild() ? bild().querySelectorAll('.fp-teil').length : 0]);
+    const kz = () => Array.from(bild().querySelectorAll('.fp-bez')).map(e => e.textContent);
+    R.push(['Kennzeichen aus der 2D-Anlage (-MM1, -QM1, -GQ1)', ['-MM1', '-QM1', '-GQ1'].every(k => kz().includes(k)), kz().join(' ')]);
+    F._leeren(); F.ausAnlage(); F.verbinden2D(true);
+    const p = F.plan(); const z = p.teile.find(t => t.typ === 'zyl_dw'); const q = p.teile.find(t => t.typ === 'quelle');
+    const z2 = F.setzen('zyl_ew', z.x + 400, z.y, {});
+    const s = F.setzen('ventil', z.x + 400, z.y + 340, { wege: '3/2', links: 'rolle_leer', rechts: 'feder', pos: 'vorne', richt: 'aus', zyl: z.id });
+    F.verbinden(q.id, '1', s, '1'); F.verbinden(s, '2', z2, 'K');
+    if (typeof window._syncCircuitFromFactory === 'function') window._syncCircuitFromFactory(true);
+    await new Promise(r => setTimeout(r, 400));
+    const g = bild();
+    const sv = g && g.querySelector('[data-t="' + s + '"]');
+    R.push(['Rollenventil steht im Auto-Schaltplan mit Rolle statt Magnet', !!sv && !sv.querySelector('.fp-bet-magnet'), sv ? 'da' : 'fehlt']);
+    R.push(['… mit seinem Kennzeichen -BG1', kz().includes('-BG1'), kz().join(' ')]);
+    const o2 = factoryObjects.find(o => o.id === F.plan().teile.find(t => t.id === z2).o.anlage);
+    R.push(['2D-Zylinder und Auto-Schaltplan tragen dasselbe Kennzeichen', o2 && o2.normLabel === '-MM2' && !!g.querySelector('[data-obj-id="' + o2.id + '"]'), o2 && o2.normLabel]);
+    // Kennzeichen in der 2D-Anlage ändern → Plan
+    o2.normLabel = '-MM7';
+    if (typeof window._fpTakt === 'function') window._fpTakt(0.05);
+    await new Promise(r => setTimeout(r, 300));
+    R.push(['Kennzeichen aus der 2D-Anlage geändert → Plan', F.plan().teile.find(t => t.id === z2).bez === '-MM7', F.plan().teile.find(t => t.id === z2).bez]);
+    F.verbinden2D(false);
     return R;
   },
   'Export / Import und Speichern in der Anlage': () => {

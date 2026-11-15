@@ -73288,6 +73288,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // Ab Version 10:
         //   Spawner mit pos3d legen kein 2D-Teil an, sondern zählen zustand().objekte[id]._spawn3d hoch;
         //                                 die 3D-Werkstatt setzt das Werkstück im Raum ab
+        // Ab Version 16 (Fluidplan-Teile pneu_fp in 3D):
+        //   zustand().objekte[id].fp   { typ, o, ab, rot, sp, ports: [{ id, nr, art, x, y, dir }], p: { anschluss: bar },
+        //                                 n, ruhe (Wegeventile), z: { stellung, betL, betR, seite, an, ab, pr, anteil } | null }
+        //   b.fpBetaetigen(id, seite, an)   Handbetätigung eines Wegeventils ('L'/'R'; Taster/Pilz/Pedal halten,
+        //                                 Hebel rastet bei an = true um) → true/false
+        //   b.fpEinstellen(id, { offen, p, zeit … })   Einstellung eines Fluidplan-Teils → true/false;
+        //                                 b.drossel(id, prozent) stellt auch Drossel/DRV als pneu_fp
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -73361,7 +73368,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 15,
+            version: 16,
+            fpBetaetigen: function(id, seite, an) {
+                return typeof window._fpHand3D === 'function' ? window._fpHand3D(id, seite, an) : false;
+            },
+            fpEinstellen: function(id, werte) {
+                return typeof window._fpOption3D === 'function' ? window._fpOption3D(id, werte) : false;
+            },
             rueckgaengig: function() {
                 const vor = historyIndex;
                 undoFactory();
@@ -73418,6 +73431,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (t === 'number' ? isFinite(v) : t === 'boolean' || (t === 'string' && v.length < 80)) z[k] = v;
                     }
                     if (o.isActive != null) z.isActive = !!o.isActive;
+                    if (o.type === 'pneu_fp' && typeof window._fp3d === 'function') z.fp = window._fp3d(o);
                     objekte[o.id] = z;
                 });
                 const teile = factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), w: Math.round(i.width || i.w || 0),
@@ -73704,6 +73718,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             drossel: function(id, prozent) {
                 const o = _brueckeObj(id);
+                if (o && o.type === 'pneu_fp' && typeof window._fpOption3D === 'function')
+                    return window._fpOption3D(id, { offen: Math.max(1, Math.min(100, Math.round(Number(prozent) || 0))) });
                 if (!o || (o.type !== 'throttle' && o.type !== 'throttle_hyd') ) return false;
                 o.opening = Math.max(1, Math.min(100, Math.round(Number(prozent) || 0)));
                 if (o.el) {

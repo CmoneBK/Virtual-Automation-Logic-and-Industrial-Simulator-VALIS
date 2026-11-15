@@ -5253,6 +5253,55 @@
     }
     const ART2D = { v: 'pressure', r: 'exhaust', a: 'work', s: 'work', k: 'work' };
     window._fpPorts2D = obj => lage2D(obj).ports.map(p => ({ id: p.id, label: String(p.nr), lx: p.lx, ly: p.ly, ptype: ART2D[p.art] || 'work', rot: true }));
+    // 3D-Werkstatt (valisBruecke.zustand().objekte[id].fp): Art, Einstellungen, Anschlüsse,
+    // Zustand aus dem Rechenkern (Stellung, betätigte Seiten, Kugel/Teller, Speicherdruck,
+    // Schwenkwinkel) und die Drücke je Anschluss in bar. Ohne Simulation: z = null, Drücke 0.
+    window._fp3d = function (obj) {
+        try {
+            const f = fp2d(obj), t = teilAus2D(obj), G = geo(t), st = simLaeuft() ? stand2D(obj) : null;
+            const ids = G.ports.map(p => p.id), pr = st ? echtDruecke(st, ids) : ids.map(() => 0);
+            const p = {}; ids.forEach((id, i) => { p[id] = +(Number(pr[i]) || 0).toFixed(2); });
+            const r = { typ: t.typ, o: kopie(t.o), ab: kopie(f.ab || {}), rot: f.rot || 0, sp: !!f.sp, p,
+                ports: G.ports.map(q => ({ id: q.id, nr: String(q.nr || q.id), art: q.art, x: q.x, y: q.y, dir: q.dir })), z: null };
+            if (t.typ === 'ventil') { const n = ventilStellungen(t.o).length; r.n = n; r.ruhe = n === 3 ? 1 : n - 1; }
+            if (st && st.z) {
+                r.z = {};
+                for (const k of ['stellung', 'betL', 'betR', 'seite', 'an', 'ab', 'pr', 'x', 'v', 'rasteL', 'rasteR']) {
+                    const v = st.z[k]; if (v != null && typeof v !== 'object' && typeof v !== 'function') r.z[k] = v;
+                }
+                if (st.z.x != null) r.z.anteil = Math.max(0, Math.min(1, st.z.x / (zylHub(t) || 1)));
+                try { if (st.p === plan) { const fe = fehlerAktiv(st.t.id); if (fe) r.fehler = fe; } } catch (e) {}
+            }
+            return r;
+        } catch (e) { return null; }
+    };
+    // Handbetätigung aus der 3D-Werkstatt (Taster, Pilz, Pedal: an/aus; Hebel: an rastet um)
+    window._fpHand3D = function (id, seite, an) {
+        const obj = (fabrik() || []).find(q => q.id === id); if (!obj || obj.type !== 'pneu_fp') return false;
+        const f = fp2d(obj); if (f.typ !== 'ventil') return false;
+        const o = Object.assign({}, TYP.ventil.optionen, f.o || {});
+        if (seite !== 'L' && seite !== 'R') seite = MANUELL[o.links] ? 'L' : 'R';
+        if (!MANUELL[seite === 'L' ? o.links : o.rechts]) return false;
+        const st = stand2D(obj); if (!st) return false;
+        const tun = () => handDruck(st.t.id, seite, an !== false);
+        if (st.p === plan) tun(); else mitPlan(st.p, st.s, tun);
+        return true;
+    };
+    // Einstellung eines Teils aus der 3D-Werkstatt (z. B. offen der Drossel, p des Druckreglers)
+    window._fpOption3D = function (id, werte) {
+        const obj = (fabrik() || []).find(q => q.id === id); if (!obj || obj.type !== 'pneu_fp' || !werte) return false;
+        const f = fp2d(obj), T = TYP[f.typ]; if (!T) return false;
+        let n = 0;
+        for (const k of Object.keys(werte)) {
+            if (!(k in T.optionen) || typeof werte[k] !== typeof T.optionen[k]) continue;
+            f.o = f.o || {}; f.o[k] = werte[k]; n++;
+        }
+        if (!n) return false;
+        try { symbol2D(obj); } catch (e) {}
+        geaendert2D(obj);
+        try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
+        return true;
+    };
     // Einstellungen im Rechtsklickmenü der 2D-Anlage
     const OPT_NAME = { p: ['Druck', 'bar', 0.5, 10, 0.5], offen: ['Öffnung', '%', 1, 100, 1], zeit: ['Zeit', 's', 0.1, 60, 0.1] };
     function menue2D(obj, ctx, sichern, umbau, platz) {

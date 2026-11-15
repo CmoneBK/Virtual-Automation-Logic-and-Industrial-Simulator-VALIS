@@ -6761,6 +6761,7 @@
             }
             obj._hydBildPorts = P;
         } catch (e) { obj._hydBildPorts = null; }
+        obj._hydSchein = schein;
         svg.style.cssText = `position:absolute;left:${((W - bw) / 2).toFixed(1)}px;top:${((H - bh) / 2).toFixed(1)}px;width:${bw.toFixed(1)}px;height:${bh.toFixed(1)}px;max-width:none;max-height:none;overflow:visible;pointer-events:none;z-index:1;color:#263238;--fp-papier:#fff;--fp-aktiv:#ffb300`;
         if (mode === 'symbol') svg.style.background = 'rgba(255,255,255,.92)';
         return svg;
@@ -6787,6 +6788,20 @@
             const m = /(\d+)\s*%/.exec((obj.pctEl && obj.pctEl.textContent) || ''), pct = m ? Math.max(0, Math.min(100, +m[1])) / 100 : 0.85;
             const hh = 14 * pct;
             r.setAttribute('y', (6 - hh).toFixed(2)); r.setAttribute('height', hh.toFixed(2));
+            return;
+        }
+        // Wegeventil aufgeschnitten oder geschlossen: Kolben, Spulen und Öl wie bei den Pneumatikventilen
+        if (obj.type === 'valve_hyd' && (mode === 'schnitt' || mode === 'aussen')) {
+            const sc = obj._hydSchein; if (!sc || !obj.el.querySelector('svg.f2d-hyd-bild')) return;
+            sc.el = obj.el;
+            const st = hydStand(obj), o = Object.assign({}, TYP.ventil.optionen, sc.pneu.fp.o), n = ventilStellungen(o).length, ruhe = n === 3 ? 1 : n - 1;
+            let k, anL, anR;
+            if (st) { k = st.z.stellung; anL = !!st.z.betL; anR = !!st.z.betR; }
+            else {
+                anL = obj.el.classList.contains('active-ext'); anR = obj.el.classList.contains('active-ret');
+                k = anL ? 0 : anR ? n - 1 : ruhe;
+            }
+            try { echtAnimieren(sc, st, k, ruhe, n, o, anL, anR); } catch (e) {}
             return;
         }
         // Wegeventil: geschaltete Stellung wie in der 2D-Anlage (Kastenblock verschieben)
@@ -6850,6 +6865,20 @@
         if (platz && platz.parentNode) platz.replaceWith(box); else ctx.appendChild(box);
         return box;
     };
+    // Zustand eines 2D-Hydraulikventils im Rechenkern: verbundener Plan oder Hydraulik-Schattenplan
+    function hydStand(obj) {
+        if (!simLaeuft()) return null;
+        if (sim && plan.anlage) {
+            const t = plan.teile.find(q => q.typ === 'ventil' && q.o && q.o.anlage === obj.id);
+            if (t && sim.zust[t.id]) return { t, z: sim.zust[t.id], p: plan, s: sim };
+        }
+        if (hschatten && hschatten.sim) {
+            const k = Object.values(hschatten.karte || {}).find(q => q && q.ventil2d === obj.id);
+            const t = k && hschatten.plan.teile.find(q => q.id === k.ventil);
+            if (t && hschatten.sim.zust[t.id]) return { t, z: hschatten.sim.zust[t.id], p: hschatten.plan, s: hschatten.sim };
+        }
+        return null;
+    }
     window._fpHydAlle = () => { for (const o of (fabrik() || [])) if (hydBildArt(o)) { try { window._fpHydBild(o); } catch (e) {} } };
     setInterval(() => { try { window._fpHydAlle(); } catch (e) {} }, 250);
     setInterval(() => { try { if (!simLaeuft()) window._fpZylAlle(); } catch (e) {} }, 500);

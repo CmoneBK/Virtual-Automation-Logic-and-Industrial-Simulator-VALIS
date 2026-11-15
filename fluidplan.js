@@ -6820,6 +6820,7 @@
                 anL = obj.el.classList.contains('active-ext'); anR = obj.el.classList.contains('active-ret');
                 k = anL ? 0 : anR ? n - 1 : ruhe;
             }
+            sc._echtTakt = 2;   // Ölfarben bei jedem Aufruf (der Takt hier ist schon gedrosselt)
             try { echtAnimieren(sc, st, k, ruhe, n, o, anL, anR); } catch (e) {}
             return;
         }
@@ -6900,6 +6901,8 @@
     }
     window._fpHydAlle = () => { for (const o of (fabrik() || [])) if (hydBildArt(o)) { try { window._fpHydBild(o); } catch (e) {} } };
     setInterval(() => { try { window._fpHydAlle(); } catch (e) {} }, 250);
+    // Während der Simulation: Hydraulikventile im Schnitt/außen öfter (Kolben und Ölfarben folgen sofort)
+    setInterval(() => { try { if (simLaeuft()) for (const o of (fabrik() || [])) if (o.type === 'valve_hyd' && o.el && o.el.classList.contains('hyd-bild') && !o.el.classList.contains('hyd-bild-symbol')) window._fpHydBild(o); } catch (e) {} }, 80);
     setInterval(() => { try { if (!simLaeuft()) window._fpZylAlle(); } catch (e) {} }, 500);
     function stand2D(obj) {
         if (!simLaeuft()) return null;

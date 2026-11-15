@@ -2511,8 +2511,19 @@
         }
     }
     function anlageUmschalten() {
-        if (!plan.anlage && !plan.teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew')) { status('Erst einen Zylinder in den Plan setzen.'); return; }
-        if (!plan.anlage && plan.teile.some(hydZylT) && !plan.teile.some(t => t.typ === 'aggregat')) { status('Erst ein Hydraulikaggregat in den Plan setzen.'); return; }
+        // Verbinden geht von Anfang an (auch leerer oder halbfertiger Plan): jedes Teil, das danach
+        // in den Plan kommt, entsteht sofort in der 2D-Anlage
+        if (!plan.anlage) {
+            const F = fabrik() || [];
+            const leer = !plan.teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew');
+            const zyl2D = F.some(q => (q.type === 'zylinder_double' || q.type === 'zylinder_single') && (q.hasPneumatics || q.hasHydraulics));
+            if (leer && zyl2D && W().confirm('Die 2D-Anlage hat schon Zylinder. Ihre Pneumatik bzw. Hydraulik als Plan übernehmen?\n\nOK: übernehmen und verbinden · Abbrechen: leeren Plan verbinden')) {
+                const n = ausAnlage(); if (n) { status(n + ' Zylinder aus der 2D-Anlage übernommen und verbunden.'); return; }
+            }
+            aendern(() => { plan.anlage = true; });
+            status(leer ? 'Mit der 2D-Anlage verbunden. Was du jetzt in den Plan setzt, entsteht auch dort.' : 'Mit der 2D-Anlage verbunden.');
+            return;
+        }
         if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !W().confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
         aendern(() => { plan.anlage = !plan.anlage; if (!plan.anlage) { plan.erzeugt = []; hydSpiegel.clear(); } });
     }
@@ -7347,6 +7358,7 @@
         abgleichen: anlageAbgleichen,
         _entfernen: (id) => aendern(() => teilEntfernen(id)),
         ausAnlage,
+        _anlageKnopf: () => anlageUmschalten(),
         verbinden2D: (an) => { aendern(() => { plan.anlage = an !== false; }); },
         _diagramm: () => ({ schritte: schritte().map(p => Object.assign({}, p.x)), proben: aufz ? aufz.proben.length : 0 }),
         _aufzNeu: () => aufzNeu(),

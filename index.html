@@ -3746,7 +3746,7 @@
                         </div>
                     </div>
                     <button class="panel-info-btn" onclick="showPanelInfo('factory-wrapper', this)" title="Kontext-Hilfe zur 2D-Anlage — Werkzeuge & Bauteile (fahre über ein Menü) sowie Profi-Steuerung & Kamera">ℹ️</button>
-                    <select id="sel-ventilbild" class="tool-btn" onchange="window._fpAlleVentile && window._fpAlleVentile(this.value)" title="Darstellung ALLER Wegeventile in der 2D-Anlage umschalten. Einzelne Ventile lassen sich danach weiter per Rechtsklick → Darstellung anders zeigen. Neue Ventile übernehmen diese Wahl." style="margin-left:auto;background:#37474f;color:#fff;border:1px solid #666;border-radius:3px;padding:3px 6px;font-size:12px;cursor:pointer;"><option value="gehaeuse">🔧 Ventile: Gehäuse</option><option value="symbol">🔧 Ventile: Normsymbol</option><option value="schnitt">🔧 Ventile: aufgeschnitten</option><option value="aussen">🔧 Ventile: echt, geschlossen</option></select>
+                    <button id="btn-pneubild" class="tool-btn" onclick="window._fpBildWeiter && window._fpBildWeiter()" title="Darstellung aller Pneumatik-Bauteile" style="margin-left:auto;background:#37474f;border:1px solid #666;border-radius:3px;padding:2px 4px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;"></button>
                     <button id="btn-viewmode" class="tool-btn" onclick="toggleGlobalViewMode()" title="Globale Anlagen-Ansicht umschalten: Seitenansicht (Standard, Werkstücke fallen unter Schwerkraft) oder Draufsicht (Vogelperspektive auf Förderband-Anlagen). Einige Bauteile haben Ansichts-spezifische Varianten." style="margin-left: 6px; background-color: #4caf50;" data-i18n="fac_btn_view_side">🌍 Global: Seitenansicht</button>
                     <button class="tool-btn" onclick="clearFactory()" title="Alle Anlagen-Komponenten + Werkstücke löschen (mit Sicherheitsabfrage). Setzt die 2D-Anlage komplett zurück; Code im Editor bleibt unverändert." style="background-color: #b71c1c; margin-left: 10px;" data-i18n="fac_btn_clear">🗑️ Alles löschen</button>
                 </div>
@@ -26211,7 +26211,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return (isPneu ? supplyY + 30 : tankY + 30);
                 };
 
-                if (pneuValves.length > 0 || hydValves.length > 0) {
+                // Fluidplan-Teile der 2D-Anlage (frei konfigurierte Ventile, Drosseln, Signalventile …) kann
+                // nur das Fluidplan-Bild zeichnen; dann steht es auch ohne freigeschalteten Fluidplan hier.
+                const _fpTeile2D = factoryObjects.some(o => o.type === 'pneu_fp');
+                if (pneuValves.length > 0 || hydValves.length > 0 || _fpTeile2D) {
                     // Pneumatik-/Hydraulik-Schaltplan OBERHALB des elektrischen Schaltplans positionieren.
                     // Vorgehen: bisherige (elektrische) Inhalte merken, Fluid-Plan ab y=40 zeichnen,
                     // dann den elektrischen Teil per <g translate(0, fluidHeight)> nach unten schieben.
@@ -26222,7 +26225,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let _fpBild = null;
                     // Vorerst nur mit freigeschaltetem Fluidplan (?fluidplan=1), wie der Fluidplan-Knopf
                     const _fpFreiSb = (() => { try { return localStorage.getItem('valisFluidplan') === '1'; } catch (e) { return false; } })();
-                    if (_fpFreiSb && pneuValves.length > 0 && window.Fluidplan && typeof window.Fluidplan._schaltbild === 'function') {
+                    if ((_fpFreiSb && pneuValves.length > 0 || _fpTeile2D) && window.Fluidplan && typeof window.Fluidplan._schaltbild === 'function') {
                         try {
                             const gFp = createSvgElement('g', {});
                             _fpBild = window.Fluidplan._schaltbild(gFp, { spule: v => _magnetLabels[v] || '', druecke: !!window.configPneuShowPressures });
@@ -78097,6 +78100,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115d"></script>
+<script src="fluidplan.js?v=20261115f"></script>
 </body>
 </html>

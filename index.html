@@ -47747,6 +47747,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
             // Beim Schließen: ALLE Cells → Panels zurück ins Hauptfenster.
             extWin.addEventListener('beforeunload', () => {
+                if (window._valisVerlaesst) return;   // Hauptfenster lädt neu: nichts mehr zurückholen
                 const cont = extWin.document.getElementById('detached-container');
                 const pids = cont ? Array.from(cont.querySelectorAll('.detached-cell')).map(c => c.dataset.panelId) : [];
                 pids.forEach(pid => window._reattachSinglePanel(pid, { _silentSharedClose: true }));
@@ -47847,7 +47848,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             placeholder.style.display = 'none';
             panel.parentNode.insertBefore(placeholder, panel);
             const extWin = window.open('', '', 'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
-            if (!extWin) return;
+            if (!extWin) { placeholder.remove(); return false; }
             window.popOutWindows[panelId] = extWin;
             extWin.document.title = 'VALIS - ' + titleName;
             extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex;';
@@ -47879,6 +47880,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             setTimeout(() => { updateAnalyzerLegend(); drawAnalyzer(); }, 100);
             _bindWindowRelay(extWin);
             extWin.addEventListener('beforeunload', () => {
+                if (window._valisVerlaesst) return;
                 const ph = document.getElementById(panelId + '-placeholder');
                 if (ph) { ph.parentNode.insertBefore(panel, ph); ph.remove(); }
                 panel.style.cssText = panel._oldCss;
@@ -47916,7 +47918,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             panel.parentNode.insertBefore(placeholder, panel);
             // Shared-Window anlegen oder holen.
             const extWin = _ensureSharedDetachWindow();
-            if (!extWin) return;
+            if (!extWin) { placeholder.remove(); return false; }
             const container = extWin.document.getElementById('detached-container');
             // Neue Cell standardmäßig rechts an die Wurzel-Reihe anhängen.
             // Per Drag kann der User sie später beliebig im Splitter-Tree
@@ -47975,6 +47977,81 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _abkKnopfSetzen); else _abkKnopfSetzen();
+        // === Neu laden: abgekoppelte Fenster wiederherstellen ===
+        // Ein abgekoppeltes Panel ist ein Stück des Hauptfensters. Lädt das
+        // Hauptfenster neu, ist seine Seite weg und das Fenster ohne Verbindung.
+        // Deshalb: vor dem Neuladen merken, welche Panels draußen waren, die
+        // toten Fenster schließen und nach dem Laden dieselben Panels wieder
+        // abkoppeln. Blockiert der Browser das Fenster ohne Klick, erscheint
+        // eine Leiste mit einem Knopf dafür.
+        const _ABK_MERK = 'valisAbgekoppelt';
+        function _abkTitel(id) { const e = _ABK_PANELS.find(x => x[0] === id); return e ? e[1] : id; }
+        function _abkMerken() {
+            const ids = [];
+            const w = window._sharedDetachWindow;
+            if (w && !w.closed) {
+                try { w.document.querySelectorAll('#detached-container .detached-cell').forEach(c => ids.push(c.dataset.panelId)); } catch (_) {}
+            }
+            const a = window.popOutWindows && window.popOutWindows['analyzer-modal'];
+            if (a && !a.closed) ids.push('analyzer-modal');
+            try {
+                if (ids.length) sessionStorage.setItem(_ABK_MERK, JSON.stringify(ids));
+                else sessionStorage.removeItem(_ABK_MERK);
+            } catch (_) {}
+            return ids;
+        }
+        window.addEventListener('pagehide', () => {
+            if (!_abkMerken().length) return;
+            window._valisVerlaesst = true;
+            const zu = [window._sharedDetachWindow].concat(Object.values(window.popOutWindows || {}));
+            zu.forEach(w => { try { if (w && !w.closed) w.close(); } catch (_) {} });
+        });
+        // Koppelt die gemerkten Panels ab; true, wenn alle draußen sind.
+        function _abkWiederOeffnen(ids) {
+            let alle = true;
+            ids.forEach(id => {
+                if (window.popOutWindows[id] && !window.popOutWindows[id].closed) return;
+                if (!document.getElementById(id)) return;
+                if (id === 'analyzer-modal') { try { openAnalyzerModal(); } catch (_) {} }
+                window._panelAbkoppeln(id, _abkTitel(id));
+                if (!(window.popOutWindows[id] && !window.popOutWindows[id].closed)) {
+                    alle = false;
+                    if (id === 'analyzer-modal') { try { closeAnalyzerModal(); } catch (_) {} }
+                }
+            });
+            return alle;
+        }
+        function _abkLeisteZeigen(ids) {
+            let l = document.getElementById('abk-wieder-leiste');
+            if (l) l.remove();
+            l = document.createElement('div');
+            l.id = 'abk-wieder-leiste';
+            l.style.cssText = 'position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:20000; display:flex; gap:10px; align-items:center; flex-wrap:wrap; max-width:calc(100vw - 32px); box-sizing:border-box; background:#263238; color:#fff; padding:8px 12px; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.45); font:13px Segoe UI, Arial, sans-serif;';
+            const t = document.createElement('span');
+            t.textContent = 'Beim Neuladen wurden die abgekoppelten Fenster geschlossen: ' + ids.map(_abkTitel).join(', ') + '.';
+            const k = document.createElement('button');
+            k.id = 'abk-wieder-knopf';
+            k.textContent = 'Wieder abkoppeln';
+            k.style.cssText = 'background:#007acc; color:#fff; border:none; border-radius:4px; padding:5px 12px; cursor:pointer; font-weight:bold;';
+            k.onclick = () => { l.remove(); try { sessionStorage.removeItem(_ABK_MERK); } catch (_) {} _abkWiederOeffnen(ids); };
+            const x = document.createElement('button');
+            x.textContent = '✕';
+            x.title = 'Im Hauptfenster lassen';
+            x.style.cssText = 'background:transparent; color:#cfd8dc; border:none; cursor:pointer; font-size:14px;';
+            x.onclick = () => { l.remove(); try { sessionStorage.removeItem(_ABK_MERK); } catch (_) {} };
+            l.append(t, k, x);
+            document.body.appendChild(l);
+        }
+        window.addEventListener('load', () => {
+            let ids = [];
+            try { ids = JSON.parse(sessionStorage.getItem(_ABK_MERK) || '[]'); } catch (_) {}
+            if (!Array.isArray(ids) || !ids.length) return;
+            // Erst wenn die Panels gezeichnet sind (Fluidplan, Anlage …).
+            setTimeout(() => {
+                if (_abkWiederOeffnen(ids)) { try { sessionStorage.removeItem(_ABK_MERK); } catch (_) {} }
+                else _abkLeisteZeigen(ids.filter(id => !(window.popOutWindows[id] && !window.popOutWindows[id].closed)));
+            }, 1500);
+        });
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
         // ==========================================

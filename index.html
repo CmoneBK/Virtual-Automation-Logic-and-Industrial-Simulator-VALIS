@@ -19866,6 +19866,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Speicher-Kurzform `X := SR(…, …)` / `RS(…)` ist ebenfalls ein
                 // Speicher — z. B. Schrittketten `SCHRITT_2 := SR(SCHRITT_1 && …, SCHRITT_3)`.
                 if (/^(SR|RS)\s*\(/i.test(String(li.rhs).trim())) return;
+                // Zeit- und Zählglieder speichern ebenfalls über den Tick hinaus:
+                // `TAKT_EIN := TON(¬TAKT_AUS, 0.5)` / `TAKT_AUS := TON(TAKT_EIN, 0.5)`
+                // ist ein gewollter Blinktakt, keine undefinierte Schleife.
+                // Nur mit Zeit > 0 (TON(…, 0) schaltet sofort durch).
+                {
+                    const r = String(li.rhs).trim();
+                    const m = r.match(/^(TON|TOF|TP|CTU)\s*\(([\s\S]*)\)$/i);
+                    let ganz = !!m;
+                    if (m) { // ein einziger Aufruf, nicht `TON(a,1) && TON(b,2)`
+                        let t = 0;
+                        for (let i = r.indexOf('('); i < r.length; i++) {
+                            if (r[i] === '(') t++;
+                            else if (r[i] === ')' && --t === 0 && i < r.length - 1) { ganz = false; break; }
+                        }
+                    }
+                    if (ganz) {
+                        const letztes = m[2].split(',').pop().trim();
+                        if (m[1].toUpperCase() === 'CTU' || !/^0+(\.0*)?$/.test(letztes)) return;
+                    }
+                }
                 const idents = li.rhs.match(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g) || [];
                 const clean = idents
                     .map(id => id.toUpperCase())
@@ -42559,6 +42579,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             }
                             return true;
                         });
+                        // Flaschen und Fässer sind Objekte, keine Items: auch sie nimmt der
+                        // Entferner auf, sobald ihre Mitte in seiner Fläche liegt (vorher fielen sie durch).
+                        if (!obj.despawnFilter || !obj.despawnFilter.length) {
+                            for (let _di = factoryObjects.length - 1; _di >= 0; _di--) {
+                                const _b = factoryObjects[_di];
+                                if (_b.type !== 'bottle' && _b.type !== 'barrel') continue;
+                                if (_b.locked || (draggedElement && draggedElement.data === _b)) continue;
+                                const _mx = _b.x + (_b.width || 0) / 2, _my = _b.y + (_b.height || 0) / 2;
+                                if (_mx < obj.x || _mx > obj.x + obj.width || _my < obj.y || _my > obj.y + (obj.height || obj.width)) continue;
+                                if (activeTask) taskDespawnCount++;
+                                if (_b.el && _b.el.parentNode) _b.el.parentNode.removeChild(_b.el);
+                                factoryObjects.splice(_di, 1);
+                                fluidGridDirty = true;
+                            }
+                        }
                         // Also despawn fluid + sand cells in the despawner area
                         let _despawnSizeBefore = fluidGrid.size;
                         for (let [grid, isFluid] of [[fluidGrid, true],[sandGrid, false]]) {
@@ -78791,6 +78826,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 </script>
 <script src="fluidplan.js?v=20261115zq"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
-<script src="uebungsanlagen.js?v=20261115b"></script>
+<script src="uebungsanlagen.js?v=20261115c"></script>
 </body>
 </html>

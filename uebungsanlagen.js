@@ -179,6 +179,9 @@
       ]
     };
   };
+  /* Prägestation: Auflage, Teil und Spannzylinder liegen um die Stempelhöhe (30 px)
+     tiefer, damit der Stempel beim Ausfahren gerade das Teil erreicht */
+  var TEIL_PRAEG = [{ x: 322, y: 225, vx: 0, vy: 0, material: 'metall', useGravity: true, useCollision: true, isSolid: true, meltTemp: 1200, temperature: 20 }];
   var TEIL_AUFLAGE = [{ x: 322, y: 195, vx: 0, vy: 0, material: 'metall', useGravity: true, useCollision: true, isSolid: true, meltTemp: 1200, temperature: 20 }];
 
   /* Gemeinsame Bedingungen ---------------------------------------------- */
@@ -317,7 +320,7 @@
       { id: 'o9', type: 'spawner_fluid', x: 246, y: 75, width: 50, height: 50, useCollision: false, labelPinned: true, linkedVar: 'VENTIL_FUELLEN', fluidMat: 'water', interval: 0.08 },
       { id: 'o10', type: 'sensor_opt', x: 230, y: 230, width: 20, height: 40, useCollision: false, linkedVar: 'LICHTSCHRANKE_FLASCHE', rangeW: 10 },
       { id: 'o11', type: 'bottle_sensor', x: 261, y: 245, width: 18, height: 18, useCollision: false, linkedVar: 'FUELLSTAND_ERREICHT' },
-      { id: 'o12', type: 'despawner', x: 440, y: 345, width: 80, height: 60, useCollision: false }
+      { id: 'o12', type: 'despawner', x: 485, y: 350, width: 90, height: 60, useCollision: false }
     ]);
   };
   var ABF_EIN = 'ANLAGE_EIN := SR(TASTER_START, ¬TASTER_STOPP || ¬NOT_HALT)\n';
@@ -414,17 +417,17 @@
         { id: 'o3', type: 'taster', x: 130, y: 20, width: 40, height: 40, useCollision: true, labelPinned: true, linkedVar: 'TASTER_QUITTIEREN', color: 'yellow' },
         { id: 'o8', type: 'led', x: 20, y: 90, width: 26, height: 26, useCollision: true, labelPinned: true, linkedVar: 'LAMPE_BEREIT', color: 'green' },
         { id: 'o10', type: 'led', x: 55, y: 90, width: 26, height: 26, useCollision: true, labelPinned: true, linkedVar: 'LAMPE_STOERUNG', color: 'red' },
-        { id: 'o11', type: 'zylinder_double', x: 160, y: 200, width: 80, height: 30, useCollision: true, linkedVarExt: 'SPULE_SPANNEN', linkedVarRet: 'SPULE_LOESEN', hasPneumatics: true, normLabel: '-MM1', pistonD: 20, rodD: 8, stroke: 100 },
+        { id: 'o11', type: 'zylinder_double', x: 160, y: 230, width: 80, height: 30, useCollision: true, linkedVarExt: 'SPULE_SPANNEN', linkedVarRet: 'SPULE_LOESEN', hasPneumatics: true, normLabel: '-MM1', pistonD: 20, rodD: 8, stroke: 100 },
         { id: 'o12', type: 'zylinder_double', x: 302, y: 60, width: 80, height: 30, rotation: 90, useCollision: true, linkedVarExt: 'SPULE_PRAEGEN', linkedVarRet: 'SPULE_PRAEGER_ZURUECK', hasPneumatics: true, normLabel: '-MM2', pistonD: 32, rodD: 8, stroke: 100 },
-        { id: 'o27', type: 'press', x: 322, y: 116, width: 40, height: 30, useCollision: false, parentId: 'o12', attachmentType: 'rod' },
-        { id: 'o13', type: 'frame', x: 290, y: 235, width: 120, height: 14, useCollision: true },
-        { id: 'o23', type: 'sensor_reed', x: 148, y: 205, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_HINTEN', parentId: 'o11', rangeW: 10 },
-        { id: 'o24', type: 'sensor_reed', x: 220, y: 205, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_VORN', parentId: 'o11', rangeW: 10 },
+        { id: 'o27', type: 'press', x: 322, y: 116, width: 40, height: 30, useCollision: true, parentId: 'o12', attachmentType: 'rod' },
+        { id: 'o13', type: 'frame', x: 290, y: 265, width: 120, height: 14, useCollision: true },
+        { id: 'o23', type: 'sensor_reed', x: 148, y: 235, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_HINTEN', parentId: 'o11', rangeW: 10 },
+        { id: 'o24', type: 'sensor_reed', x: 220, y: 235, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_VORN', parentId: 'o11', rangeW: 10 },
         { id: 'o25', type: 'sensor_reed', x: 322, y: 14, width: 20, height: 40, rotation: 90, useCollision: false, linkedVar: 'REED_PRAEGER_HINTEN', parentId: 'o12', rangeW: 10 },
         { id: 'o26', type: 'sensor_reed', x: 322, y: 85, width: 20, height: 40, rotation: 90, useCollision: false, linkedVar: 'REED_PRAEGER_VORN', parentId: 'o12', rangeW: 10 },
-        { id: 'o28', type: 'sensor_ind', x: 368, y: 195, width: 20, height: 40, rotation: 180, useCollision: false, linkedVar: 'SENSOR_TEIL' }
+        { id: 'o28', type: 'sensor_ind', x: 368, y: 225, width: 20, height: 40, rotation: 180, useCollision: false, linkedVar: 'SENSOR_TEIL' }
       ].concat(p.objekte)),
-      verbindungen: p.verbindungen, items: TEIL_AUFLAGE
+      verbindungen: p.verbindungen, items: TEIL_PRAEG
     };
   };
   var GRUNDST_P = function (R) { return an(R, 'REED_SPANNER_HINTEN') && an(R, 'REED_PRAEGER_HINTEN'); };

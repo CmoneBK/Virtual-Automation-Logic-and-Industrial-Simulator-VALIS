@@ -1112,7 +1112,7 @@
         kennzeichenAuffrischen(plan);   // alte Bezeichnungen 1A1/1V1 → -MM1/-QM1
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
         // Spiegel gehören zum alten Plan (sonst hielte der Abgleich gleich benannte 2D-Teile für gelöscht)
-        try { spiegel.clear(); spiegel2D.clear(); kennSpiegel.clear(); hydSpiegel.clear(); gesehen2D = null; } catch (e) {}
+        try { spiegel.clear(); spiegel2D.clear(); kennSpiegel.clear(); hydSpiegel.clear(); versSpiegel.clear(); gesehen2D = null; } catch (e) {}
         abgleichNachImport = !!plan.anlage;
         window._fpRoh = planExport();
         if (fenster) { zeichnen(); }
@@ -3470,6 +3470,8 @@
             } else if (w.quelle) { weg.add(w.quelle); quelleWeg = true; }
             else if (w.teil && (w.reed != null || w.offen != null)) weg.add(w.teil);
         }
+        for (const [id, tid] of versSpiegel) if (fehlt(id) && !versEinweg.has(id)) weg.add(tid);
+        for (const id of [...versSpiegel.keys()]) if (fehlt(id)) versSpiegel.delete(id);
         if (!weg.size && !auch2D.size) { gesehen2D = da; return false; }
         if (quelleWeg && !F.some(q => q.type === 'manifold' && da.has(q.id))) plan.teile.filter(t => t.typ === 'wartung').forEach(t => weg.add(t.id));
         // Aggregat weg und kein Hydraulikaggregat mehr in 2D: der Tank gehört dazu
@@ -3552,6 +3554,25 @@
     // Kennzeichen: Plan → 2D (normLabel); ändert jemand das Kennzeichen in der 2D-Anlage
     // oder im Auto-Schaltplan, holt rueckAbgleich es in den Plan zurück.
     const kennSpiegel = new Map();
+    // Versorgung: 2D-Teil → Planteil (Kompressor ↔ Quelle, Verteiler ↔ Wartungseinheit,
+    // Hydraulikaggregat/-verteiler ↔ Aggregat, Öltank ↔ Tank). Löschen wirkt in beide Richtungen.
+    const versSpiegel = new Map(), versEinweg = new Set();   // Einweg: Hydraulikverteiler (im Plan ohne eigenes Teil)
+    function versorgungLoeschen(F) {
+        let weg = false;
+        for (const [id, tid] of [...versSpiegel]) {
+            if (teil(tid)) continue;
+            versSpiegel.delete(id); spiegel.delete(id); hydSpiegel.delete(id); kennSpiegel.delete(id);
+            const o = F.find(q => q.id === id);
+            if (o) { try { deleteObjRecursive(o); weg = true; } catch (e) {} }
+        }
+        return weg;
+    }
+    function versorgungMerken(F) {
+        const T = typ => plan.teile.find(t => t.typ === typ && (typ === 'aggregat' || typ === 'tank' ? istHyd(t) : true));
+        const paar = (typ2d, typ) => { const o = F.find(q => q.type === typ2d), t = T(typ); if (o && t) versSpiegel.set(o.id, t.id); };
+        paar('compressor', 'quelle'); paar('manifold', 'wartung'); paar('hydraulic_unit', 'aggregat'); paar('oil_tank', 'tank');
+        const ag = T('aggregat'); if (ag) F.filter(q => q.type === 'hydraulic_manifold').forEach(q => { versSpiegel.set(q.id, ag.id); versEinweg.add(q.id); });
+    }
     function kennNach2D(obj, t) {
         if (!obj || !t || !t.bez) return;
         if (obj.normLabel !== t.bez) obj.normLabel = t.bez;
@@ -3709,6 +3730,8 @@
     function anlageAbgleichen() {
         const F = fabrik();
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
+        // Quelle, Wartungseinheit, Aggregat oder Tank im Plan gelöscht: das 2D-Gegenstück geht auch
+        if (versorgungLoeschen(F)) { anlageAbgleichen(); return; }
         // Hydraulikzylinder bekommen eigene 2D-Teile (valve_hyd, throttle_hyd …), Pneumatik wie bisher
         if (plan.teile.some(hydZylT) || hydSpiegel.size) hydAbgleichen(F);
         kennKonflikteLoesen();
@@ -3824,6 +3847,7 @@
         if (komp && qu) { komp.pressure = zahl(qu.o.p, 6); kennNach2D(komp, qu); spiegel.set(komp.id, { quelle: qu.id, p: komp.pressure }); }
         const wa = plan.teile.find(q => q.typ === 'wartung');
         if (wa) kennNach2D(F.find(q => q.type === 'manifold'), wa);
+        versorgungMerken(fabrik() || F);
         teileNach2D(F, abgedeckt, benutzt);
         // Aus der 2D-Anlage übernommene Zylinder, die im Plan gelöscht wurden, gehen auch in 2D
         for (const [id, w] of [...spiegel]) {

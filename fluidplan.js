@@ -4426,8 +4426,10 @@
                 o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, H, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id,
                     last: Math.max(0, Number(cfg(o).last) || 0), lastArt: cfg(o).lastArt || 'presse', lastAb: Math.max(0, Number(cfg(o).lastAb) || 0) }) };
             const wege = !dw ? '3/2' : v.isTriple ? '4/3' : '4/2';
+            // Einstellung des 2D-Ventils (Mittelstellung, Feder); geschaltet wird in 2D über die Spulen
+            const kf = konf2D(v), zwei = (v.isDouble || v.isTriple) && !(kf && kf.wege !== '4/3' && kf.rechts !== 'magnet');
             const vt = { id: nid(), typ: 'ventil', x, y: 200, rot: 0, bez: v.normLabel || '',
-                o: Object.assign({}, TYP.ventil.optionen, H, { wege, mitte: 'gesperrt', links: 'magnet', rechts: v.isDouble || v.isTriple ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: dw && (v.isDouble || v.isTriple) ? o.linkedVarRet || '' : '', anlage: v.id }) };
+                o: Object.assign({}, TYP.ventil.optionen, H, { wege, mitte: (kf && kf.mitte) || 'gesperrt', links: 'magnet', rechts: zwei ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: dw && zwei ? o.linkedVarRet || '' : '', anlage: v.id }) };
             teile.push(zt, vt);
             L(ag.id, 'P', vt.id, '1'); L(vt.id, '3', tk.id, '1');
             const k = karte[o.id] = { zyl: zt.id, ventil: vt.id, ventil2d: v.id, sr: {}, rv: {} };
@@ -4575,7 +4577,7 @@
             const v = F.find(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id);
             const an = F.filter(q => (q.type === 'throttle_hyd' || q.type === 'check_valve_hyd') && q.targetCylinderId === o.id)
                 .map(q => q.id + q.type + (q.role || '') + (q.type === 'check_valve_hyd' ? String(cfg(q).entsperrbar !== false) : '')).sort().join('+');
-            return [o.id, o.type, o.pistonD, o.rodD, o.stroke, v.id, v.isDouble, v.isTriple, an, (Number(cfg(o).dichtung) || 0) > 0, (Number(cfg(v).innenLeck) || 0) > 0].join(',');
+            return [o.id, o.type, o.pistonD, o.rodD, o.stroke, v.id, v.isDouble, v.isTriple, JSON.stringify(konf2D(v)), an, (Number(cfg(o).dichtung) || 0) > 0, (Number(cfg(v).innenLeck) || 0) > 0].join(',');
         }).join('|') + '|' + F.filter(o => o.type === 'accumulator_hyd').map(a => a.id + JSON.stringify(cfg(a))).join(';');
         if (!hschatten || hschatten.sig !== sig) {
             const r = planAusHyd2D(F, zyl);
@@ -4715,6 +4717,17 @@
     // ---- Plan → 2D-Anlage ----
     const hydSpiegel = new Map();   // 2D-Id → was der Plan zuletzt geschrieben hat
     const hydAn2D = (F, o, typ) => F.filter(q => q.type === typ && q.targetCylinderId === o.id);
+    // Einstellung eines hydraulischen Wegeventils, die Plan und 2D-Anlage teilen (valve_hyd.hyd.ventil)
+    const ventilKonf = o => ({ wege: o.wege || '4/2', mitte: o.mitte || 'gesperrt', links: o.links || 'magnet', rechts: o.rechts || 'feder' });
+    // Passt die gespeicherte Einstellung noch zum 2D-Ventil (4/3 ↔ isTriple, 3/2 ↔ einfachwirkend)?
+    function konf2D(v) {
+        const k = v && v.hyd && v.hyd.ventil; if (!k || !k.wege) return null;
+        const zyl = (fabrik() || []).find(q => q.id === v.targetCylinderId), ew = zyl && zyl.type === 'zylinder_single';
+        if ((k.wege === '4/3') !== !!v.isTriple) return null;
+        if (ew ? k.wege !== '3/2' : k.wege === '3/2') return null;
+        return ventilKonf(k);
+    }
+    window._fpHydKonf = konf2D;
     function hydVentilUmstellen(v, wahl) {
         const ist = v.isTriple ? 'triple' : v.isDouble ? 'double' : 'single';
         if (ist === wahl) return;
@@ -4839,7 +4852,7 @@
             if (ventil) {
                 hydVentilUmstellen(ventil, wahl);
                 ventil.linkedVarExt = o.linkedVarExt; ventil.linkedVarRet = o.linkedVarRet;
-                if (v) { kennNach2D(ventil, v); v.o.anlage = ventil.id; }
+                if (v) { kennNach2D(ventil, v); v.o.anlage = ventil.id; (ventil.hyd || (ventil.hyd = {})).ventil = ventilKonf(v.o); }
             }
             // Drosseln: Plan hat eine → 2D-Drossel mit derselben Öffnung, sonst keine
             const dr = {};
@@ -4882,7 +4895,7 @@
             }
             F = fabrik(); R = reeds2D(o, F);
             hydSpiegel.set(o.id, { teil: t.id, vt: v ? v.id : null, linksExt, d: o.pistonD, ds: o.rodD, hub: o.stroke,
-                ext: o.linkedVarExt || '', ret: o.linkedVarRet || '', wahl, dr, rv, last: JSON.stringify([oh.last, oh.lastArt, oh.lastAb]),
+                ext: o.linkedVarExt || '', ret: o.linkedVarRet || '', wahl, dr, rv, vk: v && ventil ? JSON.stringify(ventilKonf(v.o)) : null, last: JSON.stringify([oh.last, oh.lastArt, oh.lastAb]),
                 reed: JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' }) });
         }
         // Aggregat: Druck (DBV) und Förderstrom
@@ -5100,7 +5113,16 @@
                 });
             }
             const ventil = F.find(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id);
-            if (vt && ventil && dw) {
+            const kf = vt && ventil ? konf2D(ventil) : null;
+            if (kf && w.vk != null && JSON.stringify(kf) !== w.vk) {
+                w.vk = JSON.stringify(kf); w.wahl = ventil.isTriple ? 'triple' : 'double'; masse = true;
+                neu.push(() => {
+                    Object.assign(vt.o, kf);
+                    const [l, r] = w.linksExt ? [ext, ret] : [ret, ext];
+                    if (vt.o.links === 'magnet' && !vt.o.varL) vt.o.varL = l;
+                    if (vt.o.rechts === 'magnet' && !vt.o.varR) vt.o.varR = r;
+                });
+            } else if (vt && ventil && dw) {
                 const wahl = ventil.isTriple ? 'triple' : 'double';
                 if (wahl !== w.wahl) {
                     w.wahl = wahl; masse = true;
@@ -6686,6 +6708,7 @@
     // ------------------------------------------------------------
     const HYD_BILD = {
         valve_hyd: o => {
+            const kf = konf2D(o); if (kf) return { typ: 'ventil', o: kf };
             const zyl = (fabrik() || []).find(q => q.id === o.targetCylinderId), ew = zyl && zyl.type === 'zylinder_single';
             if (o.isTriple) return { typ: 'ventil', o: { wege: '4/3', mitte: 'gesperrt', links: 'magnet', rechts: 'magnet' } };
             if (ew || !o.isDouble && !(zyl && zyl.type === 'zylinder_double')) return { typ: 'ventil', o: { wege: '3/2', links: 'magnet', rechts: 'feder' } };
@@ -6758,6 +6781,14 @@
             try { if (typeof window.drawHydraulicHoses === 'function') window.drawHydraulicHoses(); } catch (e) {}
             if (mode === 'gehaeuse') return;
         }
+        // Öltank aufgeschnitten: der Ölstand folgt dem Füllstand der 2D-Anlage
+        if (obj.type === 'oil_tank' && mode === 'schnitt') {
+            const r = obj.el.querySelector('svg.f2d-hyd-bild rect.fp-b-luft'); if (!r) return;
+            const m = /(\d+)\s*%/.exec((obj.pctEl && obj.pctEl.textContent) || ''), pct = m ? Math.max(0, Math.min(100, +m[1])) / 100 : 0.85;
+            const hh = 14 * pct;
+            r.setAttribute('y', (6 - hh).toFixed(2)); r.setAttribute('height', hh.toFixed(2));
+            return;
+        }
         // Wegeventil: geschaltete Stellung wie in der 2D-Anlage (Kastenblock verschieben)
         if (obj.type === 'valve_hyd' && mode === 'symbol') {
             const b = obj.el.querySelector('svg.f2d-hyd-bild .fp-block'); if (!b) return;
@@ -6765,6 +6796,59 @@
             const dx = obj.isTriple ? (ext ? KASTEN : ret ? -KASTEN : 0) : (ext ? KASTEN : 0);
             b.setAttribute('transform', dx ? `translate(${dx},0)` : '');
         }
+    };
+    // Rechtsklickmenü eines hydraulischen Wegeventils der 2D-Anlage: Wege, Mittelstellung,
+    // Rückstellung und Spulen. Die Einstellung steht am 2D-Ventil (hyd.ventil) und geht von dort
+    // in den verbundenen Plan (hydRueck) und in den Schattenplan (planAusHyd2D).
+    window._fpHydVentilMenue = function (obj, ctx, sichern, platz) {
+        if (!obj || obj.type !== 'valve_hyd') return;
+        const doc = ctx.ownerDocument || document, F = fabrik() || [];
+        const zyl = F.find(q => q.id === obj.targetCylinderId), dw = !!zyl && zyl.type === 'zylinder_double';
+        const mk = (tag, txt, st) => { const e = doc.createElement(tag); if (txt != null) e.textContent = txt; if (st) e.style.cssText = st; return e; };
+        const box = mk('div', null, 'padding:5px 15px;border-top:1px solid #555;margin-top:5px');
+        box.className = 'fp-hyd-ventil-menue';
+        box.onclick = e => e.stopPropagation(); box.onmousedown = e => e.stopPropagation();
+        box.appendChild(mk('div', '⚙️ Wegeventil (Hydraulik)', 'color:#ffb300;font-size:10px;font-weight:bold;margin-bottom:4px'));
+        const k = obj.hyd && konf2D(obj) || HYD_BILD.valve_hyd(Object.assign({}, obj, { hyd: {} })).o;
+        const kf = ventilKonf(k);
+        const zeile = (label, inp) => { const r = mk('label', null, 'display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:#ddd;margin:3px 0'); r.appendChild(mk('span', label)); r.appendChild(inp); box.appendChild(r); return r; };
+        const neu = () => {
+            (obj.hyd || (obj.hyd = {})).ventil = ventilKonf(kf);
+            if (dw) hydVentilUmstellen(obj, kf.wege === '4/3' ? 'triple' : 'double');
+            try { if (typeof _applyHydManualConnections === 'function') _applyHydManualConnections(); if (typeof window.drawHydraulicHoses === 'function') window.drawHydraulicHoses(); } catch (e) {}
+            try { window._fpHydBild(obj); } catch (e) {}
+            geaendert2D(obj); sichern && sichern();
+            const ph = doc.createElement('div'); box.parentNode ? box.parentNode.insertBefore(ph, box) : ctx.appendChild(ph); box.remove();
+            window._fpHydVentilMenue(obj, ctx, sichern, ph);
+        };
+        const auswahl = (label, liste, wert, setze, cls) => {
+            const s = mk('select', null, 'font-size:11px;max-width:160px'); if (cls) s.className = cls;
+            liste.forEach(([v, n]) => { const op = mk('option', n); op.value = v; s.appendChild(op); });
+            s.value = wert; s.onchange = () => { setze(s.value); neu(); }; return zeile(label, s);
+        };
+        if (dw) {
+            auswahl('Wege', [['4/2', '4/2-Wegeventil'], ['4/3', '4/3-Wegeventil']], kf.wege, v => {
+                kf.wege = v;
+                if (v === '4/3') { kf.links = 'magnet'; kf.rechts = 'magnet'; kf.mitte = kf.mitte || 'gesperrt'; }
+            }, 'fp-hv-wege');
+            if (kf.wege === '4/3') auswahl('Mittelstellung', [['gesperrt', 'gesperrt (alle zu)'], ['umlauf', 'Umlauf (P → T)'], ['schwimm', 'Schwimmstellung (A, B → T)'], ['offen', 'offen (alle verbunden)']], kf.mitte, v => { kf.mitte = v; }, 'fp-hv-mitte');
+            else auswahl('Rückstellung', [['feder', 'Feder (eine Spule)'], ['magnet', 'Magnet (Impulsventil)']], kf.rechts === 'magnet' ? 'magnet' : 'feder', v => { kf.rechts = v; kf.links = 'magnet'; }, 'fp-hv-rueck');
+        } else box.appendChild(mk('div', '3/2-Wegeventil mit Federrückstellung (einfachwirkender Zylinder)', 'font-size:10px;color:#aaa;margin:2px 0'));
+        // Spulen = Variablen des Zylinders (Ausfahren / Einfahren)
+        const ausg = (() => { try { return (globalOutputs || []).slice(); } catch (e) { return []; } })();
+        const spule = (label, key) => {
+            const s = mk('select', null, 'font-size:11px;max-width:160px');
+            [''].concat(ausg).forEach(v => { const op = mk('option', v || '–'); op.value = v; s.appendChild(op); });
+            s.value = (zyl && zyl[key]) || '';
+            s.onchange = () => { if (!zyl) return; zyl[key] = s.value || null; if (key === 'linkedVarExt' && !dw) zyl.linkedVar = s.value || null; obj[key] = zyl[key]; geaendert2D(obj); sichern && sichern(); };
+            return zeile(label, s);
+        };
+        if (zyl) {
+            spule('Spule Ausfahren', 'linkedVarExt');
+            if (dw && (kf.wege === '4/3' || kf.rechts === 'magnet')) spule('Spule Einfahren', 'linkedVarRet');
+        }
+        if (platz && platz.parentNode) platz.replaceWith(box); else ctx.appendChild(box);
+        return box;
     };
     window._fpHydAlle = () => { for (const o of (fabrik() || [])) if (hydBildArt(o)) { try { window._fpHydBild(o); } catch (e) {} } };
     setInterval(() => { try { window._fpHydAlle(); } catch (e) {} }, 250);

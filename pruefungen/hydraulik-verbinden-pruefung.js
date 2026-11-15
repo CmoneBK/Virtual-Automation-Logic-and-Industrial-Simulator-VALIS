@@ -312,6 +312,81 @@ const FAELLE = {
     await warte(300);
     R.push(['Hydraulikzylinder gelöscht → 2D-Hydraulikzylinder weg, Pneumatik bleibt', zyl2d().length === n0 && zyl2d().filter(q => q.hasPneumatics).length === pneu0, [zyl2d().length, n0]]);
   }
+  ,
+  'Ventileinstellung sofort synchron, Rechtsklickmenü des 2D-Ventils': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan, H = { hyd: true };
+    window._findHydTankForCylinder = () => null;
+    const ag = F.setzen('aggregat', 0, 300, Object.assign({ q: 12, p: 90 }, H), '0G1');
+    const tk = F.setzen('tank', 200, 320, H, '');
+    const v = F.setzen('ventil', 0, 150, Object.assign({ wege: '4/3', mitte: 'schwimm', links: 'magnet', rechts: 'magnet', varL: 'Y1', varR: 'Y2' }, H), '1Q1');
+    const z = F.setzen('zyl_dw', 0, -100, Object.assign({ d: 32, dStange: 16, hub: 150 }, H), '1M1');
+    F.verbinden(ag, 'P', v, '1'); F.verbinden(v, '3', tk, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden2D(true);
+    const id = F.plan().teile.find(t => t.id === z).o.anlage;
+    const ventil = factoryObjects.find(x => x.type === 'valve_hyd' && x.targetCylinderId === id);
+    const k = () => JSON.stringify(window._fpHydKonf(ventil));
+    R.push(['2D-Ventil kennt die Einstellung ohne Simulation (4/3 Schwimmstellung)', ventil && ventil.isTriple && window._fpHydKonf(ventil) && window._fpHydKonf(ventil).mitte === 'schwimm', ventil && k()]);
+    // Plan → 2D sofort
+    F.aendern(v, { mitte: 'umlauf' });
+    R.push(['Plan: Mittelstellung Umlauf → 2D sofort', window._fpHydKonf(ventil).mitte === 'umlauf', k()]);
+    ventil.pneu = { bild: 'symbol' }; window._fpHydBild(ventil);
+    R.push(['Normsymbol der 2D-Anlage zeigt die Einstellung', /umlauf/.test(ventil._hydKey || ''), (ventil._hydKey || '').slice(0, 160)]);
+    // Rechtsklickmenü
+    const ctx = document.createElement('div'); document.body.appendChild(ctx);
+    window._fpHydVentilMenue(ventil, ctx, () => {});
+    const sel = c => ctx.querySelector('select.' + c);
+    R.push(['Menü: Wege und Mittelstellung', !!sel('fp-hv-wege') && !!sel('fp-hv-mitte') && sel('fp-hv-mitte').value === 'umlauf', [!!sel('fp-hv-wege'), sel('fp-hv-mitte') && sel('fp-hv-mitte').value]]);
+    sel('fp-hv-mitte').value = 'gesperrt'; sel('fp-hv-mitte').dispatchEvent(new Event('change'));
+    await warte(700);
+    let pv = F.plan().teile.find(t => t.id === v);
+    R.push(['2D-Menü: gesperrt → Plan gesperrt', pv.o.mitte === 'gesperrt', pv.o.mitte]);
+    sel('fp-hv-wege').value = '4/2'; sel('fp-hv-wege').dispatchEvent(new Event('change'));
+    R.push(['2D-Menü: 4/2 → 2D-Ventil kein 4/3 mehr, Menü zeigt Rückstellung', !ventil.isTriple && !!sel('fp-hv-rueck'), [ventil.isTriple, !!sel('fp-hv-rueck')]]);
+    sel('fp-hv-rueck').value = 'feder'; sel('fp-hv-rueck').dispatchEvent(new Event('change'));
+    await warte(700);
+    pv = F.plan().teile.find(t => t.id === v);
+    R.push(['Plan: 4/2 mit Feder, Spule links Y1', pv.o.wege === '4/2' && pv.o.rechts === 'feder' && pv.o.links === 'magnet' && pv.o.varL === 'Y1', [pv.o.wege, pv.o.links, pv.o.rechts, pv.o.varL]]);
+    const c2d = factoryObjects.find(x => x.id === id);
+    R.push(['Zylinder in 2D ohne Einfahr-Spule', !c2d.linkedVarRet, c2d.linkedVarRet]);
+    ctx.remove();
+    // Fahren mit Feder: Y1 aus → fährt wieder ein (die Bedienoberfläche baut sich nach der Änderung neu auf)
+    c2d.extension = 0; await warte(1500);
+    toggleSimulation(); await warte(400);
+    setTaster('S1', true);
+    for (let i = 0; i < 100; i++) { await warte(50); if (c2d.extension > 99) break; }
+    R.push(['fährt mit Y1 aus', c2d.extension > 99, c2d.extension]);
+    setTaster('S1', false);
+    for (let i = 0; i < 100; i++) { await warte(50); if (c2d.extension < 1) break; }
+    R.push(['Feder: ohne Y1 fährt er wieder ein', c2d.extension < 1, c2d.extension]);
+    toggleSimulation(); await warte(300);
+    ctx.remove();
+    return R;
+  }
+  ,
+  'Ohne Plan: Mittelstellung im 2D-Menü gilt für den Schattenplan': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    window._findHydTankForCylinder = () => null;
+    factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle'].includes(o.type)).forEach(o => deleteObjRecursive(o));
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2'; c.pistonD = 40; c.rodD = 20; c.stroke = 200;
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('triple');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    c.extension = 50; c.hyd = { last: 4000, lastArt: 'gewicht' };
+    const ventil = factoryObjects.find(x => x.type === 'valve_hyd' && x.targetCylinderId === c.id);
+    const ctx = document.createElement('div'); document.body.appendChild(ctx);
+    window._fpHydVentilMenue(ventil, ctx, () => {});
+    const m = ctx.querySelector('select.fp-hv-mitte');
+    R.push(['Menü für 4/3 ohne Plan', !!m && m.value === 'gesperrt', m && m.value]);
+    m.value = 'schwimm'; m.dispatchEvent(new Event('change'));
+    R.push(['Einstellung am 2D-Ventil gespeichert', window._fpHydKonf(ventil) && window._fpHydKonf(ventil).mitte === 'schwimm', JSON.stringify(window._fpHydKonf(ventil))]);
+    // Schwimmstellung: die hängende Last zieht den Zylinder ohne Spule herunter (A und B → T)
+    toggleSimulation(); await warte(1500);
+    const x = c.extension;
+    R.push(['Schwimmstellung: Last bewegt den Zylinder in der Mitte', Math.abs(x - 50) > 3, x]);
+    toggleSimulation(); await warte(300);
+    ctx.remove();
+    return R;
+  }
 };
 
 (async () => {

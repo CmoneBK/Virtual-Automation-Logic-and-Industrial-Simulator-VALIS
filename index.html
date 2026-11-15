@@ -4043,8 +4043,8 @@
                             <button type="button" onclick="window._fbAddModule('led')" title="FESTO 162244 · Meldeeinrichtung (8 LEDs + Hupe + Verteiler)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">💡 Meldeeinrichtung (LED/Hupe)</button>
                             <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
-                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
-                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU)</button>
+                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
+                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht. Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU) · Lernmodell</button>
                         </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
@@ -67276,6 +67276,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const _fw = el('text', { x: ZEITRELAIS.w - 42, y: baseY + 30, 'text-anchor': 'middle', 'font-size': 7, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g);
                     _fw.textContent = 'Funktion ' + (cType === 'tp' ? 'TP' : (r === 0 ? 'TON' : 'TOF'));
                     _fw.setAttribute('data-festo-zr-funktion', slotKey);
+                    // TP am Zeitrelais ist eine VALIS-Ergänzung: am FESTO 162243 gibt es sie so nicht
+                    if (cType === 'tp') {
+                        const _fn = el('text', { x: ZEITRELAIS.w - 42, y: baseY + 39, 'text-anchor': 'middle', 'font-size': 6, 'font-weight': 'bold', fill: '#c62828', 'font-family': 'Segoe UI, sans-serif' }, g);
+                        _fn.textContent = 'gibt es so nicht';
+                        _fn.setAttribute('data-festo-fiktiv', 'tp');
+                    }
                     // Spulen-LED rechts im Coil (neben dem Symbol)
                     const coilLed = el('circle', { cx: coilRight - 6, cy: mechLineY, r: 3.5, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
                     coilLed.setAttribute('data-festo-relais-led', '1');
@@ -67388,7 +67394,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 el('rect', { x: 0, y: 0, width: ZAEHLER.w, height: ZAEHLER.h, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
                 drawScrews(g, 0, 0, ZAEHLER.w, ZAEHLER.h);
                 el('text', { x: ZAEHLER.w/2, y: 24, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: PALETTE.titleText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = `Vorwahlzähler ${panelIdx}`;
-                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC · Festo 8605';
+                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC';
+                // Kein FESTO-Dokument: VALIS-Lernmodell, das es so als Steckmodul nicht gibt
+                const _fz = el('text', { x: ZAEHLER.w/2, y: 47, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold', fill: '#c62828', 'font-family': 'Segoe UI, sans-serif' }, g);
+                _fz.textContent = 'Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht';
+                _fz.setAttribute('data-festo-fiktiv', 'zaehler');
                 const busXs = [40, 95, 150, 210, 270, 330, 390];
                 busXs.forEach((bx, i) => drawSocket(g, bx, 56, PALETTE.socketRed, `C${panelIdx}_24V_${i+1}`, `C${panelIdx}`));
                 el('text', { x: 14, y: 55, 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' }, g).textContent = '+24V';

@@ -607,6 +607,14 @@
             font-size:13px !important; padding:4px 10px !important; line-height:1.25 !important; min-height:24px; box-sizing:border-box;
         }
         #left-panel .header-area button svg.vi, #left-panel .section-header button svg.vi, #left-panel .leg-ext-row button svg.vi { width:14px; height:14px; }
+        /* Kopfknöpfe: passen sie nicht in eine Zeile, werden sie der Reihe nach zum Symbol - erst PRO, dann Meine Umgebung, dann Datei (Christoph 15.11.2026) */
+        body:not(.vi-aus) .header-area.kopf-1 #btn-pro-toggle,
+        body:not(.vi-aus) .header-area.kopf-2 #btn-cloud,
+        body:not(.vi-aus) .header-area.kopf-3 #btn-datei { font-size:0 !important; padding:4px 9px !important; }
+        body:not(.vi-aus) .header-area.kopf-1 #btn-pro-toggle svg.vi,
+        body:not(.vi-aus) .header-area.kopf-2 #btn-cloud svg.vi,
+        body:not(.vi-aus) .header-area.kopf-3 #btn-datei svg.vi { width:15px; height:15px; margin:0; }
+        body:not(.vi-aus) .header-area.kopf-3 #btn-datei .datei-ikons { gap:4px; }
         /* Logik-Editor-Kopf: wird es eng (Zoom, schmale Fenster), bleiben von Erklärmodus und Leeren nur die Symbole (Christoph 15.11.2026) */
         #left-panel > .section-header { container-type:inline-size; }
         @container (max-width: 500px) {
@@ -6019,6 +6027,30 @@ const aktiv = resolveLinked(obj, spsState);
 		</div>
     <script>
         // Legende: vier Knöpfe öffnen je einen Abschnitt; immer nur einer offen, nochmal klicken schließt.
+        // Kopfknöpfe: Stufe für Stufe zum Symbol, bis alle in einer Zeile stehen (PRO -> Meine Umgebung -> Datei)
+        (function () {
+            const kopf = document.querySelector('#left-panel .header-area');
+            const reihe = kopf && kopf.lastElementChild;
+            if (!reihe || typeof ResizeObserver === 'undefined') return;
+            let laeuft = false;
+            const einzeilig = () => {
+                const k = [...reihe.children].filter(e => e.offsetParent && e.getBoundingClientRect().width > 0);
+                if (!k.length) return true;
+                const t0 = k[0].getBoundingClientRect().top;
+                return k.every(e => Math.abs(e.getBoundingClientRect().top - t0) < 4);
+            };
+            const pruefen = () => {
+                if (laeuft) return; laeuft = true;
+                kopf.classList.remove('kopf-1', 'kopf-2', 'kopf-3');
+                for (let n = 1; n <= 3 && !einzeilig(); n++) kopf.classList.add('kopf-' + n);
+                laeuft = false;
+            };
+            new ResizeObserver(() => requestAnimationFrame(pruefen)).observe(kopf);
+            const sig = () => [...reihe.children].map(e => (e.offsetParent ? 1 : 0) + e.textContent).join('|');
+            let letzte = sig();
+            new MutationObserver(() => { const n = sig(); if (n !== letzte) { letzte = n; requestAnimationFrame(pruefen); } }).observe(reihe, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+            window._kopfKompaktPruefen = pruefen;
+        })();
         // Legende kompakt: nur die Zeichen, sobald ein Text sonst umbrechen würde
         (function () {
             const g = document.getElementById('legend-grid');

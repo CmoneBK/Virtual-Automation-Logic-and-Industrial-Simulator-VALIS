@@ -947,6 +947,34 @@ const FAELLE = {
     F.importieren(st.fluidplan);
     R.push(['Wieder einlesen', F.exportieren().teile.length === 2, '']);
     return R;
+  },
+  'Brücke v16 für die 3D-Werkstatt: Zustand, Handbetätigung, Drossel': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    const comp = createFactoryObject('compressor', ''), man = createFactoryObject('manifold', ''), zy = createFactoryObject('zylinder_single', '');
+    zy.hasPneumatics = true;
+    const tv = Fluidplan._neu2D('ventil'); tv.pneu.fp.o = Object.assign(tv.pneu.fp.o, { wege: '3/2', links: 'taster', rechts: 'feder' });
+    const dr = Fluidplan._neu2D('drossel');
+    window.pneuConnections.push({ aObjId: comp.id, aPortId: '1', bObjId: man.id, bPortId: '1', _auto: true }, { aObjId: man.id, aPortId: '1', bObjId: tv.id, bPortId: '1' },
+      { aObjId: tv.id, aPortId: '2', bObjId: dr.id, bPortId: '1' }, { aObjId: dr.id, aPortId: '2', bObjId: zy.id, bPortId: '1' });
+    const b = window.valisBruecke;
+    R.push(['Brücke ab Version 16', b.version >= 16 && typeof b.fpBetaetigen === 'function' && typeof b.fpEinstellen === 'function', b.version]);
+    const z0 = b.zustand().objekte[tv.id].fp;
+    R.push(['zustand(): fp mit Art, Anschlüssen; ohne Simulation z = null', z0 && z0.typ === 'ventil' && z0.ports.map(p => p.id).sort().join() === '1,2,3' && z0.z === null && z0.n === 2, JSON.stringify(z0 && z0.ports)]);
+    window.toggleSimulation(); await warte(600);
+    R.push(['fpBetaetigen drückt den Taster', b.fpBetaetigen(tv.id, 'L', true) === true]);
+    await warte(1500);
+    const z1 = b.zustand().objekte[tv.id].fp;
+    R.push(['… Ventil in Stellung 0, Seite L betätigt, Druck an 2', z1.z && z1.z.stellung === 0 && z1.z.betL && z1.p['2'] > 3, JSON.stringify(z1.z) + JSON.stringify(z1.p)]);
+    R.push(['… und der Zylinder fährt aus', (zy.extension || 0) > 50, Math.round(zy.extension || 0)]);
+    b.fpBetaetigen(tv.id, 'L', false); await warte(1500);
+    R.push(['loslassen: Ventil in Ruhe, Zylinder fährt ein', b.zustand().objekte[tv.id].fp.z.stellung === 1 && (zy.extension || 0) < 10, Math.round(zy.extension || 0)]);
+    R.push(['Feder-Seite ist nicht von Hand betätigbar', b.fpBetaetigen(tv.id, 'R', true) === false]);
+    window.toggleSimulation(); await warte(200);
+    R.push(['drossel(id, %) stellt auch eine Drossel als Fluidplan-Teil', b.drossel(dr.id, 25) === true && dr.pneu.fp.o.offen === 25, JSON.stringify(dr.pneu.fp.o)]);
+    R.push(['fpEinstellen nimmt nur bekannte Einstellungen', b.fpEinstellen(dr.id, { offen: 40, quatsch: 1 }) === true && dr.pneu.fp.o.offen === 40 && !('quatsch' in dr.pneu.fp.o)]);
+    return R;
   }
 };
 // Läuft nach Panel und Popup: öffnet den Plan selbst und darf das erste Einpassen nicht vorwegnehmen

@@ -154,6 +154,9 @@ async function bedienen(page, schritte, vorlage) {
     if (filter.length && !filter.some(f => id.indexOf(f) !== -1)) continue;
     const [, anlage, nr] = id.match(/^ua-(.+)-(\d)$/);
     for (const vorlage of ohneVorlage ? [false] : [false, true]) {
+     // Die Simulation läuft in Echtzeit; unter Last im Kopflos-Browser geht selten
+     // ein Tastendruck verloren. Eine Musterlösung bekommt deshalb einen zweiten Versuch.
+     for (let versuch = 1; versuch <= (vorlage ? 1 : 2); versuch++) {
       const page = await neueSeite();
       await page.evaluate(([a, i]) => window.Uebungsanlagen.starten(a, i), [anlage, +nr - 1]);
       await page.waitForTimeout(1200);
@@ -163,6 +166,7 @@ async function bedienen(page, schritte, vorlage) {
       const labels = await page.evaluate(() => (0, eval)('activeTask').conditions.map(c => c.label));
       const z = await bedienen(page, SZ[id], vorlage);
       const alle = labels.every((l, i) => z.ok[i]);
+      if (!vorlage && versuch === 1 && !(alle && z.geloest)) { console.log(id + ' – erster Versuch nicht vollständig, zweiter Versuch'); await page.close(); continue; }
       if (!vorlage) {
         console.log(id + ' – Musterlösung (' + z.t.toFixed(1) + ' s Simulation)');
         labels.forEach((l, i) => ok(l, !!z.ok[i]));
@@ -171,6 +175,8 @@ async function bedienen(page, schritte, vorlage) {
         ok(id + ' – die Vorlage allein löst die Aufgabe nicht', !alle, labels.filter((l, i) => z.ok[i]).length + '/' + labels.length + ' Bedingungen');
       }
       await page.close();
+      break;
+     }
     }
   }
 

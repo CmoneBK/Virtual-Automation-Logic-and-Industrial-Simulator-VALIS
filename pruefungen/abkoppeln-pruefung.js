@@ -78,6 +78,24 @@ function server() {
   const pop = ctx.waitForEvent('page', { timeout: 3000 }).catch(() => null);
   await pg.click('#analyzer-header .panel-abk-btn'); await pop; await pg.waitForTimeout(800);
   pruef('Oszilloskop abgekoppelt', await pg.evaluate(() => { const w = window.popOutWindows['analyzer-modal']; return !!(w && w.document.getElementById('analyzer-modal')); }));
+  // Neu laden: abgekoppelte Panels werden gemerkt, alte Fenster geschlossen, neu abgekoppelt
+  await pg.evaluate(() => { try { window.popOutWindows['analyzer-modal'].close(); } catch (e) {} });
+  await pg.waitForTimeout(400);
+  await pg.evaluate(() => { detachPanel('fbs-wrapper', 'Logikplan'); detachPanel('factory-wrapper', '2D-Anlage'); });
+  await pg.waitForTimeout(1200);
+  await pg.reload(); await pg.waitForTimeout(5000);
+  await pg.evaluate(() => { try { closeHub(); } catch (e) {} });
+  const n = await pg.evaluate(() => { const w = window._sharedDetachWindow; return { zellen: w && !w.closed ? [...w.document.querySelectorAll('.detached-cell')].map(c => c.dataset.panelId).sort().join(',') : '', leiste: !!document.getElementById('abk-wieder-leiste') }; });
+  pruef('Neu laden: Logikplan und 2D-Anlage wieder abgekoppelt', n.zellen === 'factory-wrapper,fbs-wrapper' && !n.leiste, n.zellen);
+  pruef('Neu laden: alte Fenster geschlossen', ctx.pages().filter(x => !x.isClosed()).length === 2, ctx.pages().filter(x => !x.isClosed()).length);
+  // Browser blockiert Fenster ohne Klick: Leiste mit Knopf
+  await pg.addInitScript(() => { const o = window.open; window.open = function () { if (!window.__klick) return null; return o.apply(this, arguments); }; document.addEventListener('click', () => { window.__klick = true; setTimeout(() => { window.__klick = false; }, 0); }, true); });
+  await pg.reload(); await pg.waitForTimeout(5000);
+  await pg.evaluate(() => { try { closeHub(); } catch (e) {} });
+  const l = await pg.evaluate(() => ({ leiste: !!document.getElementById('abk-wieder-leiste'), platzhalter: document.querySelectorAll('[id$="-placeholder"]').length, fbs: getComputedStyle(document.getElementById('fbs-wrapper')).display }));
+  pruef('Blockiert: Leiste „Wieder abkoppeln“, Panels bleiben im Hauptfenster', l.leiste && l.platzhalter === 0 && l.fbs !== 'none', JSON.stringify(l));
+  await pg.click('#abk-wieder-knopf'); await pg.waitForTimeout(1500);
+  pruef('Blockiert: Knopf koppelt beide wieder ab', await pg.evaluate(() => { const w = window._sharedDetachWindow; return !!(w && !w.closed) && w.document.querySelectorAll('.detached-cell').length === 2 && !document.getElementById('abk-wieder-leiste'); }));
   pruef('keine Skriptfehler', fehler.length === 0, fehler.join(' | '));
   console.log('\n' + gut + ' gut, ' + schlecht + ' schlecht');
   await b.close(); srv.close();

@@ -207,6 +207,35 @@ const FAELLE = {
     R.push(['2D-Druckschalter entfernt → aus dem Plan weg', !F.plan().teile.some(t => t.typ === 'dschalter'), '']);
   }
   ,
+  'Hydraulikzylinder ablegen: Abfrage, 2D baut nur, was im Plan steht': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan;
+    window._findHydTankForCylinder = () => null;
+    factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold'].includes(o.type)).forEach(o => deleteObjRecursive(o));
+    F._leeren(); F.verbinden2D(true);
+    const sd = window.showValisChoiceDialog;
+    let gefragt = 0;
+    window.showValisChoiceDialog = (a, b, x, cb) => { gefragt++; cb('nein'); };
+    F._ablegen('zyl_dw', 0, 0, { hyd: true });
+    await warte(300);
+    let p = F.plan(), z = p.teile.find(t => t.typ === 'zyl_dw');
+    const o = z && factoryObjects.find(x => x.id === z.o.anlage);
+    R.push(['Abfrage kommt', gefragt === 1, gefragt]);
+    R.push(['„Nur der Zylinder“: Plan hat nur den Zylinder', p.teile.length === 1, p.teile.map(t => t.typ)]);
+    R.push(['2D: nur der Hydraulikzylinder, kein Ventil, keine Drosseln, kein Aggregat', !!o && o.hasHydraulics && !factoryObjects.some(x => ['valve_hyd', 'throttle_hyd', 'hydraulic_unit'].includes(x.type)), factoryObjects.filter(x => /hyd/.test(x.type)).map(x => x.type)]);
+    window.showValisChoiceDialog = (a, b, x, cb) => { gefragt++; cb('ja'); };
+    F._ablegen('zyl_dw', 400, 0, { hyd: true });
+    window.showValisChoiceDialog = sd;
+    await warte(300);
+    p = F.plan();
+    const z2 = p.teile.filter(t => t.typ === 'zyl_dw')[1];
+    R.push(['„Mit Grundschaltung“: Ventil 4/3, Aggregat, Tank im Plan', p.teile.some(t => t.typ === 'ventil' && t.o.wege === '4/3') && p.teile.some(t => t.typ === 'aggregat') && p.teile.some(t => t.typ === 'tank'), p.teile.map(t => t.typ)]);
+    const o2 = z2 && factoryObjects.find(x => x.id === z2.o.anlage);
+    const v2 = o2 && factoryObjects.find(x => x.type === 'valve_hyd' && x.targetCylinderId === o2.id);
+    R.push(['2D: Ventil mit Sperrmitte, keine Drosseln (stehen nicht im Plan)', v2 && v2.isTriple && !factoryObjects.some(x => x.type === 'throttle_hyd' && x.targetCylinderId === o2.id), v2 && [v2.isTriple, factoryObjects.filter(x => x.type === 'throttle_hyd').length]]);
+    R.push(['2D: Aggregat vorhanden, erster Zylinder weiter ohne Ventil', factoryObjects.some(x => x.type === 'hydraulic_unit') && !factoryObjects.some(x => x.type === 'valve_hyd' && x.targetCylinderId === o.id), '']);
+  }
+  ,
   'Pneumatikplan mit Hydraulikteilen: Pneumatik bleibt, Hydraulik nur für Hydraulikzylinder': async (R) => {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan, H = { hyd: true };

@@ -543,13 +543,13 @@
         { id: 'o9', type: 'led', x: 55, y: 90, width: 26, height: 26, useCollision: true, labelPinned: true, linkedVar: 'LAMPE_AUTOMATIK', color: 'yellow' },
         { id: 'o10', type: 'led', x: 90, y: 90, width: 26, height: 26, useCollision: true, labelPinned: true, linkedVar: 'LAMPE_STOERUNG', color: 'red' },
         { id: 'o11', type: 'zylinder_double', x: 160, y: 200, width: 80, height: 30, useCollision: true, linkedVarExt: 'SPULE_SPANNEN', linkedVarRet: 'SPULE_LOESEN', hasPneumatics: true, normLabel: '-MM1', pistonD: 20, rodD: 8, stroke: 100 },
-        { id: 'o12', type: 'zylinder_double', x: 302, y: 60, width: 80, height: 30, rotation: 90, useCollision: true, linkedVarExt: 'SPULE_VORSCHUB_VOR', linkedVarRet: 'SPULE_VORSCHUB_ZURUECK', hasPneumatics: true, normLabel: '-MM2', pistonD: 20, rodD: 8, stroke: 100 },
+        { id: 'o12', type: 'zylinder_double', x: 312, y: 50, width: 60, height: 30, rotation: 90, useCollision: true, linkedVarExt: 'SPULE_VORSCHUB_VOR', linkedVarRet: 'SPULE_VORSCHUB_ZURUECK', hasPneumatics: true, normLabel: '-MM2', pistonD: 20, rodD: 8, stroke: 100 },
         { id: 'o13', type: 'frame', x: 290, y: 235, width: 120, height: 14, useCollision: true },
         { id: 'o23', type: 'sensor_reed', x: 148, y: 205, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_HINTEN', parentId: 'o11', rangeW: 10 },
         { id: 'o24', type: 'sensor_reed', x: 220, y: 205, width: 20, height: 40, useCollision: false, linkedVar: 'REED_SPANNER_VORN', parentId: 'o11', rangeW: 10 },
         { id: 'o25', type: 'sensor_reed', x: 322, y: 14, width: 20, height: 40, rotation: 90, useCollision: false, linkedVar: 'REED_VORSCHUB_HINTEN', parentId: 'o12', rangeW: 10 },
-        { id: 'o26', type: 'sensor_reed', x: 322, y: 85, width: 20, height: 40, rotation: 90, useCollision: false, linkedVar: 'REED_VORSCHUB_VORN', parentId: 'o12', rangeW: 10 },
-        { id: 'o27', type: 'bohrspindel', x: 328, y: 116, width: 28, height: 80, useCollision: false, linkedVar: 'MOTOR_BOHREN', parentId: 'o12', attachmentType: 'rod' },
+        { id: 'o26', type: 'sensor_reed', x: 322, y: 65, width: 20, height: 40, rotation: 90, useCollision: false, linkedVar: 'REED_VORSCHUB_VORN', parentId: 'o12', rangeW: 10 },
+        { id: 'o27', type: 'bohrspindel', x: 328, y: 96, width: 28, height: 80, useCollision: false, linkedVar: 'MOTOR_BOHREN', parentId: 'o12', attachmentType: 'rod' },
         { id: 'o28', type: 'sensor_ind', x: 368, y: 195, width: 20, height: 40, rotation: 180, useCollision: false, linkedVar: 'SENSOR_TEIL' }
       ].concat(p.objekte)),
       verbindungen: p.verbindungen, items: TEIL_AUFLAGE
@@ -778,7 +778,8 @@
     ]
   };
 
-  var ANLAGEN = [SORTIERANLAGE, ABFUELLSTATION, PRAEGESTATION, BOHRSTATION, ROLLTOR];
+  // nach Schwierigkeit der Anlage selbst (Christoph 15.11.2026): Ein-/Ausgänge, Zylinder, Betriebsarten
+  var ANLAGEN = [ROLLTOR, ABFUELLSTATION, SORTIERANLAGE, PRAEGESTATION, BOHRSTATION];
 
   /* ===================================================== Aufgaben bauen */
   function anlageVon(id) { return ANLAGEN.filter(function (a) { return a.id === id; })[0] || null; }

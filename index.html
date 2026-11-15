@@ -2759,6 +2759,19 @@
            NICHT quetschbar (flex:0 0 auto !important), immer als rechtester Button. */
         .panel-info-btn { flex:0 0 auto !important; background:#17a2b8; color:#fff; border:none; border-radius:3px; cursor:help; font-size:15px; line-height:1; height:30px !important; width:32px; min-width:32px; padding:0 !important; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; box-sizing:border-box; pointer-events:auto; }
         .panel-info-btn:hover { background:#0d8fa3; }
+        /* Abkoppel-Knopf: fest oben rechts in jedem Panel, unabhängig von den
+           Werkzeugleisten, die bei Platzmangel umbrechen. Die Leisten halten
+           rechts Platz für ihn frei. Im abgekoppelten Fenster ausgeblendet
+           (dort holt „Zurück ins Hauptfenster“ das Panel zurück). */
+        .panel-abk-btn { position:absolute; top:4px; right:4px; z-index:1200; width:28px; height:28px; padding:0; margin:0; display:inline-flex; align-items:center; justify-content:center; background:rgba(38,50,56,0.85); color:#fff; border:1px solid rgba(255,255,255,0.25); border-radius:4px; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,0.35); pointer-events:auto; }
+        .panel-abk-btn:hover { background:#007acc; border-color:#007acc; }
+        .panel-abk-btn svg { width:16px; height:16px; display:block; }
+        #analyzer-header .panel-abk-btn { position:static; margin-left:auto; margin-right:8px; }
+        .detached-cell .panel-abk-btn, body.valis-popup .panel-abk-btn { display:none !important; }
+        #fbs-toolbar, #circuit-wrapper > .circuit-btn-container { right:40px !important; }
+        #ced-toolbar, #sk-wrapper .sk-panel-header, #festo-toolbar, #fluid-wrapper .fp-kopf { padding-right:40px !important; }
+        #factory-toolbar { padding-right:42px !important; }
+        #fluid-wrapper #fp-abk { display:none !important; }
         .tut-progress { font-size:11px; color:#546e7a; }
         .tut-code-wrap { margin:12px 0; }
         .tut-code-wrap > .tut-code { margin:0; border-radius:6px 6px 0 0; border-bottom:none; }
@@ -47624,6 +47637,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!extWin) return null;
             window._sharedDetachWindow = extWin;
             extWin.document.title = 'VALIS - Abgekoppelte Panels';
+            extWin.document.body.classList.add('valis-popup');
             extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex; flex-direction:column; font-family:Segoe UI,sans-serif;';
             _copyDocStylesTo(extWin);
             const container = extWin.document.createElement('div');
@@ -47761,6 +47775,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window.popOutWindows[panelId] = extWin;
             extWin.document.title = 'VALIS - ' + titleName;
             extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex;';
+            extWin.document.body.classList.add('valis-popup');
             _copyDocStylesTo(extWin);
             panel._oldCss = panel.style.cssText;
             panel.style.position = 'relative';
@@ -47845,6 +47860,45 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }, 100);
             updateWorkspace();
         };
+        // === Abkoppel-Knopf oben rechts in jedem Panel ===
+        // Ein fester Knopf je Panel (nicht in der Werkzeugleiste, die bei
+        // Platzmangel umbricht). Klick = Panel in das Fenster der abgekoppelten
+        // Panels (Multi-Screen); der Fluidplan geht über seinen eigenen Weg.
+        const _ABK_PANELS = [
+            ['fbs-wrapper', 'Logikplan'], ['circuit-wrapper', 'Schaltplan'],
+            ['circuit-editor-wrapper', 'Editor'], ['sk-wrapper', 'Schrittkette'],
+            ['factory-wrapper', '2D-Anlage'], ['festo-wrapper', 'Steckaufbau'],
+            ['fluid-wrapper', 'Fluidplan'], ['analyzer-modal', 'Oszilloskop']
+        ];
+        window._panelAbkoppeln = function(panelId, titel) {
+            if (panelId === 'fluid-wrapper' && window.Fluidplan && typeof Fluidplan._abkoppeln === 'function') { Fluidplan._abkoppeln(); return; }
+            window.detachPanel(panelId, titel);
+        };
+        function _abkKnopfSetzen() {
+            const svg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4"/><path d="M13.5 2.5 7.5 8.5"/><path d="M12 9.5v3.2a.8.8 0 0 1-.8.8H3.3a.8.8 0 0 1-.8-.8V4.8a.8.8 0 0 1 .8-.8h3.2"/></svg>';
+            _ABK_PANELS.forEach(([id, titel]) => {
+                const panel = document.getElementById(id);
+                if (!panel || panel.querySelector(':scope > .panel-abk-btn, #analyzer-header > .panel-abk-btn')) return;
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'panel-abk-btn';
+                b.dataset.panel = id;
+                b.title = titel + ' abkoppeln: in eigenes Fenster verschieben (Multi-Screen). Zurück über „Zurück ins Hauptfenster“ oder Fenster schließen.';
+                b.setAttribute('aria-label', titel + ' abkoppeln');
+                b.innerHTML = svg;
+                b.addEventListener('click', (e) => { e.stopPropagation(); window._panelAbkoppeln(id, titel); });
+                b.addEventListener('mousedown', (e) => e.stopPropagation());
+                if (id === 'analyzer-modal') {
+                    const kopf = document.getElementById('analyzer-header');
+                    const zu = kopf && kopf.querySelector('button');
+                    if (kopf) kopf.insertBefore(b, zu || null);
+                } else {
+                    // Vorne einfügen: der Oszilloskop-Code liest lastElementChild als Fußleiste.
+                    panel.insertBefore(b, panel.firstChild);
+                }
+            });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _abkKnopfSetzen); else _abkKnopfSetzen();
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
         // ==========================================

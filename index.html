@@ -3346,6 +3346,7 @@
                     <div id="pneu-options-group">
                         <button id="btn-pneu-pressures" class="btn-export" title="Drücke anzeigen — blendet während der Simulation die aktuellen Druckwerte (bar) an Pneumatik-Leitungen, Ventilen und Zylindern ein. Hilfreich zur Druckverlauf-Diagnose, kostet etwas Bildschirmplatz." style="background-color: #555; border: 1px solid #333;" onclick="togglePneuPressures()">📊 Drücke anzeigen: AUS</button>
                     </div>
+                    <button id="btn-iec-messen" class="btn-export elm-mess-btn" style="background-color: #455a64; border: 1px solid #263238;" onclick="window.ElMessen && window.ElMessen.umschalten('plan')" title="Virtuelles Multimeter: im Schaltplan messen wie an der Aufbauwand. Spannung gegen 0 V bei eingeschalteter Anlage, Widerstand und Durchgang bei ausgeschalteter. Gemessen wird an derselben Schaltung wie im Steckaufbau. Klick auf einen Anschluss oder eine Leitung = rote Spitze, Shift-Klick oder Rechtsklick = schwarze Spitze.">🩺 Messen</button>
                     <button class="panel-info-btn" onclick="showPanelInfo('circuit-wrapper', this)" title="Kontext-Hilfe zu diesem Fenster (Schaltplan)">ℹ️</button>
                     <div id="circ-palette-panel">
                         <!-- Spalte 1: Kontakte -->
@@ -3987,6 +3988,8 @@
                         <button type="button" id="festo-step-next" onclick="window._festoStep && window._festoStep(1)" title="Nächstes Kabel (→ / STRG + Mausrad runter)" style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 8px; font-size:11px; cursor:pointer; border-radius:3px;">Weiter ▶</button>
                         <button type="button" id="festo-step-all" onclick="window._festoStep && window._festoStep('all')" title="Alle Kabel anzeigen" style="background:#37474f; color:#80deea; border:1px solid #455a64; padding:2px 6px; font-size:10px; cursor:pointer; border-radius:3px;">Alle</button>
                     </span>
+                    <button type="button" id="festo-btn-messen" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.umschalten('steck')" title="Virtuelles Multimeter wie an der Aufbauwand: Spannung gegen 0 V bei eingeschalteter Anlage (Simulation läuft), Widerstand und Durchgang mit Summer bei ausgeschalteter Anlage. Klick auf eine Buchse = rote Spitze, Shift-Klick oder Rechtsklick = schwarze Spitze (COM).">🩺 Messen</button>
+                    <button type="button" id="festo-btn-fehler" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.fehlersucheUmschalten()" title="Elektrische Fehlersuche: Die Lehrkraft baut versteckte Fehler ein (Ader gebrochen, Kontakt abgebrannt oder verschweißt, Spule unterbrochen, Sensor defekt). Die Fehler wirken auf die Simulation. Lernende messen mit dem Multimeter und melden ihren Befund.">🔍 Fehlersuche</button>
                     <span id="festo-stats" style="color:#90a4ae; font-size:10px; font-family:'Consolas',monospace; margin-left:10px;"></span>
                     <span style="position:relative; margin-left:auto; display:inline-flex; align-items:center;">
                         <button id="festo-settings-btn" type="button" onclick="window._toggleFestoSettingsMenu && window._toggleFestoSettingsMenu(event)" title="Steckaufbau Einstellungen" style="background:transparent; color:#cfd8dc; border:1px solid #455a64; border-radius:3px; padding:2px 7px; font-size:14px; cursor:pointer; line-height:1;">⚙️</button>
@@ -22863,7 +22866,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!_pbActive) {
                 spsState['TRUE'] = true;
                 spsState['FALSE'] = false;
+                // Elektrische Fehler (elektro-messen.js): ein unterbrochenes Sensorkabel
+                // o. Ä. wirkt schon auf die Eingänge, bevor die Logik rechnet …
+                if (window._elVorLogik) { try { window._elVorLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
                 simulationFunction(spsState, deltaMs, window.simTimers);
+                // … und auf Spulen, Leuchten und Ventile, die die Logik einschaltet
+                if (window._elNachLogik) { try { window._elNachLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
                 // 🎬 Recording: Snapshot alle ~50ms (≈20fps)
                 if (_recActive) {
                     const _rt = performance.now() - _recStart;
@@ -23752,6 +23760,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             return { graph: Object.assign({}, g, { nodes, edges }), alias };
         }
         function drawCircuitPlan(graph, inputsList, outputsList, keepView = false) {
+            window._elVersion = (window._elVersion || 0) + 1;   // elektro-messen.js: Modell neu aufbauen
             graph = _circuitCleanGraph(graph);
             // Branch in den Anschluss-/Klemmenplan, wenn der Toggle aktiv ist
             // (nur im SPS-Modus erreichbar, siehe _toggleIecAnschlussView).
@@ -27727,6 +27736,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'regler_parameter': return 'Regler einstellen';
                 case 'custom_js':       return 'Bedingung erfüllen';
                 case 'fluid_fehler':    return 'Fehler im Fluidplan finden';
+                case 'el_fehler':       return 'Fehler in der Elektrik finden';
                 default:                return cond.type;
             }
         }
@@ -27749,6 +27759,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'regler_parameter': return `${cond.variable}: ` + ['kp', 'tn', 'tv'].filter(k => cond[k + 'Min'] != null || cond[k + 'Max'] != null).map(k => `${k.toUpperCase()} ${cond[k + 'Min'] != null ? cond[k + 'Min'] : '…'} … ${cond[k + 'Max'] != null ? cond[k + 'Max'] : '…'}`).join(', ');
                 case 'custom_js':       return cond.expression || '(JS)';
                 case 'fluid_fehler':    return 'Fluidplan: alle versteckten Fehler gefunden';
+                case 'el_fehler':       return 'Elektrik: alle versteckten Fehler im Steckaufbau gefunden';
                 default:                return '';
             }
         }
@@ -28537,6 +28548,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'variable_exists': return (globalInputs||[]).includes(cond.variable) || (globalOutputs||[]).includes(cond.variable);
                     case 'code_contains':   return new RegExp(cond.pattern).test(document.getElementById('code').value);
                     case 'fluid_fehler':    return !!(window.Fluidplan && window.Fluidplan.fehlerGefunden());
+                    case 'el_fehler':       return !!(window.ElMessen && window.ElMessen.fehlerGefunden());
                     case 'component_type':  return (componentTypes[cond.variable] || 'taster') === cond.compType;
                     case 'logic_equivalent': {
                         const _refCode = (cond.refCode || '').trim();
@@ -28801,6 +28813,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             { value:'factory_object',  group:'Aufbau & Zuordnung',    label:'Fabrikobjekt ist mit Variable verknüpft' },
             { value:'festo_train',     group:'Aufbau & Zuordnung',    label:'Steckaufbau (Trainingsmodus) abgeschlossen' },
             { value:'fluid_fehler',    group:'Aufbau & Zuordnung',    label:'Fluidplan: alle versteckten Fehler gefunden', nurFluidplan: true },
+            { value:'el_fehler',       group:'Aufbau & Zuordnung',    label:'Elektrik: alle versteckten Fehler im Steckaufbau gefunden' },
             // Analogwerte & Regler
             { value:'analog_wert',     group:'Analogwerte & Regler',  label:'Analogwert ist größer/kleiner/etwa gleich' },
             { value:'analog_band',     group:'Analogwerte & Regler',  label:'Regelgröße bleibt X s im Toleranzband' },
@@ -28822,6 +28835,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             despawner_count: 'Erfüllt, wenn seit Aufgabenstart mindestens die angegebene Anzahl Werkstücke von einem Despawner (Auswerfer/Ziel) verarbeitet (entfernt) wurde. Nützlich als Funktionsnachweis: Ist die Anlage gesperrt und enthält Despawner, belegt eine erreichte Teile-Zahl, dass die selbst gebaute Steuerungslogik tatsächlich funktioniert.',
             component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
             factory_object:  'Erfüllt, wenn in der 2D-Anlage ein Objekt des gewählten Bauteils steht, das mit der angegebenen Variable verknüpft ist (Rechtsklick auf das Objekt → Variable zuweisen).',
+            el_fehler:       'Erfüllt, sobald im Steckaufbau alle versteckten elektrischen Fehler gemeldet und per „Befund prüfen“ bestätigt sind. Die Fehler baut die Lehrkraft im Steckaufbau ein (🔍 Fehlersuche: Buchse oder Kabel anklicken) und speichert die Anlage als Ausgangszustand der Aufgabe. Gemessen wird mit dem 🩺 Multimeter.',
             fluid_fehler:    'Erfüllt, sobald im Fluidplan alle versteckten Fehler gemeldet und per „Befund prüfen“ bestätigt sind. Die Fehler baut die Lehrkraft im Fluidplan ein (🔍 Fehlersuche) und speichert die Anlage als Ausgangszustand der Aufgabe.',
             festo_train:     'Erfüllt, wenn im Steckaufbau-Panel der Trainingsmodus genutzt und der komplette Aufbau erfolgreich verkabelt wurde — also alle geforderten Kabel korrekt gesteckt sind.',
             analog_wert:     'Erfüllt, wenn die Zahl-Variable (z. B. ein Analogeingang wie TEMP oder eine Stellgröße Y) während der Simulation den Vergleich erfüllt. Der Vergleichswert darf eine Zahl oder eine Variable sein. „etwa gleich“ heißt: innerhalb der Toleranz.',
@@ -29801,6 +29815,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 factory_object:  '{ "objectType": "conveyor", "linkedVar": "A_BAND" }',
                 festo_train:     '{ }',
                 fluid_fehler:    '{ }',
+                el_fehler:       '{ }',
                 analog_wert:     '{ "variable": "TEMP", "op": ">=", "value": 45, "tol": 1 }',
                 analog_band:     '{ "variable": "OELTEMP", "sollwert": 45, "tol": 2, "seconds": 60 }',
                 regler_parameter:'{ "variable": "VENTIL", "kpMin": 4, "kpMax": 12, "tnMin": 200, "tnMax": 900 }',
@@ -43977,7 +43992,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Pneumatik: Ausfahr-Drossel auf der Stangenseite (Abluftdrosselung, 14.11.2026)
                 drosselSeite: 'stange',
                 // Freier Fluidplan (fluidplan.js): reist mit .valisave, #state und Undo
-                fluidplan: (window.Fluidplan ? window.Fluidplan.exportieren() : (window._fpRoh || null))
+                fluidplan: (window.Fluidplan ? window.Fluidplan.exportieren() : (window._fpRoh || null)),
+                // Elektrische Fehlersuche (elektro-messen.js): versteckte Fehler im Steckaufbau
+                elFehler: (window.ElMessen ? window.ElMessen.exportieren() : (window._elRoh || null))
             };
         }
         // Zonen der Auslässe genau so, wie factoryLoop sie benutzt (gleiches Raster):
@@ -44985,6 +45002,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 factoryLayers = state.layers || [];
                 window._fpRoh = state.fluidplan || null;
                 if (window.Fluidplan) { try { window.Fluidplan.importieren(window._fpRoh); } catch (e) { console.warn('Fluidplan', e); } }
+                window._elRoh = state.elFehler || null;
+                if (window.ElMessen) { try { window.ElMessen.importieren(window._elRoh); } catch (e) { console.warn('Elektrik', e); } }
                 window.pneuConnections      = state.pneuConnections      || [];
                 window.fluidPipeConnections = state.fluidPipeConnections || [];
                 // Migrate legacy hydConnections: tag existing fluid entries, merge old hyd entries
@@ -67854,6 +67873,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const bi = strandIdx.has(b.strand) ? strandIdx.get(b.strand) : 1e9;
                     return ai - bi;
                 });
+                // Kennung je Kabel für das Multimeter (wie im Programm-Steckaufbau)
+                { const n = k => ({ __ANS_BUS_24V__: '+24V', __ANS_BUS_0V__: '0V' })[k] || k, z = {};
+                  cables.forEach(c => { const b = n(c.fromKey) + '>' + n(c.toKey); z[b] = (z[b] || 0) + 1; c.elId = z[b] > 1 ? b + '#' + z[b] : b; }); }
                 window._festoStrandList = strandList;
                 return cables;
             }
@@ -67984,6 +68006,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (cable.strand && cable.strand !== '__POWER__') {
                         path.setAttribute('data-cable-strand', cable.strand);
+                        if (cable.elId) path.setAttribute('data-el-kabel', cable.elId);
                     }
                     layer.appendChild(path);
                     if (!isFiltered) {
@@ -68175,6 +68198,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window._ansFestoLastData = data;
                 window._ansFestoLastIn   = inBindings;
                 window._ansFestoLastOut  = outBindings;
+                window._elVersion = (window._elVersion || 0) + 1;   // elektro-messen.js
                 // Auto-Fit, falls beim Panel-Öffnen angefordert (siehe
                 // _festoNeedsFit-Flag).
                 if (typeof _festoMaybeFit === 'function') _festoMaybeFit();
@@ -68245,7 +68269,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             } catch(_) {}
             try { if (localStorage.getItem('valisFbLiveSync') === '1') FB.liveSync = true; } catch(_) {}
             try { if (localStorage.getItem('valisFbMarkIncomplete') === '0') FB.markIncomplete = false; } catch(_) {}
-            function _fbSave() { try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {} }
+            function _fbSave() { window._elVersion = (window._elVersion || 0) + 1; try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {} }
             // Board-Registry: NUR echte FESTO-Module (dieselben Drawer wie im
             // Standard-Steckaufbau). Maße aus den Board-Konstanten.
             // Analogkarten (Maße wie ANA_GEBER/ANA_KOMP/ANA_PID weiter unten; der
@@ -71633,8 +71657,120 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return ai - bi;
                 });
                 window._festoStrandList = strandList;
+                // Elektrisches Messen (elektro-messen.js): jedes Kabel bekommt eine
+                // feste Kennung aus seinen Enden (Schienen-Platzhalter als +24V/0V),
+                // und jeder Schaltplan-Anschluss weiß, auf welcher Buchse er liegt.
+                const _elN = k => ({ __BUS_24V__: '+24V', __BUS_0V__: '0V', __BUS_L1__: 'L1', __BUS_N__: 'N' })[k] || k;
+                const _elZ = {};
+                cables.forEach(c => { const b = _elN(c.fromKey) + '>' + _elN(c.toKey); _elZ[b] = (_elZ[b] || 0) + 1; c.elId = _elZ[b] > 1 ? b + '#' + _elZ[b] : b; });
+                window._festoElemSock = {
+                    kontakte: Array.from(contactSockCache.entries()).filter(([c, s]) => s).map(([c, s]) => ({ elem: c.elem, a: s.inputKey, b: s.outputKey })),
+                    spulen: coils.map(c => { const s = coilSockOf(c.varName), slot = varToSlot[c.varName]; return s ? { elem: c.elem, a: s.inputKey, b: s.returnKey || (slot ? slot + '_X2' : null), v: c.varName } : null; }).filter(Boolean)
+                };
                 return cables;
             }
+            // Elektrisches Modell des Steckaufbaus für das virtuelle Multimeter und
+            // die elektrische Fehlersuche (elektro-messen.js): Kabel, Kontakte,
+            // Verbraucher und Sensoren mit ihren Buchsen. Standard-Steckaufbau aus
+            // dem Schaltplan-Walker (dieselben Kabel wie gezeichnet), freier Aufbau
+            // aus den gesteckten Kabeln. Die Anschluss-Sicht (SPS-Module) fehlt noch.
+            window._elSteckModell = function() {
+                const dual = !!window.configDualCircuit;
+                const schiene = (k) => {
+                    if (k === '__BUS_24V__') return 'P'; if (k === '__BUS_0V__') return 'M';
+                    if (k === '__BUS_L1__') return 'L1'; if (k === '__BUS_N__') return 'N';
+                    const m = /^([A-Za-z]+)\d+_(24V|0V)_\d+$/.exec(k || '');
+                    if (!m) return null;
+                    const last = dual && /^[LM]$/.test(m[1]);
+                    return m[2] === '24V' ? (last ? 'L1' : 'P') : (last ? 'N' : 'M');
+                };
+                const iec = (v) => (window._festoIECLabelsByRole && (window._festoIECLabelsByRole.coil || {})[v]) || (window._festoIECLabels || {})[v] || '';
+                const elemente = [], intern = [], masse = [];
+                const E = (art, a, b, o) => elemente.push(Object.assign({ id: a + '~' + b, art, a, b }, o));
+                if (window.festoFreeBuildMode) {
+                    FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => {
+                        const keys = Object.keys(e.terms), v = e.varName || '';
+                        Object.keys(e.terms).forEach(k => { if (_fbInternalGround(k)) masse.push(k); });
+                        if (_CONTACT_CED.has(e.cedType)) {
+                            if (/^komparator/.test(e.cedType)) return;
+                            E('kontakt', keys[0], keys[1], { v, sem: b.type === 'taster' ? 'roh' : 'relais', nc: e.cedType.slice(-3) === '_nc', brett: b.type });
+                        } else if (_COIL_CED.has(e.cedType)) {
+                            const ein = keys.filter(k => e.terms[k] === 'in'), aus = keys.filter(k => e.terms[k] === 'out');
+                            if (!ein.length || !aus.length) return;
+                            for (let i = 1; i < ein.length; i++) intern.push([ein[0], ein[i]]);
+                            const last = b.type === 'relais' ? 'relais' : b.type === 'zeitrelais' ? 'zeit' : b.type === 'magnet' ? 'ventil' : e.cedType === 'siren' ? 'hupe' : 'led';
+                            E('last', ein[0], aus[0], { v, last, brett: b.type });
+                        } else if (/^sensor_/.test(e.cedType)) {
+                            const s24 = keys.find(k => /_24V$/.test(k)), q = keys.find(k => /_Q$/.test(k)), s0 = keys.find(k => /_0V$/.test(k));
+                            if (s24 && q) E('sensor', s24, q, { c: s0, v, sem: 'sensor', brett: b.type });
+                        }
+                    }));
+                    return { art: 'frei', schiene, kabel: FB.cables.map(c => ({ id: c.id, a: c.a, b: c.b })), elemente, intern, masse, plan: null, iec };
+                }
+                if (!window.epneuMode && window._iecAnschlussView) {
+                    // Anschluss-Sicht: Taster und Sensoren an den Eingängen der SPS
+                    // (16DIN, Eingang ≈ 4,7 kΩ gegen 0 V), Ausgänge (16DOUT) schalten
+                    // +24 V auf Leuchten und Magnetspulen. Braucht den gezeichneten Stand.
+                    const data = window._ansFestoLastData;
+                    if (!data) return null;
+                    const ein = window._ansFestoLastIn || {}, aus = window._ansFestoLastOut || {};
+                    const roh = _buildAnschlussCableList(data, ein, aus);
+                    const schieneA = (k) => {
+                        if (k === '__ANS_BUS_24V__' || /^ANS_(DIST|PWR)_24V_/.test(k || '')) return 'P';
+                        if (k === '__ANS_BUS_0V__' || /^ANS_(DIST|PWR)_0V_/.test(k || '')) return 'M';
+                        return schiene(k);
+                    };
+                    Object.entries(data.assignments || {}).forEach(([slot, v]) => {
+                        if (!v) return;
+                        if (/^T\d+_S\d+$/.test(slot)) {
+                            E('kontakt', slot + '_13', slot + '_14', { v, sem: 'taster', nc: false });
+                            E('kontakt', slot + '_21', slot + '_22', { v, sem: 'taster', nc: true });
+                        } else if (/^N\d+_S\d+$/.test(slot)) E('sensor', slot + '_24V', slot + '_Q', { c: slot + '_0V', v, sem: 'sensor' });
+                        else if (/^L\d+_HORN$/.test(slot)) E('last', slot + '_X1', slot + '_X2', { v, last: 'hupe' });
+                        else if (/^L\d+_S\d+$/.test(slot)) { E('last', slot + '_24V_a', slot + '_X2', { v, last: 'led' }); intern.push([slot + '_24V_a', slot + '_24V_b']); masse.push(slot + '_X2'); }
+                        else if (/^M\d+/.test(slot)) E('last', slot + '_24V_a', slot + '_X2', { v, last: 'ventil' });
+                    });
+                    Object.entries(ein).forEach(([adr, v]) => { E('last', 'ANS_DIN_' + adr, '__ANS_BUS_0V__', { v, last: 'sps_ein', adr }); });
+                    Object.entries(aus).forEach(([adr, v]) => { E('kontakt', '__ANS_BUS_24V__', 'ANS_DOUT_' + adr, { v, sem: 'sps_aus', nc: false, adr }); });
+                    return { art: 'anschluss', schiene: schieneA, kabel: roh.map(c => ({ id: c.elId, a: c.fromKey, b: c.toKey, strang: c.strand || '' })), elemente, intern, masse, plan: null, iec };
+                }
+                // Belegung wie beim Zeichnen des Steckaufbaus (auch wenn er zu ist)
+                let data = null;
+                try { data = buildAssignment(); } catch (e) { return null; }
+                window._festoLastAssignments = data.assignments;
+                window._festoIECLabels = data.iecLabels || {};
+                window._festoIECLabelsByRole = data.iecLabelsByRole || {};
+                const roh = _buildCableList();
+                const kabel = roh.map(c => ({ id: c.elId, a: c.fromKey, b: c.toKey, strang: c.strand || '' }));
+                Object.entries(window._festoLastAssignments || {}).forEach(([slot, v]) => {
+                    if (!v) return;
+                    if (/^T\d+_S\d+$/.test(slot)) {
+                        E('kontakt', slot + '_13', slot + '_14', { v, sem: 'taster', nc: false });
+                        E('kontakt', slot + '_21', slot + '_22', { v, sem: 'taster', nc: true });
+                    } else if (/^R\d+_S\d+$/.test(slot)) {
+                        E('last', slot + '_A1', slot + '_A2', { v, last: 'relais' });
+                        for (let k = 1; k <= 4; k++) {
+                            E('kontakt', `${slot}_${k}4`, `${slot}_${k}1`, { v, sem: 'relais', nc: false });
+                            E('kontakt', `${slot}_${k}2`, `${slot}_${k}1`, { v, sem: 'relais', nc: true });
+                        }
+                    } else if (/^Z\d+_S\d+$/.test(slot)) {
+                        E('last', slot + '_A1', slot + '_A2', { v, last: 'zeit' });
+                        [['17', '18'], ['27', '28']].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: false }));
+                        [['35', '36'], ['45', '46']].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: true }));
+                    } else if (/^L\d+_HORN$/.test(slot)) {
+                        E('last', slot + '_X1', slot + '_X2', { v, last: 'hupe' });
+                    } else if (/^L\d+_S\d+$/.test(slot)) {
+                        E('last', slot + '_24V_a', slot + '_X2', { v, last: 'led' });
+                        intern.push([slot + '_24V_a', slot + '_24V_b']); masse.push(slot + '_X2');
+                    } else if (/^M\d+/.test(slot)) {
+                        E('last', slot + '_24V_a', slot + '_X2', { v, last: 'ventil' });
+                    } else if (/^N\d+_S\d+$/.test(slot)) {
+                        E('sensor', slot + '_24V', slot + '_Q', { c: slot + '_0V', v, sem: 'sensor' });
+                    }
+                });
+                return { art: 'standard', schiene, kabel, elemente, intern, masse, plan: window._festoElemSock || null, iec };
+            };
+            window._elBuchseName = (k) => { try { return _describeFestoSocket(k); } catch (e) { return k; } };
             // Strang-Farbe für den „Bunte Kabel"-Modus. Vorrangig wird die
             // Farbe aus dem Auto-Schaltplan übernommen — der Schaltplan
             // hält in seinen Coil-/Contact-Gruppen pro Strang die CSS-
@@ -71866,6 +72002,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Strand-Tag für Stromfluss-Animation (Klasse wird in
                     // _updateFestoCableFlow gesetzt sobald spsState[strand] true)
                     if (cable.strand) path.setAttribute('data-cable-strand', cable.strand);
+                    if (cable.elId) path.setAttribute('data-el-kabel', cable.elId);
                     if (cable.ana) { path.setAttribute('data-ana-var', cable.anaVar); path.setAttribute('data-ana-art', cable.ana); }
                     layer.appendChild(path);
                     if (!isFiltered) {
@@ -78118,5 +78255,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 })();
 </script>
 <script src="fluidplan.js?v=20261115j"></script>
+<script src="elektro-messen.js?v=20261115a"></script>
 </body>
 </html>

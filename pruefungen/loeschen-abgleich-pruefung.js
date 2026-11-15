@@ -260,6 +260,33 @@ const FAELLE = {
     const nachher = typen(); await warte(1200);
     R.push(['nichts kommt von selbst zurück', typen() === nachher && !hat('compressor') && !hat('oil_tank'), typen()]);
   },
+  'Verbinden von Anfang an: leerer Plan, Teile entstehen danach in 2D': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    const zyl2D = () => factoryObjects.filter(o => /^zylinder_/.test(o.type)).length;
+    const vorher = zyl2D();
+    const c = window.confirm; window.confirm = () => false;
+    try { F._anlageKnopf(); } finally { window.confirm = c; }
+    await warte(500);
+    R.push(['leerer Plan ist verbunden', !!F.plan().anlage, F.plan().anlage]);
+    const q = F.setzen('quelle', 100, 400);
+    const v = F.setzen('ventil', 260, 120, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'Y9' }, '1V1');
+    const z = F.setzen('zyl_dw', 260, -60, {}, '1A1');
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    await warte(1200);
+    const zt = F.plan().teile.find(t => t.id === z);
+    const o = zt && factoryObjects.find(q => q.id === zt.o.anlage);
+    R.push(['neuer Zylinder steht sofort in 2D', !!o && zyl2D() === vorher + 1, [vorher, zyl2D()]]);
+    R.push(['2D-Zylinder hängt am Ventil (Y9)', !!o && (o.linkedVarExt === 'Y9' || factoryObjects.some(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id)), o && [o.linkedVarExt, o.hasPneumatics]]);
+  },
+  'Verbinden von Anfang an: 2D hat Zylinder → Angebot übernehmen': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    const c = window.confirm; window.confirm = () => true;
+    try { F._anlageKnopf(); } finally { window.confirm = c; }
+    await warte(800);
+    R.push(['übernommen und verbunden', !!F.plan().anlage && F.plan().teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew'), F.plan().teile.map(t => t.typ).join(',')]);
+  },
   'Löschen während der Simulation: beide Richtungen, nichts kommt beim Stopp zurück': async (R) => {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;

@@ -51859,25 +51859,40 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         // wahl ('single'|'double'|'triple') überspringt den Ventil-Dialog und das Scrollen
         // (genutzt vom freien Fluidplan, der die 2D-Pneumatik aufbaut).
         // opt.drosseln = { ext: bool, ret: bool }: nur diese Drosseln anlegen (Standard: beide).
-        window.generatePneumaticSetup = function(cylObj, wahl, opt) {
-            const _dr = (opt && opt.drosseln) || { ext: true, ret: true };
+        // Versorgung (Kompressor + Wartungseinheit) anlegen, auch ohne Zylinder (Fluidplan: Quelle gesetzt)
+        // opt (Fluidplan): { comp, manifold } legt nur das Gewünschte an; ohne opt wie bisher beides mit dem Kompressor
+        window._pneuVersorgung2D = function(opt) {
             let zone = factoryObjects.find(o => o.type === 'pneumatic_zone');
             if (!zone) { zone = createFactoryObject('pneumatic_zone', ''); zone.x = 20; zone.y = 600; }
             let comp = factoryObjects.find(o => o.type === 'compressor');
             let manifold = factoryObjects.find(o => o.type === 'manifold');
-            if (!comp) {
+            const willC = opt ? !!opt.comp : !comp, willM = opt ? !!opt.manifold : !comp;
+            if (willC && !comp) {
                 comp = createFactoryObject('compressor', ''); comp.x = zone.x + 20; comp.y = zone.y + zone.height - 80;
-                manifold = createFactoryObject('manifold', ''); manifold.x = comp.x + 140; manifold.y = comp.y + 45;
                 // 🌟 NORM-UPDATE (DIN EN 81346-2): Kompressor (GQA) und Wartungseinheit/Verteiler (GQ)
                 comp.normLabel = '-GQA1';
                 let cLbl = document.createElement('div'); cLbl.className = 'f2d-label f2d-norm-label'; 
                 cLbl.style.top = '-20px'; cLbl.innerHTML = `Kompressor<br><span style="color:#03a9f4; font-size:10px;">[${comp.normLabel}]</span>`; 
                 comp.el.appendChild(cLbl);
+                try { updateObjTransform(comp); } catch (e) {}
+            }
+            if (willM && (!manifold || !opt)) {
+                const bx = comp ? comp.x : zone.x + 20, by = comp ? comp.y : zone.y + zone.height - 80;
+                manifold = createFactoryObject('manifold', ''); manifold.x = bx + 140; manifold.y = by + 45;
                 manifold.normLabel = '-GQ1';
                 let mLbl = document.createElement('div'); mLbl.className = 'f2d-label f2d-norm-label'; 
                 mLbl.style.top = '-25px'; mLbl.innerHTML = `Wartungseinheit<br><span style="color:#03a9f4; font-size:10px;">[${manifold.normLabel}]</span>`; 
                 manifold.el.appendChild(mLbl);
+                try { updateObjTransform(manifold); } catch (e) {}
             }
+            if (!comp) {   // generatePneumaticSetup braucht einen Kompressor
+                if (!opt) return window._pneuVersorgung2D({ comp: true });
+            }
+            return { zone, comp, manifold };
+        };
+        window.generatePneumaticSetup = function(cylObj, wahl, opt) {
+            const _dr = (opt && opt.drosseln) || { ext: true, ret: true };
+            let { zone, comp, manifold } = window._pneuVersorgung2D();
             let isDouble = cylObj.type === 'zylinder_double' || cylObj.type === 'gate_pneu';
             let existingValves = factoryObjects.filter(o => o.type === 'valve_pneu');
             let groupNum = existingValves.length + 1;
@@ -52337,10 +52352,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
 
         // ==================== HYDRAULIK-SETUP ====================
-        window.generateHydraulicSetup = function(cylObj) {
+        // Aggregat + Verteiler (+ Öltank) anlegen, auch ohne Zylinder (Fluidplan: Aggregat/Tank gesetzt).
+        // opt.tank: false = keinen Öltank anlegen, true = Öltank auch zu einem vorhandenen Aggregat
+        window._hydVersorgung2D = function(opt) {
+            opt = opt || {};
             let zone = factoryObjects.find(o => o.type === 'hydraulic_zone');
             if (!zone) { zone = createFactoryObject('hydraulic_zone', ''); zone.x = 20; zone.y = 1000; }
+            const _tankNeu = () => {
+                let newTank = createFactoryObject('oil_tank', '');
+                newTank.x = zone.x + 20; newTank.y = zone.y + zone.height - 115;
+                newTank.normLabel = '-CLA1';
+                let tLbl = document.createElement('div'); tLbl.className = 'f2d-label f2d-norm-label';
+                tLbl.style.top = '-20px'; tLbl.innerHTML = `Öltank<br><span style="color:#ff8f00;font-size:10px;">[-CLA1]</span>`;
+                newTank.el.appendChild(tLbl);
+                updateObjTransform(newTank);
+                return newTank;
+            };
             let unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
+            if (opt.aggregat === false) {
+                if (opt.tank && !factoryObjects.some(o => o.type === 'oil_tank')) _tankNeu();
+                return { zone, unit, manifold: factoryObjects.find(o => o.type === 'hydraulic_manifold') || null };
+            }
             let manifold = null;
             if (!unit) {
                 unit = createFactoryObject('hydraulic_unit', ''); unit.x = zone.x + 170; unit.y = zone.y + zone.height - 90;
@@ -52353,15 +52385,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let mLbl = document.createElement('div'); mLbl.className = 'f2d-label f2d-norm-label';
                 mLbl.style.top = '-25px'; mLbl.innerHTML = `Verteiler<br><span style="color:#ff8f00;font-size:10px;">[${manifold.normLabel}]</span>`;
                 manifold.el.appendChild(mLbl);
+                try { updateObjTransform(unit); updateObjTransform(manifold); } catch (e) {}
                 // Create oil tank next to the hydraulic unit
-                let newTank = createFactoryObject('oil_tank', '');
-                newTank.x = zone.x + 20; newTank.y = zone.y + zone.height - 115;
-                newTank.normLabel = '-CLA1';
-                let tLbl = document.createElement('div'); tLbl.className = 'f2d-label f2d-norm-label';
-                tLbl.style.top = '-20px'; tLbl.innerHTML = `Öltank<br><span style="color:#ff8f00;font-size:10px;">[-CLA1]</span>`;
-                newTank.el.appendChild(tLbl);
-                updateObjTransform(newTank);
-            }
+                if (opt.tank !== false && !factoryObjects.some(o => o.type === 'oil_tank')) _tankNeu();
+            } else if (opt.tank === true && !factoryObjects.some(o => o.type === 'oil_tank')) _tankNeu();
             if (!manifold) {
                 let _mflds = factoryObjects.filter(o => o.type === 'hydraulic_manifold');
                 if (_mflds.length > 0) {
@@ -52370,6 +52397,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     );
                 }
             }
+            return { zone, unit, manifold };
+        };
+        window.generateHydraulicSetup = function(cylObj) {
+            let { zone, unit, manifold } = window._hydVersorgung2D(window._hydVersorgungOpt || {});
             let isDouble = cylObj.type === 'zylinder_double' || cylObj.type === 'gate_pneu';
             let existingValves = factoryObjects.filter(o => o.type === 'valve_hyd');
             let groupNum = existingValves.length + 1;
@@ -78743,7 +78774,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zn"></script>
+<script src="fluidplan.js?v=20261115zo"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115b"></script>
 </body>

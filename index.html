@@ -4348,6 +4348,7 @@
                         <div class="hub-item" data-hub-text="komponenten tutorials bauteile 2d anlage factory sensoren aktoren zylinder förderband" onclick="hubLaunch('tutorials')"><div class="hub-item-icon">🧩</div><div class="hub-item-txt"><div class="hub-item-title">Komponenten-Tutorials</div><div class="hub-item-desc">Erklärungen zu den Bauteilen der 2D-Anlage (Sensoren, Aktoren, Zylinder …).</div></div></div>
                         <div class="hub-item" data-hub-text="szenario analyse text ableiten eingang ausgang logik und oder markieren üben formulierung" onclick="hubLaunch('szenario')"><div class="hub-item-icon">🔎</div><div class="hub-item-txt"><div class="hub-item-title">Szenario-Analyse</div><div class="hub-item-desc">Aus Text-Szenarien Eingänge, Ausgänge und Logik ableiten üben.</div></div></div>
                         <div class="hub-item" data-hub-text="aufgaben übungen lösen erstellen editor erfolgskriterien bewertung modus trainieren" onclick="hubLaunch('aufgaben')"><div class="hub-item-icon">🎯</div><div class="hub-item-txt"><div class="hub-item-title">Aufgaben</div><div class="hub-item-desc">Aufgaben-Modus: vorhandene Übungsaufgaben lösen oder eigene Aufgaben erstellen.</div></div></div>
+                        <div class="hub-item" data-hub-text="übungsanlagen anlagen katalog sortieranlage abfüllstation prägestation bohrstation rolltor feste hardware zuordnungsliste programm schreiben einfach mittel fordernd 3d werkstatt" onclick="hubLaunch('uebungsanlagen')"><div class="hub-item-icon">🏭</div><div class="hub-item-txt"><div class="hub-item-title">Übungsanlagen</div><div class="hub-item-desc">Fertige Anlagen mit gesperrter Hardware: du schreibst nur das Programm, in drei Stufen.</div></div></div>
                         <div class="hub-group-title">Bibliothek</div>
                         <div class="hub-item" data-hub-text="beispiele projekte vorlagen laden demo" onclick="hubLaunch('beispiele')"><div class="hub-item-icon">📋</div><div class="hub-item-txt"><div class="hub-item-title">Beispiele</div><div class="hub-item-desc">Fertige Projekte laden und ausprobieren.</div></div></div>
                         <div class="hub-item" data-hub-text="lexikon fachbegriffe glossar begriffe erklärung wörterbuch quittiert selbsthaltung öffner schließer flanke zeitglied näherungssensor" onclick="hubLaunch('lexikon')"><div class="hub-item-icon">📖</div><div class="hub-item-txt"><div class="hub-item-title">Fachbegriff-Lexikon</div><div class="hub-item-desc">Alle VALIS-Fachbegriffe kurz erklärt (UND/ODER, Selbsthaltung, „quittiert" …).</div></div></div>
@@ -4355,6 +4356,7 @@
                     <div class="hub-content" id="hub-content">
                         <div id="hub-welcome"></div>
                         <div id="hub-search-results" class="hub-search-results" style="display:none;"></div>
+                        <div class="hub-panel" data-hub-panel="uebungsanlagen" id="hub-panel-uebungsanlagen"></div>
                         <div class="hub-panel lex-panel" data-hub-panel="lexikon" id="hub-panel-lexikon">
                             <div class="lex-head">
                                 <div>
@@ -21675,7 +21677,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Ein betätigter Öffner verliert das Signal (FALSE), ein Schließer bekommt es (TRUE).
             // Im E-Pneu-Modus gibt es kein NC-Konzept mehr → Variable = isActuated direkt.
             spsState[varName] = isNC ? !isActuated : isActuated;
+            // Lichtgitter rechnet jeden Takt neu, was im Strahl ist: die Hand-Unterbrechung
+            // merkt es sich, sonst wäre sie beim nächsten Takt wieder weg
+            if (cType === 'light_curtain') window._lichtgitterVonHand(varName, isActuated);
             runSimulationTick();
+        };
+        window._lichtgitterVonHand = function (varName, unterbrochen) {
+            (typeof factoryObjects !== 'undefined' ? factoryObjects : []).forEach(o => {
+                if (o.type === 'light_curtain' && o.linkedVar === varName) o._handUnterbrochen = !!unterbrochen;
+            });
         };
         // --- NEU: STRG-Logik für Taster ---
         let latchedTasters = new Set(); 
@@ -33436,6 +33446,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (isBlockInLocalRect(workerBox, obj, lx, ly, lw, lh)) isBroken = true;
                         }
                     });
+                    // 3. Von Hand im Sim-Panel unterbrochen (Schalter am Eingang)
+                    if (obj._handUnterbrochen) isBroken = true;
                     // DIE FAIL-SAFE LOGIK
                     let isClear = !isBroken;
                     if (spsState[obj.linkedVar] !== isClear) spsState[obj.linkedVar] = isClear;
@@ -59014,6 +59026,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     else if (id === 'aufgaben'  && _hubOrig.aufgaben)  _hubOrig.aufgaben();
                     else if (id === 'szenario') _szShowOverview();
                     else if (id === 'lexikon') { if (typeof window._lexRender === 'function') window._lexRender(); }
+                    else if (id === 'uebungsanlagen' && window.Uebungsanlagen) window.Uebungsanlagen.rendern(document.getElementById('hub-panel-uebungsanlagen'));
                 } catch (e) { console.warn('Hub-Render:', id, e); }
             }
             function _hubMarkTab(id) {
@@ -61255,9 +61268,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // sich öffnet. Datenquellen liegen im selben Skript-Scope; jede in
             // try/catch, damit eine fehlende Quelle die anderen nicht bricht.
             function _hubSnip(t) { return String(t || '').replace(/\s+/g, ' ').trim().slice(0, 150); }
-            const _HUB_SR_NAME = { lektionen: 'Lektionen', tutorials: 'Komponenten-Tutorials', szenario: 'Analyse-Aufgaben', aufgaben: 'Aufgaben', beispiele: 'Beispiele', lexikon: 'Fachbegriffe' };
-            const _HUB_SR_ICON = { lektionen: '📚', tutorials: '🧩', szenario: '🔎', aufgaben: '🎯', beispiele: '📋', lexikon: '📖' };
-            const _HUB_SR_ORDER = ['lektionen', 'tutorials', 'szenario', 'aufgaben', 'beispiele', 'lexikon'];
+            const _HUB_SR_NAME = { lektionen: 'Lektionen', tutorials: 'Komponenten-Tutorials', szenario: 'Analyse-Aufgaben', uebungsanlagen: 'Übungsanlagen', aufgaben: 'Aufgaben', beispiele: 'Beispiele', lexikon: 'Fachbegriffe' };
+            const _HUB_SR_ICON = { lektionen: '📚', tutorials: '🧩', szenario: '🔎', uebungsanlagen: '🏭', aufgaben: '🎯', beispiele: '📋', lexikon: '📖' };
+            const _HUB_SR_ORDER = ['lektionen', 'tutorials', 'szenario', 'uebungsanlagen', 'aufgaben', 'beispiele', 'lexikon'];
             function _hubBuildIndex() {
                 const out = [];
                 const push = function (section, icon, title, sub, extra, open) {
@@ -61289,6 +61302,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             function () { if (window.closeHub) window.closeHub(); try { window._startTask(t); } catch (e) {} });
                     });
                 } catch (e) {}
+                try { if (window.Uebungsanlagen) window.Uebungsanlagen.liste().forEach(function (a) {
+                    window.Uebungsanlagen.stufen.forEach(function (st, i) {
+                        const t = window.Uebungsanlagen.aufgabe(a.id, i);
+                        if (!t) return;
+                        push('uebungsanlagen', '🏭', t.name, a.titel + ' · ' + st.name, (t.description || ''),
+                            function () { if (window.closeHub) window.closeHub(); try { window.Uebungsanlagen.starten(a.id, i); } catch (e) {} });
+                    });
+                }); } catch (e) {}
                 try { EXAMPLE_META.forEach(function (m) {
                     push('beispiele', '📋', m.title || m.key, m.category || '', (m.desc || '') + ' ' + (m.title_en || '') + ' ' + (m.desc_en || ''),
                         function () { if (window.closeHub) window.closeHub(); try { window.loadExample(m.key); } catch (e) {} });
@@ -73807,6 +73828,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (cType.indexOf('taster') === 0) { window.setTaster(name, !!betaetigt); return; }
                 const isNC = window._variableIsNCInverted(cType);
                 spsState[name] = isNC ? !betaetigt : !!betaetigt;
+                if (cType === 'light_curtain') window._lichtgitterVonHand(name, betaetigt);
                 const chk = document.getElementById('sim_in_' + name);
                 if (chk) chk.checked = !!betaetigt;
                 runSimulationTick();
@@ -78676,5 +78698,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 </script>
 <script src="fluidplan.js?v=20261115y"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
+<script src="uebungsanlagen.js?v=20261115a"></script>
 </body>
 </html>

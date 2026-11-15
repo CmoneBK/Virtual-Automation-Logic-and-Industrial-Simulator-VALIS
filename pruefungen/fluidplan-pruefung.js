@@ -949,6 +949,34 @@ const FAELLE = {
     return R;
   }
 };
+// Läuft nach Panel und Popup: öffnet den Plan selbst und darf das erste Einpassen nicht vorwegnehmen
+const NACH = {
+  'Jedes Symbol reicht bis an seine Anschlüsse': async () => {
+    const R = [], F = Fluidplan, warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fluid-wrapper'), offen = !!fw && fw.offsetWidth > 100;
+    F._leeren(); if (!offen) F.umschalten();
+    const typen = ['ventil', 'zyl_dw', 'zyl_ew', 'schwenk', 'quelle', 'wartung', 'druckregel', 'manometer', 'daempfer', 'stopfen', 'rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'drv', 'zeit', 'folge', 'dschalter'];
+    const opts = { ventil: [{ wege: '5/2', links: 'magnet', rechts: 'feder' }, { wege: '3/2', links: 'pneu', rechts: 'feder' }, { wege: '5/2', links: 'pneu', rechts: 'pneu' }], wartung: [{}, { kurz: true }] };
+    let x = 0; const ids = [];
+    for (const t of typen) for (const o of (opts[t] || [{}])) { ids.push([t, F.setzen(t, (x % 1000), Math.floor(x / 1000) * 150, o)]); x += 200; }
+    await warte(200);
+    const svg = document.querySelector('svg.fp-svg'), fehlt = [];
+    for (const [name, id] of ids) {
+      const g = svg.querySelector(`.fp-teil[data-t="${id}"]`); if (!g) { fehlt.push(name + ' ohne Bild'); continue; }
+      const pts = [];
+      g.querySelectorAll('line,path,polyline,rect,circle').forEach(e => { if (e.getAttribute('fill') === 'transparent') return; try { const L = e.getTotalLength(), M = e.getScreenCTM(); for (let i = 0; i <= 40; i++) { const p = e.getPointAtLength(L * i / 40); pts.push([p.x * M.a + p.y * M.c + M.e, p.x * M.b + p.y * M.d + M.f]); } } catch (er) {} });
+      svg.querySelectorAll(`circle.fp-port[data-t="${id}"]`).forEach(c => {
+        const M = c.getScreenCTM(), cx = +c.getAttribute('cx'), cy = +c.getAttribute('cy');
+        const X = cx * M.a + cy * M.c + M.e, Y = cx * M.b + cy * M.d + M.f, sk = Math.hypot(M.a, M.b) || 1;
+        const d = Math.min(...pts.map(p => Math.hypot(p[0] - X, p[1] - Y))) / sk;
+        if (d > 1.5) fehlt.push(name + ':' + c.getAttribute('data-p') + ' ' + d.toFixed(1));
+      });
+    }
+    R.push(['alle Anschlüsse berührt', fehlt.length === 0, fehlt.join(', ')]);
+    F._leeren(); if (!offen) F.umschalten();
+    return R;
+  }
+};
 
 (async () => {
   const srv = await server();
@@ -1020,6 +1048,11 @@ const FAELLE = {
     ok('zurückgeholt: Knopf „Abkoppeln“ wieder da', e.abk === '', e.abk);
     await page.evaluate(() => { Fluidplan.verbinden2D(false); Fluidplan._leeren(); });
     for (const [n, g, dd] of R) { console.log(`  ${g ? '✓' : '✗'} ${n}${dd !== '' && dd != null ? '  (' + dd + ')' : ''}`); g ? gut++ : schlecht++; }
+  }
+  for (const [name, fn] of Object.entries(NACH)) {
+    const erg = await page.evaluate(`(() => { Fluidplan._leeren(); try { return (${fn.toString()})(); } catch (e) { return [['Ausnahme', false, String(e && e.stack || e)]]; } })()`);
+    console.log('\n' + name);
+    for (const [n, ok, d] of erg) { console.log(`  ${ok ? '✓' : '✗'} ${n}${d !== '' && d != null ? '  (' + d + ')' : ''}`); ok ? gut++ : schlecht++; }
   }
   if (fehler.length) { console.log('\nSeitenfehler:\n  ' + fehler.join('\n  ')); schlecht += fehler.length; }
   console.log(`\n${gut} gut, ${schlecht} schlecht`);

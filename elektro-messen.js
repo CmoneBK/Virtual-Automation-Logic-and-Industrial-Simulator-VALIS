@@ -34,10 +34,10 @@
     const NS = 'http://www.w3.org/2000/svg';
 
     // Widerstände der Verbraucher (Ω), Nennspannung 24 V
-    const R_LAST = { relais: 480, zeit: 1200, ventil: 380, led: 2200, hupe: 1000, sps_ein: 4700 };
+    const R_LAST = { relais: 480, zeit: 1200, zaehler: 1200, ventil: 380, led: 2200, hupe: 1000, sps_ein: 4700 };
     const R_SENSOR = 4700;          // Eigenverbrauch eines 3-Leiter-Sensors
     const U_FEST = { P: 24, M: 0, L1: 230, N: 0 };
-    const LAST_NAME = { relais: 'Relaisspule', zeit: 'Zeitrelais-Spule', ventil: 'Magnetspule', led: 'Leuchtmelder', hupe: 'Hörmelder', sps_ein: 'SPS-Eingang' };
+    const LAST_NAME = { relais: 'Relaisspule', zeit: 'Zeitrelais-Spule', zaehler: 'Zählereingang', ventil: 'Magnetspule', led: 'Leuchtmelder', hupe: 'Hörmelder', sps_ein: 'SPS-Eingang' };
     const FEHLER = {
         kabel: [['ab', 'Ader im Kabel gebrochen (kein Durchgang)']],
         kontakt: [['offen', 'Kontakt abgebrannt (schließt nicht)'], ['klebt', 'Kontakt verschweißt (öffnet nicht)']],
@@ -258,7 +258,7 @@
         const ein = new Set(eingaenge());
         if (!vorLogik) { logik = {}; m.elemente.forEach(e => { if (e.sem === 'sps_aus' && e.v) logik[e.v] = !!s[e.v]; }); }
         const ohne = spannungen(m, { an: true, fehler: false, s });
-        const spulen = m.elemente.filter(e => e.art === 'last' && e.v && ein.has(e.v) === vorLogik && ohne.bestromt(e) === !!s[e.v]);
+        const spulen = m.elemente.filter(e => e.art === 'last' && e.last !== 'zaehler' && e.v && ein.has(e.v) === vorLogik && ohne.bestromt(e) === !!s[e.v]);
         if (!spulen.length) return;
         for (let runde = 0; runde < 8; runde++) {
             const mit = spannungen(m, { an: true, fehler: true, s });
@@ -313,7 +313,7 @@
         if (e.sem === 'sps_aus') return 'SPS-Ausgang ' + e.adr + ' (' + e.v + ')';
         if (e.last === 'sps_ein') return 'SPS-Eingang ' + e.adr + ' (' + e.v + ')';
         if (e.art === 'kontakt') return (e.nc ? 'Öffner ' : 'Schließer ') + pin(e.a) + '/' + pin(e.b) + ' von ' + (wer || '?');
-        if (e.art === 'last') return (LAST_NAME[e.last] || 'Verbraucher') + ' ' + (wer || '?');
+        if (e.art === 'last') return (e.rueck ? 'Rücksetzeingang' : (LAST_NAME[e.last] || 'Verbraucher')) + ' ' + (wer || '?');
         return 'Sensor ' + (wer || '?');
     }
     function kabelName(c) {

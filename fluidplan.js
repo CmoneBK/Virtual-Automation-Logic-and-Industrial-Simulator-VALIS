@@ -33,8 +33,17 @@
     // linear, wie in der 2D-Anlage (dort 100 % = 200 l/min bei 6 bar).
     const G_DROSSEL = window._fpGDr || 8;
     const gDrossel = o => G_DROSSEL * Math.max(0, o) / 100;
+    const gDrosselT = (t, o) => istHyd(t) ? G_HV * Math.max(0, o) / 100 : gDrossel(o);
     const G_LEITUNG = 60;      // Leitwert zwischen Knoten (nur intern)
     const V_LEITUNG = window._fpVL || 0.0015;  // Volumen je Leitung (l), kurzer 4er-Schlauch
+    // Hydraulik (Christoph, 15.11.2026): dasselbe Netzmodell, aber Öl. p = E · (M/V − 1),
+    // E = Ersatz-Kompressionsmodul aus Öl und Schläuchen (bar), M = Ölmenge bei 0 bar (l).
+    // Leitwerte in l/(s·√bar): ein offener Ventilweg schafft 8 l/min bei etwa 2 bar.
+    const E_OEL = window._fpEOel || 600;
+    const P_AN_H = 2;             // ab hier gilt eine Hydraulikleitung als unter Druck (bar)
+    const G_HV = 0.05;            // Leitwert offener Ventilweg (Öl)
+    const V_LEITUNG_H = 0.03;     // Ölvolumen je Leitung (l), Hydraulikschlauch
+    const istHyd = t => !!(t && t.o && t.o.hyd);
 
     // ------------------------------------------------------------
     // Hilfen
@@ -88,8 +97,11 @@
         '3/2': { oben: { '2': 20 }, unten: { '1': 10, '3': 30 } },
         '4/2': { oben: { '4': 10, '2': 30 }, unten: { '1': 10, '3': 30 } },
         '5/2': { oben: { '4': 10, '2': 30 }, unten: { '5': 6, '1': 20, '3': 34 } },
-        '5/3': { oben: { '4': 10, '2': 30 }, unten: { '5': 6, '1': 20, '3': 34 } }
+        '5/3': { oben: { '4': 10, '2': 30 }, unten: { '5': 6, '1': 20, '3': 34 } },
+        '4/3': { oben: { '4': 10, '2': 30 }, unten: { '1': 10, '3': 30 } }
     };
+    // Hydraulik benennt die Anschlüsse mit Buchstaben (DIN ISO 1219): P Pumpe, T Tank, A und B Arbeitsanschlüsse
+    const HYD_NR = { '1': 'P', '3': 'T', '4': 'A', '2': 'B' };
     function ventilStellungen(o) {
         const w = o.wege || '3/2';
         if (w === '2/2') {
@@ -102,6 +114,14 @@
         }
         if (w === '4/2') return [{ w: [['1', '4'], ['2', '3']], zu: [] }, { w: [['1', '2'], ['4', '3']], zu: [] }];
         if (w === '5/2') return [{ w: [['1', '4'], ['2', '3']], zu: ['5'] }, { w: [['1', '2'], ['4', '5']], zu: ['3'] }];
+        if (w === '4/3') {
+            // Mittelstellungen der Hydraulik: gesperrt, Umlauf (P→T, Pumpe drucklos), Schwimm (A, B → T), offen (alles verbunden)
+            const mitte = o.mitte === 'umlauf' ? { w: [['1', '3']], zu: ['2', '4'] }
+                : o.mitte === 'schwimm' ? { w: [['4', '3'], ['2', '3']], zu: ['1'] }
+                : o.mitte === 'offen' ? { w: [['1', '3'], ['4', '3'], ['2', '3']], zu: [] }
+                : { w: [], zu: ['1', '2', '3', '4'] };
+            return [{ w: [['1', '4'], ['2', '3']], zu: [] }, mitte, { w: [['1', '2'], ['4', '3']], zu: [] }];
+        }
         // 5/3
         const mitte = o.mitte === 'entlueftet' ? { w: [['2', '3'], ['4', '5']], zu: ['1'] }
             : o.mitte === 'belueftet' ? { w: [['1', '2'], ['1', '4']], zu: ['3', '5'] }
@@ -201,6 +221,7 @@
             const ports = [];
             for (const id in lage.oben) ports.push({ id, x: heim * KASTEN + lage.oben[id], y: -10, dir: [0, -1], art: (id === '2' || id === '4') ? 'a' : 'v' });
             for (const id in lage.unten) ports.push({ id, x: heim * KASTEN + lage.unten[id], y: KASTEN + 10, dir: [0, 1], art: id === '1' ? 'v' : 'r' });
+            if (o.hyd) ports.forEach(p => { if (HYD_NR[p.id]) p.nr = HYD_NR[p.id]; });
             const wl = betBreite(o.links), wr = betBreite(o.rechts);
             if (o.links === 'pneu') ports.push({ id: steuerNummer(st[0]), x: -wl - 10, y: 20, dir: [-1, 0], art: 's', seite: 'L' });
             if (o.rechts === 'pneu') ports.push({ id: steuerNummer(st[n - 1]), x: n * KASTEN + wr + 10, y: 20, dir: [1, 0], art: 's', seite: 'R' });
@@ -221,6 +242,12 @@
                 const pos = id => lage.oben[id] != null ? [x0 + lage.oben[id], 0] : [x0 + lage.unten[id], KASTEN];
                 for (const [a, b] of st.w) {
                     const [x1, y1] = pos(a), [x2, y2] = pos(b);
+                    if (y1 === y2) {
+                        // Weg auf derselben Seite (Umlauf P→T): Bogen ohne Pfeil
+                        const dy = y1 < 20 ? 12 : -12;
+                        el('path', { d: `M${x1},${y1} V${y1 + dy} H${x2} V${y2}`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, block);
+                        continue;
+                    }
                     const d = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / d, uy = (y2 - y1) / d;
                     el('line', { x1, y1, x2: x2 - ux * 5, y2: y2 - uy * 5, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                     el('path', { d: `M${x2},${y2} L${x2 - ux * 7 - uy * 3.5},${y2 - uy * 7 + ux * 3.5} L${x2 - ux * 7 + uy * 3.5},${y2 - uy * 7 - ux * 3.5} Z`, fill: 'currentColor' }, block);
@@ -654,6 +681,109 @@
         }
     };
 
+
+    // ---------- Hydraulik (DIN ISO 1219-1) ----------
+    const L16 = (g, x1, y1, x2, y2, w) => el('line', { x1, y1, x2, y2, stroke: 'currentColor', 'stroke-width': w || 1.6 }, g);
+    // Tank: oben offener Behälter, die Leitung taucht ein
+    function tankZeichnen(g, x, y, b) {
+        el('path', { d: `M${x - b / 2},${y - 6} V${y + 4} H${x + b / 2} V${y - 6}`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }, g);
+    }
+    function federVerstellbar(g, x, y, s) {
+        el('polyline', { points: `${x},${y} ${x + s * 3},${y - 5} ${x + s * 6},${y + 5} ${x + s * 9},${y - 5} ${x + s * 12},${y}`, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
+        L16(g, x + s * 1, y + 8, x + s * 11, y - 8, 1);
+    }
+    TYP.aggregat = {
+        name: 'Hydraulikaggregat', buchstabe: 'Z', kette: 0,
+        optionen: { hyd: true, q: 8, p: 60 },
+        geometrie() { return { ports: [{ id: 'P', x: -10, y: -30, dir: [0, -1], art: 'v' }, { id: 'T', x: 20, y: -30, dir: [0, -1], art: 'r' }], box: [-48, -32, 36, 52] }; },
+        zeichne(t, g) {
+            el('rect', { x: -46, y: -18, width: 80, height: 68, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.1, 'stroke-dasharray': '8 3 2 3' }, g);
+            // Motor, Welle, Pumpe (Dreieck zeigt nach außen: fördert)
+            el('circle', { cx: -34, cy: 10, r: 8, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            el('text', { x: -34, y: 13.5, 'text-anchor': 'middle', 'font-size': 10, fill: 'currentColor' }, g).textContent = 'M';
+            L16(g, -26, 8.5, -20, 8.5, 1.1); L16(g, -26, 11.5, -20, 11.5, 1.1);
+            el('circle', { class: 'fp-pumpe', cx: -10, cy: 10, r: 10, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.5 }, g);
+            el('path', { d: 'M-10,0 L-14.5,7 L-5.5,7 Z', fill: 'currentColor' }, g);
+            L16(g, -10, 0, -10, -30);
+            L16(g, -10, 20, -10, 40, 1.4);            // Saugleitung
+            // eingebautes Druckbegrenzungsventil P → T
+            L16(g, -10, -8, 8, -8, 1.2);
+            el('rect', { x: 2, y: -2, width: 12, height: 22, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
+            L16(g, 8, -8, 8, -2, 1.2);
+            L16(g, 10, 16, 10, 2, 1.1); el('path', { d: 'M10,1 L8,5 L12,5 Z', fill: 'currentColor' }, g);
+            L16(g, 8, 20, 8, 40, 1.2);
+            L16(g, 20, -30, 20, 40);                  // Rücklauf
+            tankZeichnen(g, 4, 42, 50);
+        }
+    };
+    TYP.tank = {
+        name: 'Tank', buchstabe: 'Z', ohneBez: true,
+        optionen: { hyd: true },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -14, dir: [0, -1], art: 'r', ohneNr: true }], box: [-12, -16, 12, 8] }; },
+        zeichne(t, g) { L16(g, 0, -14, 0, 2); tankZeichnen(g, 0, 2, 20); }
+    };
+    TYP.dbv = {
+        name: 'Druckbegrenzungsventil', buchstabe: 'V',
+        optionen: { hyd: true, p: 60 },
+        geometrie() { return { ports: [{ id: 'P', x: 0, y: -30, dir: [0, -1], art: 'v' }, { id: 'T', x: 0, y: 30, dir: [0, 1], art: 'r' }], box: [-20, -32, 26, 32] }; },
+        zeichne(t, g) {
+            L16(g, 0, -30, 0, -18); L16(g, 0, 18, 0, 30);
+            el('rect', { x: -10, y: -18, width: 20, height: 36, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            // Pfeil gegen die Anschlusslinie versetzt: in Ruhe geschlossen
+            const k = el('g', { class: 'fp-dbv-pfeil' }, g);
+            L16(k, 4, -14, 4, 10, 1.3); el('path', { d: 'M4,14 L1,7 L7,7 Z', fill: 'currentColor' }, k);
+            // Steuerleitung vom Eingang auf den Kolben
+            el('path', { d: 'M0,-24 H-16 V-12 H-10', fill: 'none', stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '3 2' }, g);
+            federVerstellbar(g, 10, 6, 1);
+        }
+    };
+    TYP.stromregel = {
+        name: 'Stromregelventil', buchstabe: 'V',
+        optionen: { hyd: true, q: 4 },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }], box: [-18, -32, 18, 32] }; },
+        zeichne(t, g) {
+            L16(g, 0, 30, 0, -30);
+            el('rect', { x: -14, y: -18, width: 28, height: 36, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            el('path', { d: 'M-5,-9 Q-1,0 -5,9 M5,-9 Q1,0 5,9', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3 }, g);
+            L16(g, -9, 9, 9, -9, 1.1); el('path', { d: 'M10,-10 L5,-8 L8,-5 Z', fill: 'currentColor' }, g);
+            // Druckwaage: Pfeil in Strömungsrichtung (hält den Durchfluss trotz Lastdruck konstant)
+            L16(g, -10, 12, -10, -8, 1); el('path', { d: 'M-10,-12 L-12,-7 L-8,-7 Z', fill: 'currentColor' }, g);
+        }
+    };
+    TYP.speicher = {
+        name: 'Hydrospeicher', buchstabe: 'Z',
+        optionen: { hyd: true, V0: 0.7, p0: 30 },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'a', ohneNr: true }], box: [-14, -22, 14, 32] }; },
+        zeichne(t, g) {
+            L16(g, 0, 16, 0, 30);
+            el('rect', { x: -11, y: -20, width: 22, height: 36, rx: 11, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            el('rect', { class: 'fp-oelstand', x: -10, y: 15, width: 20, height: 0, fill: 'var(--fp-druck)', opacity: 0.35 }, g);
+            L16(g, -11, -2, 11, -2, 1.3);              // Trennung Gas / Öl (Blase)
+            el('path', { d: 'M0,-15 L-4,-8 L4,-8 Z', fill: 'currentColor' }, g);   // Gasseite
+        }
+    };
+    TYP.entsperr = {
+        name: 'Rückschlagventil, entsperrbar', buchstabe: 'V',
+        optionen: { hyd: true },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }, { id: 'X', x: -30, y: 10, dir: [-1, 0], art: 's' }], box: [-32, -32, 16, 32] }; },
+        zeichne(t, g) {
+            el('rect', { x: -14, y: -18, width: 28, height: 36, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.1, 'stroke-dasharray': '8 3 2 3' }, g);
+            L16(g, 0, 8, 0, 30); L16(g, 0, -5, 0, -30);
+            rueckZeichnen(g, 0, 0, -1);
+            el('path', { d: 'M-30,10 H-8 L-4,4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.1, 'stroke-dasharray': '4 3' }, g);
+        }
+    };
+    TYP.filter = {
+        name: 'Filter', buchstabe: 'V',
+        optionen: { hyd: true },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: 24, dir: [0, 1], art: 'a', ohneNr: true }, { id: '2', x: 0, y: -24, dir: [0, -1], art: 'a', ohneNr: true }], box: [-12, -26, 12, 26] }; },
+        zeichne(t, g) {
+            L16(g, 0, 24, 0, 11); L16(g, 0, -11, 0, -24);
+            el('path', { d: 'M0,-11 L11,0 L0,11 L-11,0 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            L16(g, -11, 0, 11, 0, 1).setAttribute('stroke-dasharray', '2 1.5');
+        }
+    };
+
     // ------------------------------------------------------------
     // Palette (Vorlagen)
     // ------------------------------------------------------------
@@ -706,6 +836,40 @@
             { name: 'Druckschalter (elektrisch)', typ: 'dschalter' }
         ] }
     ];
+    // Hydraulik-Palette: dieselben Teile mit o.hyd (Öl), dazu Aggregat, Tank, Druck- und Stromventile
+    const HY = o => Object.assign({ hyd: true }, o || {});
+    const PALETTE_H = [
+        { kat: 'Versorgung', teile: [
+            { name: 'Hydraulikaggregat', typ: 'aggregat' },
+            { name: 'Tank', typ: 'tank' },
+            { name: 'Druckbegrenzungsventil', typ: 'dbv' },
+            { name: 'Hydrospeicher', typ: 'speicher' },
+            { name: 'Filter', typ: 'filter' },
+            { name: 'Manometer (bis 160 bar)', typ: 'manometer', o: HY() },
+            { name: 'Verbindung (T-Stück)', typ: 'knoten' }
+        ] },
+        { kat: 'Antriebe', teile: [
+            { name: 'Zylinder doppeltwirkend', typ: 'zyl_dw', o: HY({ d: 40, dStange: 20, hub: 200 }) },
+            { name: 'Zylinder einfachwirkend', typ: 'zyl_ew', o: HY({ d: 40, dStange: 30, hub: 150 }) }
+        ] },
+        { kat: 'Wegeventile', teile: [
+            { name: '4/3 Hebel, Mitte gesperrt', typ: 'ventil', o: HY({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'gesperrt' }) },
+            { name: '4/3 Magnet, Umlauf', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf' }) },
+            { name: '4/3 Magnet, Mitte gesperrt', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'gesperrt' }) },
+            { name: '4/3 Magnet, Schwimmstellung', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'schwimm' }) },
+            { name: '4/2 Magnet, Feder', typ: 'ventil', o: HY({ wege: '4/2', links: 'magnet', rechts: 'feder' }) },
+            { name: '4/2 Hebel (rastend)', typ: 'ventil', o: HY({ wege: '4/2', links: 'hebel', rechts: 'feder' }) }
+        ] },
+        { kat: 'Sperr-, Strom- und Druckventile', teile: [
+            { name: 'Rückschlagventil', typ: 'rueck', o: HY() },
+            { name: 'Rückschlagventil, entsperrbar', typ: 'entsperr' },
+            { name: 'Drosselventil', typ: 'drossel', o: HY({ offen: 30 }) },
+            { name: 'Drosselrückschlagventil', typ: 'drv', o: HY({ offen: 30 }) },
+            { name: 'Stromregelventil', typ: 'stromregel' },
+            { name: 'Druckschalter (elektrisch)', typ: 'dschalter', o: HY({ p: 40 }) }
+        ] }
+    ];
+    let palMedium = 'pneu';
 
     // ------------------------------------------------------------
     // Zustand
@@ -805,6 +969,7 @@
     // ------------------------------------------------------------
     // Kennbuchstaben Pneumatik nach Tabellenbuch Metall, Kennzeichnung im Schaltplan (DIN EN 81346-2)
     const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'QN', manometer: 'PG',
+        aggregat: 'GP', tank: 'CM', dbv: 'FL', stromregel: 'RN', speicher: 'CM', entsperr: 'RMB', filter: 'HQ',
         rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP' };
     function kennCode(typ, o) {
         if (typ === 'ventil') {
@@ -1015,6 +1180,29 @@
         const m = new Map(); for (const l of plan.leitungen) m.set(l.id, f(l.a.t + ':' + l.a.p));
         return m;
     }
+    // Leitungen mit Öl (ihr Netz berührt ein Hydraulikteil)
+    function oelLeitungen() {
+        const netz = leitungsNetze(), hydN = new Set(), aus = new Set();
+        for (const l of plan.leitungen) if (istHyd(teil(l.a.t)) || istHyd(teil(l.b.t))) hydN.add(netz.get(l.id));
+        for (const l of plan.leitungen) if (hydN.has(netz.get(l.id))) aus.add(l.id);
+        return aus;
+    }
+    // Medium an einem Anschluss: 'hyd', 'pneu' oder null (Verbindungspunkt ohne Leitung)
+    function mediumAn(e) {
+        const t = teil(e.t); if (!t) return null;
+        if (t.typ !== 'knoten') return istHyd(t) ? 'hyd' : 'pneu';
+        const gesehen = new Set([t.id]), offen2 = [t.id];
+        while (offen2.length) {
+            const id = offen2.pop();
+            for (const l of plan.leitungen) {
+                const o = l.a.t === id ? l.b.t : l.b.t === id ? l.a.t : null; if (!o || gesehen.has(o)) continue;
+                gesehen.add(o); const q = teil(o); if (!q) continue;
+                if (q.typ !== 'knoten') return istHyd(q) ? 'hyd' : 'pneu';
+                offen2.push(o);
+            }
+        }
+        return null;
+    }
     const segH = (a, b) => a[1] === b[1] && a[0] !== b[0];
     const segV = (a, b) => a[0] === b[0] && a[1] !== b[1];
     function ueberlappen(a, b, c, d) {   // kollinear und mehr als 1 Einheit gemeinsam
@@ -1147,6 +1335,7 @@
     .fp-trenner{width:1px;align-self:stretch;background:#444;margin:0 3px}
     .fp-haupt{flex:1;display:flex;min-height:0;position:relative}
     .fp-palette{width:200px;overflow-y:auto;background:#252526;border-right:1px solid #3a3a3a;padding:4px 0}
+    .fp-reiter{display:flex;gap:3px;padding:3px 6px 2px}.fp-reiter-k{flex:1;background:#333;color:#bbb;border:1px solid #555;border-radius:4px;font-size:11px;padding:3px 2px;cursor:pointer}.fp-reiter-k.an{background:#ff6f00;border-color:#ff8f00;color:#fff}
     .fp-kat{padding:6px 10px 3px;color:#888;font-size:10px;text-transform:uppercase;letter-spacing:.8px;font-weight:bold}
     .fp-pal{display:flex;align-items:center;gap:6px;margin:2px 6px;padding:3px 5px;border-radius:4px;cursor:grab;font-size:11.5px;color:#ddd;border:1px solid transparent;user-select:none}
     .fp-pal:hover{background:#37373d;border-color:#555}
@@ -1179,6 +1368,8 @@
     svg.fp-svg .fp-leitung{fill:none;stroke:var(--fp-linie);stroke-width:1.6}
     svg.fp-svg .fp-leitung.steuer{stroke-dasharray:6 4}
     svg.fp-svg .fp-leitung.druck{stroke:var(--fp-druck);stroke-width:2.6}
+    svg.fp-svg .fp-leitung.oel{stroke-width:2}
+    svg.fp-svg .fp-leitung.oel.druck{stroke:#c62828;stroke-width:2.8}
     svg.fp-svg .fp-leitung.gewaehlt{stroke:var(--fp-wahl)}
     svg.fp-svg .fp-treffer{fill:none;stroke:transparent;stroke-width:10;cursor:pointer}
     svg.fp-svg .fp-bez{font:bold 11px 'Segoe UI',sans-serif;fill:#263238}
@@ -1301,7 +1492,12 @@
     }
 
     function paletteBauen(pal) {
-        for (const kat of PALETTE) {
+        pal.innerHTML = '';
+        const reiter = h('div', { class: 'fp-reiter' }, pal);
+        [['pneu', '💨 Pneumatik'], ['hyd', '🛢 Hydraulik']].forEach(([m, txt]) => h('button', { class: 'fp-reiter-k' + (palMedium === m ? ' an' : ''), 'data-m': m, text: txt,
+            title: m === 'hyd' ? 'Hydraulik: Aggregat, 4/3-Wegeventile, Druck- und Stromventile. Öl und Luft lassen sich nicht verbinden.' : 'Pneumatik',
+            onclick: () => { palMedium = m; paletteBauen(pal); } }, reiter));
+        for (const kat of (palMedium === 'hyd' ? PALETTE_H : PALETTE)) {
             h('div', { class: 'fp-kat', text: kat.kat }, pal);
             for (const v of kat.teile) {
                 const d = h('div', { class: 'fp-pal', title: v.name + ' – ziehen oder anklicken und in den Plan klicken' }, pal);
@@ -1329,13 +1525,14 @@
         if (!bild) svg.classList.toggle('sim', simLaeuft());
         // Leitungen
         const belegt = new Map();
+        const oel = oelLeitungen();
         for (const l of plan.leitungen) {
             const pts = leitungPunkte(l);
             if (!pts) { if (angedockt(l)) for (const e of [l.a, l.b]) { const k = e.t + ':' + e.p; belegt.set(k, (belegt.get(k) || 0) + 1); } continue; }
             const d = leitungPfad(l, pts);
             const gw = auswahl.has('L:' + l.id);
             const istSteuer = [l.a, l.b].some(e => { const tt = teil(e.t); const pl = tt && portLage(tt, e.p); return pl && pl.art === 's'; });
-            const pfad = el('path', { d, class: 'fp-leitung' + (istSteuer ? ' steuer' : '') + (gw ? ' gewaehlt' : ''), 'data-l': l.id }, ebLeitungen);
+            const pfad = el('path', { d, class: 'fp-leitung' + (istSteuer ? ' steuer' : '') + (oel.has(l.id) ? ' oel' : '') + (gw ? ' gewaehlt' : ''), 'data-l': l.id }, ebLeitungen);
             if (!bild) el('path', { d, class: 'fp-treffer', 'data-l': l.id }, ebLeitungen);
             dyn.set('L:' + l.id, pfad);
             for (const e of [l.a, l.b]) { const k = e.t + ':' + e.p; belegt.set(k, (belegt.get(k) || 0) + 1); }
@@ -1715,10 +1912,14 @@
     }
     function leitungAnlegen(a, b) {
         if (a.t === b.t && a.p === b.p) return;
+        const ma = mediumAn(a), mb = mediumAn(b);
+        if (ma && mb && ma !== mb) { status('Öl und Druckluft lassen sich nicht verbinden: Hydraulik und Pneumatik bleiben getrennte Kreise.'); zeichnen(); return; }
         if (plan.leitungen.some(l => (l.a.t === a.t && l.a.p === a.p && l.b.t === b.t && l.b.p === b.p) || (l.a.t === b.t && l.a.p === b.p && l.b.t === a.t && l.b.p === a.p))) { zeichnen(); return; }
         aendern(() => { plan.leitungen.push({ id: neueId(), a: { t: a.t, p: a.p }, b: { t: b.t, p: b.p } }); });
     }
     function abzweig(von, tr, x, y) {
+        const mv = mediumAn(von), ml = mediumAn(tr.l.a.t && teil(tr.l.a.t) && teil(tr.l.a.t).typ !== 'knoten' ? tr.l.a : tr.l.b);
+        if (mv && ml && mv !== ml) { status('Öl und Druckluft lassen sich nicht verbinden: Hydraulik und Pneumatik bleiben getrennte Kreise.'); zeichnen(); return; }
         // Punkt auf das Segment legen
         const a = tr.pts[tr.i], b = tr.pts[tr.i + 1];
         let px = snap(x), py = snap(y);
@@ -1884,8 +2085,10 @@
             i.onchange = () => setze(() => { const v = Math.max(0, Math.min(100, zahl(i.value, posProzent(t.o[key])))); t.o[key] = v === 0 ? 'hinten' : v === 100 ? 'vorne' : v; });
         };
         if (t.typ === 'ventil') {
-            const s = wahl('Wegeventil', 'wege', [['2/2', '2/2-Wege'], ['3/2', '3/2-Wege'], ['4/2', '4/2-Wege'], ['5/2', '5/2-Wege'], ['5/3', '5/3-Wege']]);
+            const s = wahl('Wegeventil', 'wege', istHyd(t) ? [['2/2', '2/2-Wege'], ['3/2', '3/2-Wege'], ['4/2', '4/2-Wege'], ['4/3', '4/3-Wege']]
+                : [['2/2', '2/2-Wege'], ['3/2', '3/2-Wege'], ['4/2', '4/2-Wege'], ['5/2', '5/2-Wege'], ['5/3', '5/3-Wege']]);
             void s;
+            if (t.o.wege === '4/3') wahl('Mittelstellung', 'mitte', [['gesperrt', 'gesperrt (alle zu)'], ['umlauf', 'Umlauf (P → T, A und B zu)'], ['schwimm', 'Schwimmstellung (A und B → T)'], ['offen', 'offen (alle verbunden)']]);
             if (t.o.wege === '2/2' || t.o.wege === '3/2') wahl('Ruhestellung', 'ruhe', [['zu', 'gesperrt (Öffner: zu)'], ['offen', 'Durchfluss (offen)']]);
             if (t.o.wege === '5/3') wahl('Mittelstellung', 'mitte', [['gesperrt', 'gesperrt'], ['entlueftet', 'entlüftet (2, 4 → Abluft)'], ['belueftet', 'belüftet (1 → 2 und 4)']]);
             const bets = Object.keys(BETAETIGUNG).filter(b => b !== 'feder').map(b => [b, BETAETIGUNG[b]]);
@@ -1910,8 +2113,8 @@
             for (const p of geo(t).ports) {
                 if (p.art === 's') continue;
                 const a = abschlussVon(t, p.id); if (!a) continue;
-                const s2 = fld('Anschluss ' + p.id + (p.art === 'r' ? ' (Abluft)' : p.art === 'v' ? ' (Versorgung)' : ' (Arbeitsanschluss)') + ': Abschluss', h('select'));
-                for (const [v2, n2] of ABSCHLUSS) h('option', { value: v2, text: n2 }, s2);
+                const s2 = fld('Anschluss ' + (p.nr || p.id) + (istHyd(t) ? (p.art === 'r' ? ' (Tank)' : p.art === 'v' ? ' (Pumpe)' : ' (Arbeitsanschluss)') : p.art === 'r' ? ' (Abluft)' : p.art === 'v' ? ' (Versorgung)' : ' (Arbeitsanschluss)') + ': Abschluss', h('select'));
+                for (const [v2, n2] of ABSCHLUSS) if (!istHyd(t) || v2 === 'offen' || v2 === 'stopfen') h('option', { value: v2, text: n2 }, s2);
                 s2.value = a.art;
                 s2.onchange = () => setze(() => { abschlussSetzen(t, p.id, { art: s2.value, offen: a.offen || 50 }); });
                 if (a.art === 'drossel') {
@@ -1919,7 +2122,8 @@
                     i2.onchange = () => setze(() => { const d = teil(a.teil); if (d) d.o.offen = Math.max(1, Math.min(100, zahl(i2.value, 50))); });
                 }
             }
-            h('div', { class: 'fp-hinw', html: `Steueranschlüsse heißen nach ISO 5599-3 so, wie sie das Ventil schalten: links <b>${steuerNummer(st[0])}</b>, rechts <b>${steuerNummer(st[st.length - 1])}</b>. ` + (t.o.rechts !== 'feder' && t.o.wege !== '5/3' ? 'Ohne Feder bleibt das Ventil in der zuletzt geschalteten Stellung (Impulsventil).' : '') }, box);
+            if (istHyd(t)) h('div', { class: 'fp-hinw', html: 'Hydraulik: P von der Pumpe, T zum Tank, A und B zum Zylinder. ' + (t.o.wege === '4/3' ? 'Ohne Betätigung steht das Ventil in der Mitte.' : '') }, box);
+            else h('div', { class: 'fp-hinw', html: `Steueranschlüsse heißen nach ISO 5599-3 so, wie sie das Ventil schalten: links <b>${steuerNummer(st[0])}</b>, rechts <b>${steuerNummer(st[st.length - 1])}</b>. ` + (t.o.rechts !== 'feder' && t.o.wege !== '5/3' ? 'Ohne Feder bleibt das Ventil in der zuletzt geschalteten Stellung (Impulsventil).' : '') }, box);
         } else if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') {
             num('Kolbendurchmesser', 'd', 8, 200, 1, 'mm');
             if (t.typ === 'zyl_dw') num('Stangendurchmesser', 'dStange', 4, 100, 1, 'mm');
@@ -1965,8 +2169,24 @@
             num('Schaltdruck', 'p', 0.5, 10, 0.1, 'bar');
             wahl('Ruhestellung', 'ruhe', [['zu', 'gesperrt'], ['offen', 'offen']]);
             h('div', { class: 'fp-hinw', text: 'Erreicht der Druck am Steueranschluss den Schaltdruck, schaltet das 3/2-Ventil (Druckschaltventil).' }, box);
+        } else if (t.typ === 'aggregat') {
+            num('Förderstrom der Pumpe', 'q', 0.5, 100, 0.5, 'l/min');
+            num('Druckbegrenzung (eingebaut)', 'p', 5, 315, 5, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Die Pumpe fördert immer. Steht der Zylinder oder ist das Wegeventil gesperrt, steigt der Druck bis zur Druckbegrenzung, das Öl fließt dann über das Ventil in den Tank (Wärme).' }, box);
+        } else if (t.typ === 'dbv') {
+            num('Öffnungsdruck', 'p', 5, 315, 5, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Das Druckbegrenzungsventil öffnet, sobald der Druck an P den eingestellten Wert erreicht, und leitet das Öl in den Tank.' }, box);
+        } else if (t.typ === 'stromregel') {
+            num('Durchfluss', 'q', 0.1, 100, 0.1, 'l/min');
+            h('div', { class: 'fp-hinw', text: 'Von 1 nach 2 hält die Druckwaage den Durchfluss fest, auch wenn sich die Last ändert (anders als die Drossel). Von 2 nach 1 strömt das Öl ungeregelt zurück.' }, box);
+        } else if (t.typ === 'speicher') {
+            num('Gasvolumen', 'V0', 0.1, 50, 0.1, 'l');
+            num('Vorfülldruck (Stickstoff)', 'p0', 1, 250, 1, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Über dem Vorfülldruck nimmt der Speicher Öl auf und gibt es wieder ab, wenn der Druck fällt.' }, box);
+        } else if (t.typ === 'entsperr') {
+            h('div', { class: 'fp-hinw', text: 'Von 1 nach 2 frei. Zurück von 2 nach 1 nur, wenn an X Steuerdruck anliegt (Last halten, z. B. beim senkrechten Zylinder).' }, box);
         } else if (t.typ === 'dschalter') {
-            num('Schaltdruck', 'p', 0.2, 10, 0.1, 'bar');
+            num('Schaltdruck', 'p', 0.2, istHyd(t) ? 315 : 10, istHyd(t) ? 1 : 0.1, 'bar');
             variable('VALIS-Eingang', 'var', 'in');
         }
         fehlerFeld(box, t.id);
@@ -1987,6 +2207,7 @@
                 if (p.art === 'r' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
                 if (t.typ === 'knoten') { meld.push(`Verbindungspunkt ohne Leitung`); continue; }
                 if (p.art === 's') meld.push(`${n}: Steueranschluss ${p.id} ist frei – das Ventil bekommt nie Steuerdruck.`);
+                else if (istHyd(t)) { if (t.typ !== 'tank' && t.typ !== 'speicher') meld.push(`${n}: Anschluss ${p.nr || p.id} ist offen – hier tritt Öl aus.`); }
                 else meld.push(`${n}: Anschluss ${p.nr || p.id} ist offen – hier bläst Luft ab.`);
             }
             if (t.typ === 'ventil') {
@@ -1997,7 +2218,9 @@
             }
             if (t.typ === 'dschalter' && !t.o.var) meld.push(`${n}: Druckschalter hat keinen VALIS-Eingang.`);
         }
-        if (plan.teile.length && !plan.teile.some(t => t.typ === 'quelle')) meld.push('Es gibt keine Druckluftquelle.');
+        const pneuTeile = plan.teile.filter(t => !istHyd(t) && t.typ !== 'knoten'), hydTeile = plan.teile.filter(istHyd);
+        if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle')) meld.push('Es gibt keine Druckluftquelle.');
+        if (hydTeile.length && !plan.teile.some(t => t.typ === 'aggregat')) meld.push('Es gibt kein Hydraulikaggregat.');
         const bez = {};
         plan.teile.forEach(t => { if (t.bez) bez[t.bez] = (bez[t.bez] || 0) + 1; });
         Object.keys(bez).forEach(b => { if (bez[b] > 1) meld.push(`Die Bezeichnung ${b} kommt ${bez[b]}-mal vor.`); });
@@ -2102,7 +2325,25 @@
             L(vA, '4', A, 'K'); L(vA, '2', A, 'S'); L(vB, '4', B, 'K'); L(vB, '2', B, 'S'); } },
         { name: 'Elektropneumatik: Magnetventil mit Sensoren', text: '1M1 hängt an der VALIS-Variable Y1, die Endlagen melden B1 (hinten) und B2 (vorne). Im Code z. B. Y1 := START.',
           bau(T, L) { const q = T('quelle', 40, 300, '0Z1'), z = T('zyl_dw', 20, -160, '1A1', { sensH: 'B1', sensV: 'B2' }), v = T('ventil', 20, 80, '1M1', { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'Y1' });
-            L(q, '1', v, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } }
+            L(q, '1', v, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Hydraulik: Presse mit 4/3-Handhebel', text: 'Hebel 1S1 links: der Zylinder fährt aus, rechts: ein, Mitte: er bleibt stehen. Am Ende steigt der Druck bis zur Druckbegrenzung (Manometer).',
+          bau(T, L) { const H = o => Object.assign({ hyd: true }, o || {});
+            const ag = T('aggregat', 40, 400, '0P1'), z = T('zyl_dw', 20, -160, '1M1', H({ d: 40, dStange: 20, hub: 200, last: 2000 })),
+            v = T('ventil', 20, 60, '1S1', H({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'gesperrt' })), m = T('manometer', -100, 240, '0P2', H());
+            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(m, '1', ag, 'P'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Hydraulik: Vorschub mit Stromregelventil', text: '1M1 (Y1) fährt aus, gleichmäßig langsam über das Stromregelventil, auch mit Last. 1M2 (Y2) fährt im Eilgang zurück. In der Mitte läuft die Pumpe drucklos um.',
+          bau(T, L) { const H = o => Object.assign({ hyd: true }, o || {});
+            const ag = T('aggregat', 60, 460, '0P1'), z = T('zyl_dw', 40, -240, '1M1', H({ d: 40, dStange: 20, hub: 200, last: 3000 })),
+            v = T('ventil', 40, 160, '1Q1', H({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf', varL: 'Y1', varR: 'Y2' })),
+            sr = T('stromregel', 50, 0, '1R1', H({ q: 3 })), d = T('dbv', 240, 390, '0F1', H({ p: 50 })), tk = T('tank', 320, 430, ''), m = T('manometer', -80, 300, '0P2', H());
+            d.rot = 270; L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(d, 'P', ag, 'P'); L(d, 'T', tk, '1'); L(m, '1', ag, 'P');
+            L(v, '4', sr, '1'); L(sr, '2', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Hydraulik: Last halten mit entsperrbarem Rückschlagventil', text: 'Der Zylinder trägt eine Last. In der Mitte (Schwimmstellung) hält das entsperrbare Rückschlagventil 1R1 sie fest. Erst Druck an B (1M2, Y2) entsperrt es und der Zylinder fährt ein.',
+          bau(T, L) { const H = o => Object.assign({ hyd: true }, o || {});
+            const ag = T('aggregat', 60, 460, '0P1'), z = T('zyl_dw', 40, -260, '1M1', H({ d: 40, dStange: 20, hub: 200, last: -4000 })),
+            v = T('ventil', 40, 160, '1Q1', H({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'schwimm', varL: 'Y1', varR: 'Y2' })),
+            e = T('entsperr', 50, 0, '1R1');
+            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(v, '4', e, '1'); L(e, '2', z, 'K'); L(v, '2', z, 'S'); L(v, '2', e, 'X'); } }
     ];
     function beispielBauen(b) {
         const neu = { v: 2, teile: [], leitungen: [] };
@@ -2182,6 +2423,7 @@
     }
     function anlageUmschalten() {
         if (!plan.anlage && !plan.teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew')) { status('Erst einen Zylinder in den Plan setzen.'); return; }
+        if (!plan.anlage && plan.teile.some(istHyd)) { status('Hydraulikpläne lassen sich noch nicht mit der 2D-Anlage verbinden. Das kommt im nächsten Schritt.'); return; }
         if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !W().confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
         aendern(() => { plan.anlage = !plan.anlage; if (!plan.anlage) plan.erzeugt = []; });
     }
@@ -2220,22 +2462,26 @@
         const idx = {};
         for (const k of alle) {
             const r = finde(k);
-            if (idx[r] == null) { idx[r] = netze.length; netze.push({ V: 0.0005, M: 0.0005, leitungen: 0, offen: [] }); }
+            if (idx[r] == null) { idx[r] = netze.length; netze.push({ V: 0.0005, M: 0.0005, E: 1, hyd: false, leitungen: 0, offen: [] }); }
             netzVon[k] = idx[r];
         }
-        for (const l of plan.leitungen) { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].V += V_LEITUNG; }
-        netze.forEach(n => { n.M = n.V; });
+        // Öl oder Luft: ein Netz mit einem Hydraulikteil ist ein Ölnetz
+        for (const t of plan.teile) if (istHyd(t)) for (const p of geo(t).ports) { const N0 = netze[netzVon[t.id + ':' + p.id]]; if (N0) { N0.hyd = true; N0.E = E_OEL; } }
+        for (const l of plan.leitungen) { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].V += netze[n].hyd ? V_LEITUNG_H : V_LEITUNG; }
+        netze.forEach(n => { if (n.hyd) n.V += 0.01; n.M = n.V; });
         // Offene Anschlüsse (ohne Leitung) blasen ab
         for (const t of plan.teile) for (const p of geo(t).ports) {
             const k = t.id + ':' + p.id;
             if (anzahl[k]) continue;
             if (t.typ === 'knoten' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
             if (t.typ === 'quelle' || t.typ === 'manometer' || t.typ === 'dschalter') continue;
+            if (t.typ === 'tank' || t.typ === 'speicher') continue;
             if (p.art === 's') continue; // freier Steueranschluss: kein Druck
-            netze[netzVon[k]].offen.push({ t: t.id, p: p.id, g: p.art === 'r' ? G_VENTIL : G_VENTIL * 0.8 });
+            const G0 = netze[netzVon[k]].hyd ? G_HV : G_VENTIL;   // Öl tritt aus (in die Wanne)
+            netze[netzVon[k]].offen.push({ t: t.id, p: p.id, g: p.art === 'r' ? G0 : G0 * 0.8 });
         }
         // Undichte Leitungen blasen ab
-        for (const l of plan.leitungen) if (fehlerAktiv('L:' + l.id) === 'leck') { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].offen.push({ t: l.a.t, p: l.a.p, g: G_VENTIL * 0.6 }); }
+        for (const l of plan.leitungen) if (fehlerAktiv('L:' + l.id) === 'leck') { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].offen.push({ t: l.a.t, p: l.a.p, g: (netze[n].hyd ? G_HV : G_VENTIL) * 0.6 }); }
         const zust = {};
         for (const t of plan.teile) {
             const z = { };
@@ -2253,40 +2499,56 @@
             if (t.typ === 'zeit') { z.pr = 0; z.an = false; }
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
             if (t.typ === 'wechsel') z.seite = 'X';
+            if (t.typ === 'speicher') z.voil = 0;
             zust[t.id] = z;
         }
         sim = { netze, netzVon, zust, zeit: 0, schreib: {} };
+        // Kammervolumen der Antriebe gleich mit Füllung (drucklos) ins Netz, sonst saugt der erste Schritt ein Vakuum
+        for (const t of plan.teile) {
+            if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
+            const z = zust[t.id], k = flaechen(t);
+            const vk = k.tot + k.AK * z.x * 1e-4, vs = k.tot + k.AS * (zylHub(t) - z.x) * 1e-4;
+            const nk = netzVon[t.id + ':K'], ns = netzVon[t.id + ':S'];
+            if (nk != null) { netze[nk].V += vk; netze[nk].M += vk; }
+            if (ns != null) { netze[ns].V += vs; netze[ns].M += vs; }
+            z.vk = vk; z.vs = vs;
+        }
         return sim;
     }
     const druckVon = n => {
         const N = sim.netze[n];
-        return N ? N.M / N.V - 1 : 0;
+        return N ? N.E * (N.M / N.V - 1) : 0;
     };
     const pPort = (t, pid) => { const n = sim.netzVon[t.id + ':' + pid]; return n == null ? 0 : druckVon(n); };
     const netz = (t, pid) => sim.netzVon[t.id + ':' + pid];
 
     // Kante zwischen zwei Netzen (oder Netz und Atmosphäre/Quelle) ausgleichen
     // g in Nl/(s·bar); nur = 1: nur von a nach b
-    function fluss(na, nb, g, nur, pQuelle) {
+    // qMax: höchstens diese Menge je Teilschritt (Stromregelventil, Druckbegrenzung)
+    function fluss(na, nb, g, nur, pQuelle, qMax) {
         if (g <= 0 || na == null) return 0;
         const A = sim.netze[na];
-        const pa = A.M / A.V - 1;
-        let pb, Vb;
+        const pa = A.E * (A.M / A.V - 1);
+        let pb, Vb, Eb = 1;
         if (nb === 'ATM') { pb = 0; Vb = Infinity; }
         else if (nb === 'Q') { pb = pQuelle; Vb = Infinity; }
-        else { if (nb == null || nb === na) return 0; const B = sim.netze[nb]; pb = B.M / B.V - 1; Vb = B.V; }
+        else { if (nb == null || nb === na) return 0; const B = sim.netze[nb]; Eb = B.E; pb = B.E * (B.M / B.V - 1); Vb = B.V; }
         let dp = pa - pb;
         if (nur && dp <= 0) return 0;
         if (nur === -1 && dp >= 0) return 0;
         // Durchfluss mit leichtem Wurzel-Gesetz (realistischer bei großen Druckdifferenzen)
         let q = g * Math.sign(dp) * Math.min(Math.abs(dp), 2 * Math.sqrt(Math.abs(dp) + 0.0001)) * DT;
-        const gl = dp / (1 / A.V + (isFinite(Vb) ? 1 / Vb : 0));   // Menge bis Gleichgewicht
+        const gl = dp / (A.E / A.V + (isFinite(Vb) ? Eb / Vb : 0));   // Menge bis Gleichgewicht
         if (Math.abs(q) > Math.abs(gl)) q = gl;
+        if (qMax != null && Math.abs(q) > qMax) q = Math.sign(q) * qMax;
         A.M -= q;
         if (isFinite(Vb)) sim.netze[nb].M += q;
-        if (A.M < A.V * 0.05) A.M = A.V * 0.05;   // nicht unter Vakuum ~ −0,95 bar
+        const unten = A.V * (1 - 0.95 / A.E);   // nicht unter Vakuum ~ −0,95 bar (Öl: Kavitation)
+        if (A.M < unten) A.M = unten;
         return q;
     }
+    // Menge, die ein Netz abgeben muss, um auf den Druck p zu fallen
+    const mengeBis = (n, p) => { const N = sim.netze[n]; return N ? Math.max(0, N.M - N.V * (1 + p / N.E)) : 0; };
 
     function betaetigt(t, z, seite, aktuell) {
         const b = seite === 'L' ? t.o.links : t.o.rechts;
@@ -2413,15 +2675,64 @@
         // Quellen
         for (const t of plan.teile) {
             if (t.typ === 'quelle') fluss(netz(t, '1'), 'Q', G_QUELLE, 0, fehlerAktiv(t.id) === 'druck' ? 2.5 : zahl(t.o.p, 6));
+            if (t.typ === 'aggregat') {
+                // Pumpe fördert Q in P, das eingebaute Druckbegrenzungsventil lässt über p in den Tank ab
+                const nP = netz(t, 'P'), fe = fehlerAktiv(t.id);
+                const ps = fe === 'druck' ? zahl(t.o.p, 60) * 0.3 : zahl(t.o.p, 60);
+                if (nP != null && fe !== 'aus') {
+                    N[nP].M += zahl(t.o.q, 8) / 60 * DT * (fe === 'verschleiss' ? 0.4 : 1);
+                    const zuviel = mengeBis(nP, ps); if (zuviel > 0) N[nP].M -= zuviel;
+                }
+                fluss(netz(t, 'T'), 'ATM', G_HV * 6, 1);
+            }
+            if (t.typ === 'tank') fluss(netz(t, '1'), 'ATM', G_HV * 6, 1);
         }
         // Bauteile
         for (const t of plan.teile) {
             const z = S.zust[t.id];
             switch (t.typ) {
                 case 'ventil': {
-                    const st = ventilStellungen(t.o)[z.stellung];
-                    for (const [a, b] of st.w) fluss(netz(t, a), netz(t, b), G_VENTIL, 0);
-                    if (fehlerAktiv(t.id) === 'leck') fluss(netz(t, '1'), 'ATM', G_VENTIL * 0.3, 1);
+                    const st = ventilStellungen(t.o)[z.stellung], G = istHyd(t) ? G_HV : G_VENTIL;
+                    for (const [a, b] of st.w) fluss(netz(t, a), netz(t, b), G, 0);
+                    if (fehlerAktiv(t.id) === 'leck') { if (istHyd(t)) { fluss(netz(t, '4'), netz(t, '3'), G * 0.15, 0); fluss(netz(t, '2'), netz(t, '3'), G * 0.15, 0); } else fluss(netz(t, '1'), 'ATM', G * 0.3, 1); }
+                    break;
+                }
+                case 'dbv': {
+                    const nP = netz(t, 'P'), nT = netz(t, 'T'), fe = fehlerAktiv(t.id);
+                    if (fe === 'klemmt') break;
+                    const ps = fe === 'druck' ? zahl(t.o.p, 60) * 0.3 : zahl(t.o.p, 60);
+                    const pP = nP != null ? druckVon(nP) : 0;
+                    z.auf = pP > ps;
+                    if (z.auf) fluss(nP, nT == null ? 'ATM' : nT, G_HV * 8, 1, 0, mengeBis(nP, ps) * 0.7 + 1e-7);
+                    break;
+                }
+                case 'stromregel': {
+                    // 1 → 2 geregelt (Druckwaage hält q, solange genug Druckgefälle da ist), 2 → 1 frei wie eine Drossel
+                    const qm = Math.max(0, zahl(t.o.q, 4)) / 60 * DT * (fehlerAktiv(t.id) === 'zu' ? 0.01 : 1);
+                    fluss(netz(t, '1'), netz(t, '2'), G_HV * 2, 1, 0, qm);
+                    fluss(netz(t, '2'), netz(t, '1'), G_HV, 1);
+                    break;
+                }
+                case 'entsperr': {
+                    fluss(netz(t, '1'), netz(t, '2'), G_HV, 1);
+                    const p2 = pPort(t, '2'), pX = pPort(t, 'X');
+                    z.entsperrt = fehlerAktiv(t.id) !== 'klemmt' && pX > 0.3 * Math.max(0, p2) + 2;
+                    if (z.entsperrt) fluss(netz(t, '2'), netz(t, '1'), G_HV, 1);
+                    break;
+                }
+                case 'filter': fluss(netz(t, '1'), netz(t, '2'), G_HV * 2 * (fehlerAktiv(t.id) === 'zu' ? 0.02 : 1), 0); break;
+                case 'speicher': {
+                    // Gaspolster isotherm: pGas = (p0 + 1) · V0 / (V0 − vÖl) − 1
+                    const n1 = netz(t, '1'); if (n1 == null) break;
+                    const V0 = Math.max(0.05, zahl(t.o.V0, 0.7)), p0 = Math.max(0, zahl(t.o.p0, 30));
+                    const pG = z.voil > 0 ? (p0 + 1) * V0 / Math.max(V0 * 0.05, V0 - z.voil) - 1 : p0;
+                    const A = N[n1], pN = druckVon(n1), dp = pN - pG;
+                    if (dp < 0 && z.voil <= 0) break;
+                    let q = G_HV * 2 * Math.sign(dp) * Math.min(Math.abs(dp), 2 * Math.sqrt(Math.abs(dp))) * DT;
+                    const steif = A.E / A.V + (pG + 1) / Math.max(V0 * 0.05, V0 - z.voil);
+                    if (Math.abs(q) > Math.abs(dp / steif)) q = dp / steif;
+                    if (q < -z.voil) q = -z.voil;
+                    A.M -= q; z.voil += q;
                     break;
                 }
                 case 'zeit': case 'folge': {
@@ -2440,16 +2751,16 @@
                     else if (p2 > ps + 0.15) fluss(n2, 'ATM', G_VENTIL * 0.5 * Math.min(1, (p2 - ps) / 0.4), 1);
                     break;
                 }
-                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), gDrossel(fehlerAktiv(t.id) === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0); break;
+                case 'drossel': fluss(netz(t, '1'), netz(t, '2'), gDrosselT(t, fehlerAktiv(t.id) === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0); break;
                 case 'drv': {
                     const fe = fehlerAktiv(t.id);
                     let n1 = netz(t, '1'), n2 = netz(t, '2');
                     if (fe === 'verkehrt') [n1, n2] = [n2, n1];
-                    fluss(n1, n2, gDrossel(fe === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0);
-                    fluss(n2, n1, G_VENTIL, 1);   // Rückschlag: frei von 2 nach 1
+                    fluss(n1, n2, gDrosselT(t, fe === 'zu' ? 0.001 : zahl(t.o.offen, 10)), 0);
+                    fluss(n2, n1, istHyd(t) ? G_HV : G_VENTIL, 1);   // Rückschlag: frei von 2 nach 1
                     break;
                 }
-                case 'rueck': if (fehlerAktiv(t.id) === 'verkehrt') fluss(netz(t, '2'), netz(t, '1'), G_VENTIL, 1); else fluss(netz(t, '1'), netz(t, '2'), G_VENTIL, 1); break;
+                case 'rueck': { const G = istHyd(t) ? G_HV : G_VENTIL; if (fehlerAktiv(t.id) === 'verkehrt') fluss(netz(t, '2'), netz(t, '1'), G, 1); else fluss(netz(t, '1'), netz(t, '2'), G, 1); break; }
                 case 'wechsel': case 'zweidruck': {
                     const px = pPort(t, 'X'), py = pPort(t, 'Y');
                     let s;
@@ -2484,7 +2795,7 @@
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
             const z = S.zust[t.id], k = flaechen(t), hub = zylHub(t);
             const fz = fehlerAktiv(t.id);
-            if (fz === 'dichtung') { if (t.typ === 'zyl_ew') fluss(netz(t, 'K'), 'ATM', G_VENTIL * 0.35, 1); else fluss(netz(t, 'K'), netz(t, 'S'), G_VENTIL * 0.35, 0); }
+            if (fz === 'dichtung') { const G = istHyd(t) ? G_HV * 0.2 : G_VENTIL * 0.35; if (t.typ === 'zyl_ew') fluss(netz(t, 'K'), 'ATM', G, 1); else fluss(netz(t, 'K'), netz(t, 'S'), G, 0); }
             const pk = pPort(t, 'K'), ps = t.typ === 'zyl_ew' ? 0 : pPort(t, 'S');
             let F = 10 * (pk * k.AK - ps * k.AS);
             if (t.typ === 'zyl_ew') F -= k.feder0 + k.federC * z.x;
@@ -2521,6 +2832,12 @@
         const d = zahl(t.o.d, 20), ds = t.typ === 'zyl_dw' ? zahl(t.o.dStange, 8) : zahl(t.o.dStange, 6);
         const AK = Math.PI * d * d / 400;               // cm²
         const AS = AK - Math.PI * ds * ds / 400;
+        if (istHyd(t)) {
+            // Hydraulikzylinder: auf 100 bar ausgelegt, schwerer, mehr Totvolumen (Schlauchanschluss)
+            const Fh = 10 * 100 * AK;
+            return { AK, AS, tot: 0.02 + AK * 2e-4, m: 8 + d / 10, d: Fh / 4, reib: 0.01 * Fh + 20,
+                feder0: 0.004 * Fh, federC: 0.004 * Fh / Math.max(10, zahl(t.o.hub, 50)) };
+        }
         const Fmax = 10 * 6 * AK;
         return { AK, AS, tot: 0.0015 + AK * 0.5e-4, m: (window._fpMasse || 0.3) + d / 80, d: Fmax / (window._fpDmp || 10), reib: 0.04 * Fmax + 3,
             feder0: 0.06 * Fmax, federC: 0.06 * Fmax / Math.max(10, zahl(t.o.hub, 50)) };
@@ -2552,7 +2869,8 @@
         for (const l of plan.leitungen) {
             const p = dyn.get('L:' + l.id); if (!p) continue;
             const n = an ? sim.netzVon[l.a.t + ':' + l.a.p] : null;
-            p.classList.toggle('druck', an && n != null && druckVon(n) > P_AN);
+            const N0 = n != null ? sim.netze[n] : null;
+            p.classList.toggle('druck', an && !!N0 && druckVon(n) > (N0.hyd ? P_AN_H : P_AN));
         }
         for (const t of plan.teile) {
             const r = dyn.get(t.id); if (!r) continue;
@@ -2597,10 +2915,16 @@
                 r.zeiger.setAttribute('x2', 16 * Math.cos(w)); r.zeiger.setAttribute('y2', 8 - 16 * Math.sin(w));
             }
             if (t.typ === 'manometer' && r.nadel) {
-                const p = an ? pPort(t, '1') : 0;
-                const w = (-135 + Math.max(0, Math.min(10, p)) / 10 * 270) * Math.PI / 180;
+                const p = an ? pPort(t, '1') : 0, voll = istHyd(t) ? 160 : 10;
+                const w = (-135 + Math.max(0, Math.min(voll, p)) / voll * 270) * Math.PI / 180;
                 r.nadel.setAttribute('x2', 9 * Math.sin(w)); r.nadel.setAttribute('y2', -9 * Math.cos(w));
-                if (r.wert) r.wert.textContent = an ? p.toFixed(1) + ' bar' : '';
+                if (r.wert) r.wert.textContent = an ? p.toFixed(istHyd(t) ? 0 : 1) + ' bar' : '';
+            }
+            if (t.typ === 'dbv') { const k = r.g.querySelector('.fp-dbv-pfeil'); if (k) k.setAttribute('transform', z && z.auf ? 'translate(-4,0)' : ''); }
+            if (t.typ === 'speicher') { const k = r.g.querySelector('.fp-oelstand'); if (k) { const a = z ? Math.max(0, Math.min(1, z.voil / Math.max(0.05, zahl(t.o.V0, 0.7)))) : 0; k.setAttribute('height', 16 * a); k.setAttribute('y', 15 - 16 * a); } }
+            if (t.typ === 'entsperr' && r.kugel) {
+                const auf = an && (z.entsperrt || pPort(t, '1') > pPort(t, '2') + 0.05);
+                r.kugel.setAttribute('transform', auf ? 'translate(0,-5)' : '');
             }
             if (t.typ === 'wechsel' && r.kugel) r.kugel.setAttribute('cx', z ? (z.seite === 'X' ? 9 : -9) : 0);
             if (t.typ === 'zweidruck' && r.schieber) r.schieber.setAttribute('transform', `translate(${z ? (z.seite === 'X' ? 3 : -3) : 0},0)`);
@@ -3034,7 +3358,7 @@
         kennSpiegel.set(obj.id, { teil: t.id, kz: t.bez });
     }
     function rueckAbgleich() {
-        const F = fabrik(); if (!F || !plan.anlage || (!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
+        const F = fabrik(); if (!F || !plan.anlage || plan.teile.some(istHyd) || (!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
         const neu = []; let masse = false;
         if (rueck2D(F, neu)) masse = true;
         for (const [id, w] of kennSpiegel) {
@@ -3182,6 +3506,7 @@
     function anlageAbgleichen() {
         const F = fabrik();
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
+        if (plan.teile.some(istHyd)) return;   // Hydraulik in der 2D-Anlage: kommt mit dem Abgleich der Hydraulikteile
         kennKonflikteLoesen();
         plan.erzeugt = plan.erzeugt || [];
         const benutzt = new Set();

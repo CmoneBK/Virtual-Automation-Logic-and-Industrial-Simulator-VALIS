@@ -943,7 +943,7 @@
         const senkrecht = dirA ? dirA[0] === 0 : true;
         if (senkrecht) pts.push([a[0], b[1]], b); else pts.push([b[0], a[1]], b);
     }
-    function leitungPunkte(l) {
+    function rohPunkte(l) {
         const ta = teil(l.a.t), tb = teil(l.b.t);
         if (!ta || !tb) return null;
         if (angedockt(l)) return null;
@@ -994,6 +994,130 @@
             out.push(p);
         }
         return out;
+    }
+
+    // ------------------------------------------------------------
+    // Alle Leitungswege gemeinsam: Leitungen verschiedener Netze laufen nie aufeinander
+    // (ein Mittelstück weicht um ein Raster aus), Kreuzungen fremder Netze bekommen einen
+    // Bogen, Abzweige im selben Netz einen Punkt (DIN ISO 1219).
+    // ------------------------------------------------------------
+    const wegSpeicher = { p: null, sig: '', wege: new Map(), netz: new Map() };
+    function wegSignatur() {
+        let s = '';
+        for (const t of plan.teile) s += t.id + ',' + t.x + ',' + t.y + ',' + (t.rot || 0) + ',' + (t.sp ? 1 : 0) + (t.typ === 'ventil' ? ',' + ventilStellungen(t.o).length + (t.o.links || '') + (t.o.rechts || '') : '') + ';';
+        for (const l of plan.leitungen) s += l.id + ':' + l.a.t + l.a.p + '>' + l.b.t + l.b.p + (l.pkt ? JSON.stringify(l.pkt) : '') + ';';
+        return s;
+    }
+    function leitungsNetze() {
+        const vater = new Map(), f = k => { while (vater.has(k) && vater.get(k) !== k) k = vater.get(k); return k; };
+        const vereine = (a, b) => { if (!vater.has(a)) vater.set(a, a); if (!vater.has(b)) vater.set(b, b); const ra = f(a), rb = f(b); if (ra !== rb) vater.set(ra, rb); };
+        for (const l of plan.leitungen) vereine(l.a.t + ':' + l.a.p, l.b.t + ':' + l.b.p);
+        const m = new Map(); for (const l of plan.leitungen) m.set(l.id, f(l.a.t + ':' + l.a.p));
+        return m;
+    }
+    const segH = (a, b) => a[1] === b[1] && a[0] !== b[0];
+    const segV = (a, b) => a[0] === b[0] && a[1] !== b[1];
+    function ueberlappen(a, b, c, d) {   // kollinear und mehr als 1 Einheit gemeinsam
+        if (segH(a, b) && segH(c, d) && Math.abs(a[1] - c[1]) < 0.5) return Math.min(Math.max(a[0], b[0]), Math.max(c[0], d[0])) - Math.max(Math.min(a[0], b[0]), Math.min(c[0], d[0])) > 1;
+        if (segV(a, b) && segV(c, d) && Math.abs(a[0] - c[0]) < 0.5) return Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1])) - Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) > 1;
+        return false;
+    }
+    function kreuzen(h0, h1, v0, v1, rand) {   // waagrecht h × senkrecht v, beide im Inneren
+        const x = v0[0], y = h0[1];
+        return x > Math.min(h0[0], h1[0]) + rand && x < Math.max(h0[0], h1[0]) - rand && y > Math.min(v0[1], v1[1]) + 0.5 && y < Math.max(v0[1], v1[1]) - 0.5;
+    }
+    function kreuzungen(pts, fremde) {
+        let n = 0;
+        for (let i = 0; i < pts.length - 1; i++) for (const q of fremde) for (let j = 0; j < q.length - 1; j++) {
+            if (segH(pts[i], pts[i + 1]) && segV(q[j], q[j + 1]) && kreuzen(pts[i], pts[i + 1], q[j], q[j + 1], 0)) n++;
+            else if (segV(pts[i], pts[i + 1]) && segH(q[j], q[j + 1]) && kreuzen(q[j], q[j + 1], pts[i], pts[i + 1], 0)) n++;
+        }
+        return n;
+    }
+    function alleWege() {
+        const sig = wegSignatur();
+        if (wegSpeicher.p === plan && wegSpeicher.sig === sig) return wegSpeicher;
+        const netz = leitungsNetze(), wege = new Map();
+        for (const l of plan.leitungen) {
+            let pts = rohPunkte(l); if (!pts) continue;
+            const fremd = [...wege].filter(([id]) => netz.get(id) !== netz.get(l.id)).map(([, q]) => q);
+            const stoesst = (pp, i) => fremd.some(q => q.some((_, j) => j < q.length - 1 && ueberlappen(pp[i], pp[i + 1], q[j], q[j + 1])));
+            if (!(Array.isArray(l.pkt) && l.pkt.length)) {
+                // Kosten eines Mittelstücks: auf fremder Leitung (schwer), durch ein Bauteil, Kreuzungen
+                const boxen = plan.teile.filter(t => t.typ !== 'knoten').map(t => boxWelt(t));
+                const durch = (a, b) => boxen.some(w => Math.max(a[0], b[0]) > w[0] + 1 && Math.min(a[0], b[0]) < w[2] - 1 && Math.max(a[1], b[1]) > w[1] + 1 && Math.min(a[1], b[1]) < w[3] - 1);
+                const kosten = (pp, i) => [i - 1, i, i + 1].reduce((k, j) => k + (stoesst(pp, j) ? 100 : 0) + (j > 0 && j + 2 < pp.length && durch(pp[j], pp[j + 1]) ? 10 : 0), 0) + kreuzungen(pp, fremd);
+                for (let i = 1; i + 2 < pts.length; i++) {
+                    let best = { pp: pts, k: kosten(pts, i) };
+                    if (!stoesst(pts, i) && !durch(pts[i], pts[i + 1])) continue;
+                    const h = segH(pts[i], pts[i + 1]);
+                    for (const dv of [10, -10, 20, -20, 30, -30, 40, -40, 50, -50]) {
+                        const pp = pts.map(q => q.slice());
+                        if (h) { pp[i][1] += dv; pp[i + 1][1] += dv; } else { pp[i][0] += dv; pp[i + 1][0] += dv; }
+                        // das Mittelstück darf nicht hinter die Stiche der Anschlüsse rutschen
+                        if (h ? (Math.sign(pp[i][1] - pp[i - 1][1]) !== Math.sign(pts[i][1] - pts[i - 1][1]) || Math.sign(pp[i + 2][1] - pp[i + 1][1]) !== Math.sign(pts[i + 2][1] - pts[i + 1][1]))
+                              : (Math.sign(pp[i][0] - pp[i - 1][0]) !== Math.sign(pts[i][0] - pts[i - 1][0]) || Math.sign(pp[i + 2][0] - pp[i + 1][0]) !== Math.sign(pts[i + 2][0] - pts[i + 1][0]))) continue;
+                        const k = kosten(pp, i);
+                        if (k < best.k) best = { pp, k };
+                        if (k === 0) break;
+                    }
+                    pts = best.pp;
+                }
+            }
+            wege.set(l.id, pts);
+        }
+        Object.assign(wegSpeicher, { p: plan, sig, wege, netz });
+        return wegSpeicher;
+    }
+    function leitungPunkte(l) {
+        if (!l) return null;
+        const W = alleWege();
+        return W.wege.has(l.id) ? W.wege.get(l.id) : rohPunkte(l);
+    }
+    // Pfad einer Leitung mit Bögen über fremde senkrechte Leitungen
+    const BOGEN = 4;
+    function leitungPfad(l, pts) {
+        const W = alleWege(), mein = W.netz.get(l.id);
+        const fremd = []; for (const [id, q] of W.wege) if (W.netz.get(id) !== mein) fremd.push(q);
+        let d = 'M' + pts[0].join(',');
+        for (let i = 0; i < pts.length - 1; i++) {
+            const a = pts[i], b = pts[i + 1];
+            if (segH(a, b)) {
+                const sg = b[0] > a[0] ? 1 : -1, xs = [];
+                for (const q of fremd) for (let j = 0; j < q.length - 1; j++) if (segV(q[j], q[j + 1]) && kreuzen(a, b, q[j], q[j + 1], BOGEN + 0.5)) xs.push(q[j][0]);
+                [...new Set(xs)].sort((u, v) => sg * (u - v)).forEach(x => { d += ` L${x - sg * BOGEN},${a[1]} A${BOGEN},${BOGEN} 0 0 ${sg > 0 ? 1 : 0} ${x + sg * BOGEN},${a[1]}`; });
+            }
+            d += ' L' + b.join(',');
+        }
+        return d;
+    }
+    // Abzweigpunkte: wo die Leitungen eines Netzes in drei oder mehr Richtungen auseinandergehen
+    function abzweigPunkte() {
+        const W = alleWege(), proNetz = new Map(), punkte = [];
+        for (const [id, q] of W.wege) { const n = W.netz.get(id); if (!proNetz.has(n)) proNetz.set(n, []); proNetz.get(n).push(q); }
+        for (const wege of proNetz.values()) {
+            if (wege.length < 2) continue;
+            const segs = []; wege.forEach(q => { for (let i = 0; i < q.length - 1; i++) segs.push([q[i], q[i + 1]]); });
+            const kand = new Map();
+            wege.forEach(q => q.forEach(p => kand.set(p.join(','), p)));
+            for (const [a, b] of segs) for (const [c, e] of segs) {
+                if (segH(a, b) && segV(c, e) && kreuzen(a, b, c, e, 0.5)) { const p = [c[0], a[1]]; kand.set(p.join(','), p); }
+            }
+            for (const p of kand.values()) {
+                const r = new Set();
+                for (const [a, b] of segs) {
+                    if (segH(a, b) && Math.abs(a[1] - p[1]) < 0.5) {
+                        const lo = Math.min(a[0], b[0]), hi = Math.max(a[0], b[0]);
+                        if (p[0] >= lo - 0.5 && p[0] <= hi + 0.5) { if (hi > p[0] + 0.5) r.add('r'); if (lo < p[0] - 0.5) r.add('l'); }
+                    } else if (segV(a, b) && Math.abs(a[0] - p[0]) < 0.5) {
+                        const lo = Math.min(a[1], b[1]), hi = Math.max(a[1], b[1]);
+                        if (p[1] >= lo - 0.5 && p[1] <= hi + 0.5) { if (hi > p[1] + 0.5) r.add('u'); if (lo < p[1] - 0.5) r.add('o'); }
+                    }
+                }
+                if (r.size >= 3) punkte.push(p);
+            }
+        }
+        return punkte;
     }
 
     // ------------------------------------------------------------
@@ -1208,7 +1332,7 @@
         for (const l of plan.leitungen) {
             const pts = leitungPunkte(l);
             if (!pts) { if (angedockt(l)) for (const e of [l.a, l.b]) { const k = e.t + ':' + e.p; belegt.set(k, (belegt.get(k) || 0) + 1); } continue; }
-            const d = 'M' + pts.map(p => p.join(',')).join(' L');
+            const d = leitungPfad(l, pts);
             const gw = auswahl.has('L:' + l.id);
             const istSteuer = [l.a, l.b].some(e => { const tt = teil(e.t); const pl = tt && portLage(tt, e.p); return pl && pl.art === 's'; });
             const pfad = el('path', { d, class: 'fp-leitung' + (istSteuer ? ' steuer' : '') + (gw ? ' gewaehlt' : ''), 'data-l': l.id }, ebLeitungen);
@@ -1285,6 +1409,8 @@
                 el('circle', { class: 'fp-port' + (n ? '' : ' frei'), cx: x, cy: y, r: n ? 2.5 : 3.5, 'data-t': t.id, 'data-p': p.id }, ebUi);
             }
         }
+        // Abzweigpunkte auf den Leitungen
+        for (const p of abzweigPunkte()) el('circle', { class: 'fp-abzweig', cx: p[0], cy: p[1], r: 3.2, fill: 'currentColor' }, ebLeitungen);
         // Verzweigungspunkte an Anschlüssen mit mehreren Leitungen
         for (const [k, n] of belegt) if (n > 1) {
             const [tid, pid] = k.split(':');
@@ -5435,6 +5561,7 @@
         beispiele: () => BEISPIELE.map(b => b.name),
         beispielLaden: (i) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i); } finally { window.confirm = c; } },
         _leeren: () => { planImport(null); gedrueckt.clear(); },
+        _wege: () => { const W = alleWege(); return { wege: Object.fromEntries(W.wege), netz: Object.fromEntries(W.netz), punkte: abzweigPunkte() }; },
         typen: () => Object.keys(TYP),
         offen: () => offen
     };

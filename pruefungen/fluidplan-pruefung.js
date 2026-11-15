@@ -774,6 +774,30 @@ const FAELLE = {
     R.push(['zurück auf Gehäuse', vs.every(o => !o.el.querySelector('svg.fp-echt'))]);
     return R;
   },
+  'Leitungen: fremde Netze nie aufeinander, Bogen an Kreuzungen, Punkt am Abzweig': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms)), F = Fluidplan;
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; F._leeren();
+    window.loadExample('code'); await warte(800);
+    window._fpAlleVentile('schnitt'); await warte(100);
+    F._leeren(); F.ausAnlage();
+    const p = F.plan(), v = p.teile.find(t => t.typ === 'ventil');
+    const sw = F.setzen('schwenk', v.x - 160, v.y - 160, {}); F.verbinden(v.id, '2', sw, 'K'); F.verbinden(v.id, '4', sw, 'S');
+    await warte(100);
+    const W = F._wege(), ids = Object.keys(W.wege);
+    let doppelt = 0;
+    const seg = q => q.slice(0, -1).map((a, i) => [a, q[i + 1]]);
+    for (const a of ids) for (const b of ids) if (a < b && W.netz[a] !== W.netz[b]) for (const [p0, p1] of seg(W.wege[a])) for (const [q0, q1] of seg(W.wege[b])) {
+      if (p0[1] === p1[1] && q0[1] === q1[1] && p0[1] === q0[1] && Math.min(Math.max(p0[0], p1[0]), Math.max(q0[0], q1[0])) - Math.max(Math.min(p0[0], p1[0]), Math.min(q0[0], q1[0])) > 1) doppelt++;
+      if (p0[0] === p1[0] && q0[0] === q1[0] && p0[0] === q0[0] && Math.min(Math.max(p0[1], p1[1]), Math.max(q0[1], q1[1])) - Math.max(Math.min(p0[1], p1[1]), Math.min(q0[1], q1[1])) > 1) doppelt++;
+    }
+    R.push(['keine zwei Netze auf derselben Linie', doppelt === 0, doppelt]);
+    R.push(['Abzweigpunkte für 2 und 4', W.punkte.length >= 2, W.punkte.length]);
+    const svgP = Array.from(document.querySelectorAll('svg.fp-svg path.fp-leitung')).map(e => e.getAttribute('d'));
+    R.push(['Kreuzung fremder Leitungen mit Bogen', svgP.some(d => / A4,4 /.test(d)), svgP.filter(d => / A/.test(d)).length]);
+    R.push(['Abzweigpunkte gezeichnet', document.querySelectorAll('svg.fp-svg .fp-abzweig').length >= 2]);
+    return R;
+  },
   'Angedockte Schalldämpfer und Stopfen in der Darstellung des Ventils': async () => {
     const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
     factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });

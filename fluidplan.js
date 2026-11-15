@@ -6948,6 +6948,20 @@ function versorgungMerken(F) {
         }
         return null;
     }
+    // Gehäuse-Darstellung: Stellung eines von Hand betätigten Planventils für das 2D-Ventil
+    // ('ext' | 'ret' | 'center'), sonst null (dann schaltet das 2D-Ventil wie bisher über die Spulen)
+    window._fpHydStellung2D = function (obj) {
+        try {
+            const st = hydStand(obj); if (!st || st.p !== plan) return null;
+            const o = st.t.o || {}; if (!MANUELL[o.links] && !MANUELL[o.rechts]) return null;
+            const r = planVentilVon2D(obj); const linksExt = r ? r.linksExt : true;
+            const n = ventilStellungen(o).length, k = st.z.stellung;
+            if (k == null) return null;
+            if (n === 3 && k === 1) return 'center';
+            const links = k === 0;
+            return links === linksExt ? 'ext' : 'ret';
+        } catch (e) { return null; }
+    };
     window._fpHydAlle = () => { for (const o of (fabrik() || [])) if (hydBildArt(o)) { try { window._fpHydBild(o); } catch (e) {} } };
     setInterval(() => { try { window._fpHydAlle(); } catch (e) {} }, 250);
     // Während der Simulation: Hydraulikventile im Schnitt/außen öfter (Kolben und Ölfarben folgen sofort)
@@ -7013,6 +7027,40 @@ function versorgungMerken(F) {
         const los = () => { tun(false); W2.removeEventListener('mouseup', los); W2.removeEventListener('pointerup', los); };
         W2.addEventListener('mouseup', los); W2.addEventListener('pointerup', los);
     }
+    // Klassisches 2D-Wegeventil (valve_pneu / valve_hyd) eines verbundenen Plans: Handbetätigung
+    // (Taster, Pilz, Pedal, Hebel) des Planventils per Klick auf das 2D-Ventil
+    function planVentilVon2D(obj) {
+        if (!plan.anlage || !obj || !obj.targetCylinderId) return null;
+        const z = plan.teile.find(t => (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') && t.o.anlage === obj.targetCylinderId);
+        if (!z) return null;
+        const dw = z.typ === 'zyl_dw';
+        if (obj.type === 'valve_hyd') {
+            const K = hydWeg(z, 'K'), S = dw ? hydWeg(z, 'S') : {}, v = K.ventil || S.ventil;
+            return v ? { v, linksExt: hydLinksExt(v, K, S) } : null;
+        }
+        const K = stellgliedVon(z, 'K'), S = dw ? stellgliedVon(z, 'S') : null;
+        const v = (K && K.ventil) || (S && S.ventil); if (!v) return null;
+        const linksExt = K && K.ventil === v ? K.port === '4' || v.o.wege === '3/2' || v.o.wege === '2/2' : !(S && S.port === '4');
+        return { v, linksExt };
+    }
+    window._fpHandVentilHat = obj => { const r = planVentilVon2D(obj); return !!(r && (MANUELL[r.v.o.links] || MANUELL[r.v.o.rechts])); };
+    window._fpHandVentil2D = function (obj, e) {
+        const r = planVentilVon2D(obj); if (!r || !sim) return false;
+        const o = r.v.o || {};
+        let seite = MANUELL[o.links] ? 'L' : MANUELL[o.rechts] ? 'R' : null; if (!seite) return false;
+        // Beidseitig von Hand: linke Hälfte des 2D-Ventils = Ausfahren
+        const rc = obj.el && e && e.clientX != null ? obj.el.getBoundingClientRect() : null;
+        if (MANUELL[o.links] && MANUELL[o.rechts] && rc && rc.width > 0) {
+            const links2D = e.clientX < rc.left + rc.width / 2;
+            seite = links2D === r.linksExt ? 'L' : 'R';
+        }
+        handDruck(r.v.id, seite, true);
+        if ((seite === 'L' ? o.links : o.rechts) === 'hebel') return seite;
+        const W2 = (obj.el && obj.el.ownerDocument && obj.el.ownerDocument.defaultView) || window;
+        const los = () => { handDruck(r.v.id, seite, false); W2.removeEventListener('mouseup', los); W2.removeEventListener('pointerup', los); };
+        W2.addEventListener('mouseup', los); W2.addEventListener('pointerup', los);
+        return seite;
+    };
     function klickSeite(obj, e) {
         let best = null, d0 = Infinity;
         for (const [sel, sd] of [['.fp-g-bet[data-seite="L"], .fp-bet-l', 'L'], ['.fp-g-bet[data-seite="R"], .fp-bet-r', 'R']]) {

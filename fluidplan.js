@@ -284,8 +284,8 @@
         },
         zeichne(t, g) {
             el('path', { d: 'M-18,8 A18,18 0 0 1 18,8 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.8 }, g);
-            el('line', { x1: -10, y1: 8, x2: -10, y2: 20, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
-            el('line', { x1: 10, y1: 8, x2: 10, y2: 20, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            el('line', { x1: -10, y1: 8, x2: -10, y2: 30, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            el('line', { x1: 10, y1: 8, x2: 10, y2: 30, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
             el('path', { d: 'M-8,-4 A10,10 0 0 1 8,-4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2, 'marker-end': 'url(#fp-pfeil)' }, g);
             el('line', { class: 'fp-zeiger', x1: 0, y1: 8, x2: -16, y2: 8, stroke: 'currentColor', 'stroke-width': 2.2 }, g);
             el('g', { class: 'fp-marken' }, g);

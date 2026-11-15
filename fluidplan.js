@@ -853,8 +853,8 @@
             { name: 'Verbindung (T-Stück)', typ: 'knoten' }
         ] },
         { kat: 'Antriebe', teile: [
-            { name: 'Zylinder doppeltwirkend', typ: 'zyl_dw', o: HY({ d: 40, dStange: 20, hub: 200 }) },
-            { name: 'Zylinder einfachwirkend', typ: 'zyl_ew', o: HY({ d: 40, dStange: 30, hub: 150 }) }
+            { name: 'Zylinder doppeltwirkend', typ: 'zyl_dw', o: HY({ d: 40, dStange: 20, hub: 200, lastArt: 'gewicht' }) },
+            { name: 'Zylinder einfachwirkend', typ: 'zyl_ew', o: HY({ d: 40, dStange: 30, hub: 150, lastArt: 'gewicht' }) }
         ] },
         { kat: 'Wegeventile', teile: [
             { name: '4/3 Hebel, Mitte gesperrt', typ: 'ventil', o: HY({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'gesperrt' }) },
@@ -2029,13 +2029,43 @@
         W().addEventListener('pointermove', mv); W().addEventListener('pointerup', up);
     }
     function setzen(v, x, y) {
+        let neu = null;
         aendern(() => {
             const o = Object.assign({}, TYP[v.typ].optionen, v.o || {});
-            const t = { id: neueId(), typ: v.typ, x, y, rot: 0, bez: bezFuer(v.typ, o), o };
+            const t = neu = { id: neueId(), typ: v.typ, x, y, rot: 0, bez: bezFuer(v.typ, o), o };
             plan.teile.push(t);
             andockAblegen(t);
             auswahl.clear(); auswahl.add(t.id);
         });
+        // Hydraulikzylinder: auf Wunsch gleich die Grundschaltung dazu (sichtbar im Plan)
+        if (neu && hydZylT(neu)) grundschaltungFragen(neu.id);
+    }
+    function grundschaltungFragen(id) {
+        const mach = w => { if (w === 'ja') aendern(() => grundschaltung(teil(id))); };
+        const dlg = window.showValisChoiceDialog;
+        if (typeof dlg === 'function') {
+            dlg('Hydraulikzylinder gesetzt', 'Soll der Plan gleich die Grundschaltung dazu bekommen? Alles erscheint im Fluidplan und, wenn er verbunden ist, auch in der 2D-Anlage.', [
+                { value: 'ja', icon: '⚙', title: 'Mit Grundschaltung', desc: 'Aggregat, Tank und Wegeventil (doppeltwirkend 4/3 mit Sperrmitte, einfachwirkend 3/2) samt Leitungen.' },
+                { value: 'nein', icon: '▭', title: 'Nur der Zylinder', desc: 'Den Rest zeichnest du selbst.' }
+            ], mach);
+        } else if (W().confirm('Grundschaltung (Aggregat, Tank, Wegeventil) gleich dazu?')) mach('ja');
+    }
+    function grundschaltung(zt) {
+        if (!zt) return;
+        const dw = zt.typ === 'zyl_dw', H = { hyd: true };
+        const neuT = (typ, x, y, o) => { const oo = Object.assign({}, TYP[typ].optionen, H, o || {}); const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: bezFuer(typ, oo), o: oo }; plan.teile.push(t); return t; };
+        const L = (a, ap, b, bp) => plan.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: b.id, p: bp } });
+        const vt = neuT('ventil', 0, zt.y + 310, dw ? { wege: '4/3', mitte: 'gesperrt', links: 'magnet', rechts: 'magnet' } : { wege: '3/2', links: 'magnet', rechts: 'feder' });
+        const g = TYP.ventil.geometrie(vt), px = pid => (g.ports.find(q => q.id === pid) || { x: 0 }).x;
+        const kX = zt.x + 10, sX = dw ? zt.x + ZYL_L - 10 : kX;
+        vt.x = snap((kX + sX) / 2 - (dw ? (px('4') + px('2')) / 2 : px('2')));
+        let ag = plan.teile.find(t => t.typ === 'aggregat' && istHyd(t));
+        if (!ag) ag = neuT('aggregat', vt.x - 60, zt.y + 440, { q: 20, p: 100 });
+        let tk = plan.teile.find(t => t.typ === 'tank' && istHyd(t));
+        if (!tk) tk = neuT('tank', vt.x + 260, zt.y + 480);
+        L(ag, 'P', vt, '1'); L(vt, '3', tk, '1');
+        if (dw) { L(vt, '4', zt, 'K'); L(vt, '2', zt, 'S'); } else L(vt, '2', zt, 'K');
+        zt.y = snap(zt.y);
     }
 
     // ------------------------------------------------------------
@@ -2140,6 +2170,7 @@
             num('Hub', 'hub', 10, 1000, 5, 'mm');
             num('Last gegen das Ausfahren', 'last', 0, istHyd(t) ? 200000 : 20000, 10, 'N');
             if (istHyd(t)) {
+                if (!t.o.lastArt) t.o.lastArt = 'gewicht';
                 wahl('Art der Last', 'lastArt', [['gewicht', 'Gewicht (wirkt über den ganzen Hub)'], ['presse', 'Werkstück (wirkt ab einer Stelle im Hub)']]);
                 if (t.o.lastArt === 'presse') num('Werkstück ab', 'lastAb', 0, 100, 1, '% Hub');
             }
@@ -4646,10 +4677,13 @@
                 o.pistonD = zahl(t.o.d, 20); o.rodD = zahl(t.o.dStange, dw ? 8 : 6); o.stroke = zahl(t.o.hub, 100);
                 o.linkedVarExt = ext || null; o.linkedVarRet = dw ? (ret || null) : null; if (!dw) o.linkedVar = ext || null;
                 try { updateObjTransform(o); } catch (e) {}
-                hydSetup2D(o, wahl);
+                // Nur was im Plan steht: ohne Wegeventil im Plan bleibt der 2D-Zylinder allein
+                if (v) hydSetup2D(o, wahl); else o.hasHydraulics = true;
                 t.o.anlage = o.id; plan.erzeugt.push(o.id);
                 F = fabrik();
             }
+            if (v && !F.some(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id)) { hydSetup2D(o, wahl); F = fabrik(); }
+            if (!v) { F.filter(q => ['valve_hyd', 'throttle_hyd', 'check_valve_hyd'].includes(q.type) && q.targetCylinderId === o.id).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} }); F = fabrik(); }
             benutzt.add(o.id);
             o.pistonD = zahl(t.o.d, 20); o.rodD = zahl(t.o.dStange, dw ? 8 : 6); o.stroke = zahl(t.o.hub, 100);
             o.linkedVarExt = ext || null; o.linkedVarRet = dw ? (ret || null) : null;
@@ -6899,6 +6933,7 @@
             return t.id;
         },
         verbinden: (a, ap, b, bp) => { leitungAnlegen({ t: a, p: ap }, { t: b, p: bp }); },
+        _ablegen: (typ, x, y, o) => setzen({ typ, o }, x, y),
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },
         _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
         _neu: () => { sim = null; simInit(); aufzNeu(); },

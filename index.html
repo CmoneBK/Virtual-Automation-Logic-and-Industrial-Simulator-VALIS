@@ -1017,6 +1017,10 @@
 		/* NEU: Tasten-Zuweisung */
         .key-bind-btn { background: #333; color: #ccc; border: 1px solid #555; border-radius: 3px; cursor: pointer; font-size: 10px; padding: 2px 6px; margin-right: 5px; transition: 0.2s; font-family: monospace; font-weight: bold; flex-shrink: 0; }
         .key-bind-btn:hover { border-color: #007acc; color: #fff; background: #444; }
+        /* Geforcter Eingang (Sim-Panel übersteuert einen Sensor der 2D-Anlage) */
+        .switch-row.sim-forciert { outline: 2px solid #ff9800; outline-offset: -2px; }
+        .sim-force-chip { margin-left: 6px; flex-shrink: 0; background: #ff9800; color: #1e1e1e; border: none; border-radius: 3px; font: bold 10px/1 monospace; padding: 3px 5px; cursor: pointer; }
+        .sim-force-chip:hover { background: #ffb74d; }
         .key-bind-btn.assigning { background: #007acc; color: #fff; animation: valis-pulse 1s infinite; }
         @keyframes valis-pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.7); } 70% { box-shadow: 0 0 0 5px rgba(0, 122, 204, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0); } }
         @keyframes valisFade { from { opacity: 0; } to { opacity: 1; } }
@@ -3280,7 +3284,7 @@
         <div class="section-header" onclick="toggleSection('simulator-container', this)" style="justify-content:space-between;">
             <span><span class="toggle-icon">▼</span> <span data-i18n="sim_header">Sim-Panel</span></span>
             <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
-                <button onclick="openHelpModal('sim')" title="Hinweise zu Hardware-Kopplung und Taster-Einrasten" style="background:#17a2b8;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:help;line-height:1;">ℹ️</button>
+                <button onclick="openHelpModal('sim')" title="Hinweise zu Bauteilen der 2D-Anlage, Forcen und Taster-Einrasten" style="background:#17a2b8;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:help;line-height:1;">ℹ️</button>
                 <button id="btn-epneu-mode" onclick="toggleEpneuMode()" title="Schaltet zwischen zwei eigenständigen Lehr-Domänen — derselbe Code, völlig verschiedene Begleitsichten und Steckaufbauten:&#10;&#10;⚡ SPS-Modus: Variable = Signal an der SPS-Eingangsklemme. NC-Kontakte (Öffner) liefern in Ruhe 1 — der Code negiert. Auto-Schaltplan zeigt standardmäßig die Anschluss-Sicht (DIN EN 60204 Klemmenplan, 👁-Toggle für Programm-Sicht). Steckaufbau zeigt echte 19″-SPS-Module (Netzteil, 16DIN, 16DOUT, Verteilung).&#10;&#10;⚡ E-Pneu-Modus: Variable = physischer Press-Zustand. NOTAUS==1 heißt gedrückt. Schließer = Variable, Öffner = ¬Variable. Auto-Schaltplan zeigt den klassischen Stromlaufplan. Steckaufbau zeigt die Steuerstromkreis-Panels (Taster, Relais, LED).&#10;&#10;Wechsel zwischen den Domänen ist explizit, persistent und mit Bestätigungs-Dialog bei sicherheitsrelevanten NC-Variablen." style="background:#455a64;color:#ccc;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⚡ SPS</button>
                 <button id="btn-zuordnung-sim" onclick="window._openZuordnungsliste()" data-i18n="zl_btn_short" title="Zuordnungsliste: Variable, Adresse, Kennzeichen, Bauteil, Öffner/Schließer, Kommentar – mit Live-Zustand, Drucken und CSV (nur SPS-Modus)" style="display:none;background:#00695c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">📋</button>
                 <button id="btn-record" onclick="toggleRecording()" title="Simulation aufzeichnen" style="background:#b71c1c;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:12px;cursor:pointer;line-height:1;">⏺</button>
@@ -21696,7 +21700,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         return `<div class="sim-ana-ctl" title="${_tt}"><input type="range" id="sim_ain_${name}" min="${_ab.min}" max="${_ab.max}" step="${_ab.schritt}" value="${spsState[name]}" ${_mu ? 'disabled' : ''} oninput="window._anaSimEingabe('${name}', this.value)"><span class="sim-ana-wert" id="sim_ainv_${name}">${typeof window._anaSimText === 'function' ? window._anaSimText(name, spsState[name]) : (spsState[name] || 0)}</span></div>`;
                     })()
                     : isSwitchUI
-                    ? `<label class="switch"><input type="checkbox" id="sim_in_${name}" ${isActuated ? 'checked' : ''} onchange="toggleInput('${name}')"><span class="slider"></span></label>`
+                    ? `<label class="switch"><input type="checkbox" id="sim_in_${name}" ${isActuated ? 'checked' : ''} onchange="window._simPanelUmschalten('${name}')"><span class="slider"></span></label>`
                     : `<button class="taster-btn ${isActuated ? 'pressed' : ''}" id="sim_taster_${name}" onmousedown="setTaster('${name}', true, event)" onmouseup="setTaster('${name}', false, event)" onmouseleave="setTaster('${name}', false, event)" ontouchstart="setTaster('${name}', true, event)" ontouchend="setTaster('${name}', false, event)">${window.t('btn_pushbutton')}</button>`;
                 let _bk = window.inputKeyBindings[name]; let boundKey = _bk ? `[${_bk === ' ' ? '␣' : _bk.toUpperCase()}]` : '⌨️';
                 let keyBtnHTML = _isAna ? '' : `<button id="btn_key_${name}" class="key-bind-btn" onclick="assignKey('${name}')" title="Klicken, um Taste zuzuweisen (Entf zum Löschen)">${boundKey}</button>`;
@@ -21713,8 +21717,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     : '';
                 const _mmInHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmIn.length > 0 ? '' : 'display:none;'}" title="${_mmInTitle}">⚠️</span>`;
                 // .sim-var-name: clickable Variablen-Span (Click=Code-Sprung, Dblclick=Rename).
-                return `<div class="switch-row flex-col">
-                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}${_spsAddrInHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmInHTML}</div>${selectHTML}</div>
+                return `<div class="switch-row flex-col${window._forciert && (name in window._forciert) ? ' sim-forciert' : ''}" data-sim-in="${name}">
+                    <div class="flex-row-between"><div style="display:flex; align-items:center; overflow:hidden; white-space:nowrap;">${keyBtnHTML}${_spsAddrInHTML}<span class="sim-var-name" data-var-name="${name}" title="Klick: zur Definition im Code springen — Doppelklick: umbenennen" style="text-overflow:ellipsis; overflow:hidden; cursor:pointer;">${name}</span>${_mmInHTML}${window._forceChipHtml ? window._forceChipHtml(name) : ''}</div>${selectHTML}</div>
                     <div class="flex-row-between" style="justify-content: flex-end;">${controlHTML}</div>
                 </div>`;
             };
@@ -21860,6 +21864,53 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Lichtgitter rechnet jeden Takt neu, was im Strahl ist: die Hand-Unterbrechung
             // merkt es sich, sonst wäre sie beim nächsten Takt wieder weg
             if (cType === 'light_curtain') window._lichtgitterVonHand(varName, isActuated);
+            runSimulationTick();
+        };
+        // ===== Forcen (Christoph 15.11.2026) =====
+        // Sensoren, die in der 2D-Anlage verbaut sind, setzt die Anlage jeden Takt
+        // selbst. Wer sie im Sim-Panel umschaltet, forct den Eingang wie an der
+        // echten SPS: der Wert gilt für die Logik, bis das Forcen aufgehoben wird.
+        // Bedienelemente (Taster, Schalter, Not-Halt …) übersteuern nichts und
+        // werden deshalb nicht geforct.
+        window._forciert = {};
+        const _FORCE_OHNE = ['taster', 'schalter', 'nothalt', 'taster_nc', 'schalter_nc', 'key_switch', 'light_curtain'];
+        window._vonAnlageGesetzt = function (varName) {
+            if (typeof factoryObjects === 'undefined') return false;
+            return factoryObjects.some(o => o.linkedVar === varName && !_FORCE_OHNE.includes(o.type));
+        };
+        window._forceChipHtml = function (name) {
+            if (!(name in window._forciert)) return '';
+            return `<button type="button" class="sim-force-chip" onclick="event.stopPropagation(); window._forceAufheben('${name}')" title="Geforct: Die Logik sieht den Wert aus dem Sim-Panel, nicht den Sensor der 2D-Anlage.&#10;Klick: Forcen aufheben, der Sensor übernimmt wieder.">F</button>`;
+        };
+        function _forceZeile(name) {
+            const cb = document.getElementById('sim_in_' + name);
+            const row = cb && cb.closest('.switch-row');
+            if (!row) return;
+            const an = name in window._forciert;
+            row.classList.toggle('sim-forciert', an);
+            const alt = row.querySelector('.sim-force-chip');
+            if (alt) alt.remove();
+            if (an) {
+                const nameEl = row.querySelector('.sim-var-name');
+                const ziel = (nameEl && nameEl.parentElement) || row;
+                ziel.insertAdjacentHTML('beforeend', window._forceChipHtml(name));
+            }
+        }
+        window._simPanelUmschalten = function (varName) {
+            if (!window._vonAnlageGesetzt(varName)) { window.toggleInput(varName); return; }
+            SoundEngine.click();
+            const cType = componentTypes[varName] || 'taster';
+            const isNC = window._variableIsNCInverted(cType);
+            const isActuated = document.getElementById(`sim_in_${varName}`).checked;
+            const wert = isNC ? !isActuated : isActuated;
+            window._forciert[varName] = wert;
+            spsState[varName] = wert;
+            _forceZeile(varName);
+            runSimulationTick();
+        };
+        window._forceAufheben = function (varName) {
+            if (varName === undefined) { const alle = Object.keys(window._forciert); window._forciert = {}; alle.forEach(_forceZeile); }
+            else { delete window._forciert[varName]; _forceZeile(varName); }
             runSimulationTick();
         };
         window._lichtgitterVonHand = function (varName, unterbrochen) {
@@ -23060,6 +23111,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Elektrische Fehler (elektro-messen.js): ein unterbrochenes Sensorkabel
                 // o. Ä. wirkt schon auf die Eingänge, bevor die Logik rechnet …
                 if (window._elVorLogik) { try { window._elVorLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
+                // Geforcte Eingänge (Sim-Panel) überschreiben das Prozessabbild wie an der echten SPS
+                if (window._forciert) { for (const k in window._forciert) if (k in spsState) spsState[k] = window._forciert[k]; }
                 simulationFunction(spsState, deltaMs, window.simTimers);
                 // … und auf Spulen, Leuchten und Ventile, die die Logik einschaltet
                 if (window._elNachLogik) { try { window._elNachLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
@@ -46090,7 +46143,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             sim: {
                 title: 'ℹ️ Hinweise zur Simulation',
                 items: [
-                    { t: 'Hardware-Kopplung', body: 'Sobald ein Signal (Taster, Sensor etc.) einem echten Bauteil in der 2D-Anlage zugewiesen wird, übernimmt die 2D-Mechanik die Kontrolle. Die manuelle Eingabe im linken Simulationsfenster wird für diese Variable dann gesperrt – klicke stattdessen direkt auf die Bauteile in der Anlage!' },
+                    { t: 'Bauteile der 2D-Anlage und Forcen', body: 'Taster und Schalter, die in der 2D-Anlage verbaut sind, kannst du in der Anlage oder hier im Sim-Panel betätigen. Sensoren der Anlage melden ihren Zustand selbst. Schaltest du einen solchen Sensor hier um, wird der Eingang <b>geforct</b> wie an der echten SPS: Die Logik sieht deinen Wert, nicht den des Sensors. Die Zeile ist dann orange umrandet und trägt ein <b>F</b>; ein Klick darauf hebt das Forcen auf und der Sensor übernimmt wieder.' },
                     { t: 'Taster einrasten', body: 'Halte <kbd>STRG</kbd> oder <kbd>CMD</kbd> gedrückt, während du einen Taster anklickst, um ihn dauerhaft einrasten zu lassen (Dauerfeuer).' }
                 ]
             },

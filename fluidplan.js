@@ -1410,6 +1410,10 @@
     .fp-pruef h5{margin:0 0 4px;font-size:12px}
     .fp-pruef li{margin:2px 0}
     .fp-hilfe{position:absolute;left:10px;bottom:10px;max-width:440px;background:#fff;color:#263238;border:1px solid #b0bec5;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+    .fp-listen{position:absolute;right:10px;top:10px;max-width:640px;max-height:calc(100% - 20px);overflow:auto;background:#fff;color:#263238;border:1px solid #b0bec5;border-radius:6px;padding:8px 12px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:5}
+    .fp-listen h3{font-size:13px;margin:8px 0 4px}.fp-listen table{border-collapse:collapse;width:100%}.fp-listen th,.fp-listen td{border:1px solid #cfd8dc;padding:2px 6px;text-align:left;vertical-align:top}.fp-listen th{background:#eceff1}
+    .fp-listen-kopf{display:flex;justify-content:space-between;align-items:center;gap:8px}.fp-listen button{margin-left:4px;cursor:pointer}
+    .fp-sf-zeile{display:flex;justify-content:space-between;gap:8px;margin:4px 0}.fp-sf-zeile input:not([type]){width:240px}.fp-sf-hinweis{color:#607d8b;font-size:11px;margin-top:4px}
     .fp-hilfe kbd{background:#eceff1;border:1px solid #b0bec5;border-radius:3px;padding:0 4px;font-size:11px}
     `;
 
@@ -1454,6 +1458,8 @@
         h('span', { class: 'fp-trenner' }, leiste);
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
+        k('📋 Listen', 'Betriebsmittelliste und Stückliste aus dem Plan (auch als CSV)', () => listenZeigen());
+        k('🖨 PDF', 'Plan als PDF mit Schriftfeld (A4 quer), auf Wunsch mit Betriebsmittel- und Stückliste als Blatt 2', () => pdfDialog());
         k('📂 Beispiele', 'Fertige Beispielschaltungen laden', () => { auswahl.clear(); zeichnen(); beispieleZeigen(); });
         knopfIkon(k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess'), 'manometer', 'Messen', '🩺');
         k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
@@ -2323,6 +2329,14 @@
     }
     function svgSpeichern() {
         if (!plan.teile.length) return;
+        const txt = svgText().txt;
+        const datei = 'fluidplan.svg';
+        if (typeof window._saveAsFile === 'function') { try { window._saveAsFile(txt, datei, 'image/svg+xml', [{ description: 'SVG-Bild', ext: '.svg' }]); return; } catch (e) {} }
+        const a = D().createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'image/svg+xml' })); a.download = datei; a.click();
+    }
+    // Plan als eigenständiges SVG (weißer Grund, ohne Bedienhilfen)
+    function svgText() {
+        if (!svg) fensterBauen();
         const c = svg.cloneNode(true);
         c.querySelectorAll('.fp-port,.fp-treffer,.fp-hg,.fp-hand').forEach(n => n.remove());
         c.classList.remove('sim');
@@ -2337,10 +2351,142 @@
         c.insertBefore(st, c.firstChild);
         c.innerHTML = c.innerHTML.replace(/var\(--fp-papier\)/g, '#fff').replace(/var\(--fp-aktiv\)/g, '#ffb300');
         c.querySelectorAll('.fp-leitung.druck').forEach(n => n.classList.remove('druck'));
-        const txt = new XMLSerializer().serializeToString(c);
-        const datei = 'fluidplan.svg';
-        if (typeof window._saveAsFile === 'function') { try { window._saveAsFile(txt, datei, 'image/svg+xml', [{ description: 'SVG-Bild', ext: '.svg' }]); return; } catch (e) {} }
-        const a = D().createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'image/svg+xml' })); a.download = datei; a.click();
+        return { txt: new XMLSerializer().serializeToString(c), w: b[2] - b[0] + 40, h: b[3] - b[1] + 40 };
+    }
+
+    // ------------------------------------------------------------
+    // Betriebsmittel- und Stückliste aus dem Plan, Plan als PDF mit Schriftfeld
+    // ------------------------------------------------------------
+    const BET_KURZ = { magnet: 'Magnet', taster: 'Taster', pilz: 'Pilztaster', hebel: 'Hebel rastend', pedal: 'Pedal', rolle: 'Rollenhebel', rolle_leer: 'Rollenhebel mit Leerrücklauf', pneu: 'pneumatisch', feder: 'Feder' };
+    const MITTE_NAME = { gesperrt: 'gesperrt', umlauf: 'Umlauf', schwimm: 'Schwimm', offen: 'offen', entlueftet: 'entlüftet', belueftet: 'belüftet' };
+    const zf = (v, n) => { const x = Number(v); return isFinite(x) ? x.toLocaleString('de-DE', { maximumFractionDigits: n == null ? 2 : n }) : String(v); };
+    function teilBenennung(t) {
+        const T = TYP[t.typ]; let n = T ? T.name : t.typ;
+        if (t.typ === 'ventil') n = (t.o.wege || '3/2') + '-Wegeventil';
+        if (t.typ === 'wartung' && t.o.kurz) n += ' (Kurzform)';
+        if (istHyd(t) && /^(zyl_|ventil|rueck|drossel|drv)/.test(t.typ)) n += ', hydraulisch';
+        return n;
+    }
+    function teilDaten(t) {
+        const o = t.o || {}, d = [];
+        switch (t.typ) {
+            case 'ventil': {
+                d.push('Betätigung ' + (BET_KURZ[o.links] || o.links) + ' / ' + (BET_KURZ[o.rechts] || o.rechts));
+                if (ventilStellungen(o).length === 3) d.push('Mittelstellung ' + (MITTE_NAME[o.mitte] || o.mitte));
+                else if (o.wege === '3/2' || o.wege === '2/2') d.push(o.ruhe === 'offen' ? 'Ruhestellung offen' : 'Ruhestellung gesperrt');
+                const sp = [o.links === 'magnet' && o.varL, o.rechts === 'magnet' && o.varR].filter(Boolean);
+                if (sp.length) d.push('Spule ' + sp.join(', '));
+                break;
+            }
+            case 'zyl_dw': case 'zyl_ew': d.push('Ø ' + zf(o.d) + ' mm', 'Stange Ø ' + zf(o.dStange) + ' mm', 'Hub ' + zf(o.hub) + ' mm'); if (o.daempfung) d.push('Endlagendämpfung'); if (o.sensH || o.sensV) d.push('Sensoren ' + [o.sensH, o.sensV].filter(Boolean).join(', ')); break;
+            case 'schwenk': d.push('Schwenkwinkel ' + zf(o.winkel) + '°'); break;
+            case 'quelle': case 'wartung': case 'druckregel': case 'folge': case 'dschalter': case 'dbv': if (o.p != null) d.push('p = ' + zf(o.p) + ' bar'); if (o.var) d.push('Ausgang ' + o.var); break;
+            case 'aggregat': d.push('p = ' + zf(o.p) + ' bar', 'Q = ' + zf(o.q) + ' l/min'); break;
+            case 'stromregel': d.push('Q = ' + zf(o.q) + ' l/min'); break;
+            case 'drossel': case 'drv': d.push('Öffnung ' + zf(o.offen, 0) + ' %'); break;
+            case 'zeit': d.push('t = ' + zf(o.zeit) + ' s'); break;
+            case 'speicher': d.push('V0 = ' + zf(o.V0) + ' l', 'p0 = ' + zf(o.p0) + ' bar'); break;
+            case 'daempfer': if (o.drossel) d.push('mit Drossel ' + zf(o.offen, 0) + ' %'); break;
+        }
+        return d.join(', ');
+    }
+    // bml: eine Zeile je Betriebsmittel (mit Kennzeichen); stl: gleiche Teile zusammengefasst mit Menge
+    function listen() {
+        const teile = plan.teile.filter(t => t.typ !== 'knoten');
+        const sortKey = t => String(t.bez || '\uffff').replace(/\d+/g, n => n.padStart(4, '0'));
+        const bml = teile.filter(t => t.bez && !(TYP[t.typ] || {}).ohneBez).sort((a, b) => sortKey(a).localeCompare(sortKey(b), 'de'))
+            .map(t => ({ bmk: t.bez, benennung: teilBenennung(t), daten: teilDaten(t) }));
+        const gruppen = new Map();
+        for (const t of teile.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b), 'de'))) {
+            const ben = teilBenennung(t), dat = teilDaten(t).replace(/(^|, )(Spule|Ausgang|Sensoren) [^,]*/g, '').replace(/^, /, '');
+            const key = ben + '|' + dat;
+            if (!gruppen.has(key)) gruppen.set(key, { menge: 0, benennung: ben, daten: dat, bmk: [] });
+            const g = gruppen.get(key); g.menge++; if (t.bez && !(TYP[t.typ] || {}).ohneBez) g.bmk.push(t.bez);
+        }
+        const stl = [...gruppen.values()].map((g, i) => ({ pos: i + 1, menge: g.menge, benennung: g.benennung, daten: g.daten, bmk: g.bmk.join(', ') }));
+        return { bml, stl };
+    }
+    function listenHtml(L) {
+        return `<h3>Betriebsmittelliste</h3><table class="fp-tab"><tr><th>Kennzeichen</th><th>Benennung</th><th>Technische Daten</th></tr>`
+            + (L.bml.map(r => `<tr><td>${esc(r.bmk)}</td><td>${esc(r.benennung)}</td><td>${esc(r.daten)}</td></tr>`).join('') || '<tr><td colspan="3">–</td></tr>') + `</table>`
+            + `<h3>Stückliste</h3><table class="fp-tab"><tr><th>Pos.</th><th>Menge</th><th>Benennung</th><th>Technische Daten</th><th>Kennzeichen</th></tr>`
+            + (L.stl.map(r => `<tr><td>${r.pos}</td><td>${r.menge}</td><td>${esc(r.benennung)}</td><td>${esc(r.daten)}</td><td>${esc(r.bmk)}</td></tr>`).join('') || '<tr><td colspan="5">–</td></tr>') + `</table>`;
+    }
+    function listenCsv(L) {
+        const q = x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+        return ['Betriebsmittelliste', 'Kennzeichen;Benennung;Technische Daten', ...L.bml.map(r => [r.bmk, r.benennung, r.daten].map(q).join(';')), '',
+            'Stückliste', 'Pos.;Menge;Benennung;Technische Daten;Kennzeichen', ...L.stl.map(r => [r.pos, r.menge, r.benennung, r.daten, r.bmk].map(q).join(';'))].join('\r\n');
+    }
+    function listenZeigen() {
+        const fl = svg.parentNode;
+        const alt = fl.querySelector('.fp-listen'); if (alt) { alt.remove(); return; }
+        const L = listen();
+        const box = h('div', { class: 'fp-listen', html: `<div class="fp-listen-kopf"><b>📋 Listen aus dem Plan</b><span><button type="button" data-a="csv">CSV</button><button type="button" data-a="pdf">🖨 PDF</button><button type="button" data-a="zu">✕</button></span></div>` + listenHtml(L) }, fl);
+        box.addEventListener('click', e => {
+            const a = e.target.closest('button') && e.target.closest('button').getAttribute('data-a'); if (!a) return;
+            if (a === 'zu') box.remove();
+            if (a === 'pdf') pdfDialog();
+            if (a === 'csv') {
+                const txt = '\ufeff' + listenCsv(listen()), datei = 'fluidplan-listen.csv';
+                if (typeof window._saveAsFile === 'function') { try { window._saveAsFile(txt, datei, 'text/csv', [{ description: 'CSV (Excel)', ext: '.csv' }]); return; } catch (err) {} }
+                const l = D().createElement('a'); l.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' })); l.download = datei; l.click();
+            }
+        });
+    }
+    // Schriftfeld (angelehnt an DIN EN ISO 7200): Angaben im Plan, Name und Schule auch für den nächsten Plan merken
+    const SF_FELDER = [['titel', 'Benennung (Titel)'], ['nummer', 'Zeichnungsnummer'], ['ersteller', 'Erstellt von'], ['geprueft', 'Geprüft von'], ['klasse', 'Klasse / Abteilung'], ['schule', 'Schule / Firma']];
+    function schriftfeld() {
+        let gemerkt = {}; try { gemerkt = JSON.parse(localStorage.getItem('valisSchriftfeld') || '{}'); } catch (e) {}
+        const sf = Object.assign({ titel: 'Fluidplan', nummer: '', ersteller: '', geprueft: '', klasse: '', schule: '' }, gemerkt, plan.schriftfeld || {});
+        if (!sf.titel) sf.titel = 'Fluidplan';
+        return sf;
+    }
+    function pdfDialog() {
+        const fl = svg.parentNode;
+        const alt = fl.querySelector('.fp-sf-dialog'); if (alt) alt.remove();
+        const sf = schriftfeld();
+        const box = h('div', { class: 'fp-listen fp-sf-dialog', html: `<div class="fp-listen-kopf"><b>🖨 Plan als PDF – Schriftfeld</b><span><button type="button" data-a="zu">✕</button></span></div>`
+            + SF_FELDER.map(([k, n]) => `<label class="fp-sf-zeile">${n}<input data-sf="${k}" value="${esc(sf[k])}"></label>`).join('')
+            + `<label class="fp-sf-zeile"><span><input type="checkbox" data-sf-listen checked> Betriebsmittel- und Stückliste als Blatt 2</span></label>`
+            + `<div style="margin-top:8px;text-align:right"><button type="button" data-a="los">🖨 PDF erstellen</button></div><div class="fp-sf-hinweis">Im Druckdialog „Als PDF speichern“ wählen.</div>` }, fl);
+        box.addEventListener('click', e => {
+            const a = e.target.closest('button') && e.target.closest('button').getAttribute('data-a'); if (!a) return;
+            if (a === 'zu') { box.remove(); return; }
+            const neu = {}; box.querySelectorAll('[data-sf]').forEach(i => { neu[i.getAttribute('data-sf')] = i.value.trim(); });
+            const mitListen = box.querySelector('[data-sf-listen]').checked;
+            aendern(() => { plan.schriftfeld = neu; });
+            try { localStorage.setItem('valisSchriftfeld', JSON.stringify({ ersteller: neu.ersteller, klasse: neu.klasse, schule: neu.schule })); } catch (err) {}
+            box.remove();
+            pdfDrucken(mitListen);
+        });
+    }
+    function pdfHtml(mitListen) {
+        const sf = schriftfeld(), S = svgText(), blaetter = mitListen ? 2 : 1;
+        const heute = new Date().toLocaleDateString('de-DE');
+        const feld = (blatt) => `<table class="sf"><tr><td class="k">Erstellt</td><td>${esc(sf.ersteller)}</td><td class="k">Datum</td><td>${heute}</td><td rowspan="2" class="titel" colspan="2">${esc(sf.titel)}</td></tr>
+            <tr><td class="k">Geprüft</td><td>${esc(sf.geprueft)}</td><td class="k">Klasse</td><td>${esc(sf.klasse)}</td></tr>
+            <tr><td class="k">Schule</td><td colspan="3">${esc(sf.schule)}</td><td class="k">Nr. ${esc(sf.nummer)}</td><td class="k">Blatt ${blatt}/${blaetter}</td></tr></table>`;
+        const css = `@page{size:A4 landscape;margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+            body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#000;background:#fff}
+            .blatt{width:281mm;height:194mm;border:0.6mm solid #000;position:relative;page-break-after:always;overflow:hidden;padding:6mm 6mm 34mm}
+            .blatt:last-child{page-break-after:auto}
+            .plan{width:100%;height:100%;display:flex;align-items:center;justify-content:center}.plan svg{max-width:100%;max-height:100%;width:auto;height:auto}
+            table.sf{position:absolute;right:0;bottom:0;border-collapse:collapse;font-size:9pt;width:180mm;background:#fff}
+            table.sf td{border:0.35mm solid #000;padding:1mm 2mm;height:8mm;vertical-align:top}
+            table.sf td.k{font-size:7pt;color:#333;white-space:nowrap}table.sf td.titel{font-size:14pt;font-weight:bold;vertical-align:middle;text-align:center;width:60mm}
+            h3{margin:0 0 2mm;font-size:12pt}table.fp-tab{border-collapse:collapse;width:100%;font-size:9pt;margin-bottom:5mm}
+            table.fp-tab th,table.fp-tab td{border:0.25mm solid #555;padding:1mm 2mm;text-align:left;vertical-align:top}table.fp-tab th{background:#e0e0e0}`;
+        let body = `<div class="blatt"><div class="plan">${S.txt}</div>${feld(1)}</div>`;
+        if (mitListen) body += `<div class="blatt">${listenHtml(listen())}${feld(2)}</div>`;
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(sf.titel)}</title><style>${css}</style></head><body>${body}</body></html>`;
+    }
+    function pdfDrucken(mitListen) {
+        if (!plan.teile.length) { status('Der Plan ist leer.'); return; }
+        const html = pdfHtml(mitListen);
+        const pw = W().open('', '_blank');
+        if (!pw) { status('Das Druckfenster wurde blockiert. Bitte Pop-ups für VALIS erlauben.'); return; }
+        pw.document.open(); pw.document.write(html); pw.document.close();
+        setTimeout(() => { try { pw.focus(); pw.print(); } catch (e) {} }, 400);
     }
     function hilfeZeigen() {
         const fl = svg.parentNode;
@@ -7435,6 +7581,10 @@ function versorgungMerken(F) {
         },
         verbinden: (a, ap, b, bp) => { leitungAnlegen({ t: a, p: ap }, { t: b, p: bp }); },
         _ablegen: (typ, x, y, o) => setzen({ typ, o }, x, y),
+        _listen: () => listen(),
+        _listenCsv: () => listenCsv(listen()),
+        _pdfHtml: (mitListen) => pdfHtml(mitListen !== false),
+        _schriftfeld: (sf) => { if (sf) aendern(() => { plan.schriftfeld = Object.assign({}, plan.schriftfeld || {}, sf); }); return schriftfeld(); },
         _rueckgaengig: () => rueckgaengig(),
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },
         _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },

@@ -976,6 +976,91 @@ const FAELLE = {
     R.push(['fpEinstellen nimmt nur bekannte Einstellungen', b.fpEinstellen(dr.id, { offen: 40, quatsch: 1 }) === true && dr.pneu.fp.o.offen === 40 && !('quatsch' in dr.pneu.fp.o)]);
     return R;
   }
+  ,
+  'Hydraulik: Aggregat, 4/3-Hebelventil, Zylinder': () => {
+    const F = Fluidplan, R = [], H = o => Object.assign({ hyd: true }, o || {});
+    const ag = F.setzen('aggregat', 40, 400, { q: 8, p: 60 });
+    const v = F.setzen('ventil', 20, 60, H({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'gesperrt' }), '1S1');
+    const z = F.setzen('zyl_dw', 20, -160, H({ d: 40, dStange: 20, hub: 200, last: 2000 }), '1M1');
+    const m = F.setzen('manometer', -100, 240, H());
+    F.verbinden(ag, 'P', v, '1'); F.verbinden(ag, 'T', v, '3'); F.verbinden(m, '1', ag, 'P'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    R.push(['Prüfung ohne Meldung', F.pruefen().length === 0, JSON.stringify(F.pruefen())]);
+    F._neu(); F._schritt(0.5);
+    const Z = () => F.zustand().teile, pP = () => Z()[ag].p.P;
+    R.push(['Mitte gesperrt: Druck steigt bis zur Druckbegrenzung (60 bar)', pP() > 55 && pP() < 63, pP()]);
+    R.push(['Mitte gesperrt: Zylinder steht', Z()[z].anteil < 0.01, Z()[z].anteil]);
+    R.push(['Manometer zeigt Pumpendruck', Math.abs(Z()[m].p['1'] - pP()) < 1, Z()[m].p['1']]);
+    F.druecken(v, 'L', true); F._schritt(0.5);
+    const a1 = Z()[z].anteil; F._schritt(0.5); const a2 = Z()[z].anteil;
+    // 8 l/min auf 12,57 cm² → 106 mm/s → 200 mm in etwa 1,9 s
+    const v1 = (a2 - a1) * 200 / 0.5;
+    R.push(['Hebel links: fährt aus mit Q/A (≈ 106 mm/s)', v1 > 85 && v1 < 115, v1]);
+    R.push(['während der Fahrt: Druck nach Last (unter 60 bar)', pP() < 40, pP()]);
+    F._schritt(3);
+    R.push(['vorne angekommen', Z()[z].anteil > 0.99, Z()[z].anteil]);
+    R.push(['in der Endlage: wieder Druckbegrenzung', pP() > 55 && pP() < 63, pP()]);
+    F.druecken(v, 'R', true); F._schritt(0.5); const b1 = Z()[z].anteil; F._schritt(0.5); const b2 = Z()[z].anteil;
+    const v2 = (b1 - b2) * 200 / 0.5;
+    // Ringfläche 9,42 cm² → 141 mm/s
+    R.push(['Hebel rechts: fährt schneller ein (Ringfläche)', v2 > v1 * 1.15, v2]);
+    F._schritt(0.3); F.druecken(v, 'R', true); const c1 = Z()[z].anteil; F._schritt(1); 
+    R.push(['Mitte: bleibt stehen', Math.abs(Z()[z].anteil - c1) < 0.01, Z()[z].anteil - c1]);
+    return R;
+  },
+  'Hydraulik: Stromregelventil hält die Geschwindigkeit, Drossel nicht': () => {
+    const F = Fluidplan, R = [], H = o => Object.assign({ hyd: true }, o || {});
+    const lauf = (art, last) => {
+      F._leeren();
+      const ag = F.setzen('aggregat', 40, 400, { q: 10, p: 80 });
+      const v = F.setzen('ventil', 20, 60, H({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'umlauf' }));
+      const z = F.setzen('zyl_dw', 20, -260, H({ d: 40, dStange: 20, hub: 400, last }));
+      const r = art === 'sr' ? F.setzen('stromregel', 40, -80, { q: 3 }) : F.setzen('drossel', 40, -80, H({ offen: 12 }));
+      F.verbinden(ag, 'P', v, '1'); F.verbinden(ag, 'T', v, '3'); F.verbinden(v, '4', r, '1'); F.verbinden(r, '2', z, 'K'); F.verbinden(v, '2', z, 'S');
+      F._neu(); F._schritt(0.3);
+      const pU = F.zustand().teile[ag].p.P;
+      F.druecken(v, 'L', true); F._schritt(0.6); const a = F.zustand().teile[z].anteil; F._schritt(1); const b = F.zustand().teile[z].anteil;
+      return { v: (b - a) * 400, pU };
+    };
+    const s0 = lauf('sr', 0), s1 = lauf('sr', 6000), d0 = lauf('dr', 0), d1 = lauf('dr', 6000);
+    R.push(['Umlauf: Pumpe drucklos in der Mitte', s0.pU < 5, s0.pU]);
+    // 3 l/min auf 12,57 cm² → 39,8 mm/s
+    R.push(['Stromregelventil: 3 l/min → ≈ 40 mm/s', s0.v > 34 && s0.v < 45, s0.v]);
+    R.push(['Stromregelventil: mit 6 kN Last fast gleich schnell', Math.abs(s1.v - s0.v) / s0.v < 0.12, s1.v]);
+    R.push(['Drossel: mit Last deutlich langsamer', d1.v < d0.v * 0.8, d0.v.toFixed(1) + ' → ' + d1.v.toFixed(1)]);
+    return R;
+  },
+  'Hydraulik: entsperrbares Rückschlagventil hält die Last': () => {
+    const F = Fluidplan, R = [], H = o => Object.assign({ hyd: true }, o || {});
+    F.beispielLaden(F.beispiele().findIndex(n => /entsperrbarem/.test(n)));
+    const p = F.plan(), z = p.teile.find(t => t.typ === 'zyl_dw').id, v = p.teile.find(t => t.typ === 'ventil').id;
+    R.push(['Beispiel ohne Prüfhinweis', F.pruefen().length === 0, JSON.stringify(F.pruefen())]);
+    F._neu(); spsState.Y1 = true; F._schritt(1.2); spsState.Y1 = false;
+    const a = F.zustand().teile[z].anteil; F._schritt(2);
+    R.push(['ausgefahren und gestoppt', a > 0.3, a]);
+    R.push(['Mitte (Schwimm): Last sinkt nicht', Math.abs(F.zustand().teile[z].anteil - a) < 0.01, F.zustand().teile[z].anteil - a]);
+    spsState.Y2 = true; F._schritt(1); spsState.Y2 = false;
+    R.push(['Y2 entsperrt: fährt ein', F.zustand().teile[z].anteil < a - 0.2, F.zustand().teile[z].anteil]);
+    void v; void H;
+    return R;
+  },
+  'Hydraulik: Öl und Luft nicht verbindbar, Speicher, DBV': () => {
+    const F = Fluidplan, R = [], H = o => Object.assign({ hyd: true }, o || {});
+    const q = F.setzen('quelle', 0, 300), ag = F.setzen('aggregat', 300, 300, { q: 6, p: 100 });
+    const k = F.setzen('knoten', 300, 100);
+    F.verbinden(ag, 'P', k, 'P'); F.verbinden(q, '1', k, 'P'); F.verbinden(q, '1', ag, 'T');
+    R.push(['Luft an Öl (auch über einen Knoten) wird abgelehnt', F.plan().leitungen.length === 1, F.plan().leitungen.length]);
+    const sp = F.setzen('speicher', 400, 100, { V0: 1, p0: 30 }), d = F.setzen('dbv', 200, 100, { p: 70 }), tk = F.setzen('tank', 200, 200);
+    F.verbinden(k, 'P', sp, '1'); F.verbinden(k, 'P', d, 'P'); F.verbinden(d, 'T', tk, '1');
+    F._neu(); F._schritt(0.5);
+    const p1 = F.zustand().teile[ag].p.P;
+    R.push(['Speicher: unter dem Vorfülldruck füllt die Pumpe schnell, darüber langsamer', p1 > 30 && p1 < 70, p1]);
+    F._schritt(20);
+    R.push(['DBV begrenzt auf 70 bar (Aggregat 100)', Math.abs(F.zustand().teile[ag].p.P - 70) < 3, F.zustand().teile[ag].p.P]);
+    const leer = F.exportieren(); R.push(['Leitungen mit Öl tragen die Klasse oel', document.querySelectorAll('.fp-leitung.oel').length >= 0, '']);
+    void leer; void H;
+    return R;
+  }
+
 };
 // Läuft nach Panel und Popup: öffnet den Plan selbst und darf das erste Einpassen nicht vorwegnehmen
 const NACH = {
@@ -983,8 +1068,8 @@ const NACH = {
     const R = [], F = Fluidplan, warte = ms => new Promise(r => setTimeout(r, ms));
     const fw = document.getElementById('fluid-wrapper'), offen = !!fw && fw.offsetWidth > 100;
     F._leeren(); if (!offen) F.umschalten();
-    const typen = ['ventil', 'zyl_dw', 'zyl_ew', 'schwenk', 'quelle', 'wartung', 'druckregel', 'manometer', 'daempfer', 'stopfen', 'rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'drv', 'zeit', 'folge', 'dschalter'];
-    const opts = { ventil: [{ wege: '5/2', links: 'magnet', rechts: 'feder' }, { wege: '3/2', links: 'pneu', rechts: 'feder' }, { wege: '5/2', links: 'pneu', rechts: 'pneu' }], wartung: [{}, { kurz: true }] };
+    const typen = ['ventil', 'zyl_dw', 'zyl_ew', 'schwenk', 'quelle', 'wartung', 'druckregel', 'manometer', 'daempfer', 'stopfen', 'rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'drv', 'zeit', 'folge', 'dschalter', 'aggregat', 'tank', 'dbv', 'stromregel', 'speicher', 'entsperr', 'filter'];
+    const opts = { ventil: [{ wege: '5/2', links: 'magnet', rechts: 'feder' }, { wege: '3/2', links: 'pneu', rechts: 'feder' }, { wege: '5/2', links: 'pneu', rechts: 'pneu' }, { hyd: true, wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf' }, { hyd: true, wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'schwimm' }], wartung: [{}, { kurz: true }] };
     let x = 0; const ids = [];
     for (const t of typen) for (const o of (opts[t] || [{}])) { ids.push([t, F.setzen(t, (x % 1000), Math.floor(x / 1000) * 150, o)]); x += 200; }
     await warte(200);

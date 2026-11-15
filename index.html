@@ -3642,6 +3642,129 @@
                     <svg id="sk-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"></svg>
                 </div>
             </div>
+            <!-- Steckaufbau links von der 2D-Anlage (Christoph 15.11.2026) -->
+            <!-- FESTO Didactic Aufbau-Panel: zeigt die konkrete Verkabelung des
+                 Schaltplans auf den realen Lehr-Boards (Taster, Relais, LED).
+                 Standard-Stellwand: 2 Taster + 2 Relais + 1 LED, mit Auto-
+                 Skalierung wenn der Plan mehr braucht. Phase 1: Panel-Boards
+                 + Auto-Zuordnung Variable→Slot. Phase 2: Kabel-Routing. -->
+            <div class="workspace-resizer" id="ws-resizer-festo"></div>
+            <div id="festo-wrapper" class="workspace-panel" style="display: none; background-color: #f5f5f0; position: relative;">
+                <!-- Persistenter Warn-Banner: nur sichtbar bei aktivem Getrennte-
+                     Stromkreise-Modus. Wichtig, damit Lehrkräfte und Schüler
+                     im Übungsbetrieb verstehen, dass die 230V-Darstellung
+                     ausschließlich didaktisch ist und KEIN realer 230V-Aufbau
+                     entsteht. Wird per JS ein-/ausgeblendet. -->
+                <div id="festo-dual-banner" style="display:none; background:linear-gradient(90deg,#b71c1c,#d32f2f,#b71c1c); color:#fff; padding:6px 12px; font-size:11px; font-weight:bold; text-align:center; border-bottom:2px solid #7f0000; flex-shrink:0; letter-spacing:0.3px; text-shadow:0 1px 1px rgba(0,0,0,0.4);">
+                    ⚠ 230V-DARSTELLUNG · NUR ZUR VERANSCHAULICHUNG · Schüler dürfen KEINE 230V-Aufbauten an realer Hardware bauen!
+                </div>
+                <div id="festo-toolbar" style="background:#37474f; color:#fff; padding:6px 10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; border-bottom:1px solid #263238; flex-shrink:0;">
+                    <span style="font-weight:bold;">🔌 Steckaufbau <span style="font-weight:normal;opacity:0.75;font-size:11px;cursor:help;" title="FESTO und Festo Didactic sind Marken der Festo SE &amp; Co. KG. Die Platinen sind zur Orientierung an der Schul-Hardware nachgezeichnet; VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.">nach FESTO-Didactic-Platinen ⓘ</span></span>
+                    <select id="festo-strand-filter" onchange="window._setFestoStrandFilter && window._setFestoStrandFilter(this.value)" title="Einzelnen Strompfad isolieren — wirkt synchron in mehreren Sichten:&#10;&#10;• Im Steckaufbau bleiben nur die Kabel des gewählten Strangs voll sichtbar; Power-Brücken und andere Stränge werden gedimmt.&#10;• Im Auto-Schaltplan werden alle Elemente, die nicht zum Strang gehören, ebenfalls gedimmt (Programm- und Anschluss-Sicht).&#10;• Im Trainings-Modus dient das Dropdown als Strang-Wähler: der Strang wird zum aktuellen Aufbau-Auftrag." style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 6px; font-size:11px; max-width:280px;">
+                        <option value="">Alle Stränge sichtbar</option>
+                    </select>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Animierter Stromfluss auf den Kabeln (nur bei aktiver Simulation)">
+                        <input type="checkbox" id="festo-flow-anim" onchange="window._setFestoFlowAnim && window._setFestoFlowAnim(this.checked)" style="margin:0;">
+                        <span style="font-size:11px;">⚡ Stromfluss</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Verlauf an Analogkabeln: Jedes Analog-Signalkabel zeigt eine kleine Kurve seiner Spannung über die letzten 10 Sekunden (nur bei aktiver Simulation)">
+                        <input type="checkbox" id="festo-ana-verlauf" onchange="window._setFestoAnaVerlauf && window._setFestoAnaVerlauf(this.checked)" style="margin:0;">
+                        <span style="font-size:11px;">〰️ Verlauf</span>
+                    </label>
+                    <button type="button" id="festo-freebuild-toggle" class="festo-mode-btn" onclick="window._toggleFestoFreeBuild && window._toggleFestoFreeBuild()" title="Freier Aufbau (BETA): reale FESTO-Module selbst platzieren und verdrahten. Aus der Verkabelung wird Code erzeugt und über den Schaltplan zurückgespielt (Round-trip). BETA — noch in Erprobung, Rückmeldungen willkommen.">🧩 Freier Aufbau<span class="fb-beta-badge">BETA</span></button>
+                    <button type="button" id="festo-step-toggle" class="festo-mode-btn" onclick="window._setFestoStepMode && window._setFestoStepMode(!window._festoStepModeActive)" title="Kabel-Schritt-Modus: Kabel nacheinander platzieren. Klick auf SVG → Tastatur ←/→ oder STRG + Mausrad steuert. Plain Mausrad zoomt wie gewohnt.">🪜 Schritt-Modus</button>
+                    <button type="button" id="festo-train-toggle" class="festo-mode-btn" onclick="window._setFestoTrainMode && window._setFestoTrainMode(!window._festoTrainModeActive)" title="Trainingsmodus: Kabel selbst per Drag&amp;Drop von Sockel zu Sockel verlegen, mit Live-Feedback.">🎓 Trainingsmodus</button>
+                    <label id="festo-train-hints-label" style="display:none; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Sockel des aktuellen Soll-Strangs hellblau pulsieren lassen.">
+                        <input type="checkbox" id="festo-train-hints" checked onchange="window._setFestoTrainHints && window._setFestoTrainHints(this.checked)" style="margin:0;">
+                        <span style="font-size:11px;">💡 Hinweise</span>
+                    </label>
+                    <span id="festo-step-controls" style="display:none; align-items:center; gap:6px;">
+                        <button type="button" id="festo-step-prev" onclick="window._festoStep && window._festoStep(-1)" title="Vorheriges Kabel (← / STRG + Mausrad hoch)" style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 8px; font-size:11px; cursor:pointer; border-radius:3px;">◀ Zurück</button>
+                        <span id="festo-step-counter" style="color:#80deea; font-size:11px; font-family:'Consolas',monospace; min-width:54px; text-align:center;">0 / 0</span>
+                        <button type="button" id="festo-step-next" onclick="window._festoStep && window._festoStep(1)" title="Nächstes Kabel (→ / STRG + Mausrad runter)" style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 8px; font-size:11px; cursor:pointer; border-radius:3px;">Weiter ▶</button>
+                        <button type="button" id="festo-step-all" onclick="window._festoStep && window._festoStep('all')" title="Alle Kabel anzeigen" style="background:#37474f; color:#80deea; border:1px solid #455a64; padding:2px 6px; font-size:10px; cursor:pointer; border-radius:3px;">Alle</button>
+                    </span>
+                    <button type="button" id="festo-btn-messen" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.umschalten('steck')" aria-label="Multimeter" title="Multimeter: Virtuelles Multimeter wie an der Aufbauwand: Spannung gegen 0 V bei eingeschalteter Anlage (Simulation läuft), Widerstand und Durchgang mit Summer bei ausgeschalteter Anlage. Klick auf eine Buchse = rote Spitze, Shift-Klick oder Rechtsklick = schwarze Spitze (COM)."><svg class="elm-mm-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:middle;display:block;width:20px;height:20px;flex:none"><rect x="5" y="2" width="14" height="20" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="7.5" y="4.5" width="9" height="5" rx="0.8" fill="currentColor" opacity="0.85"/><circle cx="12" cy="14.5" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12" y1="14.5" x2="13.9" y2="12.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="19.6" r="0.9" fill="#e53935"/><circle cx="15" cy="19.6" r="0.9" fill="currentColor"/></svg></button>
+                    <button type="button" id="festo-btn-fehler" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.fehlersucheUmschalten()" title="Elektrische Fehlersuche: Die Lehrkraft baut versteckte Fehler ein (Ader gebrochen, Kontakt abgebrannt oder verschweißt, Spule unterbrochen, Sensor defekt). Die Fehler wirken auf die Simulation. Lernende messen mit dem Multimeter und melden ihren Befund.">🔍 Fehlersuche</button>
+                    <span id="festo-stats" style="color:#90a4ae; font-size:10px; font-family:'Consolas',monospace; margin-left:10px;"></span>
+                    <span style="position:relative; margin-left:auto; display:inline-flex; align-items:center;">
+                        <button id="festo-settings-btn" type="button" onclick="window._toggleFestoSettingsMenu && window._toggleFestoSettingsMenu(event)" title="Steckaufbau Einstellungen" style="background:transparent; color:#cfd8dc; border:1px solid #455a64; border-radius:3px; padding:2px 7px; font-size:14px; cursor:pointer; line-height:1;">⚙️</button>
+                        <div id="festo-settings-menu" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background:#263238; border:1px solid #455a64; border-radius:5px; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,0.45); z-index:50; min-width:230px; max-height:80vh; overflow-y:auto;">
+                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; color:#eceff1; font-size:11px;" title="Färbt jedes FESTO-Kabel nach seinem logischen Strang ein (statt der Standard-Farben Rot für +24V und Blau für die übrige Verdrahtung).">
+                                <input type="checkbox" id="festo-colorful-cables" onchange="window._toggleFestoColorfulCables && window._toggleFestoColorfulCables(this.checked)" style="margin:0;">
+                                <span>🌈 Bunte Kabel</span>
+                            </label>
+                        </div>
+                    </span>
+                    <span style="color:#80deea; font-size:10px;">Maus-Drag = Pan, Mausrad = Zoom.</span>
+                </div>
+                <!-- Info-Panel: zeigt im Schritt-Modus die Beschreibung des
+                     gerade platzierten Kabels, im Trainingsmodus den
+                     Aufbau-Auftrag und das Live-Feedback.
+                     Feste Höhe + interner Scroll: ohne fixe Höhe würde der
+                     Panel-Inhalt darunter je nach Text-Länge auf- und ab-
+                     springen — beim Kabel-Platzieren extrem störend. -->
+                <div id="festo-info-panel" style="display:none; background:#eceff1; border-bottom:1px solid #cfd8dc; padding:8px 12px; font-size:12px; color:#37474f; flex-shrink:0; height:92px; box-sizing:border-box; overflow-y:auto;">
+                    <div id="festo-info-headline" style="font-weight:bold; margin-bottom:2px;"></div>
+                    <div id="festo-info-text" style="line-height:1.4;"></div>
+                </div>
+                <!-- festo-body ist scrollbar; user-select:none verhindert Text-
+                     Markierung beim Drag-Pan; cursor:grab signalisiert Drag. -->
+                <div id="festo-body" style="flex:1; overflow:auto; padding:14px; background:#eceff1; position:relative; user-select:none; -webkit-user-select:none; cursor:grab;">
+                    <svg id="festo-svg" xmlns="http://www.w3.org/2000/svg" style="display:block; transform-origin: 0 0;"></svg>
+                </div>
+                <!-- Zoom-Controls AUSSERHALB von festo-body, damit sie beim
+                     Scrollen/Zoomen nicht mit dem SVG-Inhalt wandern. -->
+                <div class="festo-zoom-controls">
+                    <button onclick="festoZoomIn()" title="Vergrößern">+</button>
+                    <button onclick="festoZoomReset()" title="Zoom zurücksetzen" style="font-size:12px;">🏠</button>
+                    <button onclick="festoZoomOut()" title="Verkleinern">−</button>
+                </div>
+                <!-- Freier-Aufbau-Werkzeugpanel: schwebend, einklappbar, damit es
+                     dauerhaft erreichbar ist ohne die Sicht groß einzuschränken. -->
+                <div id="fb-panel" style="display:none; position:absolute; top:52px; left:12px; z-index:30; width:238px; background:rgba(38,50,56,0.95); border:1px solid #455a64; border-radius:7px; box-shadow:0 6px 20px rgba(0,0,0,0.5); font-family:'Segoe UI',sans-serif; backdrop-filter:blur(2px);">
+                    <div id="fb-panel-head" onclick="window._fbTogglePanel && window._fbTogglePanel()" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#1976d2; border-radius:6px 6px 0 0; color:#fff; font-size:11px; font-weight:bold; user-select:none;" title="Panel ein-/ausklappen">
+                        <span>🧩 Freier Aufbau</span><span id="fb-panel-caret">▾</span>
+                    </div>
+                    <div id="fb-panel-body" style="padding:8px 10px; max-height:70vh; overflow-y:auto;">
+                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:2px 2px 3px; border-bottom:1px solid #3a3a3a;">➕ Modul hinzufügen</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:6px 0;">
+                            <button type="button" onclick="window._fbAddModule('taster')" title="FESTO 162242 · Signaleingabe (4 Taster/Schalter, 24V/0V-Bus)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔘 Signaleingabe (Taster/Schalter)</button>
+                            <button type="button" onclick="window._fbAddModule('led')" title="FESTO 162244 · Meldeeinrichtung (8 LEDs + Hupe + Verteiler)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">💡 Meldeeinrichtung (LED/Hupe)</button>
+                            <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
+                            <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
+                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
+                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht. Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU) · Lernmodell</button>
+                        </div>
+                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
+                            <button type="button" onclick="window._fbAddModule('ana_geber')" title="Analoggeber: zwei Ausgänge 0 … 10 V (Messumformer bzw. Sollwertgeber aus der Anlage)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">📈 Analoggeber</button>
+                            <button type="button" onclick="window._fbAddModule('ana_komp')" title="Komparatorkarte: 2 Eingänge, 4 Komparatoren mit Relais-Wechsler (11/12/14)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 Komparatorkarte</button>
+                            <button type="button" onclick="window._fbAddModule('ana_pid')" title="PID-Reglerkarte: Eingänge W und X, P/I/D je Poti × Stufe, Ausgang Y" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 PID-Reglerkarte</button>
+                        </div>
+                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Sensoren</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
+                            <button type="button" onclick="window._fbAddModule('sensor','inductive')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Induktiv</button>
+                            <button type="button" onclick="window._fbAddModule('sensor','capacitive')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Kapazitiv</button>
+                            <button type="button" onclick="window._fbAddModule('sensor','optical')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Optisch</button>
+                            <button type="button" onclick="window._fbAddModule('sensor','magnetic')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Zylinder</button>
+                            <button type="button" onclick="window._fbAddModule('sensor','reed')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Reed</button>
+                        </div>
+                        <button type="button" onclick="window._fbGenerate && window._fbGenerate()" style="width:100%; background:#ff9800; color:#fff; border:none; border-radius:3px; padding:6px; font-size:11px; font-weight:bold; cursor:pointer; margin-top:2px;">⚙ Code aus Aufbau</button>
+                        <label style="display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer; user-select:none; color:#cfd8dc; font-size:10px;" title="Live-Sync: Bei jeder Änderung an der Verkabelung wird automatisch Code erzeugt und in Schaltplan/FESTO zurückgespielt. Aus = nur manuell über „Code aus Aufbau".">
+                            <input type="checkbox" id="fb-livesync" onchange="window._fbSetLiveSync && window._fbSetLiveSync(this.checked)" style="margin:0;">
+                            <span>🔄 Live-Sync: Aufbau → Code/Schaltplan</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; margin-top:4px; cursor:pointer; user-select:none; color:#cfd8dc; font-size:10px;" title="Nach einer Codegenerierung Kabel orange (gestrichelt) markieren, die NICHT im Code umgesetzt sind — also zu unvollständigen Strängen gehören (z. B. fehlender +24V-Eingang oder 0V-Rückweg). Umgesetzte Kabel bleiben grün.">
+                            <input type="checkbox" id="fb-mark-incomplete" onchange="window._fbSetMarkIncomplete && window._fbSetMarkIncomplete(this.checked)" style="margin:0;">
+                            <span>⚠ Unvollständige Kabel markieren</span>
+                        </label>
+                        <button type="button" onclick="window._fbClearCables && window._fbClearCables()" title="Alle Kabel entfernen — die platzierten Module bleiben erhalten." style="width:100%; background:#4e342e; color:#ffccbc; border:1px solid #6d4c41; border-radius:3px; padding:5px; font-size:10px; cursor:pointer; margin-top:6px;">🧹 Alle Kabel entfernen</button>
+                        <div id="fb-status" style="margin-top:6px; font-size:10px; color:#80cbc4; line-height:1.3; white-space:pre-line;"></div>
+                        <div style="margin-top:4px; font-size:9px; color:#78909c; line-height:1.3;">Buchse zu Buchse ziehen (oder erst eine, dann die zweite Buchse klicken) = Kabel. Kabel klicken = löschen. × am Board entfernt es. Strom kommt aus dem 24V/0V-Bus der Signaleingabe/Meldeeinrichtung.</div>
+                    </div>
+                </div>
+            </div>
             <div class="workspace-resizer" id="ws-resizer-2" style="grid-area: r2;"></div>
             <div id="factory-wrapper" class="workspace-panel" style="display: none; grid-area: sim; background-color: #e8ecef;">
                 <div id="factory-toolbar">
@@ -4025,128 +4148,6 @@
                     <button onclick="factoryZoomOut()" title="Verkleinern">−</button>
                     <button onclick="factoryZoomReset()" title="Ansicht zurücksetzen" style="font-size:12px;">🏠</button>
                     <button id="btn-minimap-toggle" onclick="toggleMinimap()" title="Minimap ein/ausblenden" style="font-size:14px;background:#37474f;color:#ccc;border-color:#555;">🗺</button>
-                </div>
-            </div>
-            <!-- FESTO Didactic Aufbau-Panel: zeigt die konkrete Verkabelung des
-                 Schaltplans auf den realen Lehr-Boards (Taster, Relais, LED).
-                 Standard-Stellwand: 2 Taster + 2 Relais + 1 LED, mit Auto-
-                 Skalierung wenn der Plan mehr braucht. Phase 1: Panel-Boards
-                 + Auto-Zuordnung Variable→Slot. Phase 2: Kabel-Routing. -->
-            <div class="workspace-resizer" id="ws-resizer-festo"></div>
-            <div id="festo-wrapper" class="workspace-panel" style="display: none; background-color: #f5f5f0; position: relative;">
-                <!-- Persistenter Warn-Banner: nur sichtbar bei aktivem Getrennte-
-                     Stromkreise-Modus. Wichtig, damit Lehrkräfte und Schüler
-                     im Übungsbetrieb verstehen, dass die 230V-Darstellung
-                     ausschließlich didaktisch ist und KEIN realer 230V-Aufbau
-                     entsteht. Wird per JS ein-/ausgeblendet. -->
-                <div id="festo-dual-banner" style="display:none; background:linear-gradient(90deg,#b71c1c,#d32f2f,#b71c1c); color:#fff; padding:6px 12px; font-size:11px; font-weight:bold; text-align:center; border-bottom:2px solid #7f0000; flex-shrink:0; letter-spacing:0.3px; text-shadow:0 1px 1px rgba(0,0,0,0.4);">
-                    ⚠ 230V-DARSTELLUNG · NUR ZUR VERANSCHAULICHUNG · Schüler dürfen KEINE 230V-Aufbauten an realer Hardware bauen!
-                </div>
-                <div id="festo-toolbar" style="background:#37474f; color:#fff; padding:6px 10px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12px; border-bottom:1px solid #263238; flex-shrink:0;">
-                    <span style="font-weight:bold;">🔌 Steckaufbau <span style="font-weight:normal;opacity:0.75;font-size:11px;cursor:help;" title="FESTO und Festo Didactic sind Marken der Festo SE &amp; Co. KG. Die Platinen sind zur Orientierung an der Schul-Hardware nachgezeichnet; VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.">nach FESTO-Didactic-Platinen ⓘ</span></span>
-                    <select id="festo-strand-filter" onchange="window._setFestoStrandFilter && window._setFestoStrandFilter(this.value)" title="Einzelnen Strompfad isolieren — wirkt synchron in mehreren Sichten:&#10;&#10;• Im Steckaufbau bleiben nur die Kabel des gewählten Strangs voll sichtbar; Power-Brücken und andere Stränge werden gedimmt.&#10;• Im Auto-Schaltplan werden alle Elemente, die nicht zum Strang gehören, ebenfalls gedimmt (Programm- und Anschluss-Sicht).&#10;• Im Trainings-Modus dient das Dropdown als Strang-Wähler: der Strang wird zum aktuellen Aufbau-Auftrag." style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 6px; font-size:11px; max-width:280px;">
-                        <option value="">Alle Stränge sichtbar</option>
-                    </select>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Animierter Stromfluss auf den Kabeln (nur bei aktiver Simulation)">
-                        <input type="checkbox" id="festo-flow-anim" onchange="window._setFestoFlowAnim && window._setFestoFlowAnim(this.checked)" style="margin:0;">
-                        <span style="font-size:11px;">⚡ Stromfluss</span>
-                    </label>
-                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Verlauf an Analogkabeln: Jedes Analog-Signalkabel zeigt eine kleine Kurve seiner Spannung über die letzten 10 Sekunden (nur bei aktiver Simulation)">
-                        <input type="checkbox" id="festo-ana-verlauf" onchange="window._setFestoAnaVerlauf && window._setFestoAnaVerlauf(this.checked)" style="margin:0;">
-                        <span style="font-size:11px;">〰️ Verlauf</span>
-                    </label>
-                    <button type="button" id="festo-freebuild-toggle" class="festo-mode-btn" onclick="window._toggleFestoFreeBuild && window._toggleFestoFreeBuild()" title="Freier Aufbau (BETA): reale FESTO-Module selbst platzieren und verdrahten. Aus der Verkabelung wird Code erzeugt und über den Schaltplan zurückgespielt (Round-trip). BETA — noch in Erprobung, Rückmeldungen willkommen.">🧩 Freier Aufbau<span class="fb-beta-badge">BETA</span></button>
-                    <button type="button" id="festo-step-toggle" class="festo-mode-btn" onclick="window._setFestoStepMode && window._setFestoStepMode(!window._festoStepModeActive)" title="Kabel-Schritt-Modus: Kabel nacheinander platzieren. Klick auf SVG → Tastatur ←/→ oder STRG + Mausrad steuert. Plain Mausrad zoomt wie gewohnt.">🪜 Schritt-Modus</button>
-                    <button type="button" id="festo-train-toggle" class="festo-mode-btn" onclick="window._setFestoTrainMode && window._setFestoTrainMode(!window._festoTrainModeActive)" title="Trainingsmodus: Kabel selbst per Drag&amp;Drop von Sockel zu Sockel verlegen, mit Live-Feedback.">🎓 Trainingsmodus</button>
-                    <label id="festo-train-hints-label" style="display:none; align-items:center; gap:4px; cursor:pointer; user-select:none;" title="Sockel des aktuellen Soll-Strangs hellblau pulsieren lassen.">
-                        <input type="checkbox" id="festo-train-hints" checked onchange="window._setFestoTrainHints && window._setFestoTrainHints(this.checked)" style="margin:0;">
-                        <span style="font-size:11px;">💡 Hinweise</span>
-                    </label>
-                    <span id="festo-step-controls" style="display:none; align-items:center; gap:6px;">
-                        <button type="button" id="festo-step-prev" onclick="window._festoStep && window._festoStep(-1)" title="Vorheriges Kabel (← / STRG + Mausrad hoch)" style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 8px; font-size:11px; cursor:pointer; border-radius:3px;">◀ Zurück</button>
-                        <span id="festo-step-counter" style="color:#80deea; font-size:11px; font-family:'Consolas',monospace; min-width:54px; text-align:center;">0 / 0</span>
-                        <button type="button" id="festo-step-next" onclick="window._festoStep && window._festoStep(1)" title="Nächstes Kabel (→ / STRG + Mausrad runter)" style="background:#263238; color:#fff; border:1px solid #455a64; padding:2px 8px; font-size:11px; cursor:pointer; border-radius:3px;">Weiter ▶</button>
-                        <button type="button" id="festo-step-all" onclick="window._festoStep && window._festoStep('all')" title="Alle Kabel anzeigen" style="background:#37474f; color:#80deea; border:1px solid #455a64; padding:2px 6px; font-size:10px; cursor:pointer; border-radius:3px;">Alle</button>
-                    </span>
-                    <button type="button" id="festo-btn-messen" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.umschalten('steck')" aria-label="Multimeter" title="Multimeter: Virtuelles Multimeter wie an der Aufbauwand: Spannung gegen 0 V bei eingeschalteter Anlage (Simulation läuft), Widerstand und Durchgang mit Summer bei ausgeschalteter Anlage. Klick auf eine Buchse = rote Spitze, Shift-Klick oder Rechtsklick = schwarze Spitze (COM)."><svg class="elm-mm-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="vertical-align:middle;display:block;width:20px;height:20px;flex:none"><rect x="5" y="2" width="14" height="20" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="7.5" y="4.5" width="9" height="5" rx="0.8" fill="currentColor" opacity="0.85"/><circle cx="12" cy="14.5" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12" y1="14.5" x2="13.9" y2="12.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="19.6" r="0.9" fill="#e53935"/><circle cx="15" cy="19.6" r="0.9" fill="currentColor"/></svg></button>
-                    <button type="button" id="festo-btn-fehler" class="festo-mode-btn elm-mess-btn" onclick="window.ElMessen && window.ElMessen.fehlersucheUmschalten()" title="Elektrische Fehlersuche: Die Lehrkraft baut versteckte Fehler ein (Ader gebrochen, Kontakt abgebrannt oder verschweißt, Spule unterbrochen, Sensor defekt). Die Fehler wirken auf die Simulation. Lernende messen mit dem Multimeter und melden ihren Befund.">🔍 Fehlersuche</button>
-                    <span id="festo-stats" style="color:#90a4ae; font-size:10px; font-family:'Consolas',monospace; margin-left:10px;"></span>
-                    <span style="position:relative; margin-left:auto; display:inline-flex; align-items:center;">
-                        <button id="festo-settings-btn" type="button" onclick="window._toggleFestoSettingsMenu && window._toggleFestoSettingsMenu(event)" title="Steckaufbau Einstellungen" style="background:transparent; color:#cfd8dc; border:1px solid #455a64; border-radius:3px; padding:2px 7px; font-size:14px; cursor:pointer; line-height:1;">⚙️</button>
-                        <div id="festo-settings-menu" style="display:none; position:absolute; top:calc(100% + 6px); right:0; background:#263238; border:1px solid #455a64; border-radius:5px; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,0.45); z-index:50; min-width:230px; max-height:80vh; overflow-y:auto;">
-                            <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; color:#eceff1; font-size:11px;" title="Färbt jedes FESTO-Kabel nach seinem logischen Strang ein (statt der Standard-Farben Rot für +24V und Blau für die übrige Verdrahtung).">
-                                <input type="checkbox" id="festo-colorful-cables" onchange="window._toggleFestoColorfulCables && window._toggleFestoColorfulCables(this.checked)" style="margin:0;">
-                                <span>🌈 Bunte Kabel</span>
-                            </label>
-                        </div>
-                    </span>
-                    <span style="color:#80deea; font-size:10px;">Maus-Drag = Pan, Mausrad = Zoom.</span>
-                </div>
-                <!-- Info-Panel: zeigt im Schritt-Modus die Beschreibung des
-                     gerade platzierten Kabels, im Trainingsmodus den
-                     Aufbau-Auftrag und das Live-Feedback.
-                     Feste Höhe + interner Scroll: ohne fixe Höhe würde der
-                     Panel-Inhalt darunter je nach Text-Länge auf- und ab-
-                     springen — beim Kabel-Platzieren extrem störend. -->
-                <div id="festo-info-panel" style="display:none; background:#eceff1; border-bottom:1px solid #cfd8dc; padding:8px 12px; font-size:12px; color:#37474f; flex-shrink:0; height:92px; box-sizing:border-box; overflow-y:auto;">
-                    <div id="festo-info-headline" style="font-weight:bold; margin-bottom:2px;"></div>
-                    <div id="festo-info-text" style="line-height:1.4;"></div>
-                </div>
-                <!-- festo-body ist scrollbar; user-select:none verhindert Text-
-                     Markierung beim Drag-Pan; cursor:grab signalisiert Drag. -->
-                <div id="festo-body" style="flex:1; overflow:auto; padding:14px; background:#eceff1; position:relative; user-select:none; -webkit-user-select:none; cursor:grab;">
-                    <svg id="festo-svg" xmlns="http://www.w3.org/2000/svg" style="display:block; transform-origin: 0 0;"></svg>
-                </div>
-                <!-- Zoom-Controls AUSSERHALB von festo-body, damit sie beim
-                     Scrollen/Zoomen nicht mit dem SVG-Inhalt wandern. -->
-                <div class="festo-zoom-controls">
-                    <button onclick="festoZoomIn()" title="Vergrößern">+</button>
-                    <button onclick="festoZoomReset()" title="Zoom zurücksetzen" style="font-size:12px;">🏠</button>
-                    <button onclick="festoZoomOut()" title="Verkleinern">−</button>
-                </div>
-                <!-- Freier-Aufbau-Werkzeugpanel: schwebend, einklappbar, damit es
-                     dauerhaft erreichbar ist ohne die Sicht groß einzuschränken. -->
-                <div id="fb-panel" style="display:none; position:absolute; top:52px; left:12px; z-index:30; width:238px; background:rgba(38,50,56,0.95); border:1px solid #455a64; border-radius:7px; box-shadow:0 6px 20px rgba(0,0,0,0.5); font-family:'Segoe UI',sans-serif; backdrop-filter:blur(2px);">
-                    <div id="fb-panel-head" onclick="window._fbTogglePanel && window._fbTogglePanel()" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#1976d2; border-radius:6px 6px 0 0; color:#fff; font-size:11px; font-weight:bold; user-select:none;" title="Panel ein-/ausklappen">
-                        <span>🧩 Freier Aufbau</span><span id="fb-panel-caret">▾</span>
-                    </div>
-                    <div id="fb-panel-body" style="padding:8px 10px; max-height:70vh; overflow-y:auto;">
-                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:2px 2px 3px; border-bottom:1px solid #3a3a3a;">➕ Modul hinzufügen</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:6px 0;">
-                            <button type="button" onclick="window._fbAddModule('taster')" title="FESTO 162242 · Signaleingabe (4 Taster/Schalter, 24V/0V-Bus)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔘 Signaleingabe (Taster/Schalter)</button>
-                            <button type="button" onclick="window._fbAddModule('led')" title="FESTO 162244 · Meldeeinrichtung (8 LEDs + Hupe + Verteiler)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">💡 Meldeeinrichtung (LED/Hupe)</button>
-                            <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
-                            <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
-                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
-                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht. Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU) · Lernmodell</button>
-                        </div>
-                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
-                            <button type="button" onclick="window._fbAddModule('ana_geber')" title="Analoggeber: zwei Ausgänge 0 … 10 V (Messumformer bzw. Sollwertgeber aus der Anlage)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">📈 Analoggeber</button>
-                            <button type="button" onclick="window._fbAddModule('ana_komp')" title="Komparatorkarte: 2 Eingänge, 4 Komparatoren mit Relais-Wechsler (11/12/14)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 Komparatorkarte</button>
-                            <button type="button" onclick="window._fbAddModule('ana_pid')" title="PID-Reglerkarte: Eingänge W und X, P/I/D je Poti × Stufe, Ausgang Y" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🎛 PID-Reglerkarte</button>
-                        </div>
-                        <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Sensoren</div>
-                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
-                            <button type="button" onclick="window._fbAddModule('sensor','inductive')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Induktiv</button>
-                            <button type="button" onclick="window._fbAddModule('sensor','capacitive')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Kapazitiv</button>
-                            <button type="button" onclick="window._fbAddModule('sensor','optical')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Optisch</button>
-                            <button type="button" onclick="window._fbAddModule('sensor','magnetic')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Zylinder</button>
-                            <button type="button" onclick="window._fbAddModule('sensor','reed')" style="flex:1 1 46%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">Reed</button>
-                        </div>
-                        <button type="button" onclick="window._fbGenerate && window._fbGenerate()" style="width:100%; background:#ff9800; color:#fff; border:none; border-radius:3px; padding:6px; font-size:11px; font-weight:bold; cursor:pointer; margin-top:2px;">⚙ Code aus Aufbau</button>
-                        <label style="display:flex; align-items:center; gap:6px; margin-top:6px; cursor:pointer; user-select:none; color:#cfd8dc; font-size:10px;" title="Live-Sync: Bei jeder Änderung an der Verkabelung wird automatisch Code erzeugt und in Schaltplan/FESTO zurückgespielt. Aus = nur manuell über „Code aus Aufbau".">
-                            <input type="checkbox" id="fb-livesync" onchange="window._fbSetLiveSync && window._fbSetLiveSync(this.checked)" style="margin:0;">
-                            <span>🔄 Live-Sync: Aufbau → Code/Schaltplan</span>
-                        </label>
-                        <label style="display:flex; align-items:center; gap:6px; margin-top:4px; cursor:pointer; user-select:none; color:#cfd8dc; font-size:10px;" title="Nach einer Codegenerierung Kabel orange (gestrichelt) markieren, die NICHT im Code umgesetzt sind — also zu unvollständigen Strängen gehören (z. B. fehlender +24V-Eingang oder 0V-Rückweg). Umgesetzte Kabel bleiben grün.">
-                            <input type="checkbox" id="fb-mark-incomplete" onchange="window._fbSetMarkIncomplete && window._fbSetMarkIncomplete(this.checked)" style="margin:0;">
-                            <span>⚠ Unvollständige Kabel markieren</span>
-                        </label>
-                        <button type="button" onclick="window._fbClearCables && window._fbClearCables()" title="Alle Kabel entfernen — die platzierten Module bleiben erhalten." style="width:100%; background:#4e342e; color:#ffccbc; border:1px solid #6d4c41; border-radius:3px; padding:5px; font-size:10px; cursor:pointer; margin-top:6px;">🧹 Alle Kabel entfernen</button>
-                        <div id="fb-status" style="margin-top:6px; font-size:10px; color:#80cbc4; line-height:1.3; white-space:pre-line;"></div>
-                        <div style="margin-top:4px; font-size:9px; color:#78909c; line-height:1.3;">Buchse zu Buchse ziehen (oder erst eine, dann die zweite Buchse klicken) = Kabel. Kabel klicken = löschen. × am Board entfernt es. Strom kommt aus dem 24V/0V-Bus der Signaleingabe/Meldeeinrichtung.</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -22458,16 +22459,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (resizerSk) resizerSk.style.removeProperty('display');
                 if (resizerFesto) resizerFesto.style.removeProperty('display');
                 if (resizerFluid) resizerFluid.style.removeProperty('display');
-                if (resizer1) resizer1.style.display = (p0 && (p1 || pE || p2 || pS || pF || pFl)) ? 'block' : 'none';
-                // Editor-Resizer sichtbar wenn Editor aktiv UND ein Nachbar-Panel ebenfalls aktiv
-                if (resizerEdit) resizerEdit.style.display = (pE && (p1 || p0 || p2 || pS || pF || pFl)) ? 'block' : 'none';
-                if (resizer2) resizer2.style.display = ((p1 || pE || pFl) && (p2 || pS || pF)) ? 'block' : 'none';
-                // SK-Resizer trennt sk-wrapper vom Vorgänger-Panel
-                if (resizerSk) resizerSk.style.display = (pS && (p0 || p1 || pE || p2 || pF || pFl)) ? 'block' : 'none';
-                // Festo-Resizer trennt festo-wrapper vom Vorgänger-Panel
-                if (resizerFesto) resizerFesto.style.display = (pF && (p0 || p1 || pE || p2 || pS || pFl)) ? 'block' : 'none';
-                // Fluidplan-Resizer trennt fluid-wrapper vom Vorgänger-Panel
-                if (resizerFluid) resizerFluid.style.display = (pFl && (p0 || p1 || pE)) ? 'block' : 'none';   // steht direkt hinter dem Elektroplan
+                // Jeder Trenner steht im DOM direkt vor seinem Panel. Sichtbar ist er,
+                // wenn sein Panel offen ist und links davon (früher im DOM) noch eines.
+                // Reihenfolge: Logikplan | Schaltplan | Elektroplan | Fluidplan |
+                // Schrittkette | Steckaufbau | 2D-Anlage (Christoph 15.11.2026).
+                const _reihe = [[null, p0], [resizer1, p1], [resizerEdit, pE], [resizerFluid, pFl], [resizerSk, pS], [resizerFesto, pF], [resizer2, p2]];
+                let _davor = false;
+                _reihe.forEach(([r, offen]) => {
+                    if (r) r.style.display = (offen && _davor) ? 'block' : 'none';
+                    if (offen) _davor = true;
+                });
             }
             // Dynamisches Grid-Template einsetzen, wenn fbs/iec ausgeblendet sind ODER
             // festo aktiv ist (die statischen Templates kennen kein festo) —

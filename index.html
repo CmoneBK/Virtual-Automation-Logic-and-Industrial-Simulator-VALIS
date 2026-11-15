@@ -1021,6 +1021,13 @@
         .switch-row.sim-forciert { outline: 2px solid #ff9800; outline-offset: -2px; }
         .sim-force-chip { margin-left: 6px; flex-shrink: 0; background: #ff9800; color: #1e1e1e; border: none; border-radius: 3px; font: bold 10px/1 monospace; padding: 3px 5px; cursor: pointer; }
         .sim-force-chip:hover { background: #ffb74d; }
+        /* Wird ein Variablenname abgeschnitten (Zoom, schmale Spalte), rückt die Typ-Auswahl
+           in die zweite Zeile vor den Schalter; der Name hat oben die ganze Breite (Christoph 15.11.2026) */
+        .sim-grid.sim-namen-oben :is(.switch-row, .led-row):not(.is-orphan) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 6px; align-items: center; }
+        .sim-grid.sim-namen-oben :is(.switch-row, .led-row):not(.is-orphan) > .flex-row-between:first-child { display: contents; }
+        .sim-grid.sim-namen-oben :is(.switch-row, .led-row):not(.is-orphan) > .flex-row-between:first-child > div:first-child { grid-column: 1 / -1; min-width: 0; }
+        .sim-grid.sim-namen-oben :is(.switch-row, .led-row):not(.is-orphan) > .flex-row-between:first-child > select { grid-column: 1; justify-self: start; margin-left: 0; max-width: 100%; }
+        .sim-grid.sim-namen-oben :is(.switch-row, .led-row):not(.is-orphan) > .flex-row-between:nth-child(2) { grid-column: 2; width: auto; }
         .key-bind-btn.assigning { background: #007acc; color: #fff; animation: valis-pulse 1s infinite; }
         @keyframes valis-pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.7); } 70% { box-shadow: 0 0 0 5px rgba(0, 122, 204, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0); } }
         @keyframes valisFade { from { opacity: 0; } to { opacity: 1; } }
@@ -6054,6 +6061,25 @@ const aktiv = resolveLinked(obj, spsState);
             let letzte = sig();
             new MutationObserver(() => { const n = sig(); if (n !== letzte) { letzte = n; requestAnimationFrame(pruefen); } }).observe(reihe, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style'] });
             window._kopfKompaktPruefen = pruefen;
+        })();
+        // Sim-Panel: Namen bekommen die ganze erste Zeile, sobald einer abgeschnitten würde
+        (function () {
+            const g = document.querySelector('#simulator-panel .sim-grid') || document.querySelector('.sim-grid');
+            if (!g || typeof ResizeObserver === 'undefined') return;
+            let laeuft = false;
+            const pruefen = () => {
+                if (laeuft) return; laeuft = true;
+                g.classList.remove('sim-namen-oben');
+                const eng = [...g.querySelectorAll('.sim-var-name')].some(n => n.offsetParent && n.scrollWidth > n.clientWidth + 1);
+                g.classList.toggle('sim-namen-oben', eng);
+                laeuft = false;
+            };
+            let geplant = false;
+            const planen = () => { if (geplant) return; geplant = true; requestAnimationFrame(() => { geplant = false; pruefen(); }); };
+            new ResizeObserver(planen).observe(g);
+            // Nur neue/entfernte Elemente (Neuaufbau der Zeilen), nicht die Live-Texte der Analogwerte
+            new MutationObserver(rs => { if (rs.some(r => [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === 1))) planen(); }).observe(g, { childList: true, subtree: true });
+            window._simNamenPruefen = pruefen;
         })();
         // Legende kompakt: nur die Zeichen, sobald ein Text sonst umbrechen würde
         (function () {

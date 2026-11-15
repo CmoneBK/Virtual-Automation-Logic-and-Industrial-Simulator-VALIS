@@ -4037,7 +4037,8 @@
                             <button type="button" onclick="window._fbAddModule('led')" title="FESTO 162244 · Meldeeinrichtung (8 LEDs + Hupe + Verteiler)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">💡 Meldeeinrichtung (LED/Hupe)</button>
                             <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
-                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF)</button>
+                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
+                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU)</button>
                         </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
@@ -66572,10 +66573,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Sirenen/Hupen wandern auf den Hörmelder-Sockel des Meldeeinrichtung-
             // Panels (FESTO 162244). 2-Pin: X1 = Coil-Input, X2 = 0V (extern).
             const HORN_TYPES      = new Set(['siren']);
-            // Coil-Ctypes die auf das FESTO-Doppel-Zeitrelais 162243 gehören.
-            // Nur TON (Slot 1) und TOF (Slot 2) — TP/CTU werden weiterhin
-            // als normale Hilfsrelais behandelt (FESTO 162241).
-            const ZEITRELAIS_CTYPES = new Set(['ton','tof']);
+            // Coil-Ctypes die auf das FESTO-Doppel-Zeitrelais 162243 gehören:
+            // TON (Slot 1), TOF (Slot 2), TP als dritte Funktion auf einem
+            // freien Slot. CTU geht auf den Vorwahlzähler (Präfix C).
+            const ZEITRELAIS_CTYPES = new Set(['ton','tof','tp']);
             // 3-Pin-Sensoren — sensor_ind/kap/opt/mag haben in VALIS-CTYPES
             // kind:'sensor' (BN=24V/BU=0V/BK=Q statt 2-Pin-Wechsler) und
             // bekommen jetzt eigene FESTO-Sensor-Bauteile mit IEC-Symbol.
@@ -67063,8 +67064,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Symbol gehört zum Panel-Aufdruck und ist immer sichtbar,
                     // auch wenn der Slot leer ist.
                     el('rect', { x: coilLeft, y: coilTop, width: coilHalfW*2, height: coilHalfH*2, fill: '#fff', stroke: PALETTE.trace, 'stroke-width': 1.3 }, g);
-                    const cType = (r === 0) ? 'ton' : 'tof';
+                    // Funktion des Slots: TON (oben) bzw. TOF (unten), TP auf
+                    // Wunsch an jedem Slot (Funktionswahl am Gerät).
+                    const _ctAsg = assigned && coilCtypeMap ? (coilCtypeMap.get ? coilCtypeMap.get(assigned) : coilCtypeMap[assigned]) : null;
+                    const cType = _ctAsg === 'tp' ? 'tp' : ((r === 0) ? 'ton' : 'tof');
                     _zeitrelaisCoilSymbol(g, cType, coilLeft, coilRight, coilTop, coilBot);
+                    const _fw = el('text', { x: ZEITRELAIS.w - 42, y: baseY + 30, 'text-anchor': 'middle', 'font-size': 7, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g);
+                    _fw.textContent = 'Funktion ' + (cType === 'tp' ? 'TP' : (r === 0 ? 'TON' : 'TOF'));
+                    _fw.setAttribute('data-festo-zr-funktion', slotKey);
                     // Spulen-LED rechts im Coil (neben dem Symbol)
                     const coilLed = el('circle', { cx: coilRight - 6, cy: mechLineY, r: 3.5, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
                     coilLed.setAttribute('data-festo-relais-led', '1');
@@ -67151,6 +67158,117 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 return g;
             }
+            // ============ Vorwahlzähler (Zählrelais mit Vorwahl, 2-fach) ============
+            // Gehört zum CTU des Auto-Schaltplans: Zähleingang A1/A2 (+1 bei
+            // jeder steigenden Flanke), Rücksetzen A3/A4 (R), Anzeige mit
+            // Zählerstand und Vorwahl. Ist die Vorwahl erreicht, schalten die
+            // Kontakte: Schließer 13/14, 23/24, Öffner 31/32, 41/42.
+            const ZAEHLER = { w: 460, h: 460, slots: 2 };
+            const ZL_NO = { 1: ['13', '14'], 2: ['23', '24'] };
+            const ZL_NC = { 1: ['31', '32'], 2: ['41', '42'] };
+            // Vorwahl einer CTU-Variable (CTU_X) aus dem Logikgraphen („CTU (5)")
+            function _zaehlerVorwahl(v) {
+                try {
+                    const n = (typeof currentGraph !== 'undefined' && currentGraph && currentGraph.nodes) ? currentGraph.nodes.get(v) : null;
+                    const m = n && String(n.label || '').match(/\((\d+)\)/);
+                    if (m) return parseInt(m[1], 10);
+                    const lbl = window.iecSymMap ? window.iecSymMap[v] : '';
+                    const m2 = String(lbl || '').match(/CTU\s*\((\d+)\)/i);
+                    if (m2) return parseInt(m2[1], 10);
+                } catch (_) {}
+                return 0;
+            }
+            window._zaehlerVorwahl = _zaehlerVorwahl;
+            function drawZaehlerPanel(parent, x, y, panelIdx, assignments, vorwahlVon) {
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'zaehler', 'data-festo-panel-idx': panelIdx }, parent);
+                el('rect', { x: 0, y: 0, width: ZAEHLER.w, height: ZAEHLER.h, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, ZAEHLER.w, ZAEHLER.h);
+                el('text', { x: ZAEHLER.w/2, y: 24, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: PALETTE.titleText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = `Vorwahlzähler ${panelIdx}`;
+                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC';
+                const busXs = [40, 95, 150, 210, 270, 330, 390];
+                busXs.forEach((bx, i) => drawSocket(g, bx, 56, PALETTE.socketRed, `C${panelIdx}_24V_${i+1}`, `C${panelIdx}`));
+                el('text', { x: 14, y: 55, 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' }, g).textContent = '+24V';
+                el('line', { x1: 30, y1: 56, x2: ZAEHLER.w - 28, y2: 56, stroke: PALETTE.socketRed, 'stroke-width': 1.5, 'stroke-dasharray': '2 2', opacity: 0.4 }, g);
+                const y0v = ZAEHLER.h - 28;
+                busXs.forEach((bx, i) => drawSocket(g, bx, y0v, PALETTE.socketBlue, `C${panelIdx}_0V_${i+1}`, `C${panelIdx}`));
+                el('text', { x: 14, y: y0v + 3, 'font-size': 8, fill: PALETTE.socketBlue, 'font-weight': 'bold' }, g).textContent = '0V';
+                el('line', { x1: 30, y1: y0v, x2: ZAEHLER.w - 28, y2: y0v, stroke: PALETTE.socketBlue, 'stroke-width': 1.5, 'stroke-dasharray': '2 2', opacity: 0.4 }, g);
+                const blockH = 155, startY = 76;
+                for (let r = 0; r < 2; r++) {
+                    const baseY = startY + r * (blockH + 8);
+                    const slotKey = `C${panelIdx}_S${r+1}`;
+                    const assigned = assignments[slotKey];
+                    if (r > 0) el('line', { x1: 14, y1: baseY-4, x2: ZAEHLER.w-14, y2: baseY-4, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
+                    const mechY = baseY + 75, mechLineY = mechY - 5;
+                    const halbW = 15, halbH = 11;
+                    // Zwei Spulen: Zähleingang (+1) und Rücksetzen (R)
+                    [['A1', 'A2', 52, '+1', 'zaehl'], ['A3', 'A4', 112, 'R', 'reset']].forEach(([pOben, pUnten, sx, zeichen, rolle]) => {
+                        const sockX = sx - 22;
+                        el('text', { x: sockX - 17, y: baseY+33, 'font-size': 9, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = pOben;
+                        drawSocket(g, sockX, baseY+30, PALETTE.socketBlack, `${slotKey}_${pOben}`, `C${panelIdx}`);
+                        el('line', { x1: sockX, y1: baseY+30, x2: sx, y2: baseY+30, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        el('line', { x1: sx, y1: baseY+30, x2: sx, y2: mechLineY - halbH, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        el('rect', { x: sx - halbW, y: mechLineY - halbH, width: halbW*2, height: halbH*2, fill: '#fff', stroke: PALETTE.trace, 'stroke-width': 1.3 }, g);
+                        el('text', { x: sx - 4, y: mechLineY + 4, 'font-size': 10, 'font-weight': 'bold', fill: PALETTE.trace, 'text-anchor': 'middle', 'font-family': 'monospace' }, g).textContent = zeichen;
+                        const led = el('circle', { cx: sx + halbW - 5, cy: mechLineY, r: 3.2, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
+                        led.setAttribute('data-festo-zaehler-led', rolle);
+                        led.setAttribute('data-festo-slot', slotKey);
+                        el('line', { x1: sx, y1: mechLineY + halbH, x2: sx, y2: baseY+125, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        el('line', { x1: sockX, y1: baseY+125, x2: sx, y2: baseY+125, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        drawSocket(g, sockX, baseY+125, PALETTE.socketBlack, `${slotKey}_${pUnten}`, `C${panelIdx}`);
+                        el('text', { x: sockX - 17, y: baseY+128, 'font-size': 9, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = pUnten;
+                    });
+                    el('text', { x: 52, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählen';
+                    el('text', { x: 112, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Rücksetzen';
+                    // Wirkungslinie vom Zählwerk zu den Kontakten
+                    el('line', { x1: 127, y1: mechLineY, x2: 345, y2: mechLineY, stroke: PALETTE.trace, 'stroke-width': 1, 'stroke-dasharray': '4 3' }, g);
+                    for (let k = 1; k <= 4; k++) {
+                        const cx = 165 + (k-1) * 48;
+                        const isNC = k > 2;
+                        const [topLabel, botLabel] = isNC ? ZL_NC[k-2] : ZL_NO[k];
+                        el('text', { x: cx-6, y: baseY+22, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = topLabel;
+                        drawSocket(g, cx, baseY+34, PALETTE.socketBlack, `${slotKey}_${topLabel}`, `C${panelIdx}`);
+                        el('line', { x1: cx, y1: baseY+42, x2: cx, y2: mechY-10, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        if (isNC) el('line', { x1: cx, y1: mechY-10, x2: cx+10, y2: mechY-10, stroke: PALETTE.trace, 'stroke-width': 1.2 }, g);
+                        const restX = isNC ? (cx+10) : (cx-10), restY = isNC ? (mechY-10) : (mechY-7);
+                        const hebel = el('line', { x1: cx, y1: mechY, x2: restX, y2: restY, stroke: PALETTE.trace, 'stroke-width': 1.4 }, g);
+                        hebel.setAttribute('data-festo-zr-lever', '1');
+                        hebel.setAttribute('data-festo-zr-mode', isNC ? 'nc' : 'no');
+                        hebel.setAttribute('data-festo-slot', slotKey);
+                        hebel.setAttribute('data-festo-cx', cx);
+                        hebel.setAttribute('data-festo-mech-y', mechY);
+                        el('line', { x1: cx, y1: mechY, x2: cx, y2: baseY+118, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
+                        drawSocket(g, cx, baseY+125, PALETTE.socketBlack, `${slotKey}_${botLabel}`, `C${panelIdx}`);
+                        el('text', { x: cx-6, y: baseY+145, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = botLabel;
+                    }
+                    // Anzeige: Zählerstand groß, Vorwahl klein
+                    const vw = assigned ? ((typeof vorwahlVon === 'function' ? vorwahlVon(assigned) : 0) || _zaehlerVorwahl(assigned)) : 0;
+                    const dx = 350, dy = baseY + 34, dw = 96, dh = 70;
+                    el('rect', { x: dx, y: dy, width: dw, height: dh, rx: 4, fill: '#263238', stroke: '#11181c', 'stroke-width': 1.2 }, g);
+                    el('rect', { x: dx + 5, y: dy + 5, width: dw - 10, height: 34, rx: 2, fill: '#0b2e13', stroke: '#1b5e20', 'stroke-width': 0.6 }, g);
+                    const ist = el('text', { x: dx + dw - 10, y: dy + 31, 'font-size': 22, 'font-weight': 'bold', fill: '#76ff03', 'text-anchor': 'end', 'font-family': 'monospace' }, g);
+                    ist.textContent = '0';
+                    ist.setAttribute('data-festo-zaehler-ist', slotKey);
+                    el('text', { x: dx + 7, y: dy + 54, 'font-size': 8, fill: '#cfd8dc', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Vorwahl';
+                    const vwT = el('text', { x: dx + dw - 8, y: dy + 55, 'font-size': 12, 'font-weight': 'bold', fill: '#ffca28', 'text-anchor': 'end', 'font-family': 'monospace' }, g);
+                    vwT.textContent = String(vw || 0);
+                    vwT.setAttribute('data-festo-zaehler-vorwahl', slotKey);
+                    const qLed = el('circle', { cx: dx + 10, cy: dy + 64, r: 3, fill: '#3e2723', stroke: '#bf360c', 'stroke-width': 0.6 }, g);
+                    qLed.setAttribute('data-festo-zaehler-led', 'q');
+                    qLed.setAttribute('data-festo-slot', slotKey);
+                    el('text', { x: dx + 17, y: dy + 67, 'font-size': 7, fill: '#cfd8dc', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'erreicht';
+                    if (assigned) {
+                        const _iec = (window._festoIECLabelsByRole?.['coil']?.[assigned]) || (window._festoIECLabels || {})[assigned];
+                        const _main = _iec || assigned, _sub = _iec ? assigned : null, _boxH = _sub ? 24 : 16;
+                        el('rect', { x: 345, y: baseY-2, width: 106, height: _boxH, rx: 3, fill: '#fff', stroke: PALETTE.slotLabel, 'stroke-width': 1.2 }, g);
+                        el('text', { x: 398, y: baseY+9, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.slotLabel, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = _main.length > 13 ? _main.slice(0,13)+'…' : _main;
+                        if (_sub) el('text', { x: 398, y: baseY+19, 'text-anchor': 'middle', 'font-size': 7, fill: PALETTE.slotLabel, 'font-style': 'italic' }, g).textContent = `(${_sub.length > 15 ? _sub.slice(0,15)+'…' : _sub})`;
+                    } else {
+                        el('text', { x: 398, y: baseY+9, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.emptySlot, 'font-style': 'italic' }, g).textContent = `Zähler ${r+1} (frei)`;
+                    }
+                }
+                return g;
+            }
             // ============ Pair-Detektor: gepaarte Magnetventile aus Pneumatik ============
             // Liefert eine Map<varName, { partnerVar, side: 1|2, isTriple, valveId }>
             // für alle Magnetventil-Variablen die zu einem isDouble/isTriple-Ventil
@@ -67219,7 +67337,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (role === 'coil') {
                                 svgCoilNames.add(v);
                                 const ct = elem.getAttribute('data-ctype');
-                                if (ct) coilCtype.set(v, ct);
+                                // CTU hat zwei Spulen (Zählen und Rücksetzen „(R)“)
+                                // mit derselben Variable: der Zähler bleibt ein Zähler.
+                                if (ct && coilCtype.get(v) !== 'ctu') coilCtype.set(v, ct);
                             } else if (role === 'contact') svgContactNames.add(v);
                             // Erstes <text>-Element ist die IEC-Bezeichnung
                             // (-SJ1, -KF1, -BG1, …). Pro Rolle getrennt
@@ -67247,7 +67367,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const sensorVars   = [];   // 3-Pin-Sensoren auf eigenem Bauteil
                 const magnetVars   = [];   // 5/2-Wege-Magnetventile auf eigenem Bauteil
                 const hornVars     = [];   // Sirenen/Hupen → Hörmelder-Sockel je LED-Panel
-                const zeitrelaisVars = []; // TON/TOF/TP/CTU → FESTO 162243 Doppel-Zeitrelais
+                const zeitrelaisVars = []; // TON/TOF/TP → FESTO 162243 Doppel-Zeitrelais
+                const zaehlerVars  = [];   // CTU → Vorwahlzähler (Präfix C)
                 const blockedVars  = [];
                 inputs.forEach(v => {
                     const k = classifyVar(v);
@@ -67277,8 +67398,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _known = new Set([...inputs, ...outputs]);
                 svgCoilNames.forEach(v => {
                     if (_known.has(v)) return;
-                    if (relaisVars.includes(v) || ledVars.includes(v) || zeitrelaisVars.includes(v)) return;
-                    if (ZEITRELAIS_CTYPES.has(coilCtype.get(v))) zeitrelaisVars.push(v);
+                    if (relaisVars.includes(v) || ledVars.includes(v) || zeitrelaisVars.includes(v) || zaehlerVars.includes(v)) return;
+                    if (coilCtype.get(v) === 'ctu') zaehlerVars.push(v);
+                    else if (ZEITRELAIS_CTYPES.has(coilCtype.get(v))) zeitrelaisVars.push(v);
                     else relaisVars.push(v);
                 });
                 // Komparator-Ausgänge (ZWEIPUNKT, Analogvergleich): Das Relais der
@@ -67292,7 +67414,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Outputs, die als TON/TOF/TP/CTU im SVG gerendert sind, auch aufs
                 // Zeitrelais-Panel verschieben (statt auf Hilfsrelais).
                 for (let i = relaisVars.length - 1; i >= 0; i--) {
-                    if (ZEITRELAIS_CTYPES.has(coilCtype.get(relaisVars[i]))) {
+                    if (coilCtype.get(relaisVars[i]) === 'ctu') {
+                        zaehlerVars.push(relaisVars[i]);
+                        relaisVars.splice(i, 1);
+                    } else if (ZEITRELAIS_CTYPES.has(coilCtype.get(relaisVars[i]))) {
                         zeitrelaisVars.push(relaisVars[i]);
                         relaisVars.splice(i, 1);
                     }
@@ -67429,7 +67554,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 };
                 const tonPanels = _allocCascaded(tonVars, 1);
                 const tofPanels = _allocCascaded(tofVars, 2);
-                _zCountActual = Math.max(tonPanels, tofPanels, 0);
+                // TP (Impuls) ist die dritte Funktion des Zeitrelais: erster
+                // freier Slot, die Funktion wird am Slot umgestellt.
+                let tpPanels = 0;
+                zeitrelaisSorted.filter(v => coilCtype.get(v) === 'tp').forEach(v => {
+                    for (let p = 1; p < 200; p++) {
+                        const k = [`Z${p}_S1`, `Z${p}_S2`].find(x => !assignments[x]);
+                        if (!k) continue;
+                        assignments[k] = v; varToSlot[v] = k;
+                        _cascadeFirstPanel.set(v, p); _cascadeTotalSecs.set(v, Math.min(10, _zeitrelaisTimeSecs(v)));
+                        tpPanels = Math.max(tpPanels, p);
+                        break;
+                    }
+                });
+                _zCountActual = Math.max(tonPanels, tofPanels, tpPanels, 0);
+                // Vorwahlzähler: zwei Zähler je Brett, nach IEC-Nummer
+                const cCount = Math.ceil(zaehlerVars.length / ZAEHLER.slots);
+                sortByIec(zaehlerVars, 'coil').forEach((v, idx) => {
+                    const key = `C${Math.floor(idx / ZAEHLER.slots) + 1}_S${(idx % ZAEHLER.slots) + 1}`;
+                    assignments[key] = v; varToSlot[v] = key;
+                });
                 // Cascade-Info global verfügbar für den Renderer
                 window._zeitrelaisCascade = {
                     firstPanel: _cascadeFirstPanel,
@@ -67504,9 +67648,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // L1/N-Bus statt 24V/0V.
                 const dualCircuit = !!window.configDualCircuit;
                 const loadVars = new Set([...ledVars, ...magnetVars, ...hornVars]);
-                return { tCount, rCount, lCount, sCount, mCount, zCount: _zCountActual, assignments, varToSlot,
+                return { tCount, rCount, lCount, sCount, mCount, zCount: _zCountActual, cCount, assignments, varToSlot,
                          schalterVars, tasterVars, relaisVars, ledVars, sensorVars, magnetVars, magnetUnits,
-                         hornVars, zeitrelaisVars, coilCtype, blockedVars,
+                         hornVars, zeitrelaisVars, zaehlerVars, coilCtype, blockedVars,
                          iecLabels, iecLabelsByRole, dualCircuit, loadVars };
             }
             // ============ Warn-Modal für 230V-Darstellung ============
@@ -68315,11 +68459,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Standard-Steckaufbau). Maße aus den Board-Konstanten.
             // Analogkarten (Maße wie ANA_GEBER/ANA_KOMP/ANA_PID weiter unten; der
             // Analoggeber im freien Aufbau hat zwei Kanäle)
-            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h},
+            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h}, zaehler:{w:ZAEHLER.w,h:ZAEHLER.h},
                                 ana_geber:{w:300,h:214}, ana_komp:{w:440,h:450}, ana_pid:{w:600,h:450} };
-            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF)',
+            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF/TP)', zaehler:'Vorwahlzähler',
                                ana_geber:'Analoggeber', ana_komp:'Komparatorkarte', ana_pid:'PID-Reglerkarte' };
-            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z', ana_geber:'AG', ana_komp:'KK', ana_pid:'PK' };
+            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z', zaehler:'C', ana_geber:'AG', ana_komp:'KK', ana_pid:'PK' };
             const FB_KOMP_NAMEN = ['A1', 'A2', 'B1', 'B2'];
             const _fbBoardById = (id) => FB.boards.find(b => b.id === id);
             // Sockel-Key → Schiene? (Panel-Bus „{P}_24V_{n}"/„{P}_0V_{n}").
@@ -68385,6 +68529,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         elems.push({ id:'s'+i+'coil', cedType:'valve', varKey:vk, varName:cv, timer:{ type:ttype }, terms:{ [`${P}_S${i}_A1`]:'in', [`${P}_S${i}_A2`]:'out' } });
                         [['17','18'],['27','28']].forEach((pr, j) => elems.push({ id:`s${i}no${j+1}`, cedType:'relay_no', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
                         [['35','36'],['45','46']].forEach((pr, j) => elems.push({ id:`s${i}nc${j+1}`, cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
+                    }
+                } else if (b.type === 'zaehler') {
+                    // Zähleingang A1/A2 und Rücksetzen A3/A4 als neutrale Spulen
+                    // ('valve'); _fbApplyZaehler macht daraus VAR := CTU(IN, VAR_R, n).
+                    for (let i = 1; i <= 2; i++) {
+                        const vk = 'S' + i, cv = sv[vk] || '';
+                        elems.push({ id:'s'+i+'cu', cedType:'valve', varKey:vk, varName:cv, counter:{}, terms:{ [`${P}_S${i}_A1`]:'in', [`${P}_S${i}_A2`]:'out' } });
+                        elems.push({ id:'s'+i+'r', cedType:'valve', varKey:vk, varSuffix:'_R', varName: cv ? cv + '_R' : '', counter:{ reset:true }, terms:{ [`${P}_S${i}_A3`]:'in', [`${P}_S${i}_A4`]:'out' } });
+                        [ZL_NO[1], ZL_NO[2]].forEach((pr, j) => elems.push({ id:`s${i}no${j+1}`, cedType:'relay_no', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
+                        [ZL_NC[1], ZL_NC[2]].forEach((pr, j) => elems.push({ id:`s${i}nc${j+1}`, cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
                     }
                 }
                 return { elems };
@@ -68536,7 +68690,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         else if (b.type === 'led') drawLedPanel(svg, b.x, b.y, b.idx, asg);
                         else if (b.type === 'sensor') drawSensorPanel(svg, b.x, b.y, b.idx, b.sensorType || 'inductive', asg);
                         else if (b.type === 'magnet') drawMagnetventilPanel(svg, b.x, b.y, b.idx, asg);
-                        else if (b.type === 'zeitrelais') drawZeitrelaisPanel(svg, b.x, b.y, b.idx, asg, {});
+                        else if (b.type === 'zeitrelais') {
+                            const _fn = {}; Object.entries(b.timerCfg || {}).forEach(([k, c]) => { if (asg[`${b.prefix}_${k}`]) _fn[asg[`${b.prefix}_${k}`]] = c.type; });
+                            drawZeitrelaisPanel(svg, b.x, b.y, b.idx, asg, _fn);
+                        }
+                        else if (b.type === 'zaehler') {
+                            window._festoZaehlerVorwahl = window._festoZaehlerVorwahl || {};
+                            Object.entries(b.zaehlerCfg || {}).forEach(([k, c]) => { const v = (b.slotVars || {})[k]; if (v) window._festoZaehlerVorwahl[v] = c.pv; });
+                            drawZaehlerPanel(svg, b.x, b.y, b.idx, asg, v => (window._festoZaehlerVorwahl || {})[v] || 0);
+                        }
                         else if (/^ana_/.test(b.type)) _fbDrawAnalog(svg, b);
                     } catch(e) { console.warn('FB board draw', b.type, e); }
                 });
@@ -68764,6 +68926,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return !!FB.liveSync;
                 },
                 status: function() { return { liveSync: !!FB.liveSync, text: FB.status || '' }; },
+                // Vorwahl eines Zählers (z. B. „C1_S1“) → Variable oder null
+                vorwahl: function(slot, n) {
+                    const m = /^([A-Za-z]+\d+)_(S\d+)$/.exec(slot || ''); if (!m) return null;
+                    const b = FB.boards.find(x => x.prefix === m[1] && x.type === 'zaehler'); if (!b) return null;
+                    b.zaehlerCfg = b.zaehlerCfg || {};
+                    b.zaehlerCfg[m[2]] = { pv: Math.max(1, Math.round(n) || 1) };
+                    _fbSave();
+                    return (b.slotVars || {})[m[2]] || null;
+                },
                 // Zeit eines Zeitrelais-Slots (z. B. „Z1_S1“) → Variable oder null
                 zeit: function(slot, sek) {
                     const m = /^([A-Za-z]+\d+)_(S\d+)$/.exec(slot || ''); if (!m) return null;
@@ -68789,7 +68960,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const b = _fbBoardByKey(key); if (!b) return;
                 const e = _fbElemForKey(b, key); if (!e || !e.varKey) return;
                 if (!b.slotVars[e.varKey]) {
-                    const used = _fbAllVars(); const pfx = _fbVarPfx(e.cedType);
+                    const used = _fbAllVars(); const pfx = (b.type === 'zaehler' || b.type === 'zeitrelais') ? 'KF' : _fbVarPfx(e.cedType);
                     let n = 1, sug; do { sug = pfx + n; n++; } while (used.has(sug.toUpperCase()));
                     // Analoggeber: freie Analogvariable aus der Anlage vorschlagen
                     if (e.cedType === 'ana_geber' && typeof factoryObjects !== 'undefined') {
@@ -68800,12 +68971,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (inp && inp.trim()) b.slotVars[e.varKey] = inp.trim().replace(/\s+/g, '_');
                 }
                 // Zeitrelais: Verzögerungszeit einmalig pro Slot erfragen (beim Coil-Sockel).
+                // „TP 2“ stellt den Slot auf die dritte Funktion Impuls um.
                 if (b.type === 'zeitrelais' && e.timer && b.slotVars[e.varKey]) {
                     b.timerCfg = b.timerCfg || {};
                     if (!b.timerCfg[e.varKey]) {
-                        const t = (!still && typeof window.prompt === 'function') ? window.prompt('Verzögerungszeit [' + e.timer.type.toUpperCase() + '] in Sekunden:', '2.5') : '2.5';
-                        const tn = parseFloat((t || '').replace(',', '.'));
-                        b.timerCfg[e.varKey] = { type: e.timer.type, time: (isFinite(tn) && tn > 0) ? tn : 2.5 };
+                        const t = (!still && typeof window.prompt === 'function') ? window.prompt('Zeit in Sekunden für ' + e.timer.type.toUpperCase() + ' (oder „TP 2“ für Impuls, 2 s):', '2.5') : '2.5';
+                        const istTP = /^\s*tp\b/i.test(t || '');
+                        const tn = parseFloat((t || '').replace(/^\s*tp\s*/i, '').replace(',', '.'));
+                        b.timerCfg[e.varKey] = { type: istTP ? 'tp' : e.timer.type, time: (isFinite(tn) && tn > 0) ? tn : 2.5 };
+                    }
+                }
+                // Vorwahlzähler: Vorwahl einmalig pro Zähler erfragen
+                if (b.type === 'zaehler' && e.counter && b.slotVars[e.varKey]) {
+                    b.zaehlerCfg = b.zaehlerCfg || {};
+                    if (!b.zaehlerCfg[e.varKey]) {
+                        const t = (!still && typeof window.prompt === 'function') ? window.prompt('Vorwahl: nach wie vielen Impulsen schaltet der Zähler?', '3') : '3';
+                        const n = parseInt(t || '', 10);
+                        b.zaehlerCfg[e.varKey] = { pv: (isFinite(n) && n > 0) ? n : 3 };
                     }
                 }
             }
@@ -68835,7 +69017,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         // Element nur emittieren, wenn wenigstens EIN Terminal verkabelt ist.
                         if (!Object.keys(e.terms).some(k => wired.has(k))) return;
                         if (/^ana_/.test(e.cedType)) return;
-                        const comp = { id: b.id + '_' + e.id, type: e.cedType, x:0, y:0, varName: b.slotVars[e.varKey] || '' };
+                        const comp = { id: b.id + '_' + e.id, type: e.cedType, x:0, y:0, varName: b.slotVars[e.varKey] ? b.slotVars[e.varKey] + (e.varSuffix || '') : '' };
                         if (e.komp) {
                             const v = _fbAnaQuelle(`${b.prefix}_${e.komp[0]}_E`), w = _fbKompWerte(v, _fbKompCfg(b, e.komp));
                             Object.assign(comp, { kompIn: v, kompA: String(w.w), kompB: String(w.h), kompRicht: 'KUEHLEN' });
@@ -69030,6 +69212,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 return code;
             }
+            // Vorwahlzähler: „VAR := <IN>“ und „VAR_R := <RESET>“ zu
+            // „VAR := CTU(<IN>, VAR_R, n)“ (ohne gesteckten Rücksetzstrang FALSE).
+            function _fbApplyZaehler(code) {
+                FB.boards.filter(b => b.type === 'zaehler').forEach(b => {
+                    for (let i = 1; i <= 2; i++) {
+                        const v = (b.slotVars || {})['S' + i]; if (!v) continue;
+                        const pv = ((b.zaehlerCfg || {})['S' + i] || { pv: 3 }).pv;
+                        const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const hatR = new RegExp('^\\s*' + esc + '_R\\s*:=', 'm').test(code);
+                        const re = new RegExp('^(\\s*' + esc + '\\s*:=\\s*)(.+?)\\s*$', 'm');
+                        code = code.replace(re, (m, lhs, rhs) => {
+                            if (/^(TON|TOF|TP|CTU)\s*\(/i.test(rhs.trim())) return m;
+                            return lhs + 'CTU(' + rhs.trim() + ', ' + (hatR ? v + '_R' : 'FALSE') + ', ' + pv + ')';
+                        });
+                    }
+                });
+                return code;
+            }
             // ---- Code erzeugen (Round-trip über CED-Compiler) ----
             // Schaltet den Schaltplan hart in den Direkt-Modus (configEconMode=true)
             // und aktualisiert den Elektro-Optionen-Button — gleiche Optik/Logik wie
@@ -69165,6 +69365,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 catch (e) { console.warn('FB-Codegen:', e); FB.status = '⚠ Codegen-Fehler.'; }
                 finally { ST.components = prev.components; ST.wires = prev.wires; window._cedNoProxy = false; }
                 code = _fbApplyTimers(code);
+                code = _fbApplyZaehler(code);
                 if (pidZeilen.length) code = '// Analog: PID-Reglerkarte\n' + pidZeilen.join('\n') + '\n\n' + code;
                 // Freier Aufbau bildet UND/ODER als Reihen-/Parallel-Kontakte ab —
                 // das entspricht nur dem Direkt-Modus. „Klassisch" erfände je Gatter
@@ -70112,7 +70313,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const PAD = 14;
                 let cursorX = PAD;
                 const panelTopY = PAD;
-                const upperRowH = Math.max(TASTER.h, RELAIS.h, LED.h, ZEITRELAIS.h);
+                const upperRowH = Math.max(TASTER.h, RELAIS.h, LED.h, ZEITRELAIS.h, (data.cCount ? ZAEHLER.h : 0));
                 // Panel-Center-X pro Slot merken — Bauteile in der unteren
                 // Reihe nutzen das, um sich neben ihrem Verdrahtungspartner
                 // zu platzieren (kürzester Kabelweg).
@@ -70136,6 +70337,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     for (let s = 1; s <= ZEITRELAIS.slots; s++) panelCenterOfSlot[`Z${i}_S${s}`] = cx;
                     drawZeitrelaisPanel(svg, cursorX, panelTopY, i, data.assignments, data.coilCtype);
                     cursorX += ZEITRELAIS.w + 18;
+                }
+                // Vorwahlzähler (CTU) gleich daneben
+                for (let i = 1; i <= (data.cCount || 0); i++) {
+                    const cx = cursorX + ZAEHLER.w / 2;
+                    for (let s = 1; s <= ZAEHLER.slots; s++) panelCenterOfSlot[`C${i}_S${s}`] = cx;
+                    drawZaehlerPanel(svg, cursorX, panelTopY, i, data.assignments);
+                    cursorX += ZAEHLER.w + 18;
                 }
                 // LED-Panels: im Single-Stromkreis-Modus in der oberen Reihe
                 // neben Tastern/Relais. Im Dual-Modus überspringen — die
@@ -70324,6 +70532,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     parts.push(`${data.tCount}× Signaleingabe`);
                     parts.push(`${data.rCount}× Relais`);
                     if (data.zCount > 0) parts.push(`${data.zCount}× Zeitrelais`);
+                    if (data.cCount > 0) parts.push(`${data.cCount}× Vorwahlzähler`);
                     parts.push(`${data.lCount}× LED`);
                     if (data.sCount > 0) parts.push(`${data.sCount}× Sensor`);
                     if (data.mCount > 0) {
@@ -70458,6 +70667,37 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     lever.setAttribute('x2', x2);
                     lever.setAttribute('y2', y2);
+                });
+                // --- Vorwahlzähler: Zählerstand, Vorwahl, Spulen- und Q-LED ---
+                const _zlTimer = (v) => { try { const t = window.simTimers || {}; return t[v] || t['CTU_' + v] || null; } catch (_) { return null; } };
+                const _zlSpule = (v, rolle) => {
+                    if (!v || !hasState) return false;
+                    if (rolle === 'q') return !!spsState[v];
+                    const t = _zlTimer(v);
+                    if (rolle === 'zaehl' && t && t.lastCu !== undefined) return !!t.lastCu;
+                    try {
+                        const cc = _iecDoc().getElementById('circuit-content');
+                        const sp = cc ? Array.from(cc.querySelectorAll('[data-iec-role="coil"]')).filter(e => e.getAttribute('data-iec-id') === v) : [];
+                        const e = sp.find(x => (x.getAttribute('data-ctype') === 'ctu') === (rolle === 'zaehl'));
+                        if (e && typeof e._checkPower === 'function') return !!e._checkPower(spsState);
+                    } catch (_) {}
+                    return rolle === 'reset' ? !!spsState[v + '_R'] : false;
+                };
+                svg.querySelectorAll('[data-festo-zaehler-ist]').forEach(t => {
+                    const v = assignments[t.getAttribute('data-festo-zaehler-ist')];
+                    const z = v ? _zlTimer(v) : null;
+                    t.textContent = String(z && typeof z.cv === 'number' ? z.cv : 0);
+                });
+                svg.querySelectorAll('[data-festo-zaehler-vorwahl]').forEach(t => {
+                    const v = assignments[t.getAttribute('data-festo-zaehler-vorwahl')];
+                    if (v && window._festoZaehlerVorwahl && window._festoZaehlerVorwahl[v]) t.textContent = String(window._festoZaehlerVorwahl[v]);
+                });
+                svg.querySelectorAll('[data-festo-zaehler-led]').forEach(led => {
+                    const rolle = led.getAttribute('data-festo-zaehler-led');
+                    const an = _zlSpule(assignments[led.getAttribute('data-festo-slot')], rolle);
+                    const farbe = rolle === 'q' ? '#ff6d00' : '#76ff03';
+                    led.setAttribute('fill', an ? farbe : (rolle === 'q' ? '#3e2723' : '#2e3b35'));
+                    led.style.filter = an ? `drop-shadow(0 0 3px ${farbe})` : '';
                 });
                 // --- Relais-Spulen-LED (leuchtet wenn Spule angezogen) ---
                 svg.querySelectorAll('[data-festo-relais-led]').forEach(led => {
@@ -71261,7 +71501,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const prev = varToSlot[v];
                     if (!prev) { varToSlot[v] = k; return; }
                     // R/Z > T > L/M > N (Walker-relevante Slots zuerst)
-                    const rank = (s) => s.startsWith('R') || s.startsWith('Z') ? 4
+                    const rank = (s) => s.startsWith('R') || s.startsWith('Z') || s.startsWith('C') ? 4
                                       : s.startsWith('T') ? 3
                                       : s.startsWith('L') || s.startsWith('M') ? 2 : 1;
                     if (rank(k) > rank(prev)) varToSlot[v] = k;
@@ -71335,6 +71575,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             const top = contact.isNC ? { 1:'35', 2:'45' }[k] : { 1:'17', 2:'27' }[k];
                             const bot = contact.isNC ? { 1:'36', 2:'46' }[k] : { 1:'18', 2:'28' }[k];
                             sock = { inputKey: `${slot}_${top}`, outputKey: `${slot}_${bot}` };
+                        } else if (slot.startsWith('C')) {
+                            // Vorwahlzähler: Schließer 13/14, 23/24, Öffner 31/32, 41/42
+                            const usageKey = contact.varName + (contact.isNC ? '_CNC' : '_CNO');
+                            const cnt = relayUsage[usageKey] || 0;
+                            relayUsage[usageKey] = cnt + 1;
+                            const pr = (contact.isNC ? ZL_NC : ZL_NO)[(cnt % 2) + 1];
+                            sock = { inputKey: `${slot}_${pr[0]}`, outputKey: `${slot}_${pr[1]}` };
                         } else if (slot.startsWith('N')) {
                             // Sensor: 24V ist „Eingang" (vom +24V-Bus), Q ist
                             // „Ausgang" (Signal). Kein NC/NO-Switch — der
@@ -71346,9 +71593,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     contactSockCache.set(contact, sock);
                     return sock;
                 }
-                function coilSockOf(varName) {
+                // Spule eines Zählers: Zähleingang A1/A2 (data-ctype ctu) oder
+                // Rücksetzen A3/A4 (die zweite Spule „(R)“ derselben Variable).
+                const _istRueckSpule = (elem) => !!(elem && elem.getAttribute && elem.getAttribute('data-ctype') !== 'ctu');
+                function coilSockOf(varName, elem) {
                     const slot = varToSlot[varName] || ensureSlot(varName);
                     if (!slot) return null;
+                    if (slot.startsWith('C')) return _istRueckSpule(elem)
+                        ? { inputKey: `${slot}_A3`, returnKey: `${slot}_A4` }
+                        : { inputKey: `${slot}_A1`, returnKey: `${slot}_A2` };
                     if (slot.startsWith('R')) return { inputKey: `${slot}_A1`, returnKey: `${slot}_A2` };
                     // Zeitrelais: A1/A2 wie normales Relais
                     if (slot.startsWith('Z')) return { inputKey: `${slot}_A1`, returnKey: `${slot}_A2` };
@@ -71471,12 +71724,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // ─── Joined-Columns-Resolver: Coil-X + alle Spalten, die per Horizontal-Brücke daran hängen ───
                 const colTol = 8;
                 const yTol  = 10;
-                function findJoinedColumns(startX, coilTopY, coilYOff) {
+                function findJoinedColumns(startX, coilTopY, coilYOff, sperrX) {
                     const cols = new Set([startX]);
                     let changed = true;
                     while (changed) {
                         changed = false;
                         for (const h of horizontals) {
+                            // Zähler: Zähl- und Rücksetzstrang hängen oben an
+                            // einer gemeinsamen Einspeisung, sind aber zwei Stränge.
+                            if (sperrX && sperrX.some(x => Math.abs(x - h.x1) <= colTol || Math.abs(x - h.x2) <= colTol)) continue;
                             // Pass-aware: nur Horizontalen im gleichen Pass
                             // wie der Coil betrachten (verhindert Pass-Brücken
                             // im Dual-Stromkreis-Modus).
@@ -71529,7 +71785,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                         continue;
                     }
-                    const columns = findJoinedColumns(coil.topX, coil.topY, coil.yOff);
+                    const _partner = (varToSlot[coil.varName] || '').startsWith('C')
+                        ? coils.filter(c => c !== coil && c.varName === coil.varName).map(c => c.topX) : null;
+                    const columns = findJoinedColumns(coil.topX, coil.topY, coil.yOff, _partner);
                     // Strang-Kontakte: in joined columns, zwischen L+ und Coil,
                     // UND im selben Pass wie der Coil (yOff-Match). Letzteres
                     // verhindert im Dual-Stromkreis-Modus, dass Pass-1-
@@ -71549,7 +71807,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const x2In = columns.some(c => Math.abs(c - h.x2) <= colTol);
                         return x1In && x2In;
                     }).sort((a, b) => a.y - b.y);
-                    const cSock = coilSockOf(coil.varName);
+                    const cSock = coilSockOf(coil.varName, coil.elem);
                     if (!cSock) continue;
                     // Pre-resolve alle Strang-Kontakt-Sockel in Y-Sortier-Reihenfolge,
                     // damit der Wechsler-Counter deterministisch zählt.
@@ -71624,7 +71882,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (cables.length > strandStart) {
                         const iec = iecMap[coil.varName];
                         const label = iec ? `${iec} (${coil.varName})` : coil.varName;
-                        strandList.push({ id: coil.varName, label });
+                        if (!strandList.some(x => x.id === coil.varName)) strandList.push({ id: coil.varName, label });
                     }
                 }
                 // ─── Sensor-Rückleitung (Q-unabhängig): 0V von jedem
@@ -71706,7 +71964,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 cables.forEach(c => { const b = _elN(c.fromKey) + '>' + _elN(c.toKey); _elZ[b] = (_elZ[b] || 0) + 1; c.elId = _elZ[b] > 1 ? b + '#' + _elZ[b] : b; });
                 window._festoElemSock = {
                     kontakte: Array.from(contactSockCache.entries()).filter(([c, s]) => s).map(([c, s]) => ({ elem: c.elem, a: s.inputKey, b: s.outputKey })),
-                    spulen: coils.map(c => { const s = coilSockOf(c.varName), slot = varToSlot[c.varName]; return s ? { elem: c.elem, a: s.inputKey, b: s.returnKey || (slot ? slot + '_X2' : null), v: c.varName } : null; }).filter(Boolean)
+                    spulen: coils.map(c => { const s = coilSockOf(c.varName, c.elem), slot = varToSlot[c.varName]; return s ? { elem: c.elem, a: s.inputKey, b: s.returnKey || (slot ? slot + '_X2' : null), v: c.varName } : null; }).filter(Boolean)
                 };
                 return cables;
             }
@@ -71739,8 +71997,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             const ein = keys.filter(k => e.terms[k] === 'in'), aus = keys.filter(k => e.terms[k] === 'out');
                             if (!ein.length || !aus.length) return;
                             for (let i = 1; i < ein.length; i++) intern.push([ein[0], ein[i]]);
-                            const last = b.type === 'relais' ? 'relais' : b.type === 'zeitrelais' ? 'zeit' : b.type === 'magnet' ? 'ventil' : e.cedType === 'siren' ? 'hupe' : 'led';
-                            E('last', ein[0], aus[0], { v, last, brett: b.type });
+                            const last = b.type === 'relais' ? 'relais' : b.type === 'zeitrelais' ? 'zeit' : b.type === 'zaehler' ? 'zaehler' : b.type === 'magnet' ? 'ventil' : e.cedType === 'siren' ? 'hupe' : 'led';
+                            E('last', ein[0], aus[0], { v, last, brett: b.type, rueck: !!(e.counter && e.counter.reset) });
                         } else if (/^sensor_/.test(e.cedType)) {
                             const s24 = keys.find(k => /_24V$/.test(k)), q = keys.find(k => /_Q$/.test(k)), s0 = keys.find(k => /_0V$/.test(k));
                             if (s24 && q) E('sensor', s24, q, { c: s0, v, sem: 'sensor', brett: b.type });
@@ -71798,6 +72056,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         E('last', slot + '_A1', slot + '_A2', { v, last: 'zeit' });
                         [['17', '18'], ['27', '28']].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: false }));
                         [['35', '36'], ['45', '46']].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: true }));
+                    } else if (/^C\d+_S\d+$/.test(slot)) {
+                        E('last', slot + '_A1', slot + '_A2', { v, last: 'zaehler' });
+                        E('last', slot + '_A3', slot + '_A4', { v, last: 'zaehler', rueck: true });
+                        [ZL_NO[1], ZL_NO[2]].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: false }));
+                        [ZL_NC[1], ZL_NC[2]].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: true }));
                     } else if (/^L\d+_HORN$/.test(slot)) {
                         E('last', slot + '_X1', slot + '_X2', { v, last: 'hupe' });
                     } else if (/^L\d+_S\d+$/.test(slot)) {
@@ -72352,6 +72615,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const wechs = m[3], pin = m[4];
                     const isTop = (pin === '7' || pin === '5');
                     return `Zeitrelais ${m[1]} · Slot ${m[2]} Kontakt ${wechs} ${isTop ? 'oben' : 'verzögert'} (${wechs}${pin})`;
+                }
+                if ((m = key.match(/^C(\d+)_S(\d+)_(A[1-4])$/))) {
+                    return `Vorwahlzähler ${m[1]} · Zähler ${m[2]} ${m[3] === 'A1' || m[3] === 'A2' ? 'Zähleingang' : 'Rücksetzen'} ${m[3]}`;
+                }
+                if ((m = key.match(/^C(\d+)_S(\d+)_(\d)(\d)$/))) {
+                    const nc = m[4] === '1' || m[4] === '2';
+                    return `Vorwahlzähler ${m[1]} · Zähler ${m[2]} ${nc ? 'Öffner (NC)' : 'Schließer (NO)'} (${m[3]}${m[4]})`;
+                }
+                if ((m = key.match(/^C(\d+)_(24V|0V)_\d+$/))) {
+                    return `Vorwahlzähler ${m[1]} · ${m[2]}-Sammelschiene`;
                 }
                 if ((m = key.match(/^Z(\d+)_(24V|0V)_\d+$/))) {
                     return `Zeitrelais ${m[1]} · ${m[2]}-Sammelschiene`;
@@ -78312,6 +78585,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 })();
 </script>
 <script src="fluidplan.js?v=20261115q"></script>
-<script src="elektro-messen.js?v=20261115a"></script>
+<script src="elektro-messen.js?v=20261115b"></script>
 </body>
 </html>

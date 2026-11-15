@@ -1443,7 +1443,7 @@
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
         k('📂 Beispiele', 'Fertige Beispielschaltungen laden', () => { auswahl.clear(); zeichnen(); beispieleZeigen(); });
-        k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess');
+        knopfIkon(k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess'), 'manometer', 'Messen', '🩺');
         k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
         k('📈 Diagramm', 'Weg-Schritt-Diagramm der Zylinder ein-/ausblenden. Es zeichnet während der Simulation mit.', () => { diagBox.classList.toggle('offen'); const b = D().getElementById('fp-diagk'); if (b) b.classList.toggle('an', diagBox.classList.contains('offen')); diagZeichnen(true); }, 'fp-diagk');
         k('🧹 Leeren', 'Ganzen Plan löschen', () => { if (plan.fehlersuche && fehlerAnzahl()) { status('In der Fehlersuche bleibt der Plan, wie er ist.'); return; } if (plan.teile.length && W().confirm('Den ganzen Fluidplan löschen?')) aendern(() => { plan.teile = []; plan.leitungen = []; auswahl.clear(); }); });
@@ -2504,11 +2504,28 @@
         if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !W().confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
         aendern(() => { plan.anlage = !plan.anlage; if (!plan.anlage) { plan.erzeugt = []; hydSpiegel.clear(); } });
     }
+    // Icon aus dem VALIS-Iconsatz (wie im Hauptfenster); ohne ihn bleibt das Zeichen im Text
+    function knopfIkon(el, id, text, zeichen) {
+        if (!el) return el;
+        el.textContent = text;
+        try {
+            const V = window._valisIcons;
+            if (V && V.IC && V.IC[id]) { el.setAttribute('data-vi', id); V.festesIcon(el, id); if (el.querySelector('svg.vi')) return el; }
+        } catch (e) {}
+        el.removeAttribute('data-vi');
+        el.textContent = zeichen + ' ' + text;
+        return el;
+    }
     function knopfZustand() {
         const ab = D().getElementById('fp-anlage');
         if (ab) { ab.textContent = plan.anlage ? '🏭 2D-Anlage: verbunden' : '🏭 2D-Anlage: aus'; ab.classList.toggle('an', !!plan.anlage); }
         const s = D().getElementById('fp-sim');
-        if (s) { const an = simLaeuft(); s.classList.add('sim'); s.classList.toggle('an', an); s.textContent = an ? '■ Stopp' : '▶ Simulation'; }
+        if (s) {
+            const an = simLaeuft(); s.classList.add('sim'); s.classList.toggle('an', an);
+            // Dasselbe Icon wie der Simulationsknopf im Hauptfenster
+            const id = an ? 'v_simStop' : 'v_simStart';
+            if (s.getAttribute('data-vi') !== id || !s.querySelector('svg.vi')) knopfIkon(s, id, an ? 'Stopp' : 'Simulation', an ? '■' : '▶');
+        }
         const u = D().getElementById('fp-undo'); if (u) u.disabled = !undoStapel.length;
         const r = D().getElementById('fp-redo'); if (r) r.disabled = !redoStapel.length;
         // Den Ansicht-Knopf oben (aktiv / abgekoppelt) setzt updateWorkspace

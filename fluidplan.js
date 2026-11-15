@@ -4111,10 +4111,8 @@
         for (const pid of Object.keys(R.ab)) {
             const a = R.ab[pid]; if (!a || !a.art || a.art === 'offen') continue;
             const p = G.ports.find(q => q.id === pid); if (!p) continue;
-            const typ = a.art === 'stopfen' ? 'stopfen' : 'daempfer', [x, y] = gLokal(t, p.x, p.y);
-            const gt = { typ, o: Object.assign({}, TYP[typ].optionen, { drossel: a.art === 'drossel' }) };
-            const gg = mk('g', { transform: `translate(${x},${y + (typ === 'stopfen' ? 12 : 14)})` }, g);
-            const altB = bildDok; bildDok = doc; try { TYP[typ].zeichne(gt, gg, TYP[typ].geometrie(gt)); } finally { bildDok = altB; }
+            const [x, y] = gLokal(t, p.x, p.y);
+            abschlussBild(gg => g.appendChild(gg), x, y, a, 'gehaeuse', '', doc, pid);
         }
         return s;
     }
@@ -4275,10 +4273,8 @@
         for (const pid of Object.keys(R.ab)) {
             const a = R.ab[pid]; if (!a || !a.art || a.art === 'offen') continue;
             const p = G.ports.find(q => q.id === pid); if (!p) continue;
-            const typ = a.art === 'stopfen' ? 'stopfen' : 'daempfer', [x, y] = R.portXY(p);
-            const gt = { typ, o: Object.assign({}, TYP[typ].optionen, { drossel: a.art === 'drossel' }) };
-            const gg = mk('g', { transform: `translate(${x},${y + (typ === 'stopfen' ? 12 : 14)})` }, g);
-            TYP[typ].zeichne(gt, gg, TYP[typ].geometrie(gt));
+            const [x, y] = R.portXY(p);
+            abschlussBild(gg => g.appendChild(gg), x, y, a, schnitt ? 'schnitt' : 'aussen', uid, doc, pid);
         }
         return s;
     }
@@ -4605,30 +4601,34 @@
         druck(id, P, z) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), z ? P(z.seite === 'X' ? 'X' : 'Y') : 0); },
         anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 9.5 : -9.5}px)` : ''; }
     };
-    // Zweidruckventil (UND): Schieber mit zwei Tellern schließt die zuerst belüftete Seite.
-    // Die Teller sind kleiner als die Mittelkammer: Über und unter dem offenen Teller strömt die Luft zum Ausgang 2.
+    // Zweidruckventil (UND): Die Teller sitzen in den Eingangskammern vor den Sitzen. Der Druck
+    // eines Eingangs drückt seinen eigenen Teller auf den Sitz und schließt sich so selbst ab.
+    // Erst wenn auch der andere Eingang Druck hat, strömt Luft am anderen (offenen) Teller vorbei
+    // durch die Bohrung zum Ausgang 2 – es kommt der niedrigere Druck durch.
     BAU.zweidruck = {
         rand: [-24, -10, 24, 10],
         zeichne(t, D) {
             D.body(-24, -10, 48, 20);
             if (D.innen) {
-                D.kammer('X', -24, -2, 9, 4); D.kammer('Y', 15, -2, 9, 4);
-                D.kammer('M', -15, -7, 30, 14); D.kammer('2', -2, -10, 4, 3);
-                for (const x of [-15.6, 14.4]) { D.lippe(x, -5, 1.2, 3); D.lippe(x, 2, 1.2, 3); }
+                D.kammer('X', -24, -6, 12, 12); D.kammer('Y', 12, -6, 12, 12);
+                D.kammer('M', -12, -2, 24, 4); D.kammer('M', -8, -6, 16, 12); D.kammer('2', -2, -10, 4, 4);
+                for (const x of [-12.6, 12]) { D.lippe(x, -4, 0.6, 2); D.lippe(x, 2, 0.6, 2); }
                 const s = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .15s' });
-                D.metall(-10, -0.9, 20, 1.8, null, s);
-                for (const x of [-12, 9.5]) { D.metall(x, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: x + (x < 0 ? -0.6 : 2.5), y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s); }
-                // Strömungspfeile: vom offenen Eingang am Teller vorbei nach oben zu 2
-                for (const [sd, d, sp] of [['X', 'M-21,0 H-13 V-5.6 H0 V-9', '-1.4,-7.6 0,-10 1.4,-7.6'], ['Y', 'M21,0 H13 V-5.6 H0 V-9', '-1.4,-7.6 0,-10 1.4,-7.6']]) {
+                D.metall(-18, -0.9, 36, 1.8, null, s);
+                D.metall(-18.2, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: -15.7, y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s);
+                D.metall(15.7, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: 15.1, y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s);
+                // Strömungspfeile: vom offenen Eingang um den Teller, durch die Bohrung, nach oben zu 2
+                for (const [sd, d] of [['X', 'M-23,-5 H-13.6 V-1.4 H-6 V-4 H0 V-8.4'], ['Y', 'M23,-5 H13.6 V-1.4 H6 V-4 H0 V-8.4']]) {
                     const g = D.mk('g', { class: 'fp-b-strom', 'data-s': sd, style: 'display:none' });
                     D.mk('path', { d, fill: 'none', stroke: '#0d47a1', 'stroke-width': 0.8, 'stroke-dasharray': '2 1.2', 'stroke-linejoin': 'round' }, g);
-                    D.mk('polygon', { points: sp, fill: '#0d47a1' }, g);
+                    D.mk('polygon', { points: '-1.4,-7.6 0,-10 1.4,-7.6', fill: '#0d47a1' }, g);
                 }
             } else { D.glanz(-22, -8, 22); D.pfeil(-18, 4, -8, 4); D.pfeil(18, 4, 8, 4); D.mk('text', { x: 0, y: 7, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }).textContent = '&'; }
         },
         druck(id, P) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), Math.min(P('X'), P('Y'))); },
+        // z.seite = offener Eingang: der andere Teller liegt auf seinem Sitz
         anim(r, t, z, P) {
-            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 2.4 : -2.4}px)` : '';
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? -2.5 : 2.5}px)` : '';
             const fliesst = !!z && P('X') > P_AN && P('Y') > P_AN;
             r.querySelectorAll('.fp-b-strom').forEach(e => { e.style.display = fliesst && e.getAttribute('data-s') === z.seite ? '' : 'none'; });
         }
@@ -4865,6 +4865,19 @@
         }
     };
     // Bild eines Teils (Maßstab 1, Planeinheiten) in g zeichnen
+    // Angedockter Schalldämpfer/Blindstopfen am Wegeventil in der Darstellung des Ventils
+    // (Gehäuse, Schnitt, geschlossen): eingeschraubt am Anschlusspunkt, Luftraum färbt sich mit dem Anschluss.
+    function abschlussBild(anhaengen, x, y, a, mode, uid, doc, pid) {
+        const typ = a.art === 'stopfen' ? 'stopfen' : 'daempfer';
+        const gt = { typ, o: Object.assign({}, TYP[typ].optionen, { drossel: a.art === 'drossel' }) };
+        const altB = bildDok; bildDok = doc || document;
+        try {
+            const gg = el('g', { transform: `translate(${x},${y + (typ === 'stopfen' ? 12 : 9)})`, class: 'fp-dock' });
+            anhaengen(gg);
+            BAU[typ].zeichne(gt, bauStift(mode, uid, gg));
+            gg.querySelectorAll('.fp-b-luft').forEach(e => { e.setAttribute('class', 'fp-r-kanal'); e.setAttribute('data-p', pid); });
+        } finally { bildDok = altB; }
+    }
     function bauZeichnen(t, g, mode, uid, rot) {
         const B = BAU[t.typ]; if (!B) return false;
         const D = bauStift(mode, uid, g);

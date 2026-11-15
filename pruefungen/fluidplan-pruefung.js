@@ -774,6 +774,30 @@ const FAELLE = {
     R.push(['zurück auf Gehäuse', vs.every(o => !o.el.querySelector('svg.fp-echt'))]);
     return R;
   },
+  'Angedockte Schalldämpfer und Stopfen in der Darstellung des Ventils': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    window.loadExample('code'); await warte(800);
+    window._fpAlleVentile('schnitt'); await warte(50);
+    const v = factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'ventil');
+    for (const b of ['schnitt', 'aussen', 'gehaeuse']) {
+      window._fpAlleVentile(b); v.pneu.fp.ab = { '3': { art: 'daempfer' }, '5': { art: 'stopfen' } }; window._fp2d.refreshLabel(v); await warte(50);
+      const d = v.el.querySelectorAll('.fp-dock');
+      R.push([b + ': Schalldämpfer und Stopfen als Bauteil, kein Normsymbol', d.length === 2 && Array.from(d).every(g => g.querySelector('rect')) && !Array.from(d).some(g => g.querySelector('path[d^="M-3.5,16"]')), d.length]);
+    }
+    R.push(['Schnitt: Luftraum des Schalldämpfers hängt am Anschluss 3', (window._fpAlleVentile('schnitt'), v.pneu.fp.ab = { '3': { art: 'daempfer' } }, window._fp2d.refreshLabel(v), !!v.el.querySelector('.fp-dock .fp-r-kanal[data-p="3"]'))]);
+    return R;
+  },
+  'Zweidruckventil: Teller in den Eingangskammern, eigener Druck schließt': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    const o = Fluidplan._neu2D('zweidruck'); window._fpAlleVentile('schnitt'); await warte(50);
+    const pl = Array.from(o.el.querySelectorAll('.fp-b-ventil rect')).filter(r => +r.getAttribute('height') === 8).map(r => +r.getAttribute('x'));
+    R.push(['Teller liegen außerhalb der Sitze (|x| > 12)', pl.length === 2 && pl.every(x => Math.abs(x) > 12), pl.join()]);
+    return R;
+  },
   'Alle Pneumatik-Teile in vier Darstellungen, Drossel arbeitet im Gehäusebild': async () => {
     const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
     factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });

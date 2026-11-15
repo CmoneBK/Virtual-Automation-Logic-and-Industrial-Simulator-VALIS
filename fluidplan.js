@@ -4605,22 +4605,33 @@
         druck(id, P, z) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), z ? P(z.seite === 'X' ? 'X' : 'Y') : 0); },
         anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 9.5 : -9.5}px)` : ''; }
     };
-    // Zweidruckventil (UND): Schieber mit zwei Tellern schließt die zuerst belüftete Seite
+    // Zweidruckventil (UND): Schieber mit zwei Tellern schließt die zuerst belüftete Seite.
+    // Die Teller sind kleiner als die Mittelkammer: Über und unter dem offenen Teller strömt die Luft zum Ausgang 2.
     BAU.zweidruck = {
         rand: [-24, -10, 24, 10],
         zeichne(t, D) {
             D.body(-24, -10, 48, 20);
             if (D.innen) {
-                D.kammer('X', -24, -2, 10, 4); D.kammer('Y', 14, -2, 10, 4);
-                D.kammer('M', -14, -4.5, 28, 9); D.kammer('2', -2, -10, 4, 6);
-                for (const x of [-14.6, 13.4]) { D.lippe(x, -4.5, 1.2, 2.5); D.lippe(x, 2, 1.2, 2.5); }
+                D.kammer('X', -24, -2, 9, 4); D.kammer('Y', 15, -2, 9, 4);
+                D.kammer('M', -15, -7, 30, 14); D.kammer('2', -2, -10, 4, 3);
+                for (const x of [-15.6, 14.4]) { D.lippe(x, -5, 1.2, 3); D.lippe(x, 2, 1.2, 3); }
                 const s = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .15s' });
-                D.metall(-11, -0.9, 22, 1.8, null, s);
-                for (const x of [-12.5, 10]) { D.metall(x, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: x + (x < 0 ? -0.6 : 2.5), y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s); }
+                D.metall(-10, -0.9, 20, 1.8, null, s);
+                for (const x of [-12, 9.5]) { D.metall(x, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: x + (x < 0 ? -0.6 : 2.5), y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s); }
+                // Strömungspfeile: vom offenen Eingang am Teller vorbei nach oben zu 2
+                for (const [sd, d, sp] of [['X', 'M-21,0 H-13 V-5.6 H0 V-9', '-1.4,-7.6 0,-10 1.4,-7.6'], ['Y', 'M21,0 H13 V-5.6 H0 V-9', '-1.4,-7.6 0,-10 1.4,-7.6']]) {
+                    const g = D.mk('g', { class: 'fp-b-strom', 'data-s': sd, style: 'display:none' });
+                    D.mk('path', { d, fill: 'none', stroke: '#0d47a1', 'stroke-width': 0.8, 'stroke-dasharray': '2 1.2', 'stroke-linejoin': 'round' }, g);
+                    D.mk('polygon', { points: sp, fill: '#0d47a1' }, g);
+                }
             } else { D.glanz(-22, -8, 22); D.pfeil(-18, 4, -8, 4); D.pfeil(18, 4, 8, 4); D.mk('text', { x: 0, y: 7, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }).textContent = '&'; }
         },
         druck(id, P) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), Math.min(P('X'), P('Y'))); },
-        anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 3 : -3}px)` : ''; }
+        anim(r, t, z, P) {
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 2.4 : -2.4}px)` : '';
+            const fliesst = !!z && P('X') > P_AN && P('Y') > P_AN;
+            r.querySelectorAll('.fp-b-strom').forEach(e => { e.style.display = fliesst && e.getAttribute('data-s') === z.seite ? '' : 'none'; });
+        }
     };
     // Schnellentlüftungsventil: Membranscheibe schließt beim Belüften die Abluft, beim Entlüften den Zulauf
     BAU.schnell = {

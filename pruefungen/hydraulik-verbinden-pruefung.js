@@ -236,6 +236,55 @@ const FAELLE = {
     R.push(['2D: Aggregat vorhanden, erster Zylinder weiter ohne Ventil', factoryObjects.some(x => x.type === 'hydraulic_unit') && !factoryObjects.some(x => x.type === 'valve_hyd' && x.targetCylinderId === o.id), '']);
   }
   ,
+  'Aus 2D-Anlage mit Pneumatik und Hydraulik: beide kommen in den Plan': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan;
+    window._findHydTankForCylinder = () => null;
+    // Startszene: pneumatischer cyl1 mit Ventil und Drosseln bleibt, dazu ein Hydraulikzylinder
+    const c = createFactoryObject('zylinder_double', ''); c.x = 700; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    window._hydAnbauen(null, 'manometer_hyd', 'P');
+    const vorher = factoryObjects.map(o => o.type).sort().join(',');
+    const n = F.ausAnlage(); await warte(900);
+    const p = F.plan(), T = typ => p.teile.filter(t => t.typ === typ);
+    R.push(['zwei Zylinder übernommen', n === 2, n]);
+    R.push(['Pneumatik im Plan: Quelle, Zylinder, Ventil', T('quelle').length === 1 && p.teile.some(t => t.typ === 'zyl_dw' && !t.o.hyd && t.o.anlage === 'cyl1'), p.teile.map(t => t.typ)]);
+    R.push(['Hydraulik im Plan: Aggregat, Tank, Zylinder, Ventil, Manometer', T('aggregat').length === 1 && T('tank').length === 1 && p.teile.some(t => t.typ === 'zyl_dw' && t.o.hyd && t.o.anlage === c.id) && p.teile.some(t => t.typ === 'ventil' && t.o.hyd) && T('manometer').some(t => t.o.hyd), p.teile.map(t => t.typ)]);
+    const pn = p.teile.filter(t => !t.o.hyd), hy = p.teile.filter(t => t.o.hyd);
+    R.push(['Hydraulik steht rechts neben der Pneumatik', Math.min(...hy.map(t => t.x)) > Math.max(...pn.map(t => t.x)), [Math.max(...pn.map(t => t.x)), Math.min(...hy.map(t => t.x))]]);
+    R.push(['2D-Anlage bleibt wie sie war', factoryObjects.map(o => o.type).sort().join(',') === vorher, factoryObjects.map(o => o.type).sort().join(',')]);
+  }
+  ,
+  'Hydraulikteile in den vier Darstellungen': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    window._findHydTankForCylinder = () => null;
+    clearFactory(true);
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300;
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('triple');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    window._hydAnbauen(c.id, 'check_valve_hyd', 'A');
+    window._hydAnbauen(null, 'accumulator_hyd', 'P');
+    window._hydAnbauen(null, 'pressure_switch_hyd', 'P');
+    window._hydAnbauen(null, 'manometer_hyd', 'P');
+    const TEILE = ['valve_hyd', 'throttle_hyd', 'check_valve_hyd', 'hydraulic_unit', 'accumulator_hyd', 'pressure_switch_hyd', 'manometer_hyd'];
+    for (const mode of ['symbol', 'schnitt', 'aussen']) {
+      const n = window._fpAlleVentile(mode); await warte(400);
+      const ohne = TEILE.filter(t => { const o = factoryObjects.find(q => q.type === t); return !o || !o.el.querySelector('svg.f2d-hyd-bild') || !o.el.classList.contains('hyd-bild'); });
+      R.push([mode + ': jedes Hydraulikteil zeigt sein Bild', !ohne.length && n >= TEILE.length + 1, ohne]);
+      R.push([mode + ': Hydraulikzylinder auch', !!c.el.querySelector('svg.f2d-zyl-bild'), '']);
+    }
+    // Normsymbol: das 4/3-Ventil zeigt die geschaltete Stellung
+    window._fpAlleVentile('symbol'); await warte(300);
+    const v = factoryObjects.find(q => q.type === 'valve_hyd');
+    v.el.classList.add('active-ext'); await warte(400);
+    const blk = v.el.querySelector('svg.f2d-hyd-bild .fp-block');
+    R.push(['4/3-Ventil geschaltet: Kastenblock verschoben', blk && /translate\(40/.test(blk.getAttribute('transform') || ''), blk && blk.getAttribute('transform')]);
+    v.el.classList.remove('active-ext');
+    window._fpAlleVentile('gehaeuse'); await warte(400);
+    R.push(['Gehäuse: wieder das gewohnte 2D-Bild', !factoryObjects.some(o => o.el && (o.el.querySelector('svg.f2d-hyd-bild') || o.el.classList.contains('hyd-bild'))) && !c.el.querySelector('svg.f2d-zyl-bild'), '']);
+  }
+  ,
   'Pneumatikplan mit Hydraulikteilen: Pneumatik bleibt, Hydraulik nur für Hydraulikzylinder': async (R) => {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan, H = { hyd: true };

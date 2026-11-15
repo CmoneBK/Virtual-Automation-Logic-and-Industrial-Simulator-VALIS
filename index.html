@@ -1669,6 +1669,10 @@
         /* Darstellungen des Zylinders (Bild aus fluidplan.js über dem Gehäuse): aufgeschnitten, echt geschlossen, Normsymbol */
         .f2d-obj.f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder { background: transparent; border-color: transparent; box-shadow: none; }
         .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::after { display: none; }
+        /* Hydraulikteile in den Darstellungen Normsymbol/echt: Bild aus fluidplan.js statt des 2D-Körpers */
+        .f2d-obj.hyd-bild { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+        .f2d-obj.hyd-bild > :not(svg.f2d-hyd-bild):not(.f2d-v-port):not(.f2d-label):not(.f2d-rotate-handle):not(.f2d-resize-handle):not(.f2d-resize-handle-xy):not(.f2d-hyd-wert):not(.f2d-v-solenoid) { visibility: hidden; }
+        .f2d-obj.hyd-bild > .f2d-v-solenoid { opacity: 0; }
         .f2d-zylinder-wrapper.zyl-bild-schnitt .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-aussen .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-symbol .f2d-zyl-magnet { opacity: 0; }
         .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben { background: #000; border: none; height: 3.2px; top: 13.4px; border-radius: 0; }
         .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben::after { background: #000; border: none; width: 2px; right: 0; top: -2px; height: 7px; }
@@ -3753,7 +3757,7 @@
                         </div>
                     </div>
                     <button class="panel-info-btn" onclick="showPanelInfo('factory-wrapper', this)" title="Kontext-Hilfe zur 2D-Anlage — Werkzeuge & Bauteile (fahre über ein Menü) sowie Profi-Steuerung & Kamera">ℹ️</button>
-                    <button id="btn-pneubild" class="tool-btn" onclick="window._fpBildWeiter && window._fpBildWeiter()" title="Darstellung aller Pneumatik-Bauteile" style="margin-left:auto;background:#37474f;border:1px solid #666;border-radius:3px;padding:2px 4px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;"></button>
+                    <button id="btn-pneubild" class="tool-btn" onclick="window._fpBildWeiter && window._fpBildWeiter()" title="Darstellung aller Pneumatik- und Hydraulikteile" style="margin-left:auto;background:#37474f;border:1px solid #666;border-radius:3px;padding:2px 4px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;"></button>
                     <button id="btn-viewmode" class="tool-btn" onclick="toggleGlobalViewMode()" title="Globale Anlagen-Ansicht umschalten: Seitenansicht (Standard, Werkstücke fallen unter Schwerkraft) oder Draufsicht (Vogelperspektive auf Förderband-Anlagen). Einige Bauteile haben Ansichts-spezifische Varianten." style="margin-left: 6px; background-color: #4caf50;" data-i18n="fac_btn_view_side">🌍 Global: Seitenansicht</button>
                     <button class="tool-btn" onclick="clearFactory()" title="Alle Anlagen-Komponenten + Werkstücke löschen (mit Sicherheitsabfrage). Setzt die 2D-Anlage komplett zurück; Code im Editor bleibt unverändert." style="background-color: #b71c1c; margin-left: 10px;" data-i18n="fac_btn_clear">🗑️ Alles löschen</button>
                 </div>
@@ -40483,6 +40487,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     };
                     ctxMenu.appendChild(_btnKB);
                 }
+                if (window._fpHydBildArt && window._fpHydBildArt(obj)) {
+                    // Hydraulikteile: dieselben vier Darstellungen wie die Pneumatik
+                    const _dw = document.createElement('label'); _dw.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 15px;font-size:11px;color:#ddd;';
+                    _dw.onclick = e => e.stopPropagation(); _dw.onmousedown = e => e.stopPropagation();
+                    _dw.innerHTML = '<span>🖼 Darstellung</span>';
+                    const _ds = document.createElement('select'); _ds.style.cssText = 'font-size:11px;max-width:150px';
+                    [['gehaeuse', 'Gehäuse (gewohnt)'], ['symbol', 'Normsymbol'], ['schnitt', 'Echt, aufgeschnitten'], ['aussen', 'Echt, geschlossen']].forEach(([v, n]) => { const op = document.createElement('option'); op.value = v; op.textContent = n; _ds.appendChild(op); });
+                    _ds.value = (obj.pneu && obj.pneu.bild) || (window._fpBildStandard ? window._fpBildStandard() : 'gehaeuse');
+                    _ds.onchange = () => { (obj.pneu = obj.pneu || {}).bild = _ds.value; window._fpHydBild(obj); saveFactoryState(); };
+                    _dw.appendChild(_ds); ctxMenu.appendChild(_dw);
+                }
                 if (obj.type === 'conveyor') {
                     let rampWrap = document.createElement('div'); rampWrap.style.padding = '5px 15px'; rampWrap.onclick = e => e.stopPropagation();
                     rampWrap.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">⏱ Anlaufzeit (s)</div>`;
@@ -40502,7 +40517,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         saveFactoryState(); ctxMenu.style.display = 'none';
                     };
                     ctxMenu.appendChild(btnV);
-                    if (!obj.hasHydraulics && window._fpZylBild) {
+                    if (window._fpZylBild) {
                         const _dw = document.createElement('label'); _dw.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 15px;font-size:11px;color:#ddd;';
                         _dw.onclick = e => e.stopPropagation(); _dw.onmousedown = e => e.stopPropagation();
                         _dw.innerHTML = '<span>🖼 Darstellung</span>';
@@ -78696,7 +78711,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115z"></script>
+<script src="fluidplan.js?v=20261115za"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115a"></script>
 </body>

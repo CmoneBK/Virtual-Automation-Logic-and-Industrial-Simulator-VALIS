@@ -5246,6 +5246,28 @@ function versorgungMerken(F) {
 
     // Drücke des Rechenkerns an den Anschlüssen der 2D-Teile ('objId:port' → bar), damit Drucksensor,
     // Durchflusssensor, Schlauch- und Schaltplanfarben dieselben Werte zeigen (eine Wahrheit).
+    // Oszilloskop: je 2D-Zylinder Druck in Kammer A (Kolbenseite, K) und B (Stangenseite, S) in bar,
+    // Weg s in mm und Kolbenkraft F = pA·AK − pB·AS in N (1 bar = 0,1 N/mm²; Feder/Reibung nicht abgezogen).
+    // Quelle: verbundener Plan, sonst Schattenplan (Pneumatik und Hydraulik).
+    window._fpZylMess = function () {
+        if (!simLaeuft()) return null;
+        const m = {};
+        const mess = (zt, o2) => {
+            if (!zt || !o2 || m[o2] || (zt.typ !== 'zyl_dw' && zt.typ !== 'zyl_ew') || !sim) return;
+            const z = sim.zust[zt.id] || {}, dw = zt.typ === 'zyl_dw';
+            const pA = pPort(zt, 'K'), pB = dw ? pPort(zt, 'S') : 0;
+            const d = zahl(zt.o.d, 20), ds = zahl(zt.o.dStange, dw ? 8 : 6);
+            const AK = Math.PI * d * d / 4, AS = AK - Math.PI * ds * ds / 4;
+            m[o2] = { pA, pB, s: z.x || 0, hub: zylHub(zt), F: (pA * AK - (dw ? pB * AS : 0)) * 0.1, hyd: istHyd(zt), dw };
+        };
+        try {
+            if (sim && plan.anlage) for (const t of plan.teile) if (t.o && t.o.anlage) mess(t, t.o.anlage);
+            for (const S of [schatten, hschatten]) if (S && S.sim) mitPlan(S.plan, S.sim, () => {
+                for (const o2 in S.karte) { const k = S.karte[o2]; if (k && typeof k === 'object' && k.zyl) mess(plan.teile.find(q => q.id === k.zyl), o2); }
+            });
+        } catch (e) {}
+        return m;
+    };
     window._fpDruckKarte = function () {
         if (!simLaeuft()) return null;
         const m = {};

@@ -5922,9 +5922,10 @@ const aktiv = resolveLinked(obj, spsState);
                     <canvas id="analyzer-canvas" style="display: block; width: 100%;"></canvas>
                 </div>
             </div>
+            <canvas id="analyzer-fs" width="340" height="230" title="Kraft über dem Weg je Zylinder (aus Druck A/B und den Kolbenflächen)" style="display:none;position:absolute;right:24px;bottom:58px;pointer-events:none;z-index:2;"></canvas>
             <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
                 <span>Zeichnet jeden Simulations-Tick auf: Bits als Flanke (High/Low), Zahlen (Analogwerte) als Kurve mit Skala. Maus über die Kurven: Werte zu diesem Zeitpunkt. Zeitachse unten: Simulationszeit in Sekunden.</span>
-                <span style="display:flex;gap:6px;"><select class="zeitraffer-wahl" onchange="window._setZeitraffer(this.value)" title="Zeitraffer: SPS-Zeit, Öltemperatur und Regelstrecken laufen schneller (nicht die Mechanik)" style="background:#555;color:#fff;border:none;border-radius:3px;padding:4px;"><option value="1">⏩ 1×</option><option value="10">⏩ 10×</option><option value="60">⏩ 60×</option><option value="300">⏩ 300×</option></select><button onclick="window._toggleAnalyzerUeberlagern(this)" title="Alle Analogwerte (z. B. Sollwert w, Istwert x, Stellgröße y) in eine gemeinsame Spur legen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📈 Analog überlagern</button>
+                <span style="display:flex;gap:6px;"><select class="zeitraffer-wahl" onchange="window._setZeitraffer(this.value)" title="Zeitraffer: SPS-Zeit, Öltemperatur und Regelstrecken laufen schneller (nicht die Mechanik)" style="background:#555;color:#fff;border:none;border-radius:3px;padding:4px;"><option value="1">⏩ 1×</option><option value="10">⏩ 10×</option><option value="60">⏩ 60×</option><option value="300">⏩ 300×</option></select><button onclick="window._toggleAnalyzerDruck(this)" title="Druckverläufe der Zylinderkammern A (Kolbenseite) und B (Stangenseite) in bar und den Kolbenweg in mm als Spuren zeigen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">🫧 Zylinderdrücke</button><button onclick="window._toggleAnalyzerFs(this)" title="Kraft über dem Weg (F-s-Diagramm) je Zylinder: F = pA · A(Kolben) − pB · A(Ring)" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📐 Kraft–Weg</button><button onclick="window._toggleAnalyzerUeberlagern(this)" title="Alle Analogwerte (z. B. Sollwert w, Istwert x, Stellgröße y) in eine gemeinsame Spur legen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📈 Analog überlagern</button>
                 <button onclick="clearAnalyzer()" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">🗑️ Verlauf leeren</button></span>
             </div>
         </div>
@@ -23101,7 +23102,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Wir kopieren den aktuellen Booleschen Zustand aller Variablen
                 // + Simulationszeit (ms, inkl. simSpeed) für die Zeitachse.
                 analyzerSimTimeMs += deltaMs;
-                analyzerHistory.push({ ...spsState, __simT: analyzerSimTimeMs });
+                const _anaEintrag = { ...spsState, __simT: analyzerSimTimeMs };
+                // Zylinderkammern: Druck A/B, Weg und Kraft (aus dem Fluidplan-Rechenkern)
+                if (typeof window._anaZylMitschnitt === 'function') { try { window._anaZylMitschnitt(_anaEintrag); } catch (_) {} }
+                analyzerHistory.push(_anaEintrag);
                 // Begrenze auf 2000 Einträge, damit der RAM nicht platzt
                 if (analyzerHistory.length > 2000) analyzerHistory.shift();
                 if (isAnalyzerOpen) drawAnalyzer();
@@ -48189,6 +48193,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
         window.clearAnalyzer = function() {
             analyzerHistory = [];
+            for (const k in _anaZylInfo) delete _anaZylInfo[k];
             analyzerSimTimeMs = 0;
             drawAnalyzer();
         };
@@ -48203,7 +48208,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         let _analyzerLaneSig = '';
         let analyzerCursorX = null;
         window._anaOszUeberlagern = false;
+        // Zylinder-Kanäle: „-MM1 pA“, „-MM1 pB“ (bar), „-MM1 s“ (mm), „-MM1 F“ (N)
+        window._anaOszDruck = false; window._anaOszFs = false;
+        const _anaZylEinheit = {};   // Kanal → Einheit
+        const _anaZylInfo = {};      // Zylindername → { hub, dw, hyd }
+        window._anaZylMitschnitt = function (e) {
+            const M = typeof window._fpZylMess === 'function' ? window._fpZylMess() : null; if (!M) return;
+            for (const id in M) {
+                const o = factoryObjects.find(q => q.id === id); if (!o) continue;
+                const n = (o.normLabel || o.id).trim(), w = M[id];
+                e[n + ' pA'] = +w.pA.toFixed(3); e[n + ' s'] = +w.s.toFixed(2); e[n + ' F'] = +w.F.toFixed(1);
+                _anaZylEinheit[n + ' pA'] = 'bar'; _anaZylEinheit[n + ' s'] = 'mm'; _anaZylEinheit[n + ' F'] = 'N';
+                if (w.dw) { e[n + ' pB'] = +w.pB.toFixed(3); _anaZylEinheit[n + ' pB'] = 'bar'; }
+                _anaZylInfo[n] = { hub: w.hub, dw: w.dw, hyd: w.hyd };
+            }
+        };
+        window._anaZylEinheit = _anaZylEinheit;
+        function _anaZylKanaele() {
+            if (!window._anaOszDruck) return [];
+            const k = [];
+            Object.keys(_anaZylInfo).sort().forEach(n => { k.push(n + ' pA'); if (_anaZylInfo[n].dw) k.push(n + ' pB'); k.push(n + ' s'); });
+            return k;
+        }
         function _analyzerIstAnalog(v, hist) {
+            if (_anaZylEinheit[v]) return true;
             const t = componentTypes[v];
             if (t === 'analog_in' || t === 'analog_out') return true;
             for (let i = hist.length - 1, n = 0; i >= 0 && n < 600; i--, n++) {
@@ -48217,6 +48245,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             analyzerVars.forEach(v => (_analyzerIstAnalog(v, analyzerHistory) ? ana : dig).push(v));
             const lanes = [];
             let y = 0;
+            // Druck A und B eines Zylinders in einer gemeinsamen Spur
+            for (const n of Object.keys(_anaZylInfo).sort()) {
+                const pa = n + ' pA', pb = n + ' pB';
+                if (!ana.includes(pa)) continue;
+                const v2 = [pa].concat(ana.includes(pb) ? [pb] : []);
+                lanes.push({ vars: v2, analog: true, y0: y, h: 120, einheit: 'bar' }); y += 120;
+                v2.forEach(v => ana.splice(ana.indexOf(v), 1));
+            }
             if (window._anaOszUeberlagern && ana.length > 1) {
                 lanes.push({ vars: ana, analog: true, y0: y, h: 160 }); y += 160;
             } else {
@@ -48234,7 +48270,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
         function updateAnalyzerLegend() {
             // Filtere alle benutzten Ein- und Ausgänge
-            analyzerVars = [...new Set([...globalInputs, ...globalOutputs])].sort();
+            analyzerVars = [...new Set([...globalInputs, ...globalOutputs])].sort().concat(_anaZylKanaele());
             const lay = _analyzerLayout();
             analyzerLanes = lay.lanes;
             _analyzerLaneSig = analyzerLanes.map(l => l.vars.join(',') + ':' + l.h).join('|');
@@ -48249,6 +48285,49 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     legendDiv.innerHTML += `<div style="height: ${l.h}px; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding-left: 10px; border-bottom: 1px dashed #555; box-sizing: border-box; background: rgba(0,131,143,0.08);">${zeilen}<div class="osz-ana-skala" style="color:#777;font-size:10px;"></div></div>`;
                 }
             });
+        }
+        window._toggleAnalyzerDruck = function(btn) {
+            window._anaOszDruck = !window._anaOszDruck;
+            if (btn) btn.style.background = window._anaOszDruck ? '#00838f' : '#555';
+            updateAnalyzerLegend();
+            drawAnalyzer();
+        };
+        window._toggleAnalyzerFs = function(btn) {
+            window._anaOszFs = !window._anaOszFs;
+            if (btn) btn.style.background = window._anaOszFs ? '#00838f' : '#555';
+            const c = _anaEl('analyzer-fs'); if (c) c.style.display = window._anaOszFs ? 'block' : 'none';
+            drawAnalyzer();
+        };
+        // Kraft über dem Weg (F-s-Diagramm) je Zylinder aus dem aufgezeichneten Verlauf
+        function _analyzerFs(hist) {
+            const c = _anaEl('analyzer-fs'); if (!c || !window._anaOszFs) return;
+            const ctx = c.getContext('2d'), W = c.width, H = c.height, L = 48, R = 10, T = 18, B = 26;
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = 'rgba(20,20,22,0.92)'; ctx.fillRect(0, 0, W, H);
+            ctx.strokeStyle = '#555'; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+            const namen = Object.keys(_anaZylInfo).sort();
+            ctx.font = '10px monospace'; ctx.fillStyle = '#ccc'; ctx.textAlign = 'left';
+            ctx.fillText('Kraft F über Weg s', 8, 12);
+            if (!namen.length) { ctx.fillStyle = '#888'; ctx.fillText('kein Zylinder mit Pneumatik/Hydraulik', 8, H / 2); return; }
+            let fMin = 0, fMax = 1, sMax = 1;
+            namen.forEach(n => { sMax = Math.max(sMax, _anaZylInfo[n].hub || 1); hist.forEach(h => { const f = h[n + ' F']; if (typeof f === 'number') { if (f < fMin) fMin = f; if (f > fMax) fMax = f; } }); });
+            const roh = (fMax - fMin) / 4, p10 = Math.pow(10, Math.floor(Math.log10(roh || 1))), st = [1, 2, 2.5, 5, 10].map(f => f * p10).find(q => q >= roh) || roh || 1;
+            fMin = Math.floor(fMin / st) * st; fMax = Math.ceil(fMax / st) * st; if (fMax <= fMin) fMax = fMin + st;
+            const X = sv => L + sv / sMax * (W - L - R), Y = f => H - B - (f - fMin) / (fMax - fMin) * (H - B - T);
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.fillStyle = '#9e9e9e'; ctx.textAlign = 'right';
+            for (let f = fMin; f <= fMax + st * 0.01; f += st) { const y = Math.round(Y(f)) + 0.5; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke(); ctx.fillText(_analyzerZahl(f), L - 4, y + 3); }
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 4; i++) { const sv = sMax * i / 4, x = Math.round(X(sv)) + 0.5; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, H - B); ctx.stroke(); ctx.fillText(_analyzerZahl(sv), x, H - B + 12); }
+            ctx.fillText('s [mm]', (L + W - R) / 2, H - 3); ctx.save(); ctx.translate(10, (T + H - B) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText('F [N]', 0, 0); ctx.restore();
+            namen.forEach((n, i) => {
+                const farbe = analyzerColors[i % analyzerColors.length];
+                ctx.strokeStyle = farbe; ctx.lineWidth = 1.6; ctx.beginPath(); let an = false, letzt = null;
+                hist.forEach(h => { const f = h[n + ' F'], sv = h[n + ' s']; if (typeof f !== 'number' || typeof sv !== 'number') return; const x = X(sv), y = Y(f); if (!an) { ctx.moveTo(x, y); an = true; } else ctx.lineTo(x, y); letzt = [x, y]; });
+                ctx.stroke();
+                if (letzt) { ctx.fillStyle = farbe; ctx.beginPath(); ctx.arc(letzt[0], letzt[1], 3, 0, Math.PI * 2); ctx.fill(); }
+                ctx.fillStyle = farbe; ctx.textAlign = 'right'; ctx.fillText(n, W - R - 2, T + 10 + i * 11);
+            });
+            c.setAttribute('data-fs-zylinder', namen.join(','));
         }
         window._toggleAnalyzerUeberlagern = function(btn) {
             window._anaOszUeberlagern = !window._anaOszUeberlagern;
@@ -48283,7 +48362,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             {
                 const lay = _analyzerLayout();
                 const sig = lay.lanes.map(l => l.vars.join(',') + ':' + l.h).join('|');
-                if (sig !== _analyzerLaneSig) updateAnalyzerLegend();
+                if (sig !== _analyzerLaneSig || _anaZylKanaele().some(k => !analyzerVars.includes(k))) updateAnalyzerLegend();
             }
             const totalH = analyzerLanes.reduce((s, l) => s + l.h, 0);
             // Passt die Auflösung an die Containerbreite und die nötige Variablen-Höhe an
@@ -48394,8 +48473,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ctx.stroke();
                 });
                 const sEl = document.querySelectorAll('#analyzer-legend .osz-ana-skala')[analyzerLanes.filter(l => l.analog).indexOf(lane)];
-                if (sEl) sEl.textContent = 'Skala ' + _analyzerZahl(sk.min) + ' … ' + _analyzerZahl(sk.max);
+                if (sEl) sEl.textContent = 'Skala ' + _analyzerZahl(sk.min) + ' … ' + _analyzerZahl(sk.max) + (_anaZylEinheit[lane.vars[0]] ? ' ' + _anaZylEinheit[lane.vars[0]] : '');
             });
+            _analyzerFs(drawHistory);
             // Aktuelle Werte (oder Werte am Cursor) in der Legende
             let iCur = drawHistory.length - 1;
             if (analyzerCursorX != null) iCur = Math.max(0, Math.min(drawHistory.length - 1, Math.round(analyzerCursorX / xStep)));
@@ -48403,7 +48483,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             document.querySelectorAll('#analyzer-legend .osz-ana-wert').forEach(sp => {
                 const v = sp.getAttribute('data-osz-var');
                 const x = zeile ? zeile[v] : null;
-                sp.textContent = x == null ? '' : '= ' + _analyzerZahl(typeof x === 'number' ? x : (x ? 1 : 0));
+                sp.textContent = x == null ? '' : '= ' + _analyzerZahl(typeof x === 'number' ? x : (x ? 1 : 0)) + (_anaZylEinheit[v] ? ' ' + _anaZylEinheit[v] : '');
             });
             // Cursor: senkrechte Linie mit Zeit
             if (analyzerCursorX != null && zeile) {
@@ -78854,7 +78934,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zq"></script>
+<script src="fluidplan.js?v=20261115zr"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>
 </body>

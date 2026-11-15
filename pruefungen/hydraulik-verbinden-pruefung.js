@@ -299,7 +299,8 @@ const FAELLE = {
     const v = F.setzen('ventil', 900, 250, Object.assign({ wege: '4/2', links: 'magnet', rechts: 'feder', varL: 'YH' }, H), '9Q1');
     F.verbinden(ag, 'P', v, '1');
     await warte(300);
-    R.push(['Aggregat und Ventil gesetzt: kein neuer 2D-Zylinder, keine 2D-Hydraulik', zyl2d().length === n0 && !factoryObjects.some(o => ['hydraulic_unit', 'valve_hyd'].includes(o.type)), [zyl2d().length, factoryObjects.filter(o => /hyd/.test(o.type)).map(o => o.type)]]);
+    // Das Aggregat steht in 2D (eine Wahrheit), aber kein Ventil ohne Hydraulikzylinder und keine Hydraulik an Pneumatikzylindern
+    R.push(['Aggregat und Ventil gesetzt: Aggregat in 2D, kein neuer 2D-Zylinder, kein 2D-Hydraulikventil', zyl2d().length === n0 && factoryObjects.some(o => o.type === 'hydraulic_unit') && !factoryObjects.some(o => o.type === 'valve_hyd') && !zyl2d().some(o => o.hasHydraulics), [zyl2d().length, factoryObjects.filter(o => /hyd/.test(o.type)).map(o => o.type)]]);
     R.push(['Pneumatikzylinder behalten ihre Pneumatik', zyl2d().filter(o => o.hasPneumatics).length === pneu0 && !zyl2d().some(o => o.hasHydraulics), zyl2d().map(o => [o.hasPneumatics, !!o.hasHydraulics])]);
     R.push(['keine Pneumatik-Teile aus Hydraulikteilen', !factoryObjects.some(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && ['aggregat', 'tank'].includes(o.pneu.fp.typ)) && !factoryObjects.some(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.o && o.pneu.fp.o.hyd), '']);
     const z = F.setzen('zyl_dw', 900, 0, Object.assign({ d: 32, dStange: 16, hub: 100 }, H), '9M1');

@@ -3578,7 +3578,21 @@
         }
         return weg;
     }
-    function versorgungMerken(F) {
+    // Quelle, Wartungseinheit, Aggregat, Tank im Plan: das 2D-Gegenstück entsteht sofort (ohne Zylinder oder Ventil)
+function versorgungAnlegen(F) {
+    const hat = typ => F.some(q => q.type === typ);
+    const T = typ => plan.teile.find(t => t.typ === typ && (typ === 'aggregat' || typ === 'tank' ? istHyd(t) : true));
+    // In 2D gerade gelöscht (Rückabgleich steht noch aus): nicht wieder anlegen
+    const offen = t => t && [...versSpiegel].some(([id, tid]) => tid === t.id && !F.some(q => q.id === id));
+    let neu = false;
+    const q = T('quelle'), w = T('wartung'), ag = T('aggregat'), tk = T('tank');
+    const qFehlt = q && !offen(q) && !hat('compressor'), wFehlt = w && !offen(w) && !hat('manifold');
+    if ((qFehlt || wFehlt) && typeof window._pneuVersorgung2D === 'function') { try { window._pneuVersorgung2D({ comp: !!qFehlt, manifold: !!wFehlt }); neu = true; } catch (e) { console.warn(e); } }
+    const agFehlt = ag && !offen(ag) && !hat('hydraulic_unit'), tkFehlt = tk && !offen(tk) && !hat('oil_tank');
+    if ((agFehlt || tkFehlt) && typeof window._hydVersorgung2D === 'function') { try { window._hydVersorgung2D({ aggregat: !!agFehlt, tank: tkFehlt ? true : undefined }); neu = true; } catch (e) { console.warn(e); } }
+    return neu;
+}
+function versorgungMerken(F) {
         const T = typ => plan.teile.find(t => t.typ === typ && (typ === 'aggregat' || typ === 'tank' ? istHyd(t) : true));
         const paar = (typ2d, typ) => { const o = F.find(q => q.type === typ2d), t = T(typ); if (o && t) versSpiegel.set(o.id, t.id); };
         paar('compressor', 'quelle'); paar('manifold', 'wartung'); paar('hydraulic_unit', 'aggregat'); paar('oil_tank', 'tank');
@@ -3743,6 +3757,7 @@
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
         // Quelle, Wartungseinheit, Aggregat oder Tank im Plan gelöscht: das 2D-Gegenstück geht auch
         if (versorgungLoeschen(F)) { anlageAbgleichen(); return; }
+        if (versorgungAnlegen(F)) { anlageAbgleichen(); return; }
         // Hydraulikzylinder bekommen eigene 2D-Teile (valve_hyd, throttle_hyd …), Pneumatik wie bisher
         if (plan.teile.some(hydZylT) || hydSpiegel.size) hydAbgleichen(F);
         kennKonflikteLoesen();

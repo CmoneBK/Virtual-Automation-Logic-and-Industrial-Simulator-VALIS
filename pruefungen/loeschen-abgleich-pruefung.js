@@ -287,6 +287,27 @@ const FAELLE = {
     await warte(800);
     R.push(['übernommen und verbunden', !!F.plan().anlage && F.plan().teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew'), F.plan().teile.map(t => t.typ).join(',')]);
   },
+  'Verbunden: Aggregat, Tank, Quelle entstehen in 2D sofort (ohne Ventil)': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    try { clearFactory && clearFactory(); } catch (e) {}
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    await warte(400);
+    const c = window.confirm; window.confirm = () => false;
+    try { F._anlageKnopf(); } finally { window.confirm = c; }
+    await warte(400);
+    const hat = typ => factoryObjects.some(o => o.type === typ);
+    const ag = F.setzen('aggregat', 100, 400); await warte(900);
+    R.push(['Aggregat gesetzt → 2D-Hydraulikaggregat', hat('hydraulic_unit'), factoryObjects.map(o => o.type).join(',')]);
+    const tk = F.setzen('tank', 300, 400); await warte(900);
+    R.push(['Tank gesetzt → 2D-Öltank (genau einer)', factoryObjects.filter(o => o.type === 'oil_tank').length === 1, factoryObjects.filter(o => o.type === 'oil_tank').length]);
+    const q = F.setzen('quelle', 100, 700); await warte(900);
+    R.push(['Quelle gesetzt → 2D-Kompressor', hat('compressor'), hat('compressor')]);
+    F._entfernen(ag); await warte(900);
+    R.push(['Aggregat im Plan gelöscht → 2D weg und kommt nicht zurück', !hat('hydraulic_unit'), hat('hydraulic_unit')]);
+    deleteObjRecursive(factoryObjects.find(o => o.type === 'compressor')); saveFactoryState(); await warte(1200);
+    R.push(['2D-Kompressor gelöscht → Quelle im Plan weg, Kompressor bleibt weg', !hat('compressor') && !F.plan().teile.some(t => t.typ === 'quelle'), [hat('compressor'), F.plan().teile.map(t => t.typ).join(',')]]);
+  },
   'Löschen während der Simulation: beide Richtungen, nichts kommt beim Stopp zurück': async (R) => {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;

@@ -4067,7 +4067,32 @@
         const m = o.mitte === 'entlueftet' ? { s: -0.5, n: [[0.5, 1.5], [3.5, 4.5]] } : o.mitte === 'belueftet' ? { s: -0.5, n: [[1.5, 3.5]] } : { s: -0.5, n: [[1, 2], [3, 4]] };
         return { ord, pos: [a, m, b] };
     }
-    const darst = obj => { const f = fp2d(obj); if (f.typ !== 'ventil') return 'symbol'; return f.bild === 'symbol' || f.bild === 'schnitt' || f.bild === 'aussen' ? f.bild : 'gehaeuse'; };
+    // Darstellung eines Wegeventils: eigene Wahl (fp.bild) oder der zentrale Umschalter der 2D-Anlage
+    const BILDER = ['gehaeuse', 'symbol', 'schnitt', 'aussen'];
+    const bildStandard = () => { try { const b = localStorage.getItem('valisVentilBild'); return BILDER.includes(b) ? b : 'gehaeuse'; } catch (e) { return 'gehaeuse'; } };
+    const darst = obj => { const f = fp2d(obj); if (f.typ !== 'ventil') return 'symbol'; return BILDER.includes(f.bild) ? f.bild : bildStandard(); };
+    // Zentraler Umschalter: alle Wegeventile der 2D-Anlage in einer Darstellung; alte 2D-Magnetventile
+    // werden dafür (wie bei der ersten Menüänderung) zum frei konfigurierbaren Fluidplan-Teil.
+    window._fpAlleVentile = function (bild) {
+        if (!BILDER.includes(bild)) return 0;
+        try { localStorage.setItem('valisVentilBild', bild); } catch (e) {}
+        const F = fabrik() || [];
+        let umbau = false;
+        if (bild !== 'gehaeuse') for (const v of F.filter(q => q.type === 'valve_pneu')) { const r = ventilUmbauen(v, fpVonVentil(v)); if (r === true) umbau = true; }
+        if (umbau) { try { anlageAbgleichen(); } catch (e) {} }
+        let n = 0;
+        for (const o of (fabrik() || [])) {
+            if (o.type !== 'pneu_fp' || !o.pneu || !o.pneu.fp || o.pneu.fp.typ !== 'ventil') continue;
+            o.pneu.fp.bild = bild; n++;
+            try { symbol2D(o); updateObjTransform(o); } catch (e) {}
+        }
+        const sel = document.getElementById('sel-ventilbild'); if (sel) sel.value = bild;
+        try { if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
+        try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
+        return n;
+    };
+    window._fpBildStandard = bildStandard;
+    (function selSetzen() { const sel = document.getElementById('sel-ventilbild'); if (sel) sel.value = bildStandard(); else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', selSetzen, { once: true }); })();
     const echt = obj => { const d = darst(obj); return d === 'schnitt' || d === 'aussen'; };
     function echtRoh(obj) {
         const t = teilAus2D(obj), o = t.o, f = fp2d(obj), ab = f.ab || {};
@@ -4092,8 +4117,9 @@
     // Planpunkt (Rolle) → lokaler Punkt der echten Darstellung
     function echtLokal(R, x, y) {
         const n = ventilStellungen(R.o).length;
-        if (x < 0) return [R.kL - 18, 20];
-        if (x > n * KASTEN) return [R.kR + 18, 20];
+        const rad = b => b === 'rolle' || b === 'rolle_leer';
+        if (x < 0) return rad(R.o.links) ? [R.kL - 17, 38] : [R.kL - 18, 20];
+        if (x > n * KASTEN) return rad(R.o.rechts) ? [R.kR + 17, 38] : [R.kR + 18, 20];
         return [(R.kL + R.kR) / 2, y];
     }
     const luftFarbe = p => p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : '#eceff1';
@@ -4152,8 +4178,10 @@
         for (const [seite, b, x0, sg, v] of [['L', o.links, R.kL, -1, o.varL], ['R', o.rechts, R.kR, 1, o.varR]]) {
             const bg = mk('g', { class: 'fp-g-bet', 'data-seite': seite }, g);
             echtBetaetiger(bg, b, x0, sg, schnitt, fuell, mk, R, seite);
-            if (b === 'magnet' && v) txt(x0 + sg * RW / 2, -7, v, { fill: '#1565c0', 'font-size': 8 });
+            if (b === 'magnet' && v) txt(x0 + sg * FR / 2, -7, v, { fill: '#1565c0', 'font-size': 8 });
         }
+        // Schieber samt Stößel, Anker und Federteller über die Betätigerräume legen
+        const sgr = g.querySelector('.fp-r-schieber'); if (sgr) g.appendChild(sgr);
         // Angedockte Schalldämpfer und Stopfen
         for (const pid of Object.keys(R.ab)) {
             const a = R.ab[pid]; if (!a || !a.art || a.art === 'offen') continue;
@@ -4186,31 +4214,58 @@
         // Stößel durch die Deckel zu den Betätigern
         mk('rect', { x: R.kL - 3 - Math.max(0, R.sMax) * RP, y: 18.5, width: R.xi(R.spL) - R.kL + 3 + Math.max(0, R.sMax) * RP, height: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 0.5 }, sg);
         mk('rect', { x: R.xi(R.spR), y: 18.5, width: R.kR + 3 - R.xi(R.spR) - Math.min(0, R.sMin) * RP, height: 3, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 0.5 }, sg);
+        // Federteller am Stößelende: drückt die Feder beim Umschalten zusammen
+        for (const [seite, b] of [['L', R.o.links], ['R', R.o.rechts]]) {
+            if (b === 'magnet') {
+                // Anker am Stößelende: wandert mit dem Schieber im Polrohr
+                const xe = seite === 'R' ? R.kR + 3 - Math.min(0, R.sMin) * RP : R.kL - 3 - Math.max(0, R.sMax) * RP, sd = seite === 'R' ? 1 : -1, la = 9;
+                mk('rect', { class: 'fp-r-anker', 'data-seite': seite, x: Math.min(xe, xe + sd * la), y: 16, width: la, height: 8, rx: 0.6, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.7 }, sg);
+                mk('line', { x1: xe + sd * 1.5, y1: 17.2, x2: xe + sd * (la - 1.5), y2: 17.2, stroke: '#fff', 'stroke-opacity': 0.8, 'stroke-width': 0.7 }, sg);
+                continue;
+            }
+            if (b !== 'feder') continue;
+            const xe = seite === 'R' ? R.kR + 3 - Math.min(0, R.sMin) * RP : R.kL - 3 - Math.max(0, R.sMax) * RP, sd = seite === 'R' ? 1 : -1;
+            mk('rect', { class: 'fp-r-teller', x: Math.min(xe, xe + sd * 2.2), y: 12.6, width: 2.2, height: 14.8, rx: 0.5, fill: '#78909c', stroke: '#37474f', 'stroke-width': 0.6 }, sg);
+            mk('rect', { x: Math.min(xe + sd * 2.2, xe + sd * 4.2), y: 17, width: 2, height: 6, fill: '#90a4ae', stroke: '#546e7a', 'stroke-width': 0.4 }, sg);   // Führungszapfen in der Feder
+        }
+    }
+    // Federraum: Abstand Deckelkante -> Federteller in Ruhe und Federlänge
+    const FR = 34;   // Länge Federraum außen
+    function federMass(R, seite) {
+        const nS = R.S.pos.length, sR = R.S.pos[nS === 3 ? 1 : nS - 1].s;
+        const rest = 3 + 2.2 + (seite === 'R' ? sR - Math.min(0, R.sMin) : Math.max(0, R.sMax) - sR) * RP;
+        return { rest, L: Math.max(6, FR - 2 - rest) };
     }
     function echtBetaetiger(bg, b, x0, s, schnitt, fuell, mk, R, seite) {
         const X = d => x0 + s * d, rx = (a, c) => Math.min(X(a), X(c)), bw = (a, c) => Math.abs(c - a);
         const bew = mk('g', { class: 'fp-r-bew' }, bg);
         if (b === 'magnet') {
-            mk('rect', { x: rx(0, RW), y: 6, width: RW, height: 28, rx: 2, fill: schnitt ? fuell : '#37474f', stroke: '#263238', 'stroke-width': 1.2 }, bg);
+            mk('rect', { x: rx(0, FR), y: 6, width: FR, height: 28, rx: 2, fill: schnitt ? fuell : '#37474f', stroke: '#263238', 'stroke-width': 1.2 }, bg);
             if (schnitt) {
+                // Polrohr mit beweglichem Anker (sitzt am Stößel, siehe schieberInhalt) und festem Polkern
+                mk('rect', { x: rx(0, FR - 2), y: 15.2, width: FR - 2, height: 9.6, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.5 }, bg);
                 for (const y of [9, 25]) {
-                    mk('rect', { class: 'fp-r-wicklung', x: rx(3, RW - 3), y, width: RW - 6, height: 6, fill: '#b87333', stroke: '#6d4c41', 'stroke-width': 0.6 }, bg);
-                    for (let d = 5; d < RW - 3; d += 2.5) mk('line', { x1: X(d), y1: y, x2: X(d), y2: y + 6, stroke: '#6d4c41', 'stroke-width': 0.4 }, bg);
+                    mk('rect', { class: 'fp-r-wicklung', x: rx(3, FR - 3), y, width: FR - 6, height: 6, fill: '#b87333', stroke: '#6d4c41', 'stroke-width': 0.6 }, bg);
+                    for (let d = 5; d < FR - 3; d += 2.5) mk('line', { x1: X(d), y1: y, x2: X(d), y2: y + 6, stroke: '#6d4c41', 'stroke-width': 0.4 }, bg);
                 }
-                mk('rect', { class: 'fp-r-anker', x: rx(2, RW - 5), y: 16, width: RW - 7, height: 8, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.8 }, bew);
+                mk('rect', { class: 'fp-r-polkern', x: rx(0.5, 3), y: 15.6, width: 2.5, height: 8.8, fill: '#607d8b', stroke: '#37474f', 'stroke-width': 0.6 }, bg);
             } else {
-                mk('rect', { x: rx(RW / 2 - 6, RW / 2 + 6), y: -2, width: 12, height: 8, rx: 1, fill: '#212121' }, bg);
-                mk('circle', { class: 'fp-r-led', cx: X(RW - 6), cy: 11, r: 2.2, fill: '#5d4037', stroke: '#212121', 'stroke-width': 0.5 }, bg);
-                mk('circle', { cx: X(RW - 6), cy: 28, r: 2.4, fill: '#ffb300', stroke: '#6d4c41', 'stroke-width': 0.5 }, bg);   // Handhilfsbetätigung
+                mk('rect', { x: rx(FR / 2 - 6, FR / 2 + 6), y: -2, width: 12, height: 8, rx: 1, fill: '#212121' }, bg);
+                mk('circle', { class: 'fp-r-led', cx: X(FR - 6), cy: 11, r: 2.2, fill: '#5d4037', stroke: '#212121', 'stroke-width': 0.5 }, bg);
+                mk('circle', { cx: X(FR - 6), cy: 28, r: 2.4, fill: '#ffb300', stroke: '#6d4c41', 'stroke-width': 0.5 }, bg);   // Handhilfsbetätigung
             }
         } else if (b === 'feder') {
-            mk('rect', { x: rx(0, RW - 4), y: 8, width: RW - 4, height: 24, rx: 3, fill: schnitt ? fuell : '#b0bec5', stroke: '#37474f', 'stroke-width': 1.2 }, bg);
+            mk('rect', { x: rx(0, FR), y: 8, width: FR, height: 24, rx: 3, fill: schnitt ? fuell : '#b0bec5', stroke: '#37474f', 'stroke-width': 1.2 }, bg);
             if (schnitt) {
-                mk('rect', { x: rx(0, RW - 8), y: 12, width: RW - 8, height: 16, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.5 }, bg);
-                const L = RW - 11, pts = [];
-                for (let i = 0; i <= 8; i++) pts.push((X(RW - 8) - s * i * L / 8) + ',' + (20 + (i === 0 || i === 8 ? 0 : (i % 2 ? -6 : 6))));
-                mk('polyline', { class: 'fp-r-feder', points: pts.join(' '), fill: 'none', stroke: '#455a64', 'stroke-width': 1.3, style: `transform-box:view-box;transform-origin:${X(RW - 8)}px 20px;transition:transform .25s cubic-bezier(.4,0,.2,1)` }, bg);
-            } else mk('circle', { cx: X(RW - 4), cy: 20, r: 1.2, fill: '#37474f' }, bg);
+                const M = federMass(R, seite), L = M.L, xa = FR - 2, n = 10, pts = [];
+                mk('rect', { x: rx(0, xa), y: 12, width: xa, height: 16, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.5 }, bg);
+                for (let i = 0; i <= n; i++) pts.push((X(xa) - s * i * L / n) + ',' + (20 + (i === 0 || i === n ? 0 : (i % 2 ? -6.5 : 6.5))));
+                mk('polyline', { class: 'fp-r-feder', 'data-l': L, points: pts.join(' '), fill: 'none', stroke: '#455a64', 'stroke-width': 1.4, 'stroke-linejoin': 'round', style: `transform-box:view-box;transform-origin:${X(xa)}px 20px;transition:transform .25s cubic-bezier(.4,0,.2,1)` }, bg);
+                mk('rect', { x: rx(xa - 3, xa), y: 15, width: 3, height: 10, fill: '#78909c', stroke: '#455a64', 'stroke-width': 0.5 }, bg);   // Federsitz im Deckel
+            } else {
+                mk('line', { x1: X(FR - 3), y1: 10, x2: X(FR - 3), y2: 30, stroke: '#546e7a', 'stroke-width': 0.8 }, bg);
+                mk('circle', { cx: X(FR - 1.5), cy: 20, r: 1.2, fill: '#37474f' }, bg);
+            }
         } else if (b === 'pneu') {
             mk('rect', { x: rx(0, RW - 4), y: 8, width: RW - 4, height: 24, rx: 2, fill: schnitt ? fuell : '#b0bec5', stroke: '#37474f', 'stroke-width': 1.2 }, bg);
             if (schnitt) {
@@ -4220,8 +4275,26 @@
             }
             mk('rect', { x: rx(RW - 4, RW + 10), y: 18, width: 14, height: 4, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.6 }, bg);
             mk('rect', { class: 'fp-r-ring', 'data-p': (geo(R.t).ports.find(p => p.art === 's' && p.seite === seite) || {}).id || '', x: rx(RW + 4, RW + 9), y: 15, width: 5, height: 10, rx: 1, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.8 }, bg);
+        } else if (b === 'rolle' || b === 'rolle_leer') {
+            // Rollenhebel wie in echt: Kopfstück mit Stößel, Blechhebel mit Drehpunkt oben,
+            // Laufrolle unten. Fährt der Nocken die Rolle an, kippt der Hebel und drückt den Stößel.
+            mk('rect', { x: rx(0, 8), y: 4, width: 8, height: 32, rx: 1, fill: schnitt ? fuell : '#cfd8dc', stroke: '#37474f', 'stroke-width': 1 }, bg);
+            if (schnitt) mk('rect', { x: rx(0, 8), y: 16.5, width: 8, height: 7, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 }, bg);
+            mk('rect', { class: 'fp-r-stoessel', x: rx(0, 11.5), y: 17.5, width: 11.5, height: 5, rx: 1, fill: '#b0bec5', stroke: '#546e7a', 'stroke-width': 0.6, style: 'transition:transform .12s ease' }, bg);
+            const hb = mk('g', { class: 'fp-r-hebel', 'data-dreh': `${X(9)},3,${s * 9}`, style: 'transition:transform .12s ease' }, bg);
+            mk('path', { d: `M${X(6)},0 L${X(12)},0 L${X(20)},35 L${X(14)},37 Z`, fill: '#b0bec5', stroke: '#546e7a', 'stroke-width': 0.9, 'stroke-linejoin': 'round' }, hb);
+            mk('line', { x1: X(8), y1: 2, x2: X(15.5), y2: 33, stroke: '#eceff1', 'stroke-width': 0.8, 'stroke-opacity': 0.9 }, hb);
+            for (const [dx, dy] of [[10, 9], [13.5, 22]]) mk('circle', { cx: X(dx), cy: dy, r: 1.3, fill: '#eceff1', stroke: '#78909c', 'stroke-width': 0.4 }, hb);
+            if (b === 'rolle_leer') {
+                // Gelenk für den Leerrücklauf: die Rolle knickt in Gegenrichtung weg
+                mk('circle', { cx: X(15.8), cy: 27, r: 1.8, fill: '#78909c', stroke: '#37474f', 'stroke-width': 0.6 }, hb);
+                mk('path', { d: `M${X(19)},25 q${s * 3},2 ${s * 1},6`, fill: 'none', stroke: '#37474f', 'stroke-width': 0.8, 'marker-end': 'url(#fp-pfeil)' }, hb);
+            }
+            mk('circle', { class: 'fp-r-rad', cx: X(17), cy: 38, r: 6, fill: '#212121', stroke: '#37474f', 'stroke-width': 1.4 }, hb);
+            mk('circle', { cx: X(17), cy: 38, r: 2.2, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.5 }, hb);
+            mk('circle', { cx: X(9), cy: 3, r: 2.2, fill: '#78909c', stroke: '#37474f', 'stroke-width': 0.7 }, bg);   // Drehpunkt
         } else {
-            // Handbetätigung oder Rolle: Führungsbuchse, Stößel, Kopf
+            // Handbetätigung: Führungsbuchse, Stößel, Kopf
             mk('rect', { x: rx(0, 7), y: 14, width: 7, height: 12, fill: schnitt ? fuell : '#90a4ae', stroke: '#37474f', 'stroke-width': 1 }, bg);
             mk('rect', { x: rx(1, 14), y: 18, width: 13, height: 4, fill: '#b0bec5', stroke: '#546e7a', 'stroke-width': 0.6 }, bew);
             if (b === 'taster') mk('rect', { x: rx(13, 19), y: 10, width: 6, height: 20, rx: 2, fill: '#1565c0', stroke: '#0d47a1', 'stroke-width': 0.8 }, bew);
@@ -4233,11 +4306,6 @@
             } else if (b === 'pedal') {
                 mk('rect', { x: rx(10, 26), y: 32, width: 16, height: 3, fill: '#455a64' }, bg);
                 mk('line', { class: 'fp-griff', 'data-dreh': `${X(14)},20,${-s * 15}`, x1: X(10), y1: 30, x2: X(26), y2: 12, stroke: '#37474f', 'stroke-width': 3.2, 'stroke-linecap': 'round' }, bew);
-            } else if (b === 'rolle' || b === 'rolle_leer') {
-                mk('line', { x1: X(14), y1: 20, x2: X(18), y2: 20, stroke: '#546e7a', 'stroke-width': 2 }, bew);
-                mk('circle', { class: 'fp-rolle', cx: X(18), cy: 20, r: 4.5, fill: 'none', stroke: '#37474f', 'stroke-width': 1.6 }, bew);
-                mk('circle', { cx: X(18), cy: 20, r: 1.1, fill: '#37474f' }, bew);
-                if (b === 'rolle_leer') mk('path', { d: `M${X(11)},14 l${s * 2},6 l${-s * 2},6`, fill: 'none', stroke: '#37474f', 'stroke-width': 1 }, bg);
             }
         }
     }
@@ -4262,15 +4330,24 @@
                 }
                 sg.style.transform = `translateX(${P.s * RP}px)`;
                 // Feder: zwischen Federteller (am Schieber) und Deckel gestaucht
-                const fd = el2.querySelector('.fp-r-feder');
-                if (fd) { const PR = R.S.pos[ruhe] || P, d = (P.s - PR.s) * RP, Lf = RW - 11; fd.style.transform = `scaleX(${Math.max(0.35, (Lf - Math.abs(d)) / Lf)})`; }
+                el2.querySelectorAll('.fp-g-bet').forEach(gb => {
+                    const fd = gb.querySelector('.fp-r-feder'); if (!fd) return;
+                    const PR = R.S.pos[ruhe] || P, Lf = +fd.getAttribute('data-l') || 20;
+                    const d = (gb.getAttribute('data-seite') === 'R' ? P.s - PR.s : PR.s - P.s) * RP;   // >0: Teller fährt in den Federraum
+                    fd.style.transform = `scaleX(${Math.min(1, Math.max(0.25, (Lf - d) / Lf))})`;
+                });
             }
             el2.querySelectorAll('.fp-g-bet').forEach(g => {
                 const L = g.getAttribute('data-seite') === 'L', an = L ? anL : anR, b = L ? o.links : o.rechts;
                 if (b === 'magnet') {
                     g.querySelectorAll('.fp-r-wicklung').forEach(w => { w.setAttribute('fill', an ? '#ff9800' : '#b87333'); w.style.filter = an ? 'drop-shadow(0 0 3px #ff9800)' : ''; });
-                    const a = g.querySelector('.fp-r-anker'); if (a) { a.style.transition = 'transform .12s'; a.style.transform = an ? `translateX(${(L ? 1 : -1) * 2}px)` : ''; }
+                    const a = el2.querySelector(`.fp-r-anker[data-seite="${L ? 'L' : 'R'}"]`); if (a) { a.setAttribute('fill', an ? '#ffcc80' : '#90a4ae'); a.style.filter = an ? 'drop-shadow(0 0 2px #ff9800)' : ''; }
                     const led = g.querySelector('.fp-r-led'); if (led) { led.setAttribute('fill', an ? '#ffeb3b' : '#5d4037'); led.style.filter = an ? 'drop-shadow(0 0 3px #ffeb3b)' : ''; }
+                } else if (b === 'rolle' || b === 'rolle_leer') {
+                    const s2 = L ? -1 : 1, hb = g.querySelector('.fp-r-hebel'), st2 = g.querySelector('.fp-r-stoessel'), rd = g.querySelector('.fp-r-rad');
+                    if (hb) { const [px, py, w] = hb.getAttribute('data-dreh').split(','); hb.style.transformOrigin = `${px}px ${py}px`; hb.style.transformBox = 'view-box'; hb.style.transform = an ? `rotate(${w}deg)` : ''; }
+                    if (st2) st2.style.transform = an ? `translateX(${-s2 * 2.5}px)` : '';
+                    if (rd) { rd.setAttribute('stroke', an ? '#2196f3' : '#37474f'); rd.style.filter = an ? 'drop-shadow(0 0 3px #2196f3)' : ''; }
                 } else if (b !== 'feder') betZeigen(g.querySelector('.fp-r-bew'), b, L ? -1 : 1, an, '#2196f3');
             });
             if (altK != null && altK !== k && st && typeof SoundEngine !== 'undefined') { try { SoundEngine.clack(); } catch (e) {} }
@@ -4440,7 +4517,7 @@
                 else if (k === 'kurz') auswahl('Darstellung', [['n', 'ausführlich'], ['j', 'Kurzform']], f.o.kurz ? 'j' : 'n', v => { f.o.kurz = v === 'j'; });
             }
         }
-        if (f.typ === 'ventil') auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)'], ['schnitt', 'Echtes Ventil, aufgeschnitten'], ['aussen', 'Echtes Ventil, geschlossen']], darst(obj), v => { if (v === 'gehaeuse') delete f.bild; else f.bild = v; });
+        if (f.typ === 'ventil') auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)'], ['schnitt', 'Echtes Ventil, aufgeschnitten'], ['aussen', 'Echtes Ventil, geschlossen']], darst(obj), v => { f.bild = v; });
         auswahl('Drehen', [['0', '0°'], ['90', '90°'], ['180', '180°'], ['270', '270°']], String(f.rot || 0), v => { f.rot = +v; });
         if (platz && platz.parentNode) platz.replaceWith(box); else ctx.appendChild(box);
     }

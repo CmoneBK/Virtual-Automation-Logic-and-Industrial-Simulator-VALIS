@@ -132,7 +132,8 @@ async function bedienen(page, schritte, vorlage) {
       openHub(); await new Promise(r => setTimeout(r, 300));
       hubLaunch('uebungsanlagen'); await new Promise(r => setTimeout(r, 400));
       const p = document.getElementById('hub-panel-uebungsanlagen');
-      const res = { aktiv: p.classList.contains('active'), karten: p.querySelectorAll('.ua-karte').length, starten: p.querySelectorAll('[data-ua="start"]').length };
+      p.scrollTop = 10000; const gescrollt = p.scrollTop;
+      const res = { gescrollt: gescrollt, aktiv: p.classList.contains('active'), karten: p.querySelectorAll('.ua-karte').length, starten: p.querySelectorAll('[data-ua="start"]').length };
       const s = document.getElementById('hub-search'); s.value = 'rolltor'; s.dispatchEvent(new Event('input', { bubbles: true }));
       await new Promise(r => setTimeout(r, 500));
       res.suche = document.getElementById('hub-search-results').textContent;
@@ -144,6 +145,7 @@ async function bedienen(page, schritte, vorlage) {
       return res;
     });
     ok('Panel im Lernzentrum aktiv, 5 Anlagen, 15 Starter', k.aktiv && k.karten === 5 && k.starten === 15, k.karten + ' Karten, ' + k.starten + ' Starter');
+    ok('Katalog lässt sich scrollen', k.gescrollt > 100, k.gescrollt + ' px');
     ok('Suche „rolltor“ findet die Übungsanlagen', /Übungsanlagen/.test(k.suche) && /Rolltor 3/.test(k.suche));
     ok('15 verschiedene Aufgaben, Hardware gesperrt, Vorlage ≠ Lösung', new Set(k.ids).size === 15 && k.gesperrt);
     ok('3D-Link zum Pneumatik-Raum mit Zustand', /virtuelle-werkstatt-raeume-pneumatik-raum\.html#state=.{40,}/.test(k.link));

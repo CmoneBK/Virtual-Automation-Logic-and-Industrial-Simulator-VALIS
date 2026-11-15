@@ -2042,9 +2042,35 @@
         // Hydraulikzylinder: auf Wunsch gleich die Grundschaltung dazu (sichtbar im Plan)
         if (neu && hydZylT(neu)) grundschaltungFragen(neu.id);
     }
+    // Auswahlkarten im Dokument des Plans (eigenes Fenster, wenn abgekoppelt); wie showValisChoiceDialog
+    function wahlDialog(titel, sub, karten, cb) {
+        const d = D(), alt = d.getElementById('fp-wahl'); if (alt) alt.remove();
+        const ov = d.createElement('div'); ov.id = 'fp-wahl';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100000;font-family:sans-serif';
+        const box = d.createElement('div');
+        box.style.cssText = 'background:#263238;color:#eceff1;border:1px solid #546e7a;border-radius:8px;padding:18px 20px;max-width:560px;width:calc(100% - 40px);box-shadow:0 8px 30px rgba(0,0,0,.5)';
+        const h = d.createElement('div'); h.textContent = titel; h.style.cssText = 'font-size:17px;font-weight:bold;margin-bottom:6px';
+        const u = d.createElement('div'); u.textContent = sub; u.style.cssText = 'font-size:12px;color:#b0bec5;margin-bottom:14px';
+        const reihe = d.createElement('div'); reihe.style.cssText = 'display:flex;gap:12px;flex-wrap:wrap';
+        box.append(h, u, reihe); ov.appendChild(box);
+        const zu = w => { ov.remove(); cb(w); };
+        karten.forEach(k => {
+            const c = d.createElement('button'); c.type = 'button'; c.setAttribute('data-wahl', k.value);
+            c.style.cssText = 'flex:1 1 200px;text-align:left;background:#37474f;color:#eceff1;border:1px solid #607d8b;border-radius:6px;padding:12px;cursor:pointer;font:inherit';
+            const ic = d.createElement('div'); ic.textContent = k.icon || ''; ic.style.cssText = 'font-size:22px';
+            const t = d.createElement('div'); t.textContent = k.title; t.style.cssText = 'font-weight:bold;margin:4px 0';
+            const ds = d.createElement('div'); ds.textContent = k.desc || ''; ds.style.cssText = 'font-size:12px;color:#b0bec5';
+            c.append(ic, t, ds); c.onclick = () => zu(k.value);
+            c.onmouseenter = () => { c.style.borderColor = '#ffb300'; }; c.onmouseleave = () => { c.style.borderColor = '#607d8b'; };
+            reihe.appendChild(c);
+        });
+        ov.addEventListener('mousedown', e => { if (e.target === ov) zu(null); });
+        d.body.appendChild(ov);
+    }
     function grundschaltungFragen(id) {
         const mach = w => { if (w === 'ja') aendern(() => grundschaltung(teil(id))); };
-        const dlg = window.showValisChoiceDialog;
+        // Abgekoppelt: die Abfrage erscheint im Fenster des Plans, nicht im Hauptfenster
+        const dlg = D() === document ? window.showValisChoiceDialog : wahlDialog;
         if (typeof dlg === 'function') {
             dlg('Hydraulikzylinder gesetzt', 'Soll der Plan gleich die Grundschaltung dazu bekommen? Alles erscheint im Fluidplan und, wenn er verbunden ist, auch in der 2D-Anlage.', [
                 { value: 'ja', icon: '⚙', title: 'Mit Grundschaltung', desc: 'Aggregat, Tank und Wegeventil (doppeltwirkend 4/3 mit Sperrmitte, einfachwirkend 3/2) samt Leitungen.' },

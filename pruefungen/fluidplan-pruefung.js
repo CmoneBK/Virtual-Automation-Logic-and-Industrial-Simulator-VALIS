@@ -1163,6 +1163,14 @@ const NACH = {
     const d = await page.evaluate((id) => ({ imPlan: Fluidplan.plan().teile.some(t => t.id === id), th2d: !!factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === 'cyl1' && o.role === 'ext') }), drvId);
     ok('abgekoppelt: Anklicken + Entf löscht die Drossel im Plan', drvId && !d.imPlan, drvId);
     ok('… und der Abgleich nimmt sie aus der 2D-Anlage', !d.th2d);
+    // Hydraulikzylinder im abgekoppelten Plan ablegen: die Abfrage kommt im Fenster des Plans
+    await page.evaluate(() => { window.__hauptDialog = 0; const sd = window.showValisChoiceDialog; window.__sd = sd; window.showValisChoiceDialog = function () { window.__hauptDialog++; }; Fluidplan._ablegen('zyl_dw', 1200, 0, { hyd: true }); });
+    await page.waitForTimeout(400);
+    const fr = await pop.evaluate(() => ({ da: !!document.getElementById('fp-wahl'), karten: document.querySelectorAll('#fp-wahl [data-wahl]').length }));
+    ok('abgekoppelt: Grundschaltungs-Abfrage erscheint im Plan-Fenster', fr.da && fr.karten === 2 && await page.evaluate(() => window.__hauptDialog === 0), JSON.stringify(fr));
+    if (fr.da) { await pop.click('#fp-wahl [data-wahl="nein"]'); await page.waitForTimeout(300); }
+    ok('… „Nur der Zylinder“ schließt sie', !(await pop.evaluate(() => !!document.getElementById('fp-wahl'))));
+    await page.evaluate(() => { window.showValisChoiceDialog = window.__sd; const z = Fluidplan.plan().teile.filter(t => t.typ === 'zyl_dw' && t.o.hyd).pop(); if (z) Fluidplan._entfernen(z.id); });
     // Zurück ins Hauptfenster
     await pop.evaluate(() => document.querySelector('.detached-cell[data-panel-id="fluid-wrapper"] .detached-cell-reattach-btn').click());
     await page.waitForTimeout(800);

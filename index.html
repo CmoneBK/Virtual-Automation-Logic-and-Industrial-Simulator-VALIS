@@ -43056,6 +43056,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             || (typeof window._propVentil === 'function' ? window._propVentil(obj) : null);
                         if (_pv) {
                             forceExt = _pv.dir > 0; forceRet = _pv.dir < 0;
+                            if (obj.hasHydraulics) obj._hydraulicActive = forceExt || forceRet;
                             // ziel: Stellung in % genau in diesem Bild erreichen (Fluidplan)
                             if (_pv.ziel != null) baseSpeed = Math.abs(_pv.ziel - (obj.extension || 0)) / Math.max(1e-6, (window.simSpeed || 1) * timeScale);
                             else baseSpeed = ((_pv.v / (obj.stroke || 100)) * 100) / 60;
@@ -53560,9 +53561,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const _visk = T => Math.max(0.6, 1 + (T - 40) / 40);   // wärmeres Öl leckt mehr
             const _rund = (v, n) => { const f = Math.pow(10, n || 0); return Math.round(v * f) / f; };
 
+            // Öl im Tank? (Zylinder ohne Öl fährt nicht)
+            window._hydOelDa = function(c) {
+                const t = window._findHydTankForCylinder ? window._findHydTankForCylinder(c) : factoryObjects.find(o => o.type === 'oil_tank');
+                if (!t) return true;
+                const wt = t.wallThickness || 10;
+                const gx0 = Math.ceil((t.x + wt) / FLUID_CELL), gx1 = Math.floor((t.x + t.width - wt) / FLUID_CELL);
+                const gy0 = Math.ceil((t.y + wt) / FLUID_CELL), gy1 = Math.floor((t.y + t.height - wt) / FLUID_CELL);
+                for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) { const z = fluidGrid.get(gx + ',' + gy); if (z && z.mat === 'oil') return true; }
+                return false;
+            };
             window._hydStep = function(dt) {
                 const unit = factoryObjects.find(o => o.type === 'hydraulic_unit');
                 if (!unit) return;
+                // Rechnet der Fluidplan-Kern die Hydraulik (Schattenplan), gelten seine Werte
+                if (typeof window._fpHydSchatten === 'function' && window._fpHydSchatten()) return;
                 dt = Math.max(0, Math.min(0.5, num(dt, 0)));
                 const H = cfg(unit);
                 const pDBV = Math.max(1, num(unit.pressure, 100));
@@ -78584,7 +78597,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115q"></script>
+<script src="fluidplan.js?v=20261115r"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 </body>
 </html>

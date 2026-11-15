@@ -24,7 +24,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const fehler = [];
   page.on('pageerror', e => fehler.push(String(e).slice(0, 200)));
   page.on('dialog', d => d.accept());
-  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisFluidplan', '1'); localStorage.removeItem('valisSchriftfeld'); } catch (e) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisFluidplan', '1'); localStorage.removeItem('valisSchriftfeld'); } catch (e) {} window._fpKeinAutoVerbinden = true; });
   await page.goto(`http://localhost:${srv.address().port}/index.html?fluidplan=1`); await page.waitForTimeout(3000);
   const r = await page.evaluate(async () => {
     const warte = ms => new Promise(r => setTimeout(r, ms));

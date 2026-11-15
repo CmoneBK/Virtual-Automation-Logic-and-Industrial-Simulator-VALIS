@@ -40496,6 +40496,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     };
                     ctxMenu.appendChild(_btnKB);
                 }
+                if (obj.type === 'valve_hyd' && window._fpHydVentilMenue) { try { window._fpHydVentilMenue(obj, ctxMenu, saveFactoryState); } catch (e) { console.warn(e); } }
                 if (window._fpHydBildArt && window._fpHydBildArt(obj)) {
                     // Hydraulikteile: dieselben vier Darstellungen wie die Pneumatik
                     const _dw = document.createElement('label'); _dw.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 15px;font-size:11px;color:#ddd;';
@@ -41795,10 +41796,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Draw cells at ~1.75x size (4px padding each side) so the blurred boundary reaches
             // adjacent solid surfaces — object renderings sit on top and hide the overflow
             const FC_PAD = 4, FC_SZ = FLUID_CELL + FC_PAD * 2;
+            // Öltank in Normsymbol/Schnitt/außen: das Bild zeigt den Ölstand, die Fluid-Engine zeichnet dort nichts
+            const _verb = factoryObjects.filter(o => o.type === 'oil_tank' && o.el && o.el.classList.contains('hyd-bild'))
+                .map(o => [Math.floor(o.x / FLUID_CELL) - 1, Math.floor(o.y / FLUID_CELL) - 1, Math.ceil((o.x + o.width) / FLUID_CELL) + 1, Math.ceil((o.y + o.height) / FLUID_CELL) + 1]);
             for (let mat in byMat) {
                 _fluidCtx.fillStyle = FLUID_MATERIALS[mat] ? FLUID_MATERIALS[mat].color : 'rgb(30,144,255)';
                 let coords = byMat[mat];
                 for (let i = 0; i < coords.length; i += 2) {
+                    if (_verb.length && _verb.some(r => coords[i] >= r[0] && coords[i] <= r[2] && coords[i + 1] >= r[1] && coords[i + 1] <= r[3])) continue;
                     _fluidCtx.fillRect(coords[i] * FLUID_CELL - FC_PAD, coords[i + 1] * FLUID_CELL - FC_PAD, FC_SZ, FC_SZ);
                 }
             }
@@ -78729,7 +78734,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zf"></script>
+<script src="fluidplan.js?v=20261115zh"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115a"></script>
 </body>

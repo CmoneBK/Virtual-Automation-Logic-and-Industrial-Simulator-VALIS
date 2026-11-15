@@ -963,8 +963,23 @@
             if (a1[0] === b1[0] || a1[1] === b1[1]) pts.push(b1);
             else if (vA && vB) { const my = snap((a1[1] + b1[1]) / 2); pts.push([a1[0], my], [b1[0], my], b1); }
             else if (!vA && !vB && (da[0] || db[0])) { const mx = snap((a1[0] + b1[0]) / 2); pts.push([mx, a1[1]], [mx, b1[1]], b1); }
-            else if (vA) pts.push([a1[0], b1[1]], b1);
-            else pts.push([b1[0], a1[1]], b1);
+            else {
+                // L-Weg; läge die Ecke in einem Bauteil, außen herum (Z-Weg über den Stich des Anschlusses)
+                const drin = (q, t) => { const w = boxWelt(t); return q[0] > w[0] && q[0] < w[2] && q[1] > w[1] && q[1] < w[3]; };
+                if (vA) {
+                    const ecke = [a1[0], b1[1]], w = boxWelt(tb);
+                    if ((drin(ecke, tb) || drin(ecke, ta)) && (a1[1] > w[3] || a1[1] < w[1])) {
+                        const my = snap((a1[1] + (a1[1] > w[3] ? w[3] : w[1])) / 2);
+                        pts.push([a1[0], my], [b1[0], my], b1);
+                    } else pts.push(ecke, b1);
+                } else {
+                    const ecke = [b1[0], a1[1]], w = boxWelt(ta);
+                    if ((drin(ecke, ta) || drin(ecke, tb)) && (b1[1] > w[3] || b1[1] < w[1])) {
+                        const my = snap((b1[1] + (b1[1] > w[3] ? w[3] : w[1])) / 2);
+                        pts.push([a1[0], my], [b1[0], my], b1);
+                    } else pts.push(ecke, b1);
+                }
+            }
         }
         if (b1 !== b0) pts.push(b0);
         // doppelte Punkte entfernen, gerade Zwischenpunkte zusammenfassen
@@ -3498,12 +3513,57 @@
                 const k = [A.join(':'), B.join(':')].sort().join('|'); if (gesehenL.has(k)) continue; gesehenL.add(k);
                 L(A[0], A[1], B[0], B[1]);
             }
+            fpAnordnen(teile, leitungen, new Set(Object.values(karte2)), q, wa);
         }
         // Kennzeichen aus der 2D-Anlage (-MM1, -QM1, -RN1 …); fehlende und doppelte neu vergeben
         const gesehen = new Set();
         teile.forEach(t => { if (!/^-[A-Z]+\d+$/.test(t.bez || '') || gesehen.has(t.bez)) t.bez = ''; else gesehen.add(t.bez); });
         kennzeichenAuffrischen({ teile });
         return { teile, leitungen, karte, karte2, quelle: q.id, versorgung };
+    }
+    // Fluidplan-Teile aus der 2D-Anlage wie im Schaltplan anordnen: Zylinder oben, darunter Schicht
+    // für Schicht, was an ihnen hängt (Drosseln, Stellglied, Signalglieder), jedes Teil senkrecht
+    // unter dem Anschluss, an dem es hängt; die Versorgung ganz unten.
+    function fpAnordnen(teile, leitungen, frei, q, wa) {
+        const T = id => teile.find(t => t.id === id);
+        const welt = (t, pid) => { const p = geo(t).ports.find(x => x.id === pid); if (!p) return null; const [x, y] = trafo(t, p.x, p.y); return { x, y, dir: trafoDir(t, p.dir) || [0, 0] }; };
+        const nachbarn = id => leitungen.filter(l => l.a.t === id || l.b.t === id).map(l => l.a.t === id ? { mein: l.a.p, t: l.b.t, p: l.b.p } : { mein: l.b.p, t: l.a.t, p: l.a.p });
+        const gesetzt = new Set(teile.filter(t => (t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'schwenk') && !frei.has(t.id)).map(t => t.id));
+        const reihe = [...gesetzt];
+        const belegt = [];
+        teile.forEach(t => { if (gesetzt.has(t.id)) belegt.push(boxWelt(t)); });
+        const ueberlappt = b => belegt.some(w => b[0] < w[2] + 12 && b[2] > w[0] - 12 && b[1] < w[3] + 8 && b[3] > w[1] - 8);
+        let unten = -Infinity;
+        while (reihe.length) {
+            const pid = reihe.shift(), par = T(pid);
+            // Kinder links nach rechts nach der Lage ihres Elternanschlusses
+            const kinder = nachbarn(pid).filter(n => frei.has(n.t) && !gesetzt.has(n.t)).map(n => Object.assign(n, { w: welt(par, n.mein) })).filter(n => n.w).sort((a, b) => a.w.x - b.w.x);
+            for (const n of kinder) {
+                if (gesetzt.has(n.t)) continue;
+                const t = T(n.t); if (!t) continue;
+                // Anschluss zum Elternteil soll nach oben zeigen (0° oder 180°)
+                t.x = 0; t.y = 0; t.rot = 0;
+                let w = welt(t, n.p); if (w && w.dir[1] > 0) { t.rot = 180; w = welt(t, n.p); }
+                if (!w) continue;
+                t.x = snap(n.w.x - w.x); t.y = snap(n.w.y + 50 - w.y);
+                let b = boxWelt(t), k = 0;
+                while (ueberlappt(b) && k++ < 30) { t.x += 20 * (k % 2 ? k : -k); b = boxWelt(t); }
+                belegt.push(b); gesetzt.add(t.id); reihe.push(t.id); unten = Math.max(unten, b[3]);
+            }
+        }
+        // Versorgung unter allen Teilen; Ausgang unter dem Anschluss 1 des ersten versorgten Teils
+        if (unten > -Infinity) {
+            const src = wa || q, sp = wa ? '2' : '1';
+            const ziel = nachbarn(src.id).map(n => ({ t: T(n.t), p: n.p })).find(n => n.t && frei.has(n.t.id));
+            const y0 = snap(unten + 70);
+            if (q.y < y0) q.y = y0;
+            if (wa) { wa.y = q.y; }
+            if (ziel) {
+                const w = welt(ziel.t, ziel.p);
+                if (w) { if (wa) { const g2 = welt(wa, '2'); wa.x = snap(wa.x + (w.x - g2.x) - 40); q.x = wa.x - 80; q.y = wa.y; } else { const g1 = welt(q, '1'); q.x = snap(q.x + (w.x - g1.x) - 60); } }
+            }
+            void sp;
+        }
     }
     function ausAnlage() {
         const F = fabrik(); if (!F) return 0;
@@ -3868,7 +3928,7 @@
     // Ruhestellung, Kasten 1) mit den Kammern dahinter, die Betätigungen sitzen fest am
     // Gehäuse. f.bild === 'symbol' zeigt stattdessen das Normsymbol wie im Plan.
     const G2D = 1;
-    const gehaeuse = obj => darst(obj) === 'gehaeuse';
+    const gehaeuse = obj => fp2d(obj).typ === 'ventil' && darst(obj) === 'gehaeuse';
     // Planpunkt des Ventils (ungedreht) → Gehäusepunkt: Betätiger rücken ans Fenster
     function gLokal(t, x, y) {
         const n = ventilStellungen(t.o).length;
@@ -3895,8 +3955,8 @@
             const R = gehaeuseRoh(obj), [gx, gy] = gLokal(R.t, x, y), [wx, wy] = trafo(R.t, gx, gy);
             return [(wx - R.b[0]) * G2D, (wy - R.b[1]) * G2D];
         }
-        const t = teilAus2D(obj), [rx, ry] = trafo(t, x, y), B = lage2D(obj).b;
-        return [(rx - B[0]) * S2D, (ry - B[1]) * S2D];
+        const t = teilAus2D(obj), [rx, ry] = trafo(t, x, y), L0 = lage2D(obj), B = L0.b, sk = L0.bau ? G2D : S2D;
+        return [(rx - B[0]) * sk, (ry - B[1]) * sk];
     }
     function lage2D(obj) {
         if (echt(obj)) {
@@ -3914,6 +3974,15 @@
                 return { id: p.id, nr: p.nr || p.id, lx: (x - R.b[0]) * G2D, ly: (y - R.b[1]) * G2D, art: p.art, dir: trafoDir(t, p.dir) };
             });
             return { b: R.b, w: (R.b[2] - R.b[0]) * G2D, h: (R.b[3] - R.b[1]) * G2D, ports, gehaeuse: true };
+        }
+        if (bau(obj)) {
+            const t = teilAus2D(obj), G = geo(t), Rr = BAU[t.typ].rand;
+            const pk = [[Rr[0] - 2, Rr[1] - 2], [Rr[2] + 2, Rr[1] - 2], [Rr[0] - 2, Rr[3] + 2], [Rr[2] + 2, Rr[3] + 2]];
+            for (const p of G.ports) pk.push([p.x - 5, p.y - 5], [p.x + 5, p.y + 5]);
+            const w = pk.map(([x, y]) => trafo(t, x, y));
+            const b = [Math.min(...w.map(e => e[0])), Math.min(...w.map(e => e[1])), Math.max(...w.map(e => e[0])), Math.max(...w.map(e => e[1]))];
+            const ports = G.ports.map(p => { const [x, y] = trafo(t, p.x, p.y); return { id: p.id, nr: p.nr || p.id, lx: (x - b[0]) * G2D, ly: (y - b[1]) * G2D, art: p.art, dir: trafoDir(t, p.dir) }; });
+            return { b, w: (b[2] - b[0]) * G2D, h: (b[3] - b[1]) * G2D, ports, bau: true };
         }
         return mitMini(obj, null, P => {
             let b = [Infinity, Infinity, -Infinity, -Infinity];
@@ -3943,7 +4012,7 @@
         const L = lage2D(obj);
         // Der Körper bleibt stehen, wenn das Bild wächst (Schalldämpfer, Betätigung, Darstellung):
         // Weltlage des Teilursprungs festhalten
-        const flach = L.gehaeuse || L.echt, sk = flach ? G2D : S2D, ur = [-L.b[0] * sk, -L.b[1] * sk];
+        const flach = L.gehaeuse || L.echt || L.bau, sk = flach ? G2D : S2D, ur = [-L.b[0] * sk, -L.b[1] * sk];
         if (obj._fpUr && (obj._fpUr[0] !== ur[0] || obj._fpUr[1] !== ur[1]) && typeof obj.x === 'number') {
             obj.x = Math.round(obj.x + obj._fpUr[0] - ur[0]); obj.y = Math.round(obj.y + obj._fpUr[1] - ur[1]);
             try { updateObjTransform(obj); } catch (e) {}
@@ -3959,6 +4028,7 @@
         obj._echtR = null; obj._fpSig = null; obj._echtLuft = null;
         if (L.echt) { const alt = bildDok; bildDok = doc; try { s = echtZeichnen(obj, doc, L); } finally { bildDok = alt; } }
         else if (L.gehaeuse) { const alt = bildDok; bildDok = doc; try { s = gehaeuseZeichnen(obj, doc, L); } finally { bildDok = alt; } }
+        else if (L.bau) { const alt = bildDok; bildDok = doc; try { s = bauSvg(obj, doc, L); } finally { bildDok = alt; } }
         else mitMini(obj, doc, P => {
             s = el('svg', { class: 'fp2d', width: obj.width, height: obj.height, viewBox: `${L.b[0]} ${L.b[1]} ${L.b[2] - L.b[0]} ${L.b[3] - L.b[1]}`,
                 style: 'position:absolute;left:0;top:0;overflow:visible;color:#263238;--fp-papier:#fff;--fp-aktiv:#ffb300;pointer-events:none' });
@@ -4070,7 +4140,9 @@
     // Darstellung eines Wegeventils: eigene Wahl (fp.bild) oder der zentrale Umschalter der 2D-Anlage
     const BILDER = ['gehaeuse', 'symbol', 'schnitt', 'aussen'];
     const bildStandard = () => { try { const b = localStorage.getItem('valisVentilBild'); return BILDER.includes(b) ? b : 'gehaeuse'; } catch (e) { return 'gehaeuse'; } };
-    const darst = obj => { const f = fp2d(obj); if (f.typ !== 'ventil') return 'symbol'; return BILDER.includes(f.bild) ? f.bild : bildStandard(); };
+    const darst = obj => { const f = fp2d(obj); if (f.typ !== 'ventil' && !BAU[f.typ]) return 'symbol'; return BILDER.includes(f.bild) ? f.bild : bildStandard(); };
+    const bau = obj => { const f = fp2d(obj); return f.typ !== 'ventil' && !!BAU[f.typ] && darst(obj) !== 'symbol'; };
+    const mitBild = obj => { const f = obj && obj.type === 'pneu_fp' && obj.pneu && obj.pneu.fp; return !!f && (f.typ === 'ventil' || !!BAU[f.typ]); };
     // Zentraler Umschalter: alle Wegeventile der 2D-Anlage in einer Darstellung; alte 2D-Magnetventile
     // werden dafür (wie bei der ersten Menüänderung) zum frei konfigurierbaren Fluidplan-Teil.
     window._fpAlleVentile = function (bild) {
@@ -4082,18 +4154,35 @@
         if (umbau) { try { anlageAbgleichen(); } catch (e) {} }
         let n = 0;
         for (const o of (fabrik() || [])) {
-            if (o.type !== 'pneu_fp' || !o.pneu || !o.pneu.fp || o.pneu.fp.typ !== 'ventil') continue;
+            if (!mitBild(o)) continue;
             o.pneu.fp.bild = bild; n++;
             try { symbol2D(o); updateObjTransform(o); } catch (e) {}
         }
-        const sel = document.getElementById('sel-ventilbild'); if (sel) sel.value = bild;
+        for (const o of (fabrik() || [])) if (zylArt(o)) { (o.pneu = o.pneu || {}).bild = bild; n++; try { window._fpZylBild(o); } catch (e) {} }
+        knopfBild();
         try { if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
         try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
         return n;
     };
     window._fpBildStandard = bildStandard;
-    (function selSetzen() { const sel = document.getElementById('sel-ventilbild'); if (sel) sel.value = bildStandard(); else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', selSetzen, { once: true }); })();
-    const echt = obj => { const d = darst(obj); return d === 'schnitt' || d === 'aussen'; };
+    // Kleiner Knopf in der 2D-Anlage: zeigt die aktuelle Form als Bildchen, Klick = nächste Form
+    const BILD_NAME = { gehaeuse: 'Gehäuse (anschaulich)', symbol: 'Normsymbol (wie im Plan)', schnitt: 'echt, aufgeschnitten', aussen: 'echt, geschlossen' };
+    const BILD_ICON = {
+        gehaeuse: '<rect x="3" y="4" width="16" height="12" rx="1.5" fill="#ffe0b2" stroke="#fff" stroke-width="1.4"/><path d="M6,13 L15,7" stroke="#e65100" stroke-width="1.8"/><path d="M15,7 l-3.5,0.3 l1.6,2.5 z" fill="#e65100"/>',
+        symbol: '<rect x="2" y="5" width="9" height="10" fill="none" stroke="#fff" stroke-width="1.3"/><rect x="11" y="5" width="9" height="10" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M4,14 L9,7 M13,7 V14" stroke="#fff" stroke-width="1.1"/><path d="M9,7 l-2.6,0.6 l1.6,1.6 z M13,7 l-1.4,2.4 h2.8 z" fill="#fff"/>',
+        schnitt: '<defs><pattern id="pbs" width="3" height="3" patternUnits="userSpaceOnUse"><path d="M-1,1 L1,-1 M0,3 L3,0" stroke="#90a4ae" stroke-width="0.7"/></pattern></defs><rect x="2" y="4" width="18" height="12" fill="url(#pbs)" stroke="#fff" stroke-width="1.3"/><rect x="3.5" y="8" width="15" height="4" fill="#eceff1"/><rect x="6" y="8" width="3" height="4" fill="#78909c"/><rect x="13" y="8" width="3" height="4" fill="#78909c"/><rect x="5" y="7" width="12" height="1" fill="#29b6f6"/>',
+        aussen: '<defs><linearGradient id="pba" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eceff1"/><stop offset="1" stop-color="#78909c"/></linearGradient></defs><rect x="2" y="5" width="18" height="10" rx="1.5" fill="url(#pba)" stroke="#fff" stroke-width="1"/><rect x="6" y="1.5" width="3" height="3.5" fill="#b0bec5"/><rect x="13" y="1.5" width="3" height="3.5" fill="#b0bec5"/><rect x="9.5" y="15" width="3" height="3.5" fill="#b0bec5"/>'
+    };
+    function knopfBild() {
+        const k = document.getElementById('btn-pneubild'); if (!k) return;
+        const b = bildStandard(), i = BILDER.indexOf(b), n = BILDER[(i + 1) % BILDER.length];
+        k.innerHTML = `<svg width="22" height="20" viewBox="0 0 22 20" style="display:block">${BILD_ICON[b]}</svg>`;
+        k.title = `Pneumatik-Teile: ${BILD_NAME[b]}. Klick: alle Teile als ${BILD_NAME[n]}. Einzelne Teile per Rechtsklick → Darstellung.`;
+        k.setAttribute('data-bild', b);
+    }
+    window._fpBildWeiter = () => { const i = BILDER.indexOf(bildStandard()); return window._fpAlleVentile(BILDER[(i + 1) % BILDER.length]); };
+    (function knopfSetzen() { if (document.getElementById('btn-pneubild')) knopfBild(); else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', knopfSetzen, { once: true }); })();
+    const echt = obj => { if (fp2d(obj).typ !== 'ventil') return false; const d = darst(obj); return d === 'schnitt' || d === 'aussen'; };
     function echtRoh(obj) {
         const t = teilAus2D(obj), o = t.o, f = fp2d(obj), ab = f.ab || {};
         const S = schieber(o), N = S.ord.length;
@@ -4373,6 +4462,575 @@
     }
     const G2Dport = (R, id) => R.S.ord.indexOf(id) >= 0 && !geo(R.t).ports.some(p => p.id === id) ? '3' : id;
     // Zustand aus dem Rechenkern: verbundener Plan oder Schattenplan
+    // ------------------------------------------------------------
+    // Alle übrigen Pneumatik-Teile in der 2D-Anlage: Gehäuse (anschaulich, flach), aufgeschnitten
+    // ('schnitt', schraffiert mit Luftwegen, Kugeln, Federn) oder geschlossen ('aussen').
+    // Gezeichnet in Planeinheiten (Maßstab 1); die Anschlüsse liegen wie im Normsymbol.
+    // ------------------------------------------------------------
+    function bauStift(mode, uid, g) {
+        const innen = mode !== 'aussen', geh = mode === 'gehaeuse';
+        const D = {
+            mode, innen, geh,
+            kontur: geh ? '#333' : '#37474f', sw: geh ? 1.8 : 1.2,
+            koerper: mode === 'schnitt' ? `url(#fps-${uid})` : mode === 'aussen' ? `url(#fpa-${uid})` : '#ffe0b2',
+            luft: p => p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : (geh ? '#fff' : '#eceff1'),
+            mk: (tag, a, p) => el(tag, a, p || g),
+            g, uid
+        };
+        D.body = (x, y, w, h, rx, p) => D.mk('rect', { x, y, width: w, height: h, rx: rx == null ? (mode === 'schnitt' ? 1 : 2.5) : rx, fill: D.koerper, stroke: D.kontur, 'stroke-width': D.sw }, p);
+        D.glanz = (x1, y, x2, p) => { if (mode === 'aussen') D.mk('line', { x1, y1: y, x2, y2: y, stroke: '#fff', 'stroke-opacity': 0.7, 'stroke-width': 1 }, p); };
+        // Luftraum (Kammer) mit Anschluss-ID: färbt sich mit dem Druck
+        D.kammer = (pid, x, y, w, h, p) => innen ? D.mk('rect', { class: 'fp-b-luft', 'data-p': pid, x, y, width: w, height: h, fill: D.luft(0), stroke: '#455a64', 'stroke-width': 0.5 }, p) : null;
+        // Luftkanal als dicker Linienzug
+        D.kanal = (pid, d, b, p) => innen ? D.mk('path', { class: 'fp-b-luft fp-b-kanal', 'data-p': pid, d, fill: 'none', stroke: D.luft(0), 'stroke-width': b || 4, 'stroke-linejoin': 'miter' }, p) : null;
+        D.kanalRand = (d, b, p) => innen ? D.mk('path', { d, fill: 'none', stroke: '#455a64', 'stroke-width': (b || 4) + 1, 'stroke-linejoin': 'miter' }, p) : null;
+        D.luftweg = (pid, d, b, p) => { D.kanalRand(d, b, p); return D.kanal(pid, d, b, p); };
+        D.metall = (x, y, w, h, cls, p, rx) => D.mk('rect', Object.assign({ x, y, width: w, height: h, rx: rx || 0.5, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.6 }, cls ? { class: cls } : {}), p);
+        D.kugel = (cx, cy, r, cls, p) => D.mk('circle', { class: cls || 'fp-b-kugel', cx, cy, r, fill: '#263238', stroke: '#000', 'stroke-width': 0.5 }, p);
+        D.lippe = (x, y, w, h, p) => D.mk('rect', { x, y, width: w, height: h, fill: '#212121' }, p);
+        D.feder = (x1, y1, x2, y2, amp, n, cls, p) => {
+            const L = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / L, uy = (y2 - y1) / L, pts = [];
+            for (let i = 0; i <= n; i++) { const a = i === 0 || i === n ? 0 : (i % 2 ? amp : -amp); pts.push((x1 + ux * L * i / n - uy * a).toFixed(2) + ',' + (y1 + uy * L * i / n + ux * a).toFixed(2)); }
+            return D.mk('polyline', { class: cls || 'fp-b-feder', points: pts.join(' '), fill: 'none', stroke: '#455a64', 'stroke-width': 1.1, 'stroke-linejoin': 'round', style: `transform-box:view-box;transform-origin:${x1}px ${y1}px;transition:transform .2s ease` }, p);
+        };
+        D.knopf = (x, y, w, h, p) => {   // Einstellknopf, gerändelt
+            const k = D.mk('rect', { x, y, width: w, height: h, rx: 1.2, fill: '#455a64', stroke: '#263238', 'stroke-width': 0.8 }, p);
+            for (let i = 1; i < (w > h ? w : h) / 2; i++) { if (w > h) D.mk('line', { x1: x + i * 2, y1: y + 0.6, x2: x + i * 2, y2: y + h - 0.6, stroke: '#263238', 'stroke-width': 0.5 }, p); else D.mk('line', { x1: x + 0.6, y1: y + i * 2, x2: x + w - 0.6, y2: y + i * 2, stroke: '#263238', 'stroke-width': 0.5 }, p); }
+            return k;
+        };
+        D.pfeil = (x1, y1, x2, y2, p) => {   // eingeprägter Durchflusspfeil (geschlossen)
+            const d = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / d, uy = (y2 - y1) / d;
+            D.mk('line', { x1, y1, x2: x2 - ux * 3, y2: y2 - uy * 3, stroke: '#37474f', 'stroke-width': 1 }, p);
+            D.mk('path', { d: `M${x2},${y2} L${x2 - ux * 4 - uy * 2},${y2 - uy * 4 + ux * 2} L${x2 - ux * 4 + uy * 2},${y2 - uy * 4 - ux * 2} Z`, fill: '#37474f' }, p);
+        };
+        return D;
+    }
+    // Anschlussverschraubung vom Körperrand bis zum Anschlusspunkt, mit Nummer
+    function bauStutzen(D, t, p, rand, rot) {
+        const [dx, dy] = p.dir || [0, 1];
+        let x0 = p.x, y0 = p.y;
+        if (dy > 0) y0 = rand[3]; else if (dy < 0) y0 = rand[1]; else if (dx > 0) x0 = rand[2]; else x0 = rand[0];
+        const L = Math.abs(p.x - x0) + Math.abs(p.y - y0), senk = dx === 0;
+        const r = (x, y, w, h, f, cls) => D.mk('rect', Object.assign({ x, y, width: w, height: h, fill: f, stroke: '#455a64', 'stroke-width': 0.6 }, cls ? { class: cls } : {}));
+        if (L > 0.5) {
+            if (senk) r(p.x - 2.2, Math.min(y0, p.y), 4.4, L, '#90a4ae'); else r(Math.min(x0, p.x), p.y - 2.2, L, 4.4, '#90a4ae');
+            if (D.innen) { if (senk) D.mk('line', { class: 'fp-b-luft fp-b-kanal', 'data-p': p.id, x1: p.x, y1: y0, x2: p.x, y2: p.y, stroke: D.luft(0), 'stroke-width': 2 }); else D.mk('line', { class: 'fp-b-luft fp-b-kanal', 'data-p': p.id, x1: x0, y1: p.y, x2: p.x, y2: p.y, stroke: D.luft(0), 'stroke-width': 2 }); }
+        }
+        // Mutter am Ende
+        if (senk) r(p.x - 4, dy > 0 ? p.y - 4 : p.y, 8, 4, '#b0bec5', 'fp-r-ring'); else r(dx > 0 ? p.x - 4 : p.x, p.y - 4, 4, 8, '#b0bec5', 'fp-r-ring');
+        if (!p.ohneNr) {
+            const tx = p.x + (senk ? 7 : dx * -2), ty = p.y + (senk ? (dy > 0 ? -2 : 6) : -6);
+            const e = D.mk('text', { x: tx, y: ty, 'font-size': 6, 'font-family': 'sans-serif', 'font-weight': 'bold', 'text-anchor': 'middle', fill: '#263238', transform: rot ? `rotate(${-rot} ${tx} ${ty})` : '' });
+            e.textContent = p.nr || p.id;
+        }
+    }
+    const BAU = {};
+    // Rückschlagventil: Kugel, von einer Feder auf den Sitz gedrückt; frei von 1 nach 2
+    BAU.rueck = {
+        rand: [-9, -15, 9, 15],
+        zeichne(t, D) {
+            D.body(-9, -15, 18, 30);
+            if (D.innen) {
+                D.kammer('2', -6, -12, 12, 14); D.kammer('1', -3, 4, 6, 11);
+                D.lippe(-6, 2, 3.2, 2); D.lippe(2.8, 2, 3.2, 2);
+                const k = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .12s' });
+                D.kugel(0, 0, 3.4, null, k);
+                D.feder(0, -12, 0, -3.4, 2.6, 6);
+                D.kammer('2', -2, -15, 4, 3);
+            } else { D.glanz(-7, -13, 7); D.pfeil(0, 9, 0, -9); }
+        },
+        anim(r, t, z, P, D) {
+            let [vor, nach] = ['1', '2']; if (z && z.fehler === 'verkehrt') [vor, nach] = [nach, vor];
+            const auf = !!z && P(vor) > P(nach) + 0.005;
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = auf ? 'translateY(-3px)' : '';
+            const f = r.querySelector('.fp-b-feder'); if (f) f.style.transform = auf ? 'scaleY(0.66)' : '';
+        }
+    };
+    // Drosselventil: Nadel verengt den Kanal je nach Öffnung
+    function nadel(D, xKnopf, s, offen, y) {
+        // s = +1 Nadel kommt von rechts, -1 von links; Spitze bei offen 0 % über die Kanalmitte hinaus
+        const tip = s * (-2.6 + 5.2 * Math.max(0, Math.min(100, offen)) / 100);
+        if (D.innen) {
+            const xe = xKnopf - s * 0.5;
+            D.mk('rect', { x: Math.min(tip + s * 2.4, xe), y: y - 1.3, width: Math.abs(xe - tip - s * 2.4), height: 2.6, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.5 });
+            D.mk('path', { d: `M${tip},${y} L${tip + s * 2.6},${y - 1.6} L${tip + s * 2.6},${y + 1.6} Z`, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.5 });
+        }
+        D.knopf(s > 0 ? xKnopf : xKnopf - 7, y - 4, 7, 8);
+    }
+    BAU.drossel = {
+        rand: [-9, -15, 9, 15],
+        zeichne(t, D) {
+            D.body(-9, -15, 18, 30);
+            if (D.innen) { D.kammer('2', -2.6, -15, 5.2, 13.5); D.kammer('1', -2.6, 1.5, 5.2, 13.5); D.lippe(-2.6, -1.5, 0.9, 3); }
+            else { D.glanz(-7, -13, 7); D.pfeil(-4, 8, -4, -8); D.pfeil(-6, -8, -6, 8); }
+            nadel(D, 9, 1, t.o.offen, 0);
+        }
+    };
+    // Drosselrückschlagventil: Drossel im Hauptkanal, Rückschlag im Umgehungskanal (frei von 2 nach 1)
+    BAU.drv = {
+        rand: [-10, -22, 30, 22],
+        zeichne(t, D) {
+            D.body(-10, -22, 40, 44);
+            if (D.innen) {
+                D.kammer('2', -2.6, -22, 5.2, 20.5); D.kammer('1', -2.6, 1.5, 5.2, 20.5); D.lippe(-2.6, -1.5, 0.9, 3);
+                D.luftweg('2', 'M0,-15 H20 V-3', 4); D.luftweg('1', 'M0,15 H20 V4', 4);
+                D.kammer('2', 15, -8, 10, 6); D.kammer('1', 15, 0.5, 10, 14);
+                D.lippe(15, -2.5, 3, 2); D.lippe(22, -2.5, 3, 2);
+                const k = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .12s' });
+                D.kugel(20, 0.8, 3.3, null, k);
+                D.feder(20, 14.5, 20, 4.1, 2.6, 6);
+            } else { D.glanz(-8, -20, 28); D.pfeil(24, -10, 24, 10); }
+            nadel(D, -10, -1, t.o.offen, 0);
+        },
+        anim(r, t, z, P) {
+            let [vor, nach] = ['2', '1']; if (z && z.fehler === 'verkehrt') [vor, nach] = [nach, vor];
+            const auf = !!z && P(vor) > P(nach) + 0.005;
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = auf ? 'translateY(3px)' : '';
+            const f = r.querySelector('.fp-b-feder'); if (f) f.style.transform = auf ? 'scaleY(0.7)' : '';
+        }
+    };
+    // Wechselventil (ODER): Kugel schließt die drucklose Seite
+    BAU.wechsel = {
+        rand: [-24, -10, 24, 10],
+        zeichne(t, D) {
+            D.body(-24, -10, 48, 20);
+            if (D.innen) {
+                D.kammer('X', -24, -2, 10, 4); D.kammer('Y', 14, -2, 10, 4);
+                D.kammer('M', -14, -4.5, 28, 9); D.kammer('2', -2, -10, 4, 6);
+                for (const x of [-14.6, 13.4]) { D.lippe(x, -4.5, 1.2, 2.5); D.lippe(x, 2, 1.2, 2.5); }
+                D.kugel(0, 0, 4, 'fp-b-kugel', D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .15s' }));
+            } else { D.glanz(-22, -8, 22); D.pfeil(-18, 4, -8, 4); D.pfeil(18, 4, 8, 4); }
+        },
+        // Innenraum: verbunden mit dem offenen Eingang (die Kugel sperrt den anderen)
+        druck(id, P, z) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), z ? P(z.seite === 'X' ? 'X' : 'Y') : 0); },
+        anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 9.5 : -9.5}px)` : ''; }
+    };
+    // Zweidruckventil (UND): Schieber mit zwei Tellern schließt die zuerst belüftete Seite
+    BAU.zweidruck = {
+        rand: [-24, -10, 24, 10],
+        zeichne(t, D) {
+            D.body(-24, -10, 48, 20);
+            if (D.innen) {
+                D.kammer('X', -24, -2, 10, 4); D.kammer('Y', 14, -2, 10, 4);
+                D.kammer('M', -14, -4.5, 28, 9); D.kammer('2', -2, -10, 4, 6);
+                for (const x of [-14.6, 13.4]) { D.lippe(x, -4.5, 1.2, 2.5); D.lippe(x, 2, 1.2, 2.5); }
+                const s = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .15s' });
+                D.metall(-11, -0.9, 22, 1.8, null, s);
+                for (const x of [-12.5, 10]) { D.metall(x, -4, 2.5, 8, null, s, 0.6); D.mk('rect', { x: x + (x < 0 ? -0.6 : 2.5), y: -3.2, width: 0.6, height: 6.4, fill: '#212121' }, s); }
+            } else { D.glanz(-22, -8, 22); D.pfeil(-18, 4, -8, 4); D.pfeil(18, 4, 8, 4); D.mk('text', { x: 0, y: 7, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }).textContent = '&'; }
+        },
+        druck(id, P) { if (id !== 'M' && id !== '2') return P(id); return Math.max(P('2'), Math.min(P('X'), P('Y'))); },
+        anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z ? `translateX(${z.seite === 'X' ? 3 : -3}px)` : ''; }
+    };
+    // Schnellentlüftungsventil: Membranscheibe schließt beim Belüften die Abluft, beim Entlüften den Zulauf
+    BAU.schnell = {
+        rand: [-14, -18, 14, 18],
+        zeichne(t, D) {
+            D.body(-14, -18, 28, 36);
+            if (D.innen) {
+                D.kammer('2', -9, -7, 18, 14);
+                D.luftweg('1', 'M0,18 V7', 5); D.lippe(-4.5, 6, 2, 1.5); D.lippe(2.5, 6, 2, 1.5);
+                D.luftweg('2', 'M-6,-7 V-12 H0 V-18', 4);
+                D.luftweg('3', 'M5,-7 V-12 H11 V0 H14', 4); D.lippe(2.5, -8.5, 1.5, 1.5); D.lippe(7.5, -8.5, 1.5, 1.5);
+                const m = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .12s' });
+                D.mk('rect', { x: -3, y: -6.8, width: 12.5, height: 2.6, rx: 1, fill: '#37474f', stroke: '#000', 'stroke-width': 0.4 }, m);
+            } else { D.glanz(-12, -16, 12); D.pfeil(-6, 10, -6, -10); D.pfeil(6, -6, 11, -6); }
+        },
+        anim(r, t, z) { const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = z && z.ab ? 'translateY(10.4px)' : ''; }
+    };
+    // Druckregelventil: Feder (Stellknopf) gegen Membran, die den Ventilteller vom Sitz hebt
+    BAU.druckregel = {
+        rand: [-11, -20, 22, 20],
+        zeichne(t, D) {
+            D.body(-11, -20, 22, 40);
+            D.body(11, -9, 9, 18, 1.5);
+            if (D.innen) {
+                D.kammer('2', -7, -16, 15, 15); D.kammer('2', -2, -20, 4, 4);
+                D.luftweg('1', 'M0,20 V6', 5); D.lippe(-6, 3, 3.5, 2); D.lippe(2.5, 3, 3.5, 2);
+                D.metall(-3.2, 0.2, 6.4, 3, 'fp-b-teller');
+                D.mk('line', { x1: 0, y1: 0.2, x2: 0, y2: -9, stroke: '#78909c', 'stroke-width': 1.4 });
+                D.mk('path', { d: 'M0,-9 H8', stroke: '#78909c', 'stroke-width': 1.4, fill: 'none' });
+                D.mk('rect', { class: 'fp-b-membran', x: 8, y: -15, width: 1.6, height: 13, fill: '#212121' });
+                D.mk('rect', { x: 12, y: -7, width: 7, height: 14, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 });
+                D.feder(9.6, 0, 18.5, 0, 3, 7);
+            } else { D.glanz(-9, -18, 9); D.pfeil(-5, 10, -5, -10); }
+            D.knopf(20, -5, 3, 10);
+            const tx = D.mk('text', { x: 17.5, y: 15.5, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }); tx.textContent = (t.o.p != null ? t.o.p : 4) + ' bar';
+        }
+    };
+    // Manometer: Rohrfeder (aufgeschnitten) und Zeiger
+    BAU.manometer = {
+        rand: [-12, -12, 12, 12],
+        zeichne(t, D) {
+            D.mk('rect', { x: -2.5, y: 10, width: 5, height: 8, fill: '#c0a060', stroke: '#6d4c41', 'stroke-width': 0.5 });
+            D.mk('rect', { x: -4.5, y: 12.5, width: 9, height: 4, fill: '#d4b46a', stroke: '#6d4c41', 'stroke-width': 0.5 });
+            D.mk('circle', { cx: 0, cy: 0, r: 12, fill: D.mode === 'gehaeuse' ? '#ffe0b2' : '#263238', stroke: D.kontur, 'stroke-width': D.sw });
+            D.mk('circle', { cx: 0, cy: 0, r: 10, fill: '#fff', stroke: '#90a4ae', 'stroke-width': 0.5 });
+            for (let i = 0; i <= 10; i++) { const w = (-135 + i * 27) * Math.PI / 180, a = i % 5 ? 8.3 : 7.2; D.mk('line', { x1: 9.4 * Math.sin(w), y1: -9.4 * Math.cos(w), x2: a * Math.sin(w), y2: -a * Math.cos(w), stroke: '#263238', 'stroke-width': i % 5 ? 0.4 : 0.8 }); }
+            for (const [i, s] of [[0, '0'], [5, '5'], [10, '10']]) { const w = (-135 + i * 27) * Math.PI / 180; D.mk('text', { x: 5.3 * Math.sin(w), y: -5.3 * Math.cos(w) + 1.6, 'font-size': 3.6, 'text-anchor': 'middle', fill: '#263238', 'font-family': 'sans-serif' }).textContent = s; }
+            if (D.innen) D.mk('path', { class: 'fp-b-luft', 'data-p': '1', d: 'M0,10 C-7,10 -7.5,-2 -3,-5.5 C0,-7.5 4,-6 5,-3', fill: 'none', stroke: '#c0a060', 'stroke-width': 1.6, 'stroke-opacity': 0.8 });
+            D.mk('line', { class: 'fp-b-nadel', x1: 0, y1: 0, x2: 0, y2: -8.6, stroke: '#c62828', 'stroke-width': 0.9, style: 'transform-box:view-box;transform-origin:0px 0px;transform:rotate(-135deg);transition:transform .2s' });
+            D.mk('circle', { cx: 0, cy: 0, r: 1.1, fill: '#263238' });
+            D.mk('text', { class: 'fp-b-wert', x: 0, y: 6.5, 'font-size': 3.4, 'text-anchor': 'middle', fill: '#1565c0', 'font-family': 'sans-serif' });
+        },
+        anim(r, t, z, P) {
+            const p = z ? P('1') : 0, n = r.querySelector('.fp-b-nadel');
+            if (n) n.style.transform = `rotate(${-135 + Math.max(0, Math.min(10, p)) / 10 * 270}deg)`;
+            const w = r.querySelector('.fp-b-wert'); if (w) w.textContent = z ? p.toFixed(1) + ' bar' : 'bar';
+        }
+    };
+    // Druckschalter: Membran gegen Stellfeder, Stößel betätigt den Mikroschalter
+    BAU.dschalter = {
+        rand: [-12, -14, 28, 14],
+        zeichne(t, D) {
+            D.body(-12, -14, 24, 28);
+            D.mk('rect', { x: 12, y: -12, width: 16, height: 14, rx: 1.5, fill: '#37474f', stroke: '#263238', 'stroke-width': D.sw });
+            if (D.innen) {
+                D.kammer('1', -8, 5, 16, 5); D.luftweg('1', 'M0,14 V10', 4);
+                D.mk('rect', { class: 'fp-b-membran', x: -8, y: 3.6, width: 16, height: 1.4, fill: '#212121' });
+                D.mk('rect', { x: -6, y: -11, width: 12, height: 14, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 });
+                const st = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .1s' });
+                D.metall(-4, 1.2, 8, 2, null, st); D.metall(-0.8, -9, 1.6, 10.5, null, st); D.metall(-0.8, -9, 14, 1.6, null, st);
+                D.feder(-3.5, 1.2, -3.5, -10.5, 2, 6, 'fp-b-feder'); D.feder(3.5, 1.2, 3.5, -10.5, 2, 6, 'fp-b-feder');
+            } else D.glanz(-10, -12, 10);
+            D.mk('path', { class: 'fp-b-kontakt', d: 'M15,-3 L25,-7', stroke: '#ffca28', 'stroke-width': 1.2, fill: 'none' });
+            D.mk('circle', { cx: 15, cy: -3, r: 0.9, fill: '#ffca28' }); D.mk('rect', { x: 23.5, y: -10, width: 3, height: 1.5, fill: '#ffca28' });
+            D.mk('circle', { class: 'fp-b-led', cx: 24.5, cy: -1, r: 1.6, fill: '#5d4037', stroke: '#212121', 'stroke-width': 0.4 });
+            D.knopf(-4, -17, 8, 3);
+        },
+        anim(r, t, z) {
+            const an = !!(z && z.an), k = r.querySelector('.fp-b-kontakt'); if (k) k.setAttribute('d', an ? 'M15,-3 L25,-8.5' : 'M15,-3 L25,-6');
+            const s = r.querySelector('.fp-b-ventil'); if (s) s.style.transform = an ? 'translateY(-2px)' : '';
+            r.querySelectorAll('.fp-b-feder').forEach(f => { f.style.transform = an ? 'scaleY(0.83)' : ''; });
+            const l = r.querySelector('.fp-b-led'); if (l) { l.setAttribute('fill', an ? '#ffeb3b' : '#5d4037'); l.style.filter = an ? 'drop-shadow(0 0 2px #ffeb3b)' : ''; }
+        }
+    };
+    // Schalldämpfer: Gewinde, Sechskant, Sinterbronze-Körper
+    BAU.daempfer = {
+        rand: [-5, -12, 5, 16],
+        zeichne(t, D) {
+            D.mk('rect', { x: -6, y: -9, width: 12, height: 4, fill: D.mode === 'gehaeuse' ? '#ffe0b2' : '#b0bec5', stroke: D.kontur, 'stroke-width': 0.8 });
+            D.mk('rect', { x: -5, y: -5, width: 10, height: 20, rx: 2, fill: '#b08d57', stroke: '#6d4c41', 'stroke-width': D.sw * 0.8 });
+            for (let y = -3; y < 14; y += 2) for (let x = -3.5 + (y % 4 ? 1 : 0); x < 4; x += 2) D.mk('circle', { cx: x, cy: y, r: 0.45, fill: '#7a5a2e' });
+            if (D.innen) D.kammer('1', -1.8, -9, 3.6, 21);
+            if (t.o.drossel) D.knopf(-1.5, 15, 3, 3);
+        }
+    };
+    // Blindstopfen: Gewindezapfen mit Sechskantkopf
+    BAU.stopfen = {
+        rand: [-6, -12, 6, 1],
+        zeichne(t, D) {
+            D.mk('rect', { x: -3, y: -12, width: 6, height: 7, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.6 });
+            for (let y = -11; y < -5; y += 1.5) D.mk('line', { x1: -3, y1: y, x2: 3, y2: y + 0.8, stroke: '#455a64', 'stroke-width': 0.4 });
+            D.body(-6, -5, 12, 6, 1);
+            D.mk('line', { x1: -2, y1: -5, x2: -2, y2: 1, stroke: '#546e7a', 'stroke-width': 0.5 }); D.mk('line', { x1: 2, y1: -5, x2: 2, y2: 1, stroke: '#546e7a', 'stroke-width': 0.5 });
+        }
+    };
+    // Zeit- und Druckfolgeventil: kleines 3/2-Schieberventil, links der Steuerteil
+    // (Zeit: Drosselrückschlag + Speicher; Folge: Druckstufe mit Stellfeder)
+    function kleinVentil(t, D) {
+        const ports = geo(t).ports, P = id => ports.find(p => p.id === id);
+        const p1 = P('1'), p3 = P('3'), p2 = P('2'), ps = ports.find(p => p.art === 's');
+        D.body(30, 0, 86, 40);
+        if (D.innen) {
+            D.mk('rect', { x: 34, y: 14, width: 80, height: 12, fill: '#f5f5f5', stroke: '#37474f', 'stroke-width': 0.6 });
+            for (const p of [p1, p3, p2]) if (p) D.luftweg(p.id, p.y < 0 ? `M${p.x},0 V14` : `M${p.x},40 V26`, 4);
+            const sg = D.mk('g', { class: 'fp-b-schieber', style: 'transition:transform .25s cubic-bezier(.4,0,.2,1)' });
+            // Kolben (Stege): schaltet beim Verschieben um 10 nach rechts
+            const steg = (a, c) => { D.metall(a, 14.6, c - a, 10.8, null, sg, 0.6); for (const xr of (c - a > 6 ? [a + 1.5, c - 1.5] : [(a + c) / 2])) for (const yr of [15.2, 24.8]) D.mk('ellipse', { cx: xr, cy: yr, rx: 1, ry: 0.8, fill: '#212121' }, sg); };
+            D.metall(36, 18.5, 66, 3, null, sg);
+            if (t.o.ruhe === 'offen') { steg(44, 64); steg(84, 87); steg(95, 100); } else { steg(40, 56); steg(74, 77); steg(95, 100); }
+            D.mk('rect', { x: 36, y: 14.6, width: 2.4, height: 10.8, fill: '#455a64' }, sg);
+            D.feder(114, 20, 100, 20, 4, 6, 'fp-b-vfeder');
+            D.kammer(ps ? ps.id : '12', 30.5, 16, 5, 8);
+        } else { D.glanz(32, 2, 114); }
+        D.body(116, 8, 8, 24, 1.5);
+    }
+    BAU.zeit = {
+        rand: [-26, 0, 124, 40],
+        zeichne(t, D) {
+            const ps = geo(t).ports.find(p => p.art === 's');
+            D.body(-26, 12, 56, 16);
+            D.body(-10, 26, 22, 16, 4);
+            if (D.innen) {
+                D.luftweg(ps.id, `M-26,20 H-3`, 4); D.lippe(-3, 18, 1, 4);
+                D.luftweg(ps.id, `M-2,20 H30`, 4);
+                D.mk('rect', { class: 'fp-b-speicher', x: -7, y: 29, width: 16, height: 10, rx: 3, fill: D.luft(0), stroke: '#455a64', 'stroke-width': 0.5 });
+                D.luftweg(ps.id, 'M1,20 V29', 3);
+                D.luftweg(ps.id, 'M-21,20 V25 H-7 V20', 2.5);
+                D.kugel(-12, 25, 1.5, 'fp-b-kugel2');
+                D.mk('rect', { x: -15.3, y: 12, width: 2.6, height: 5.5, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.5 });
+                D.mk('path', { d: 'M-15.3,17.5 L-14,20.5 L-12.7,17.5 Z', fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.5 });
+            } else { D.glanz(-24, 14, 28); D.mk('text', { x: 1, y: 37, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }).textContent = (t.o.zeit != null ? t.o.zeit : 3) + ' s'; }
+            D.knopf(-18, 8, 8, 4);
+            kleinVentil(t, D);
+        },
+        anim(r, t, z) {
+            const s = r.querySelector('.fp-b-schieber'); if (s) s.style.transform = z && z.an ? 'translateX(10px)' : '';
+            const f = r.querySelector('.fp-b-vfeder'); if (f) f.style.transform = z && z.an ? 'scaleX(0.4)' : '';
+            const sp = r.querySelector('.fp-b-speicher'); if (sp) sp.setAttribute('fill', z && z.pr > 0.3 ? `rgba(41,182,246,${(0.3 + 0.6 * Math.min(1, z.pr / 6)).toFixed(2)})` : '#eceff1');
+        }
+    };
+    BAU.folge = {
+        rand: [-26, 0, 124, 40],
+        zeichne(t, D) {
+            const ps = geo(t).ports.find(p => p.art === 's');
+            D.body(-26, 12, 56, 16);
+            D.body(-20, 26, 16, 18, 1.5);
+            if (D.innen) {
+                D.luftweg(ps.id, 'M-26,20 H30', 4);
+                D.mk('rect', { x: -17, y: 30, width: 10, height: 12, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 });
+                D.luftweg(ps.id, 'M-12,20 V27', 3);
+                D.mk('rect', { class: 'fp-b-membran', x: -17, y: 28, width: 10, height: 1.6, fill: '#212121' });
+                D.feder(-12, 29.6, -12, 41.5, 3, 6);
+            } else D.glanz(-24, 14, 28);
+            D.knopf(-15, 44, 6, 3);
+            D.mk('text', { x: -12, y: 52, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }).textContent = (t.o.p != null ? t.o.p : 4) + ' bar';
+            kleinVentil(t, D);
+        },
+        anim(r, t, z) {
+            const s = r.querySelector('.fp-b-schieber'); if (s) s.style.transform = z && z.an ? 'translateX(10px)' : '';
+            const f = r.querySelector('.fp-b-vfeder'); if (f) f.style.transform = z && z.an ? 'scaleX(0.4)' : '';
+        }
+    };
+    // Wartungseinheit: Filter mit Wasserabscheider (Behälter, Ablass) und Druckregler mit Manometer
+    BAU.wartung = {
+        rand: [-30, -22, 30, 22],
+        zeichne(t, D) {
+            D.body(-30, -14, 28, 10, 1.5); D.body(-2, -14, 32, 20, 1.5);
+            D.mk('rect', { x: -27, y: -4, width: 22, height: 22, rx: 4, fill: D.innen ? 'rgba(227,242,253,.9)' : 'rgba(207,216,220,.85)', stroke: D.kontur, 'stroke-width': D.sw });   // Behälter
+            D.mk('rect', { x: -17.5, y: 18, width: 3, height: 3.5, fill: '#455a64' });   // Ablass
+            D.knopf(8, -22, 12, 8);
+            if (D.innen) {
+                D.luftweg('1', 'M-30,-9 H-19 V2', 4);
+                D.mk('rect', { x: -22, y: 0, width: 6, height: 12, fill: `url(#fps-${D.uid})`, stroke: '#8d6e63', 'stroke-width': 0.6, 'stroke-dasharray': '1 1' });
+                D.mk('rect', { x: -26, y: 13, width: 20, height: 4, fill: '#64b5f6', opacity: 0.6 });   // Kondensat
+                D.luftweg('1', 'M-11,0 V-9 H5', 4); D.lippe(5, -12, 1.2, 1.8); D.lippe(5, -7.8, 1.2, 1.8);
+                D.luftweg('2', 'M7,-9 H30', 4);
+                D.mk('rect', { x: 5.4, y: -11, width: 3, height: 4, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.4 });
+                D.feder(8, -14, 20, -14, 2, 6);
+            } else { D.glanz(-28, -12, -4); D.glanz(0, -12, 28); D.pfeil(-26, -9, -20, -9); }
+            D.mk('circle', { cx: 14, cy: 0, r: 5.6, fill: '#fff', stroke: '#263238', 'stroke-width': 1 });
+            D.mk('line', { class: 'fp-b-nadel', x1: 14, y1: 0, x2: 14, y2: -4.5, stroke: '#c62828', 'stroke-width': 0.8, style: 'transform-box:view-box;transform-origin:14px 0px;transform:rotate(-135deg);transition:transform .2s' });
+            D.mk('text', { x: 14, y: 4, 'font-size': 2.6, 'text-anchor': 'middle', fill: '#263238', 'font-family': 'sans-serif' }).textContent = (t.o.p != null ? t.o.p : 6) + ' bar';
+        },
+        anim(r, t, z, P) {
+            const p = z ? P('2') : 0, n = r.querySelector('.fp-b-nadel');
+            if (n) n.style.transform = `rotate(${-135 + Math.max(0, Math.min(10, p)) / 10 * 270}deg)`;
+        }
+    };
+    // Druckluftquelle als kleiner Kolbenkompressor mit Kessel
+    BAU.quelle = {
+        rand: [-16, -14, 16, 14],
+        zeichne(t, D) {
+            D.mk('rect', { x: -16, y: -2, width: 32, height: 14, rx: 7, fill: D.mode === 'gehaeuse' ? '#ffcdd2' : D.innen ? D.koerper : '#c62828', stroke: D.kontur, 'stroke-width': D.sw });   // Kessel
+            if (D.innen) D.kammer('1', -12, 1, 24, 8);
+            D.body(-9, -12, 12, 10, 1.2);   // Verdichter
+            D.mk('rect', { x: 4, y: -10, width: 9, height: 8, rx: 1.5, fill: '#37474f', stroke: '#263238', 'stroke-width': 0.6 });   // Motor
+            if (D.innen) { D.mk('rect', { x: -6, y: -10, width: 6, height: 6, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 }); D.metall(-6, -6, 6, 2, 'fp-b-kolbenq'); D.luftweg('1', 'M0,-22 V-12', 3); }
+            for (const x of [-11, 11]) D.mk('rect', { x: x - 1.5, y: 12, width: 3, height: 2, fill: '#263238' });
+        }
+    };
+    // Schwenkantrieb: Drehflügel zwischen zwei Kammern, Welle mit Zeiger
+    BAU.schwenk = {
+        rand: [-20, -20, 20, 20],
+        zeichne(t, D) {
+            D.body(-20, -20, 40, 40, 4);
+            D.mk('circle', { cx: 0, cy: 0, r: 15, fill: D.innen ? '#f5f5f5' : 'none', stroke: D.kontur, 'stroke-width': 0.8 });
+            if (D.innen) {
+                D.mk('path', { class: 'fp-b-luft', 'data-p': 'K', d: 'M0,0 L-15,0 A15,15 0 0 1 0,-15 Z', fill: D.luft(0) });
+                D.mk('path', { class: 'fp-b-luft', 'data-p': 'S', d: 'M0,0 L0,-15 A15,15 0 0 1 15,0 Z', fill: D.luft(0) });
+                D.mk('rect', { x: -15, y: -0.8, width: 30, height: 15.8, fill: '#cfd8dc' });   // Anschlag (unterer Halbkreis fest)
+                D.luftweg('K', 'M-10,20 V2', 3); D.luftweg('S', 'M10,20 V2', 3);
+            }
+            const fl = D.mk('g', { class: 'fp-b-fluegel', style: 'transform-box:view-box;transform-origin:0px 0px;transition:transform .1s linear' });
+            if (D.innen) D.metall(-15, -1.5, 15, 3, null, fl, 0.6);
+            else D.mk('line', { x1: 0, y1: 0, x2: -13, y2: 0, stroke: '#c62828', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, fl);
+            D.mk('circle', { cx: 0, cy: 0, r: 3.2, fill: '#546e7a', stroke: '#263238', 'stroke-width': 0.6 });
+        },
+        anim(r, t, z) {
+            const s = z && z.x != null ? Math.max(0, Math.min(1, z.x / zylHub(t))) : (t.o.start === 'vorne' ? 1 : 0);
+            const f = r.querySelector('.fp-b-fluegel'); if (f) f.style.transform = `rotate(${s * 180}deg)`;
+        }
+    };
+    // Bild eines Teils (Maßstab 1, Planeinheiten) in g zeichnen
+    function bauZeichnen(t, g, mode, uid, rot) {
+        const B = BAU[t.typ]; if (!B) return false;
+        const D = bauStift(mode, uid, g);
+        const G = geo(t);
+        for (const p of G.ports) bauStutzen(D, t, p, B.rand, rot);
+        B.zeichne(t, D);
+        return true;
+    }
+    function bauSvg(obj, doc, L) {
+        const t = teilAus2D(obj), uid = String(obj.id).replace(/[^\w-]/g, ''), mode = darst(obj);
+        const s = el('svg', { class: 'fp2d fp-bau fp-bau-' + mode, width: Math.round(L.w), height: Math.round(L.h), viewBox: `${L.b[0]} ${L.b[1]} ${L.b[2] - L.b[0]} ${L.b[3] - L.b[1]}`,
+            style: 'position:absolute;left:0;top:0;overflow:visible;color:#37474f;--fp-papier:#fff;pointer-events:none' });
+        const defs = el('defs', {}, s);
+        const pat = el('pattern', { id: 'fps-' + uid, patternUnits: 'userSpaceOnUse', width: 4, height: 4 }, defs);
+        el('rect', { width: 4, height: 4, fill: '#cfd8dc' }, pat);
+        el('path', { d: 'M-1,1 L1,-1 M0,4 L4,0 M3,5 L5,3', stroke: '#78909c', 'stroke-width': 0.6 }, pat);
+        const grad = el('linearGradient', { id: 'fpa-' + uid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+        el('stop', { offset: '0', 'stop-color': '#eceff1' }, grad); el('stop', { offset: '0.45', 'stop-color': '#b0bec5' }, grad); el('stop', { offset: '1', 'stop-color': '#78909c' }, grad);
+        const r = ((t.rot || 0) % 360 + 360) % 360;
+        const g = el('g', { transform: `translate(${t.x},${t.y}) rotate(${r})${t.sp ? ' scale(-1,1)' : ''}`, 'data-t': t.id }, s);
+        bauZeichnen(t, g, mode, uid, r);
+        return s;
+    }
+    // Normsymbol in der 2D-Anlage: Kugeln, Schieber, Zeiger, Kontakte wie im Plan
+    function symbolAnimieren(obj, st) {
+        const t0 = teilAus2D(obj), g = obj.el && obj.el.querySelector('svg.fp2d g[data-t]'); if (!g) return;
+        const ids = geo(t0).ports.map(p => p.id);
+        const pr = st ? echtDruecke(st, ids) : ids.map(() => 0);
+        const P = id => { const i = ids.indexOf(id); return i < 0 ? 0 : pr[i]; };
+        const z = st ? st.z : null;
+        const sig = 's' + pr.map(p => p.toFixed(1)).join(',') + '|' + (z ? [z.seite, z.an, z.ab, z.x != null ? z.x.toFixed(3) : ''].join() : '-');
+        if (obj._fpSig === sig) return;
+        obj._fpSig = sig;
+        const typ = t0.typ, kugel = g.querySelector('.fp-kugel');
+        if ((typ === 'drv' || typ === 'rueck') && kugel) {
+            let [vor, nach] = typ === 'drv' ? ['2', '1'] : ['1', '2'];
+            try { if (st && st.p === plan && fehlerAktiv(st.t.id) === 'verkehrt') [vor, nach] = [nach, vor]; } catch (e) {}
+            const auf = !!z && P(vor) > P(nach) + 0.005, sk = Number(kugel.getAttribute('data-frei')) || 1;
+            kugel.setAttribute('transform', auf ? `translate(0,${sk * 5})` : '');
+            kugel.setAttribute('fill', auf ? 'var(--fp-aktiv)' : 'var(--fp-papier)');
+        }
+        if (typ === 'wechsel' && kugel) kugel.setAttribute('cx', z ? (z.seite === 'X' ? 9 : -9) : 0);
+        if (typ === 'zweidruck') { const sc = g.querySelector('.fp-schieber'); if (sc) sc.setAttribute('transform', `translate(${z ? (z.seite === 'X' ? 3 : -3) : 0},0)`); }
+        if (typ === 'schnell' && kugel) kugel.setAttribute('cy', z && z.ab ? 6 : -2);
+        if (typ === 'zeit' || typ === 'folge') { const b = g.querySelector('.fp-block'); if (b) b.setAttribute('transform', `translate(${z && z.an ? KASTEN : 0},0)`); const sp = g.querySelector('.fp-speicher'); if (sp) sp.setAttribute('fill', z && z.pr > 0.3 ? `rgba(21,101,192,${Math.min(0.85, z.pr / 6)})` : 'var(--fp-papier)'); }
+        if (typ === 'manometer') {
+            const p = z ? P('1') : 0, w = (-135 + Math.max(0, Math.min(10, p)) / 10 * 270) * Math.PI / 180, n = g.querySelector('.fp-nadel'), wt = g.querySelector('.fp-wert');
+            if (n) { n.setAttribute('x2', 9 * Math.sin(w)); n.setAttribute('y2', -9 * Math.cos(w)); }
+            if (wt) wt.textContent = z ? p.toFixed(1) + ' bar' : '';
+        }
+        if (typ === 'dschalter') { const k = g.querySelector('.fp-kontakt'); if (k) k.setAttribute('d', z && z.an ? 'M12,2 H18 L26,-4' : 'M12,2 H18 L26,-8'); }
+        if (typ === 'schwenk') { const zg = g.querySelector('.fp-zeiger'); if (zg) { const s2 = z && z.x != null ? z.x / zylHub(t0) : 0, w = Math.PI - s2 * Math.PI; zg.setAttribute('x2', 16 * Math.cos(w)); zg.setAttribute('y2', 8 - 16 * Math.sin(w)); } }
+        // Leitungsstriche des Symbols färben sich mit dem Druck des nächsten Anschlusses
+        const an = pr.some(p => p > P_AN);
+        obj.el.style.boxShadow = an ? '0 0 0 1px rgba(41,182,246,.6)' : '';
+    }
+    // Animation: Druck in den Luftwegen und bewegte Teile
+    function bauAnimieren(obj, st) {
+        const t0 = teilAus2D(obj), B = BAU[t0.typ], el2 = obj.el; if (!B || !el2) return;
+        const ids = geo(t0).ports.map(p => p.id);
+        const pr = st ? echtDruecke(st, ids) : ids.map(() => 0);
+        const P = id => { const i = ids.indexOf(id); return i < 0 ? 0 : pr[i]; };
+        const z = st ? Object.assign({ fehler: (() => { try { return st.p === plan ? fehlerAktiv(st.t.id) : null; } catch (e) { return null; } })() }, st.z) : null;
+        const sig = pr.map(p => p.toFixed(1)).join(',') + '|' + (z ? [z.seite, z.an, z.ab, z.pr != null ? z.pr.toFixed(1) : '', z.x != null ? z.x.toFixed(3) : ''].join() : '-');
+        if (obj._fpSig === sig) return;
+        obj._fpSig = sig;
+        const geh = darst(obj) === 'gehaeuse';
+        const Pv = id => B.druck ? B.druck(id, P, z) : P(id);
+        el2.querySelectorAll('.fp-b-luft').forEach(e => {
+            const f = (pp => pp > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, pp / 6)).toFixed(2)})` : (geh ? '#fff' : '#eceff1'))(Pv(e.getAttribute('data-p')));
+            if (e.tagName === 'rect') e.setAttribute('fill', f); else if (e.classList.contains('fp-b-kanal')) e.setAttribute('stroke', f);
+            else e.setAttribute('stroke', Pv(e.getAttribute('data-p')) > P_AN ? '#29b6f6' : '#c0a060');
+        });
+        if (B.anim) B.anim(el2, t0, z, P);
+    }
+    // ------------------------------------------------------------
+    // Zylinder der 2D-Anlage in den Darstellungen: 'gehaeuse' = das gewohnte 2D-Bild (unverändert),
+    // 'aussen' = Profilzylinder wie echt, 'schnitt' = aufgeschnitten (Kammern, Kolben, Dichtungen,
+    // Magnetring, Feder), 'symbol' = Normsymbol. Gezeichnet als Bild über dem Gehäuse; Kolben und
+    // Kammerdruck laufen in jedem Bild mit (window._fpZylBild je Bild der Simulation).
+    // ------------------------------------------------------------
+    const zylArt = obj => !!obj && typeof obj.type === 'string' && obj.type.startsWith('zylinder') && !obj.hasHydraulics;
+    const zylMode = obj => { const b = obj.pneu && obj.pneu.bild; return BILDER.includes(b) ? b : bildStandard(); };
+    function zylDruck(obj) {
+        const m = (window._fluidPressures && window._fluidPressures.pneu) || {};
+        return [Number(m[obj.id + ':1']) || 0, Number(m[obj.id + ':2']) || 0];
+    }
+    function zylBauen(obj, mode, W) {
+        const hs = obj.el.querySelector('.f2d-zylinder'); if (!hs) return null;
+        let s = hs.querySelector('svg.f2d-zyl-bild'); if (s) s.remove();
+        const doc = obj.el.ownerDocument || document, uid = 'z' + String(obj.id).replace(/[^\w-]/g, '');
+        const mk = (tag, a, p) => { const e = doc.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+        s = mk('svg', { class: 'f2d-zyl-bild', width: W, height: 30, viewBox: `0 0 ${W} 30`, style: 'position:absolute;left:-1px;top:-1px;overflow:visible;pointer-events:none;z-index:1' });
+        const defs = mk('defs', {}, s);
+        const pat = mk('pattern', { id: 'fps-' + uid, patternUnits: 'userSpaceOnUse', width: 4, height: 4 }, defs);
+        mk('rect', { width: 4, height: 4, fill: '#cfd8dc' }, pat); mk('path', { d: 'M-1,1 L1,-1 M0,4 L4,0 M3,5 L5,3', stroke: '#78909c', 'stroke-width': 0.6 }, pat);
+        const gr = mk('linearGradient', { id: 'fpa-' + uid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+        [['0', '#f5f7f8'], ['0.3', '#cfd8dc'], ['0.75', '#90a4ae'], ['1', '#607d8b']].forEach(([o, c]) => mk('stop', { offset: o, 'stop-color': c }, gr));
+        const gk = mk('linearGradient', { id: 'fpk-' + uid, x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+        [['0', '#546e7a'], ['0.4', '#37474f'], ['1', '#263238']].forEach(([o, c]) => mk('stop', { offset: o, 'stop-color': c }, gk));
+        const ew = obj.type === 'zylinder_single';
+        const R = { s, mode, W, ew };
+        if (mode === 'symbol') {
+            mk('rect', { x: 0.8, y: 0.8, width: W - 1.6, height: 28.4, fill: '#fff', stroke: '#000', 'stroke-width': 1.6 }, s);
+            R.kolben = mk('rect', { x: 0, y: 1.6, width: 2.4, height: 26.8, fill: '#000' }, s);
+            R.stange = mk('rect', { x: 0, y: 13.4, width: 0, height: 3.2, fill: '#000' }, s);
+            if (ew) R.feder = mk('polyline', { points: '', fill: 'none', stroke: '#000', 'stroke-width': 1.1 }, s);
+            hs.appendChild(s);
+            return R;
+        }
+        const schnitt = mode === 'schnitt';
+        const wand = schnitt ? `url(#fps-${uid})` : `url(#fpa-${uid})`;
+        // Rohr bzw. Profil
+        mk('rect', { x: 0, y: 0, width: W, height: 30, rx: 1.5, fill: wand, stroke: '#37474f', 'stroke-width': 1 }, s);
+        if (schnitt) {
+            R.kA = mk('rect', { x: 7, y: 4, width: 1, height: 22, fill: '#eceff1' }, s);
+            R.kB = mk('rect', { x: 7, y: 4, width: 1, height: 22, fill: '#eceff1' }, s);
+            mk('rect', { x: 7, y: 4, width: W - 14, height: 22, fill: 'none', stroke: '#37474f', 'stroke-width': 0.7 }, s);
+            // Anschlusskanäle durch den Deckel
+            R.pA = mk('path', { d: `M10,0 V6 H7`, fill: 'none', stroke: '#eceff1', 'stroke-width': 2.4 }, s);
+            if (!ew) R.pB = mk('path', { d: `M${W - 10},0 V6 H${W - 7}`, fill: 'none', stroke: '#eceff1', 'stroke-width': 2.4 }, s);
+            else mk('path', { d: `M${W - 10},0 V4`, stroke: '#eceff1', 'stroke-width': 1.6 }, s);   // Entlüftung
+            if (ew) R.feder = mk('polyline', { points: '', fill: 'none', stroke: '#455a64', 'stroke-width': 1.1 }, s);
+            // Kolbenstange innen (durch den vorderen Deckel mit Stangendichtung)
+            R.stange = mk('rect', { x: 0, y: 11.5, width: 0, height: 7, fill: '#cfd8dc', stroke: '#546e7a', 'stroke-width': 0.5 }, s);
+            for (const y of [10.2, 18.6]) mk('rect', { x: W - 5.5, y, width: 2.4, height: 1.2, fill: '#212121' }, s);
+            R.kolben = mk('g', {}, s);
+            mk('rect', { x: 0, y: 4.3, width: 7, height: 21.4, rx: 0.6, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.6 }, R.kolben);
+            mk('rect', { x: 2, y: 4.3, width: 3, height: 21.4, fill: '#c62828', opacity: 0.85 }, R.kolben);   // Magnetring
+            for (const x of [0.4, 5.4]) for (const y of [4.3, 23.9]) mk('rect', { x, y, width: 1.2, height: 1.8, fill: '#212121' }, R.kolben);
+            // Deckel (Endlagen)
+            for (const x of [0, W - 7]) mk('rect', { x, y: 0, width: 7, height: 30, fill: `url(#fpk-${uid})`, opacity: 0.35 }, s);
+        } else {
+            // geschlossen: Aluprofil mit Sensornuten, Deckel mit Schrauben
+            for (const y of [6, 24]) { mk('line', { x1: 8, y1: y, x2: W - 8, y2: y, stroke: '#455a64', 'stroke-width': 0.8 }, s); mk('line', { x1: 8, y1: y + 1, x2: W - 8, y2: y + 1, stroke: '#fff', 'stroke-opacity': 0.6, 'stroke-width': 0.6 }, s); }
+            mk('line', { x1: 8, y1: 2, x2: W - 8, y2: 2, stroke: '#fff', 'stroke-opacity': 0.8, 'stroke-width': 1 }, s);
+            for (const x of [0, W - 8]) {
+                mk('rect', { x, y: -1, width: 8, height: 32, rx: 1.2, fill: `url(#fpk-${uid})`, stroke: '#1c262b', 'stroke-width': 0.8 }, s);
+                for (const y of [3, 27]) mk('circle', { cx: x + 4, cy: y, r: 1.4, fill: '#90a4ae', stroke: '#1c262b', 'stroke-width': 0.4 }, s);
+            }
+            mk('rect', { x: W - 3, y: 10, width: 4, height: 10, rx: 1, fill: '#78909c', stroke: '#263238', 'stroke-width': 0.5 }, s);   // Stangenführung
+            const tx = mk('text', { x: W / 2, y: 17.5, 'font-size': 6, 'text-anchor': 'middle', fill: '#455a64', 'font-family': 'sans-serif' }, s);
+            tx.textContent = `Ø${obj.pistonD || 20} × ${obj.stroke || 100}`;
+        }
+        hs.appendChild(s);
+        return R;
+    }
+    window._fpZylBild = function (obj) {
+        if (!obj || !obj.el || !zylArt(obj)) return;
+        const mode = zylMode(obj), W = Math.round(obj.width || 80);
+        const key = mode + '|' + W + '|' + obj.type;
+        if (obj._zylKey !== key) {
+            obj._zylKey = key;
+            BILDER.forEach(b => obj.el.classList.toggle('zyl-bild-' + b, b === mode && b !== 'gehaeuse'));
+            if (mode === 'gehaeuse') { const s = obj.el.querySelector('svg.f2d-zyl-bild'); if (s) s.remove(); obj._zylR = null; return; }
+            obj._zylR = zylBauen(obj, mode, W);
+        }
+        const R = obj._zylR; if (!R || !R.kolben) return;
+        const e = Math.max(0, Math.min(100, obj.extension || 0)) / 100, kw = R.mode === 'symbol' ? 2.4 : 7;
+        const x = 7 + e * (W - 14 - kw);
+        R.kolben.setAttribute(R.mode === 'symbol' ? 'x' : 'transform', R.mode === 'symbol' ? x : `translate(${x},0)`);
+        if (R.mode === 'symbol') { R.stange.setAttribute('x', x + kw); R.stange.setAttribute('width', Math.max(0, W - x - kw)); }
+        else if (R.stange) { R.stange.setAttribute('x', x + kw); R.stange.setAttribute('width', Math.max(0, W - x - kw + 1)); }
+        if (R.feder) {
+            const x0 = x + kw + 0.5, x1 = W - (R.mode === 'symbol' ? 2 : 7.5), pts = [];
+            for (let i = 0; i <= 8; i++) pts.push((x0 + (x1 - x0) * i / 8).toFixed(1) + ',' + (15 + (i === 0 || i === 8 ? 0 : (i % 2 ? -7 : 7))));
+            R.feder.setAttribute('points', pts.join(' '));
+        }
+        if (R.kA) {
+            const [pa, pb] = zylDruck(obj), fa = luftFarbe(pa), fb = luftFarbe(pb);
+            R.kA.setAttribute('x', 7); R.kA.setAttribute('width', Math.max(0, x - 7)); R.kA.setAttribute('fill', fa);
+            R.kB.setAttribute('x', x + kw); R.kB.setAttribute('width', Math.max(0, W - 7 - x - kw)); R.kB.setAttribute('fill', R.ew ? '#eceff1' : fb);
+            if (R.pA) R.pA.setAttribute('stroke', fa); if (R.pB) R.pB.setAttribute('stroke', fb);
+        }
+    };
+    window._fpZylAlle = () => { for (const o of (fabrik() || [])) if (zylArt(o)) { try { window._fpZylBild(o); } catch (e) {} } };
+    setInterval(() => { try { if (!simLaeuft()) window._fpZylAlle(); } catch (e) {} }, 500);
     function stand2D(obj) {
         if (!simLaeuft()) return null;
         if (sim && plan.anlage) {
@@ -4384,7 +5042,8 @@
         return null;
     }
     function animate2D(obj) {
-        const f = fp2d(obj); if (f.typ !== 'ventil' || !obj.el) return;
+        const f = fp2d(obj); if (!obj.el) return;
+        if (f.typ !== 'ventil') { if (bau(obj)) bauAnimieren(obj, stand2D(obj)); else symbolAnimieren(obj, stand2D(obj)); return; }
         const st = stand2D(obj);
         const o = Object.assign({}, TYP.ventil.optionen, f.o), n = ventilStellungen(o).length, ruhe = n === 3 ? 1 : n - 1;
         const k = st ? st.z.stellung : ruhe;
@@ -4517,7 +5176,7 @@
                 else if (k === 'kurz') auswahl('Darstellung', [['n', 'ausführlich'], ['j', 'Kurzform']], f.o.kurz ? 'j' : 'n', v => { f.o.kurz = v === 'j'; });
             }
         }
-        if (f.typ === 'ventil') auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)'], ['schnitt', 'Echtes Ventil, aufgeschnitten'], ['aussen', 'Echtes Ventil, geschlossen']], darst(obj), v => { f.bild = v; });
+        if (f.typ === 'ventil' || BAU[f.typ]) auswahl('Darstellung', [['gehaeuse', 'Gehäuse (anschaulich)'], ['symbol', 'Normsymbol (wie im Plan)'], ['schnitt', 'Echt, aufgeschnitten'], ['aussen', 'Echt, geschlossen']], darst(obj), v => { f.bild = v; });
         auswahl('Drehen', [['0', '0°'], ['90', '90°'], ['180', '180°'], ['270', '270°']], String(f.rot || 0), v => { f.rot = +v; });
         if (platz && platz.parentNode) platz.replaceWith(box); else ctx.appendChild(box);
     }

@@ -1666,6 +1666,12 @@
         .f2d-obj.f2d-zylinder-wrapper .f2d-zyl-magnet { top: 1px; background: linear-gradient(90deg, #455a64 0 2px, #e53935 2px 6px, #455a64 6px); border-radius: 1.5px; box-shadow: 0 0 0 1px rgba(28,38,43,0.45); }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-zyl-kolben { background: linear-gradient(180deg, #b0bec5, #fafafa 35%, #cfd8dc 55%, #78909c); border: 1px solid #607d8b; border-radius: 0 2px 2px 0; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-zyl-kolben::after { content: ''; position: absolute; right: -3px; top: -3px; width: 6px; height: 14px; border-radius: 1px; background: linear-gradient(180deg, #78909c, #b0bec5 30%, #546e7a); border: 1px solid #263238; box-sizing: border-box; }
+        /* Darstellungen des Zylinders (Bild aus fluidplan.js über dem Gehäuse): aufgeschnitten, echt geschlossen, Normsymbol */
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder { background: transparent; border-color: transparent; box-shadow: none; }
+        .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::after { display: none; }
+        .f2d-zylinder-wrapper.zyl-bild-schnitt .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-aussen .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-symbol .f2d-zyl-magnet { opacity: 0; }
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben { background: #000; border: none; height: 3.2px; top: 13.4px; border-radius: 0; }
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben::after { background: #000; border: none; width: 2px; right: 0; top: -2px; height: 7px; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-resize-handle { background: transparent; border-left: none; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-resize-handle:hover { background: rgba(255,255,255,0.35); }
         .f2d-obj.f2d-zylinder-wrapper .f2d-pneu-port { background: radial-gradient(circle at 50% 30%, #4fc3f7 0 2px, #90a4ae 2.5px); border-width: 1.5px; border-radius: 2px; }
@@ -2759,6 +2765,19 @@
            NICHT quetschbar (flex:0 0 auto !important), immer als rechtester Button. */
         .panel-info-btn { flex:0 0 auto !important; background:#17a2b8; color:#fff; border:none; border-radius:3px; cursor:help; font-size:15px; line-height:1; height:30px !important; width:32px; min-width:32px; padding:0 !important; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; box-sizing:border-box; pointer-events:auto; }
         .panel-info-btn:hover { background:#0d8fa3; }
+        /* Abkoppel-Knopf: fest oben rechts in jedem Panel, unabhängig von den
+           Werkzeugleisten, die bei Platzmangel umbrechen. Die Leisten halten
+           rechts Platz für ihn frei. Im abgekoppelten Fenster ausgeblendet
+           (dort holt „Zurück ins Hauptfenster“ das Panel zurück). */
+        .panel-abk-btn { position:absolute; top:4px; right:4px; z-index:1200; width:28px; height:28px; padding:0; margin:0; display:inline-flex; align-items:center; justify-content:center; background:rgba(38,50,56,0.85); color:#fff; border:1px solid rgba(255,255,255,0.25); border-radius:4px; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,0.35); pointer-events:auto; }
+        .panel-abk-btn:hover { background:#007acc; border-color:#007acc; }
+        .panel-abk-btn svg { width:16px; height:16px; display:block; }
+        #analyzer-header .panel-abk-btn { position:static; margin-left:auto; margin-right:8px; }
+        .detached-cell .panel-abk-btn, body.valis-popup .panel-abk-btn { display:none !important; }
+        #fbs-toolbar, #circuit-wrapper > .circuit-btn-container { right:40px !important; }
+        #ced-toolbar, #sk-wrapper .sk-panel-header, #festo-toolbar, #fluid-wrapper .fp-kopf { padding-right:40px !important; }
+        #factory-toolbar { padding-right:42px !important; }
+        #fluid-wrapper #fp-abk { display:none !important; }
         .tut-progress { font-size:11px; color:#546e7a; }
         .tut-code-wrap { margin:12px 0; }
         .tut-code-wrap > .tut-code { margin:0; border-radius:6px 6px 0 0; border-bottom:none; }
@@ -3734,7 +3753,7 @@
                         </div>
                     </div>
                     <button class="panel-info-btn" onclick="showPanelInfo('factory-wrapper', this)" title="Kontext-Hilfe zur 2D-Anlage — Werkzeuge & Bauteile (fahre über ein Menü) sowie Profi-Steuerung & Kamera">ℹ️</button>
-                    <select id="sel-ventilbild" class="tool-btn" onchange="window._fpAlleVentile && window._fpAlleVentile(this.value)" title="Darstellung ALLER Wegeventile in der 2D-Anlage umschalten. Einzelne Ventile lassen sich danach weiter per Rechtsklick → Darstellung anders zeigen. Neue Ventile übernehmen diese Wahl." style="margin-left:auto;background:#37474f;color:#fff;border:1px solid #666;border-radius:3px;padding:3px 6px;font-size:12px;cursor:pointer;"><option value="gehaeuse">🔧 Ventile: Gehäuse</option><option value="symbol">🔧 Ventile: Normsymbol</option><option value="schnitt">🔧 Ventile: aufgeschnitten</option><option value="aussen">🔧 Ventile: echt, geschlossen</option></select>
+                    <button id="btn-pneubild" class="tool-btn" onclick="window._fpBildWeiter && window._fpBildWeiter()" title="Darstellung aller Pneumatik-Bauteile" style="margin-left:auto;background:#37474f;border:1px solid #666;border-radius:3px;padding:2px 4px;width:30px;height:26px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;"></button>
                     <button id="btn-viewmode" class="tool-btn" onclick="toggleGlobalViewMode()" title="Globale Anlagen-Ansicht umschalten: Seitenansicht (Standard, Werkstücke fallen unter Schwerkraft) oder Draufsicht (Vogelperspektive auf Förderband-Anlagen). Einige Bauteile haben Ansichts-spezifische Varianten." style="margin-left: 6px; background-color: #4caf50;" data-i18n="fac_btn_view_side">🌍 Global: Seitenansicht</button>
                     <button class="tool-btn" onclick="clearFactory()" title="Alle Anlagen-Komponenten + Werkstücke löschen (mit Sicherheitsabfrage). Setzt die 2D-Anlage komplett zurück; Code im Editor bleibt unverändert." style="background-color: #b71c1c; margin-left: 10px;" data-i18n="fac_btn_clear">🗑️ Alles löschen</button>
                 </div>
@@ -26207,7 +26226,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return (isPneu ? supplyY + 30 : tankY + 30);
                 };
 
-                if (pneuValves.length > 0 || hydValves.length > 0) {
+                // Fluidplan-Teile der 2D-Anlage (frei konfigurierte Ventile, Drosseln, Signalventile …) kann
+                // nur das Fluidplan-Bild zeichnen; dann steht es auch ohne freigeschalteten Fluidplan hier.
+                const _fpTeile2D = factoryObjects.some(o => o.type === 'pneu_fp');
+                if (pneuValves.length > 0 || hydValves.length > 0 || _fpTeile2D) {
                     // Pneumatik-/Hydraulik-Schaltplan OBERHALB des elektrischen Schaltplans positionieren.
                     // Vorgehen: bisherige (elektrische) Inhalte merken, Fluid-Plan ab y=40 zeichnen,
                     // dann den elektrischen Teil per <g translate(0, fluidHeight)> nach unten schieben.
@@ -26218,7 +26240,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let _fpBild = null;
                     // Vorerst nur mit freigeschaltetem Fluidplan (?fluidplan=1), wie der Fluidplan-Knopf
                     const _fpFreiSb = (() => { try { return localStorage.getItem('valisFluidplan') === '1'; } catch (e) { return false; } })();
-                    if (_fpFreiSb && pneuValves.length > 0 && window.Fluidplan && typeof window.Fluidplan._schaltbild === 'function') {
+                    if ((_fpFreiSb && pneuValves.length > 0 || _fpTeile2D) && window.Fluidplan && typeof window.Fluidplan._schaltbild === 'function') {
                         try {
                             const gFp = createSvgElement('g', {});
                             _fpBild = window.Fluidplan._schaltbild(gFp, { spule: v => _magnetLabels[v] || '', druecke: !!window.configPneuShowPressures });
@@ -40432,6 +40454,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         saveFactoryState(); ctxMenu.style.display = 'none';
                     };
                     ctxMenu.appendChild(btnV);
+                    if (!obj.hasHydraulics && window._fpZylBild) {
+                        const _dw = document.createElement('label'); _dw.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 15px;font-size:11px;color:#ddd;';
+                        _dw.onclick = e => e.stopPropagation(); _dw.onmousedown = e => e.stopPropagation();
+                        _dw.innerHTML = '<span>🖼 Darstellung</span>';
+                        const _ds = document.createElement('select'); _ds.style.cssText = 'font-size:11px;max-width:150px';
+                        [['gehaeuse', 'Gehäuse (gewohnt)'], ['symbol', 'Normsymbol'], ['schnitt', 'Echt, aufgeschnitten'], ['aussen', 'Echt, geschlossen']].forEach(([v, n]) => { const op = document.createElement('option'); op.value = v; op.textContent = n; _ds.appendChild(op); });
+                        _ds.value = (obj.pneu && obj.pneu.bild) || (window._fpBildStandard ? window._fpBildStandard() : 'gehaeuse');
+                        _ds.onchange = () => { (obj.pneu = obj.pneu || {}).bild = _ds.value; window._fpZylBild(obj); saveFactoryState(); };
+                        _dw.appendChild(_ds); ctxMenu.appendChild(_dw);
+                    }
                     if (obj.type === 'zylinder_double' && !obj.hasPneumatics) {
                         let brakeOn = obj.hasBrake !== false;
                         let btnBrake = document.createElement('div'); btnBrake.className = 'ctx-item';
@@ -43136,6 +43168,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (obj.extension < 0) obj.extension = 0;
                         let extPixels = (obj.extension / 100) * obj.width;
                         if (obj.rodEl) obj.rodEl.style.transform = `translateX(${extPixels}px)`; 
+                        if (window._fpZylBild) window._fpZylBild(obj);
                         let magTravel = obj.width - 20; let magPos = 5 + (obj.extension / 100) * magTravel;
                         if (obj.magnetEl) obj.magnetEl.style.left = `${magPos}px`; 
                         let rad = (obj.rotation || 0) * Math.PI / 180;
@@ -47640,6 +47673,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!extWin) return null;
             window._sharedDetachWindow = extWin;
             extWin.document.title = 'VALIS - Abgekoppelte Panels';
+            extWin.document.body.classList.add('valis-popup');
             extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex; flex-direction:column; font-family:Segoe UI,sans-serif;';
             _copyDocStylesTo(extWin);
             const container = extWin.document.createElement('div');
@@ -47777,6 +47811,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window.popOutWindows[panelId] = extWin;
             extWin.document.title = 'VALIS - ' + titleName;
             extWin.document.body.style.cssText = 'margin:0; height:100vh; background:#1e1e1e; overflow:hidden; display:flex;';
+            extWin.document.body.classList.add('valis-popup');
             _copyDocStylesTo(extWin);
             panel._oldCss = panel.style.cssText;
             panel.style.position = 'relative';
@@ -47861,6 +47896,45 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }, 100);
             updateWorkspace();
         };
+        // === Abkoppel-Knopf oben rechts in jedem Panel ===
+        // Ein fester Knopf je Panel (nicht in der Werkzeugleiste, die bei
+        // Platzmangel umbricht). Klick = Panel in das Fenster der abgekoppelten
+        // Panels (Multi-Screen); der Fluidplan geht über seinen eigenen Weg.
+        const _ABK_PANELS = [
+            ['fbs-wrapper', 'Logikplan'], ['circuit-wrapper', 'Schaltplan'],
+            ['circuit-editor-wrapper', 'Editor'], ['sk-wrapper', 'Schrittkette'],
+            ['factory-wrapper', '2D-Anlage'], ['festo-wrapper', 'Steckaufbau'],
+            ['fluid-wrapper', 'Fluidplan'], ['analyzer-modal', 'Oszilloskop']
+        ];
+        window._panelAbkoppeln = function(panelId, titel) {
+            if (panelId === 'fluid-wrapper' && window.Fluidplan && typeof Fluidplan._abkoppeln === 'function') { Fluidplan._abkoppeln(); return; }
+            window.detachPanel(panelId, titel);
+        };
+        function _abkKnopfSetzen() {
+            const svg = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4"/><path d="M13.5 2.5 7.5 8.5"/><path d="M12 9.5v3.2a.8.8 0 0 1-.8.8H3.3a.8.8 0 0 1-.8-.8V4.8a.8.8 0 0 1 .8-.8h3.2"/></svg>';
+            _ABK_PANELS.forEach(([id, titel]) => {
+                const panel = document.getElementById(id);
+                if (!panel || panel.querySelector(':scope > .panel-abk-btn, #analyzer-header > .panel-abk-btn')) return;
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'panel-abk-btn';
+                b.dataset.panel = id;
+                b.title = titel + ' abkoppeln: in eigenes Fenster verschieben (Multi-Screen). Zurück über „Zurück ins Hauptfenster“ oder Fenster schließen.';
+                b.setAttribute('aria-label', titel + ' abkoppeln');
+                b.innerHTML = svg;
+                b.addEventListener('click', (e) => { e.stopPropagation(); window._panelAbkoppeln(id, titel); });
+                b.addEventListener('mousedown', (e) => e.stopPropagation());
+                if (id === 'analyzer-modal') {
+                    const kopf = document.getElementById('analyzer-header');
+                    const zu = kopf && kopf.querySelector('button');
+                    if (kopf) kopf.insertBefore(b, zu || null);
+                } else {
+                    // Vorne einfügen: der Oszilloskop-Code liest lastElementChild als Fußleiste.
+                    panel.insertBefore(b, panel.firstChild);
+                }
+            });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _abkKnopfSetzen); else _abkKnopfSetzen();
 		// ==========================================
         // NEU: OSZILLOSKOP ENGINE (Logik-Analysator)
         // ==========================================
@@ -78180,7 +78254,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115d"></script>
+<script src="fluidplan.js?v=20261115i"></script>
 <script src="elektro-messen.js?v=20261115a"></script>
 </body>
 </html>

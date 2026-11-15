@@ -56479,6 +56479,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             const entpinne = () => document.querySelectorAll('.tb-dropdown.pinned').forEach(d => d.classList.remove('pinned'));
             const hub = (bereich) => { try { window.openHub(bereich); } catch (_) {} };
+            // Fluidplan öffnen (koppelt automatisch an die 2D-Anlage, siehe fluidplan.js).
+            const fluidAuf = () => { try { if (window.Fluidplan) window.Fluidplan.oeffnen(); } catch (_) {} };
             const hubZu = () => { try { window.closeHub(); } catch (_) {} };
             const proAn = () => { try { if (typeof window._isProMode === 'function' && !window._isProMode()) window._toggleProMode(); } catch (_) {} };
             const legExt = (key, an) => {
@@ -56583,7 +56585,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { id: 'simpanel',    titel: 'Sim-Panel' },
                 { id: 'simulation',  titel: 'Simulation und Analyse' },
                 { id: 'logikplan',   titel: 'Logikplan' },
-                { id: 'schaltplan',  titel: 'Schaltpläne und Steckaufbau' },
+                { id: 'schaltplan',  titel: 'Pläne und Steckaufbau' },
                 { id: 'anlage',      titel: '2D-Anlage' },
                 { id: 'lernzentrum', titel: 'Lernzentrum und Aufgaben' },
                 { id: 'teilen',      titel: 'Speichern, Teilen, Zusammenarbeiten' },
@@ -56595,7 +56597,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return [
                 // 1 · Start und Überblick
                 { k: 'start', kurz: true, title: '🎓 Willkommen bei VALIS!',
-                  text: 'VALIS ist eine virtuelle SPS mit Anlage: Du schreibst eine Steuerung, siehst sie als Logikplan, Schaltplan und Steckaufbau und testest sie an einer 2D-Anlage.<br><br>Die Tour führt alles live vor. Wo du selbst etwas tun sollst, steht <b>👉 Mach mit</b>. Du kannst diese Schritte auch überspringen.',
+                  text: 'VALIS ist eine virtuelle SPS mit Anlage: Du schreibst eine Steuerung, siehst sie als Logikplan, Schaltplan, Fluidplan und Steckaufbau und testest sie an einer 2D-Anlage.<br><br>Die Tour führt alles live vor. Wo du selbst etwas tun sollst, steht <b>👉 Mach mit</b>. Du kannst diese Schritte auch überspringen.',
                   textLang: 'Die ausführliche Tour hat zehn Kapitel. Mit <b>⏭ Kapitel</b> springst du zum nächsten Kapitel, mit <b>✕ Schließen</b> hörst du jederzeit auf.',
                   target: null },
                 { k: 'start', kurz: true, title: '🧭 Links: Logik-Editor und Sim-Panel',
@@ -56603,10 +56605,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   before: () => panels(['fbs-wrapper', 'factory-wrapper']), wait: 250,
                   target: '#left-panel', pos: 'right' },
                 { k: 'start', kurz: true, title: '🧭 Rechts: der Arbeitsbereich',
-                  text: 'Rechts liegt der <b>Arbeitsbereich</b> mit den Ansichten, die du oben in der Leiste ein- und ausschaltest: Logikplan, Schaltplan, Schaltplan-Editor, Steckaufbau und 2D-Anlage. Hier sind gerade Logikplan und 2D-Anlage offen.<br><br>Jede Ansicht ist ein eigener Weg zur selben Logik: Du kannst im Code schreiben, Bausteine im Logikplan ziehen, im Schaltplan-Editor verdrahten oder im Steckaufbau Kabel stecken.'
+                  text: 'Rechts liegt der <b>Arbeitsbereich</b>. Oben in der Leiste schaltest du seine Ansichten ein und aus, in drei Gruppen: <b>Programm</b> (Logikplan, Schrittkette), <b>Pläne</b> (Schaltplan, Elektroplan, Fluidplan) und <b>Aufbau</b> (Steckaufbau, 2D-Anlage). Hier sind gerade Logikplan und 2D-Anlage offen.<br><br>Jede Ansicht ist ein eigener Weg zur selben Logik: Du kannst im Code schreiben, Bausteine im Logikplan ziehen, im Elektroplan verdrahten, im Fluidplan Pneumatik zeichnen oder im Steckaufbau Kabel stecken.'
                       + lk('In Aufgaben lässt sich jeder dieser Bereiche einzeln <b>sperren</b> oder ganz <b>ausblenden</b>. So bauen Lernende die Logik z. B. nur im Logikplan oder nur im Steckaufbau. Wie das geht, zeigt das Kapitel „Lernzentrum und Aufgaben".'),
                   before: () => panels(['fbs-wrapper', 'factory-wrapper']), wait: 250,
-                  target: '#workspace-container', pos: 'left' },
+                  target: ['#graph-container', '#workspace-container'], pos: 'left' },
                 { k: 'start', kurz: true, title: '📋 Das Beispiel für die Tour',
                   text: 'Für die Tour ist die <b>Sortieranlage</b> geladen: Ein Band fördert Metall- und Kunststoffteile, ein induktiver Sensor erkennt Metall und ein Zylinder schiebt es aus.<br><br>🔒 Dein eigener Stand ist gesichert. Wenn die Tour endet, lädt VALIS kurz neu und alles ist wieder wie vorher, auch wenn du mittendrin abbrichst.',
                   target: '#code', pos: 'right' },
@@ -56643,7 +56645,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 // 3 · Sim-Panel
                 { k: 'simpanel', kurz: true, title: '🎛 Das Sim-Panel',
-                  text: 'Jede Variable aus dem Code erscheint hier von selbst: Eingänge links, Ausgänge rechts. Eingänge schaltest du per Klick, Ausgänge zeigen ihren Zustand. Mit gedrückter <b>Strg</b>-Taste bleiben mehrere Taster gleichzeitig gedrückt.',
+                  text: 'Jede Variable aus dem Code erscheint hier von selbst: Eingänge links, Ausgänge rechts. Eingänge schaltest du per Klick, Ausgänge zeigen ihren Zustand. Mit gedrückter <b>Strg</b>-Taste bleiben mehrere Taster gleichzeitig gedrückt. Was Taster und Schalter unterscheidet, erklärt der <b>i</b>-Knopf neben „Eingänge“.',
                   target: '#simulator-container', pos: 'right' },
                 { k: 'simpanel', title: '🔘 Was für ein Bauteil?',
                   text: 'Hinter jedem Eingang wählst du, was er ist: Taster, Schalter, Not-Halt, Öffner oder einer der Sensoren. Davon hängt ab, wie er sich verhält und wie er im Schaltplan und im Steckaufbau gezeichnet wird.',
@@ -56664,7 +56666,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 // 4 · Simulation und Analyse
                 { k: 'simulation', kurz: true, title: '▶️ Simulation starten',
-                  text: 'Mit <b>Simulation starten</b> läuft die Steuerung: VALIS rechnet den Code etwa 20-mal pro Sekunde durch, und alle Ansichten zeigen live, was passiert.'
+                  text: 'Mit <b>Simulation starten</b> oben rechts läuft die Steuerung: VALIS rechnet den Code etwa 20-mal pro Sekunde durch, und alle Ansichten zeigen live, was passiert.'
                       + mit('Klick auf <b>▶ Simulation starten</b>.'),
                   before: () => panels(['fbs-wrapper', 'factory-wrapper']),
                   mitmachen: { pruefen: simLaeuft, ok: 'Die Simulation läuft.' },
@@ -56692,12 +56694,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   text: 'Der rote Knopf im Sim-Panel zeichnet eine Simulation auf. So kannst du einen Ablauf festhalten und später wieder abspielen.',
                   target: '#btn-record', pos: 'right' },
                 { k: 'simulation', title: '🔊 Ton',
-                  text: 'Schaltet den Ton durch: aus, nur Schaltklicks oder Klicks mit Anlagengeräuschen. So hörst du z. B., wie oft ein Relais schaltet oder wann Druckluft strömt.',
+                  text: 'Das Lautsprecher-Symbol direkt rechts neben dem Simulationsknopf schaltet den Ton durch: aus, nur Schaltklicks oder Klicks mit Anlagengeräuschen. So hörst du z. B., wie oft ein Relais schaltet oder wann Druckluft strömt.',
                   target: '#btn-toggle-sound', pos: 'bottom' },
 
                 // 5 · Logikplan
                 { k: 'logikplan', kurz: true, title: '🧩 Der Logikplan',
-                  text: 'Der Logikplan (FBS) zeigt den Code als Funktionsbausteine und entsteht automatisch. Du kannst hier aber auch selbst bauen: Bausteine aus der Palette ziehen, per Rechtsklick Verbindungen und Bausteine ändern. Der Code passt sich an.',
+                  text: 'Der Logikplan (FBS) steht in der Gruppe <b>Programm</b> ganz links in der Leiste. Er zeigt den Code als Funktionsbausteine und entsteht automatisch. Du kannst hier aber auch selbst bauen: Bausteine aus der Palette ziehen, per Rechtsklick Verbindungen und Bausteine ändern. Der Code passt sich an.',
                   before: () => panels(['fbs-wrapper']), wait: 250,
                   target: '#btn-view-fbs', pos: 'bottom' },
                 { k: 'logikplan', title: '➕ Bausteinpalette',
@@ -56716,16 +56718,28 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 // 6 · Schaltpläne und Steckaufbau
                 { k: 'schaltplan', kurz: true, title: '⚡ Schaltplan (automatisch)',
-                  text: 'Aus demselben Code zeichnet VALIS einen Schaltplan nach IEC mit Kontakten, Relais und Spulen. In der Simulation fließt der Strom sichtbar.',
+                  text: 'In der Gruppe <b>Pläne</b> stehen Schaltplan, Elektroplan und Fluidplan. Den <b>Schaltplan</b> zeichnet VALIS aus demselben Code: oben die Pneumatik nach DIN ISO 1219, darunter den Elektro-Schaltplan nach IEC 60617 mit Kontakten, Relais und Spulen. In der Simulation fließt der Strom sichtbar.',
                   before: () => panels(['circuit-wrapper']), wait: 300,
                   target: '#btn-view-iec', pos: 'bottom' },
                 { k: 'schaltplan', title: '🔧 Schaltplan-Optionen',
-                  text: 'Die Optionen stellen die Darstellung ein: <b>Relais</b> (jedes Gatter als Hilfsrelais) oder <b>Direkt</b>, Wechslernummern 11/12/14, fortlaufende Kontaktnummern, getrennte Steuer- und Lastkreise und wie viel beschriftet wird. Im SPS-Modus wechselt ein Knopf zur <b>Anschluss-Sicht</b> mit Klemmen nach DIN EN 60204.',
-                  target: ['#btn-iec-toggle', '#btn-iec-anschluss'], pos: 'bottom' },
-                { k: 'schaltplan', kurz: true, title: '🎨 Schaltplan-Editor',
-                  text: 'Im Editor zeichnest du selbst: Kontakte, Spulen, Sensoren zwischen +24 V und 0 V ziehen und verdrahten. Aus deiner Verdrahtung erkennt VALIS den Code, auch Selbsthaltungen. Umgekehrt baut <b>Aus Code</b> den Plan aus dem Code auf.',
+                  text: 'Die <b>Elektro-Optionen</b> stellen die Darstellung ein: <b>Relais</b> (jedes Gatter als Hilfsrelais) oder <b>Direkt</b>, Wechslernummern 11/12/14, fortlaufende Kontaktnummern, getrennte Steuer- und Lastkreise und wie viel beschriftet wird. Im SPS-Modus wechselt ein Knopf zur <b>Anschluss-Sicht</b> mit Klemmen nach DIN EN 60204. Die <b>Pneumatik-Optionen</b> daneben zeigen Drücke, Strömungspfeile und Ventilstellungen.',
+                  target: ['#btn-iec-toggle', '#btn-pneu-options', '#btn-iec-anschluss'], pos: 'bottom' },
+                { k: 'schaltplan', kurz: true, title: '🎨 Elektroplan',
+                  text: 'Im <b>Elektroplan</b> (früher Schaltplan-Editor) zeichnest du selbst: Kontakte, Spulen, Sensoren zwischen +24 V und 0 V ziehen und verdrahten. Aus deiner Verdrahtung erkennt VALIS den Code, auch Selbsthaltungen. Umgekehrt baut <b>Aus Code</b> den Plan aus dem Code auf.',
                   before: () => panels(['circuit-editor-wrapper']), wait: 300,
                   target: '#ced-toolbar', pos: 'bottom' },
+                { k: 'schaltplan', kurz: true, title: '💨 Fluidplan',
+                  text: 'Im <b>Fluidplan</b> zeichnest du Pneumatik und Hydraulik nach DIN ISO 1219 und simulierst sie: Druck in jeder Leitung, Kolben nach Kraft und Luftmenge. Beim Öffnen übernimmt er die Pneumatik der 2D-Anlage und bleibt mit ihr verbunden, hier den Zylinder der Sortieranlage.<br><br>Fluidplan, 2D-Anlage und Schaltplan sind eine Wahrheit: Was du an einer Stelle änderst, ziehen die anderen mit.',
+                  before: () => { panels(['fluid-wrapper', 'factory-wrapper']); fluidAuf(); }, wait: 600,
+                  target: ['#btn-view-fluid', '#fluid-wrapper'], pos: 'left' },
+                { k: 'schaltplan', title: '🧰 Bauteile des Fluidplans',
+                  text: 'Links liegt die Palette mit zwei Reitern: <b>Pneumatik</b> (Versorgung, Wegeventile, Drosseln, Zylinder, Sensoren) und <b>Hydraulik</b> (Aggregat, Tank, Druckbegrenzungs- und Stromregelventil, Speicher). Bauteile ziehst du auf die Fläche, Leitungen ziehst du von Anschluss zu Anschluss. Ein Klick auf ein Bauteil zeigt rechts seine Eigenschaften.',
+                  before: () => { panels(['fluid-wrapper', 'factory-wrapper']); fluidAuf(); }, wait: 400,
+                  target: '#fp-fenster .fp-palette', pos: 'right' },
+                { k: 'schaltplan', title: '🩺 Prüfen, Messen, Listen',
+                  text: 'Die Leiste des Fluidplans: <b>Prüfen</b> findet offene Anschlüsse und fehlende Variablen, <b>Messen</b> steckt Manometer an Leitungen, <b>Fehlersuche</b> baut versteckte Fehler ein, <b>Diagramm</b> zeichnet das Weg-Schritt-Diagramm. <b>Listen</b> und <b>PDF</b> machen Betriebsmittel- und Stückliste und ein Blatt mit Schriftfeld. <b>2D-Anlage</b> zeigt und schaltet die Verbindung zur Anlage.',
+                  before: () => { panels(['fluid-wrapper', 'factory-wrapper']); fluidAuf(); }, wait: 400,
+                  target: '#fp-fenster .fp-leiste', pos: 'bottom' },
                 { k: 'schaltplan', kurz: true, title: '🔌 Steckaufbau',
                   text: 'Der Steckaufbau zeigt, wie der Schaltplan auf Lehrplatinen gesteckt wird: Taster-, Relais- und Leuchtenplatinen mit Kabeln in Normfarben, Rot für +24 V und Blau für 0 V. An jeder Buchse steht die Anschlusskennziffer.',
                   before: () => panels(['festo-wrapper']), wait: 300,
@@ -56734,13 +56748,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   text: 'Im <b>Trainingsmodus</b> steckst du die Kabel selbst, VALIS prüft jedes Kabel. Im <b>freien Aufbau</b> steckst du ohne Vorlage, und VALIS erzeugt daraus den Code. Die Aufbau-Lektionen im Lernzentrum führen Schritt für Schritt hinein.',
                   target: '#festo-train-toggle', pos: 'bottom' },
                 { k: 'schaltplan', title: '📋 Schrittkette (PRO)',
-                  text: 'Im PRO-Modus gibt es die Ansicht <b>Schrittkette</b>: Ablaufsteuerungen als GRAFCET oder S7-GRAPH. Sie erscheint, sobald der Code eine Schrittkette enthält, und zeigt in der Simulation den aktiven Schritt. Die Tour hat PRO dafür kurz eingeschaltet.',
+                  text: 'Im PRO-Modus gibt es die Ansicht <b>Schrittkette</b>: Ablaufsteuerungen als GRAFCET oder S7-GRAPH. Sie steht in der Gruppe <b>Programm</b> neben dem Logikplan und erscheint, sobald der Code eine Schrittkette enthält, und zeigt in der Simulation den aktiven Schritt. Die Tour hat PRO dafür kurz eingeschaltet.',
                   before: () => { proAn(); panels(['sk-wrapper']); }, wait: 400,
                   target: '#btn-view-sk', pos: 'bottom' },
 
                 // 7 · 2D-Anlage
                 { k: 'anlage', kurz: true, title: '🏭 Die 2D-Anlage',
-                  text: 'Hier baust du die Anlage, an der deine Steuerung läuft: Bedienpult, Bänder, Sensoren, Zylinder, Werkstücke. Sobald ein Bauteil mit einer Variable verbunden ist, steuert die Anlage diesen Eingang. Im Sim-Panel ist er dann gesperrt.',
+                  text: 'Hier baust du die Anlage, an der deine Steuerung läuft: Bedienpult, Bänder, Sensoren, Zylinder, Werkstücke. Sobald ein Bauteil mit einer Variable verbunden ist, steuert die Anlage diesen Eingang.',
                   before: () => { panels(['factory-wrapper']); sim(true); }, wait: 400,
                   target: '#btn-view-fac', pos: 'bottom' },
                 { k: 'anlage', kurz: true, title: '🔩 Metall aussortieren',
@@ -56755,6 +56769,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   },
                   mitmachen: { pruefen: () => sps('ZYL_AUS'), ok: 'Der Zylinder ist ausgefahren und hat das Metallteil aussortiert.' },
                   wait: 300, target: '#factory-canvas-area', pos: 'left' },
+                { k: 'anlage', title: '🅵 Sensoren forcen',
+                  text: 'Einen Sensor der 2D-Anlage kannst du im Sim-Panel <b>forcen</b>: Ein Klick auf seinen Schalter übersteuert ihn, die Logik sieht dann deinen Wert statt den Sensor. Ein orangefarbenes <b>F</b> zeigt das an, ein Klick auf das F gibt den Sensor wieder frei. Taster bleiben ganz normal bedienbar.'
+                      + mit('Klick im Sim-Panel auf den Schalter von <b>S_METALL</b>.'),
+                  before: () => { panels(['fbs-wrapper', 'factory-wrapper']); sim(true); },
+                  after: () => { try { window._forceAufheben(); } catch (_) {} },
+                  mitmachen: { pruefen: () => !!(window._forciert && ('S_METALL' in window._forciert)), ok: 'S_METALL ist geforct. Das F rechts daneben gibt ihn wieder frei, das macht die Tour beim Weiterklicken.' },
+                  wait: 300, target: '[data-sim-in="S_METALL"]', pos: 'right' },
                 { k: 'anlage', title: '🖱 Bewegen und Zoomen',
                   text: 'Mit dem Mausrad zoomst du, mit gedrückter Maus auf freier Fläche verschiebst du die Ansicht. Bauteile ziehst du mit der Maus. <b>Rechtsklick</b> auf ein Bauteil öffnet das Kontextmenü: Variable zuweisen, Position, Ebene, Sperren, ohne Kollision und Beschriftung anheften.',
                   before: () => panels(['factory-wrapper']), target: '#factory-canvas-area', pos: 'left' },
@@ -56787,7 +56808,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
                 // 8 · Lernzentrum und Aufgaben
                 { k: 'lernzentrum', kurz: true, title: '🎓 Das Lernzentrum',
-                  text: 'Alles zum Lernen an einem Ort, auch mit <b>Strg+K</b>: Tour, Lektionen, Komponenten-Tutorials, Szenario-Analyse, Aufgaben, Beispiele und das Fachbegriff-Lexikon. Oben durchsucht ein Feld alles auf einmal.',
+                  text: 'Alles zum Lernen an einem Ort, auch mit <b>Strg+K</b>: Tour, Lektionen, Komponenten-Tutorials, Szenario-Analyse, Aufgaben, Übungsanlagen, Beispiele und das Fachbegriff-Lexikon. Oben durchsucht ein Feld alles auf einmal.',
                   before: () => { sim(false); hub(); }, after: hubZu, wait: 300,
                   target: '#hub-overlay .hub-box', pos: 'left' },
                 { k: 'lernzentrum', title: '📚 Lektionen',
@@ -56807,7 +56828,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   before: () => hub('aufgaben'), after: hubZu, wait: 300,
                   target: '#hub-overlay .hub-box', pos: 'left' },
                 { k: 'lernzentrum', title: '🔒 Bereiche sperren oder ausblenden',
-                  text: 'Im Aufgaben-Editor legst du für jeden Bereich fest, ob ihn Lernende benutzen dürfen: <b>Sperren</b> lässt ihn sichtbar, aber nicht bedienbar, <b>Ausblenden</b> nimmt ihn ganz weg. Das gilt für Code-Editor, Ein-/Ausgänge, Logikplan, Schaltplan, Schaltplan-Editor, 2D-Anlage, Steckaufbau und Schrittkette. Dazu gibt es feinere Schalter, z. B. „Aus Code" im Schaltplan-Editor abschalten.'
+                  text: 'Im Aufgaben-Editor legst du für jeden Bereich fest, ob ihn Lernende benutzen dürfen: <b>Sperren</b> lässt ihn sichtbar, aber nicht bedienbar, <b>Ausblenden</b> nimmt ihn ganz weg. Das gilt für Code-Editor, Ein-/Ausgänge, Logikplan, Schaltplan, Elektroplan (im Aufgaben-Editor „Schaltplan-Editor"), 2D-Anlage, Steckaufbau und Schrittkette. Dazu gibt es feinere Schalter, z. B. „Aus Code" im Elektroplan abschalten.'
                       + lk('Die nächsten drei Schritte zeigen drei typische Zuschnitte so, wie Lernende sie sehen. Die Beispiel-Aufgaben existieren nur in der Tour und werden nicht gespeichert.'),
                   before: () => {
                       try { window._openTaskEditor(demoAufgabe('Tour-Beispiel', 'Nur für die Tour', {}, {})); } catch (_) {}
@@ -56816,7 +56837,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   after: () => { const m = document.getElementById('task-editor-modal'); if (m) m.style.display = 'none'; },
                   wait: 400, target: '#ted-bereiche', pos: 'left' },
                 { k: 'lernzentrum', title: '🧩 Beispiel 1: nur im Logikplan bauen',
-                  text: 'Hier ist der Code-Editor <b>ausgeblendet</b>, ebenso Schaltplan, Schaltplan-Editor und Steckaufbau. Lernende bauen die Logik nur mit Bausteinen im Logikplan.'
+                  text: 'Hier ist der Code-Editor <b>ausgeblendet</b>, ebenso Schaltplan, Elektroplan und Steckaufbau. Lernende bauen die Logik nur mit Bausteinen im Logikplan.'
                       + lk('Häkchen im Aufgaben-Editor: Ausblenden bei Code-Editor, Schaltplan, Schaltplan-Editor und Steckaufbau.'),
                   before: () => {
                       panels(['fbs-wrapper', 'factory-wrapper']);
@@ -56824,8 +56845,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                           { codeEditor: true, schaltplan: true, circuitEditor: true, festo: true }, {}));
                   },
                   after: demoBeenden, wait: 500, target: '#fbs-wrapper', pos: 'left' },
-                { k: 'lernzentrum', title: '🎨 Beispiel 2: nur im Schaltplan-Editor verdrahten',
-                  text: 'Code-Editor, Logikplan und Steckaufbau sind ausgeblendet. Im Schaltplan-Editor sind <b>Aus Code</b> und der Live-Abgleich abgeschaltet: Lernende müssen selbst verdrahten, der Code entsteht aus ihrer Verdrahtung.'
+                { k: 'lernzentrum', title: '🎨 Beispiel 2: nur im Elektroplan verdrahten',
+                  text: 'Code-Editor, Logikplan und Steckaufbau sind ausgeblendet. Im Elektroplan sind <b>Aus Code</b> und der Live-Abgleich abgeschaltet: Lernende müssen selbst verdrahten, der Code entsteht aus ihrer Verdrahtung.'
                       + lk('Häkchen: Ausblenden bei Code-Editor, Logikplan, Schaltplan und Steckaufbau, dazu „Aus Code" und „Live-Sync" aus.'),
                   before: () => {
                       demoStarten(demoAufgabe('Nur Schaltplan-Editor', 'Verdrahte die Steuerung im Schaltplan-Editor.',
@@ -56836,7 +56857,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   after: demoBeenden, wait: 500, target: '#circuit-editor-wrapper', pos: 'left' },
                 { k: 'lernzentrum', title: '🔌 Beispiel 3: nur im Steckaufbau stecken',
                   text: 'Jetzt bleibt nur der <b>Steckaufbau</b>, im freien Aufbau. Lernende stecken die Kabel auf den Platinen, VALIS erzeugt daraus den Code und prüft ihn an der Anlage.'
-                      + lk('Häkchen: Ausblenden bei Code-Editor, Logikplan, Schaltplan und Schaltplan-Editor, dazu im Steckaufbau „Freier Aufbau erzwingen".'),
+                      + lk('Häkchen: Ausblenden bei Code-Editor, Logikplan, Schaltplan und Schaltplan-Editor (Elektroplan), dazu im Steckaufbau „Freier Aufbau erzwingen".'),
                   before: () => {
                       demoStarten(demoAufgabe('Nur Steckaufbau', 'Stecke die Steuerung auf den Platinen.',
                           { codeEditor: true, logikplan: true, schaltplan: true, circuitEditor: true }, {},
@@ -56858,7 +56879,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   text: 'VALIS speichert jede Änderung sofort im Browser. Oben neben dem Namen leuchtet dann kurz <b>Gespeichert</b>. Nach einem Neuladen ist alles wieder da.',
                   target: '#save-indicator', pos: 'bottom' },
                 { k: 'teilen', kurz: true, title: '📤 Speichern, Laden, Teilen',
-                  text: 'Hier sicherst du Code und Anlage als <b>.valisave</b>-Datei und lädst sie wieder. Ein <b>Link</b> mit QR-Code nimmt das ganze Projekt mit, z. B. für Lernende am Tablet.',
+                  text: 'Der Knopf <b>Datei</b> oben links öffnet dieses Fenster. Hier sicherst du Code und Anlage als <b>.valisave</b>-Datei und lädst sie wieder. Ein <b>Link</b> mit QR-Code nimmt das ganze Projekt mit, z. B. für Lernende am Tablet.',
                   before: () => { try { window.openSaveLoadModal(); } catch (_) {} },
                   after: () => { try { window.closeSaveLoadModal(); } catch (_) {} },
                   wait: 300, target: '#saveload-modal', pos: 'left' },
@@ -56871,15 +56892,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   after: () => { try { window.closeSaveLoadModal(); } catch (_) {} },
                   wait: 350, target: '#saveload-modal .sl-section', pos: 'left' },
                 { k: 'teilen', title: '☁️ Meine Umgebung und Zusammenarbeiten',
-                  text: 'Mit <b>Meine Umgebung</b> meldest du dich an: Aufgaben und Pakete liegen dann auf dem Server und sind auf jedem Gerät da, eine Klasse tritt mit dem <b>Klassencode</b> bei. Über <b>👥 Zusammen</b> bearbeiten mehrere gleichzeitig dasselbe Projekt, live.',
-                  target: '#btn-cloud', pos: 'bottom' },
+                  text: 'Mit <b>Meine Umgebung</b> rechts neben Datei meldest du dich an: Aufgaben und Pakete liegen dann auf dem Server und sind auf jedem Gerät da, eine Klasse tritt mit dem <b>Klassencode</b> bei. Über <b>👥 Zusammen</b> bearbeiten mehrere gleichzeitig dasselbe Projekt, live.<br><br>Wird es oben eng, schrumpfen PRO, Meine Umgebung und Datei zu Symbolen.',
+                  target: ['#btn-datei', '#btn-cloud'], pos: 'bottom' },
 
                 // 10 · Einstellungen und Extras
                 { k: 'extras', title: '⚙️ PRO-Modus',
                   text: '<b>PRO</b> schaltet die Profi-Funktionen frei: Schrittketten als eigene Sprache mit GRAFCET- und S7-GRAPH-Ansicht, Betriebsarten, Verriegelungen und Arithmetik. Für den Einstieg bleibt er aus. Lehrkräfte können ihn für ihre Klasse vorgeben.',
                   target: '#btn-pro-toggle', pos: 'bottom' },
                 { k: 'extras', title: '◫ Layout und zweiter Bildschirm',
-                  text: 'Hier ordnest du die Ansichten an: nebeneinander, untereinander oder die Anlage groß unten, oben, links oder rechts. Rechts im Menü <b>koppelst</b> du einzelne Ansichten in ein eigenes Fenster ab, z. B. die Anlage auf den Beamer und den Code auf den Laptop.',
+                  text: 'Das <b>Layout</b>-Symbol rechts neben den Ansichten öffnet dieses Menü. Hier ordnest du die Ansichten an: nebeneinander, untereinander oder die Anlage groß unten, oben, links oder rechts. Rechts im Menü <b>koppelst</b> du einzelne Ansichten in ein eigenes Fenster ab, auch den Fluidplan, z. B. die Anlage auf den Beamer und den Code auf den Laptop.',
                   before: () => pinne('#btn-layout-text'), after: entpinne, wait: 150,
                   target: '#btn-layout-text', pos: 'bottom' },
                 { k: 'extras', title: '🌍 Sprache und App',
@@ -56887,7 +56908,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   target: '#btn-lang-toggle', pos: 'bottom' },
                 { k: 'extras', kurz: true, title: '🎓 Geschafft!',
                   text: 'Das war die Tour. Wenn du auf <b>✓ Fertig</b> klickst, lädt VALIS kurz neu und dein eigener Stand ist wieder da.<br><br>Ein guter nächster Schritt sind die <b>Lektionen</b> im Lernzentrum (Strg+K). In jedem Fenster hilft dir der <b>ℹ️</b>-Knopf.',
-                  textKurz: 'Das war die kurze Tour. Die <b>ausführliche Tour</b> im Lernzentrum zeigt in zehn Kapiteln alles Weitere: Fehleranzeige, Erklärmodus, Oszilloskop, Pneumatik, Regler, Aufgaben für Lehrkräfte, Export und mehr.',
+                  textKurz: 'Das war die kurze Tour. Die <b>ausführliche Tour</b> im Lernzentrum zeigt in zehn Kapiteln alles Weitere: Fehleranzeige, Erklärmodus, Oszilloskop, Forcen, Fluidplan-Werkzeuge, Pneumatik, Regler, Aufgaben für Lehrkräfte, Export und mehr.',
                   target: null }
                 ];
             }

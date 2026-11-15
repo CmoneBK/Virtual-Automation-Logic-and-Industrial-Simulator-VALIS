@@ -1411,7 +1411,7 @@
     .fp-pruef li{margin:2px 0}
     .fp-hilfe{position:absolute;left:10px;bottom:10px;max-width:440px;background:#fff;color:#263238;border:1px solid #b0bec5;border-radius:6px;padding:8px 12px;font-size:12px;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.2)}
     .fp-listen{position:absolute;right:10px;top:10px;max-width:640px;max-height:calc(100% - 20px);overflow:auto;background:#fff;color:#263238;border:1px solid #b0bec5;border-radius:6px;padding:8px 12px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:5}
-    .fp-listen h3{font-size:13px;margin:8px 0 4px}.fp-listen table{border-collapse:collapse;width:100%}.fp-listen th,.fp-listen td{border:1px solid #cfd8dc;padding:2px 6px;text-align:left;vertical-align:top}.fp-listen th{background:#eceff1}
+    .fp-listen h3{font-size:13px;margin:10px 0 4px;color:#111 !important;border:0 !important;padding:0}.fp-listen table{border-collapse:collapse;width:100%}.fp-listen th,.fp-listen td{border:1px solid #90a4ae;padding:3px 6px;text-align:left;vertical-align:top;color:#111 !important;-webkit-text-fill-color:#111;opacity:1 !important;font-weight:500}.fp-listen th{background:#dfe5e8;font-weight:700}
     .fp-listen-kopf{display:flex;justify-content:space-between;align-items:center;gap:8px}.fp-listen button{margin-left:4px;cursor:pointer}
     .fp-sf-zeile{display:flex;justify-content:space-between;gap:8px;margin:4px 0}.fp-sf-zeile input:not([type]){width:240px}.fp-sf-hinweis{color:#607d8b;font-size:11px;margin-top:4px}
     .fp-hilfe kbd{background:#eceff1;border:1px solid #b0bec5;border-radius:3px;padding:0 4px;font-size:11px}

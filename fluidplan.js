@@ -44,6 +44,8 @@
     const G_HV = 0.05;            // Leitwert offener Ventilweg (Öl)
     const V_LEITUNG_H = 0.03;     // Ölvolumen je Leitung (l), Hydraulikschlauch
     const istHyd = t => !!(t && t.o && t.o.hyd);
+    // Hydraulikzylinder: der Plan baut dafür die 2D-Hydraulik (valve_hyd …), sonst Pneumatik
+    const hydZylT = t => !!t && (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') && istHyd(t);
 
     // ------------------------------------------------------------
     // Hilfen
@@ -971,9 +973,15 @@
     // ------------------------------------------------------------
     // Kennbuchstaben Pneumatik nach Tabellenbuch Metall, Kennzeichnung im Schaltplan (DIN EN 81346-2)
     const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'QN', manometer: 'PG',
-        aggregat: 'GP', tank: 'CM', dbv: 'FL', stromregel: 'RN', speicher: 'CM', entsperr: 'RMB', filter: 'HQ',
+        aggregat: 'GPA', tank: 'CLA', dbv: 'QNA', stromregel: 'RNA', speicher: 'CMA', entsperr: 'RMA', filter: 'HQ',
         rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP' };
+    // Hydraulik nach Tabellenbuch Metall, Hydraulikzylinder und hydraulische Grundschaltungen:
+    // -MMA1 Zylinder, -QMA1 Wegeventil, -RNA1 Stromregelventil, -RMA1 Rückschlagventil (entsperrbar),
+    // -QNA1 Druckbegrenzungsventil, -GPA1 Pumpe/Aggregat, -CLA1 Tank, -CMA1 Speicher, -BPB1 Druckschalter
+    const KENN_H = { zyl_dw: 'MMA', zyl_ew: 'MMA', ventil: 'QMA', aggregat: 'GPA', tank: 'CLA', dbv: 'QNA', stromregel: 'RNA', drossel: 'RNA', drv: 'RNA',
+        speicher: 'CMA', entsperr: 'RMA', rueck: 'RMA', dschalter: 'BPB', filter: 'HQ', manometer: 'PG' };
     function kennCode(typ, o) {
+        if (o && o.hyd && KENN_H[typ]) return KENN_H[typ];
         if (typ === 'ventil') {
             // Signalglieder: Rollenventile erfassen eine Lage (BG), handbetätigte sind Bedienteile (SJ)
             if (o && o.wege === '3/2' && (o.links === 'rolle' || o.links === 'rolle_leer')) return 'BG';
@@ -2130,7 +2138,11 @@
             num('Kolbendurchmesser', 'd', 8, 200, 1, 'mm');
             if (t.typ === 'zyl_dw') num('Stangendurchmesser', 'dStange', 4, 100, 1, 'mm');
             num('Hub', 'hub', 10, 1000, 5, 'mm');
-            num('Last gegen das Ausfahren', 'last', 0, 20000, 10, 'N');
+            num('Last gegen das Ausfahren', 'last', 0, istHyd(t) ? 200000 : 20000, 10, 'N');
+            if (istHyd(t)) {
+                wahl('Art der Last', 'lastArt', [['gewicht', 'Gewicht (wirkt über den ganzen Hub)'], ['presse', 'Werkstück (wirkt ab einer Stelle im Hub)']]);
+                if (t.o.lastArt === 'presse') num('Werkstück ab', 'lastAb', 0, 100, 1, '% Hub');
+            }
             if (t.typ === 'zyl_dw') {
                 wahl('Grundstellung', 'start', [['hinten', 'eingefahren'], ['vorne', 'ausgefahren']]);
                 const c = fld('Endlagendämpfung', h('input', { type: 'checkbox' })); c.checked = !!t.o.daempfung; c.onchange = () => setze(() => { t.o.daempfung = c.checked; });
@@ -2189,6 +2201,10 @@
             h('div', { class: 'fp-hinw', text: 'Von 1 nach 2 frei. Zurück von 2 nach 1 nur, wenn an X Steuerdruck anliegt (Last halten, z. B. beim senkrechten Zylinder).' }, box);
         } else if (t.typ === 'dschalter') {
             num('Schaltdruck', 'p', 0.2, istHyd(t) ? 315 : 10, istHyd(t) ? 1 : 0.1, 'bar');
+            if (istHyd(t)) {
+                num('Schaltdifferenz (Hysterese)', 'hyst', 0.5, 50, 0.5, 'bar');
+                const c = fld('Öffner (meldet, solange der Druck fehlt)', h('input', { type: 'checkbox' })); c.checked = !!t.o.oeffner; c.onchange = () => setze(() => { t.o.oeffner = c.checked; });
+            }
             variable('VALIS-Eingang', 'var', 'in');
         }
         fehlerFeld(box, t.id);
@@ -2425,7 +2441,7 @@
     }
     function anlageUmschalten() {
         if (!plan.anlage && !plan.teile.some(t => t.typ === 'zyl_dw' || t.typ === 'zyl_ew')) { status('Erst einen Zylinder in den Plan setzen.'); return; }
-        if (!plan.anlage && plan.teile.some(istHyd) && !plan.teile.some(t => t.typ === 'aggregat')) { status('Erst ein Hydraulikaggregat in den Plan setzen.'); return; }
+        if (!plan.anlage && plan.teile.some(hydZylT) && !plan.teile.some(t => t.typ === 'aggregat')) { status('Erst ein Hydraulikaggregat in den Plan setzen.'); return; }
         if (plan.anlage && plan.erzeugt && plan.erzeugt.length && !W().confirm('Verbindung lösen? Die vom Plan in der 2D-Anlage erzeugten Zylinder bleiben stehen.')) return;
         aendern(() => { plan.anlage = !plan.anlage; if (!plan.anlage) { plan.erzeugt = []; hydSpiegel.clear(); } });
     }
@@ -2641,9 +2657,9 @@
                 const an = fehlerAktiv(t.id) === 'klemmt' ? false : z.an ? p12 > ps - 0.3 : p12 >= ps;
                 if (an !== z.an) { z.an = an; klick(); }
             } else if (t.typ === 'dschalter') {
-                const p = pPort(t, '1'), ps = zahl(t.o.p, 4);
-                z.an = fehlerAktiv(t.id) === 'defekt' ? false : z.an ? p > ps - 0.3 : p >= ps;
-                if (t.o.var) S.schreib[t.o.var] = z.an;
+                const p = pPort(t, '1'), ps = zahl(t.o.p, 4), hy = istHyd(t) ? Math.max(0.3, zahl(t.o.hyst, Math.max(2, ps * 0.05))) : 0.3;
+                z.an = fehlerAktiv(t.id) === 'defekt' ? false : z.an ? p > ps - hy : p >= ps;
+                if (t.o.var && S.schreib) S.schreib[t.o.var] = t.o.oeffner ? !z.an : z.an;
             }
         }
         // --- Teilschritte: Strömung und Kolben ---
@@ -3058,8 +3074,24 @@
     }
 
     let taktZeit = -1e9;
+    // Werkstück (Hydraulik, Last „presse"): wirkt erst ab lastAb % Hub und nur gegen das Ausfahren.
+    // Ist es stärker als der Zylinder beim höchsten Aggregatdruck, wirkt es als fester Anschlag.
+    function presseLasten() {
+        let pMax = 0;
+        for (const t of plan.teile) if (t.typ === 'aggregat') pMax = Math.max(pMax, zahl(t.o.p, 60));
+        for (const t of plan.teile) {
+            if (!hydZylT(t)) continue;
+            if (t.o.lastArt !== 'presse') { LW.delete(t); continue; }
+            const z = sim.zust[t.id]; if (!z) continue;
+            const Fl = Math.max(0, zahl(t.o.last, 0)), hub = zylHub(t), ab = Math.max(0, Math.min(100, zahl(t.o.lastAb, 0))) / 100 * hub;
+            const fMax = (pMax || 100) * Math.PI * Math.pow(zahl(t.o.d, 20), 2) / 4 / 100 * 10;
+            const anschlag = Fl > fMax ? ab : null;
+            LW.set(t, { last: anschlag != null || z.v < -0.5 || z.x < ab - 0.01 ? 0 : Fl, anschlag });
+        }
+    }
     function planTakt(dt) {
         if (!sim) simInit();
+        try { presseLasten(); } catch (e) {}
         sim.schreib = {};
         simSchritt(dt);
         // VALIS-Eingänge schreiben
@@ -3373,7 +3405,7 @@
     }
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage) return;
-        if (plan.teile.some(istHyd)) return hydRueckAbgleich(F);
+        if (hydSpiegel.size) hydRueckAbgleich(F);
         if ((!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
         const neu = []; let masse = false;
         if (rueck2D(F, neu)) masse = true;
@@ -3522,7 +3554,8 @@
     function anlageAbgleichen() {
         const F = fabrik();
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
-        if (plan.teile.some(istHyd)) return hydAbgleichen(F);   // Hydraulikplan: eigene 2D-Teile (valve_hyd, throttle_hyd …)
+        // Hydraulikzylinder bekommen eigene 2D-Teile (valve_hyd, throttle_hyd …), Pneumatik wie bisher
+        if (plan.teile.some(hydZylT) || hydSpiegel.size) hydAbgleichen(F);
         kennKonflikteLoesen();
         plan.erzeugt = plan.erzeugt || [];
         const benutzt = new Set();
@@ -3530,6 +3563,7 @@
         const zylNeu = [];
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew') continue;
+            if (hydZylT(t)) { if (t.o.anlage) benutzt.add(t.o.anlage); continue; }
             const dw = t.typ === 'zyl_dw';
             const K0 = stellgliedVon(t, 'K'), S0 = dw ? stellgliedVon(t, 'S') : null;
             const v0 = (K0 && K0.ventil) || (S0 && S0.ventil) || null;
@@ -3554,7 +3588,7 @@
             const wahl = !v ? 'single' : v.o.wege === '5/3' ? 'triple' : (v.o.links !== 'feder' && v.o.rechts !== 'feder') ? 'double' : 'single';
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
             const typ2d = dw ? 'zylinder_double' : 'zylinder_single';
-            if (o && o.type !== typ2d && o.type !== 'gate_pneu') { o = null; }
+            if (o && ((o.type !== typ2d && o.type !== 'gate_pneu') || o.hasHydraulics)) { o = null; }
             if (!o) {
                 o = createFactoryObject(typ2d, ext, dw ? ret : undefined);
                 // über dem Pneumatik-Bereich, nebeneinander (der Bereich entsteht sonst bei 20/600)
@@ -3663,7 +3697,7 @@
         const zx = zone ? zone.x : 20, zy = zone ? zone.y : 600;
         let nr = 0;
         for (const t of plan.teile) {
-            if (abgedeckt.has(t.id) || ['zyl_dw', 'zyl_ew', 'quelle', 'wartung', 'knoten'].includes(t.typ)) continue;
+            if (abgedeckt.has(t.id) || istHyd(t) || ['zyl_dw', 'zyl_ew', 'quelle', 'wartung', 'knoten'].includes(t.typ)) continue;
             if (gast[t.id] && !abgedeckt.has(gast[t.id])) continue;   // sitzt im Symbol seines Wirts
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
             if (o && o.type !== 'pneu_fp') o = null;
@@ -3756,6 +3790,7 @@
         for (const l of plan.leitungen) {
             const a = l.a.t + ':' + l.a.p;
             if (knot(l.a) && knot(l.b)) continue;
+            if (istHyd(teil(l.a.t)) || istHyd(teil(l.b.t))) continue;   // Öl: Schläuche baut der Hydraulik-Abgleich
             if (!knot(l.a) && !knot(l.b)) { gruppen.set('L' + l.id, [l.a, l.b]); gLeit.set('L' + l.id, [l]); continue; }
             const g = finde(knot(l.a) ? a : l.b.t + ':' + l.b.p), liste = gruppen.get(g) || [];
             for (const e of [l.a, l.b]) if (!knot(e) && !liste.some(x => x.t === e.t && x.p === e.p)) liste.push(e);
@@ -4070,6 +4105,7 @@
                 t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
             });
             plan.teile = r.plan.teile; plan.leitungen = r.plan.leitungen; plan.erzeugt = []; plan.anlage = true;
+            F.filter(istMess2D).forEach(m => { if ((m.role || 'P') === 'P' || zyl.some(o => o.id === m.targetCylinderId)) hydMessNeu(m); });
         });
         einpassen();
         return zyl.length;
@@ -4221,7 +4257,8 @@
             const dw = o.type === 'zylinder_double', x = 140 + i * 340;
             const v = F.find(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id);
             const zt = { id: nid(), typ: dw ? 'zyl_dw' : 'zyl_ew', x, y: -40, rot: 0, bez: o.normLabel || '',
-                o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, H, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id }) };
+                o: Object.assign({}, TYP[dw ? 'zyl_dw' : 'zyl_ew'].optionen, H, { d: o.pistonD || 20, dStange: o.rodD || (dw ? 8 : 6), hub: o.stroke || 100, anlage: o.id,
+                    last: Math.max(0, Number(cfg(o).last) || 0), lastArt: cfg(o).lastArt || 'presse', lastAb: Math.max(0, Number(cfg(o).lastAb) || 0) }) };
             const wege = !dw ? '3/2' : v.isTriple ? '4/3' : '4/2';
             const vt = { id: nid(), typ: 'ventil', x, y: 200, rot: 0, bez: v.normLabel || '',
                 o: Object.assign({}, TYP.ventil.optionen, H, { wege, mitte: 'gesperrt', links: 'magnet', rechts: v.isDouble || v.isTriple ? 'magnet' : 'feder', varL: o.linkedVarExt || o.linkedVar || '', varR: dw && (v.isDouble || v.isTriple) ? o.linkedVarRet || '' : '', anlage: v.id }) };
@@ -4314,7 +4351,7 @@
         return { pP, qDbv, zylW, verlustDrossel, sp };
     }
     // Live-Werte in die 2D-Anlage (Anzeigen, Lektionen, valisBruecke: hydP, hydPA, hydKraft, hydTemp …)
-    function hydLiveWerte(F, unit, zyl, karte, ergebnis, Qp, pDBV, pumpe, dt) {
+    function hydLiveWerte(F, unit, zyl, karte, ergebnis, Qp, pDBV, pumpe, dt, mess) {
         const R = (x, n) => { const f = Math.pow(10, n || 0); return Math.round(x * f) / f; };
         const s = sps(), H = unit.hyd || (unit.hyd = {});
         for (const o of zyl) {
@@ -4352,6 +4389,7 @@
             return o.role === 'B' ? (c.hydPB || 0) : (c.hydPA || 0);
         };
         F.forEach(o => {
+            if (mess && mess[o.id]) { o.hydP = R(mess[o.id].p, 1); if (o.type === 'pressure_switch_hyd') o.hydSchaltet = !!mess[o.id].an; return; }
             if (o.type === 'pressure_switch_hyd') {
                 const h = o.hyd || (o.hyd = {}), p = pAn(o);
                 const ps = Math.max(1, Number(h.schaltdruck) || 80), hy = Math.max(1, Number(h.hysterese) || Math.max(2, ps * 0.05));
@@ -4432,7 +4470,7 @@
     // Der sichtbare Plan rechnet, die 2D-Anlage zeigt dieselben Teile (Aggregat, Wegeventil,
     // Drosseln, Rückschlagventile, Speicher, Zylinder) und gleicht Änderungen zurück.
     // ------------------------------------------------------------
-    const hydVerbunden = () => !!plan.anlage && plan.teile.some(istHyd);
+    const hydVerbunden = () => !!plan.anlage && plan.teile.some(hydZylT);
     const QN_HYD = () => window.DROSSEL_QN_HYD || 20;
     const HYD_DROSSEL = ['stromregel', 'drossel', 'drv'], HYD_RUECK = ['rueck', 'entsperr'];
     function hydEigen(F) {
@@ -4498,13 +4536,14 @@
         c.pDBV = c.ag ? Math.max(1, zahl(c.ag.o.p, 60)) : Math.max(1, Number(unit.pressure) || 100);
         c.A = hydAggregatEin(unit, c.ag ? zahl(c.ag.o.q, 8) : Number(unit.maxFlow) || 20, c.zyl, c.pDBV);
         if (c.ag) LW.set(c.ag, { q: c.A.q, aus: c.A.aus });
-        for (const o of c.zyl) { const k = c.karte[o.id]; hydLastEin(o, teil(k.zyl), k.dir() >= 0, c.pDBV, true); }
         return c;
     }
     function hydSichtbarNach(c, d, dt) {
         if (!sim) return;
         const e = hydMessen(c.karte, c.ag && c.ag.id, c.zyl, hydGlatt, d);
-        hydLiveWerte(c.F, c.unit, c.zyl, c.karte, e, c.A.aus ? 0 : c.A.q, c.pDBV, c.A.pumpe, dt);
+        const mess = {};
+        for (const t of plan.teile) if (MESS_2D[t.typ] && istHyd(t) && t.o.anlage) mess[t.o.anlage] = { p: Math.max(0, pPort(t, '1')), an: !!(sim.zust[t.id] || {}).an };
+        hydLiveWerte(c.F, c.unit, c.zyl, c.karte, e, c.A.aus ? 0 : c.A.q, c.pDBV, c.A.pumpe, dt, mess);
     }
 
     // ---- Plan → 2D-Anlage ----
@@ -4570,7 +4609,7 @@
         if (bereich) try { bereich.scrollTo({ left: sx, top: sy, behavior: 'instant' }); } catch (e) {}
     }
     function hydZyl2DLoeschen(F, o) {
-        F.filter(q => ['valve_hyd', 'throttle_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd'].includes(q.type) && q.targetCylinderId === o.id)
+        F.filter(q => ['valve_hyd', 'throttle_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'valve_pneu', 'throttle'].includes(q.type) && q.targetCylinderId === o.id)
             .forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
         const C = hydSchlaeuche();
         for (let i = C.length - 1; i >= 0; i--) if (C[i]._sys === 'hyd' && (C[i].aObjId === o.id || C[i].bObjId === o.id)) C.splice(i, 1);
@@ -4583,7 +4622,7 @@
         const ag = plan.teile.find(t => t.typ === 'aggregat');
         let nr = 0;
         for (const t of plan.teile) {
-            if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew') continue;
+            if (!hydZylT(t)) continue;
             const dw = t.typ === 'zyl_dw';
             const K = hydWeg(t, 'K'), S = dw ? hydWeg(t, 'S') : {};
             const v = K.ventil || S.ventil;
@@ -4615,6 +4654,8 @@
             o.pistonD = zahl(t.o.d, 20); o.rodD = zahl(t.o.dStange, dw ? 8 : 6); o.stroke = zahl(t.o.hub, 100);
             o.linkedVarExt = ext || null; o.linkedVarRet = dw ? (ret || null) : null;
             if (!dw) o.linkedVar = ext || null;
+            const oh = o.hyd || (o.hyd = {});
+            oh.last = Math.max(0, zahl(t.o.last, 0)); oh.lastArt = t.o.lastArt || 'gewicht'; oh.lastAb = Math.max(0, zahl(t.o.lastAb, 0));
             kennNach2D(o, t);
             const ventil = F.find(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id);
             if (ventil) {
@@ -4663,7 +4704,7 @@
             }
             F = fabrik(); R = reeds2D(o, F);
             hydSpiegel.set(o.id, { teil: t.id, vt: v ? v.id : null, linksExt, d: o.pistonD, ds: o.rodD, hub: o.stroke,
-                ext: o.linkedVarExt || '', ret: o.linkedVarRet || '', wahl, dr, rv,
+                ext: o.linkedVarExt || '', ret: o.linkedVarRet || '', wahl, dr, rv, last: JSON.stringify([oh.last, oh.lastArt, oh.lastAb]),
                 reed: JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' }) });
         }
         // Aggregat: Druck (DBV) und Förderstrom
@@ -4686,20 +4727,120 @@
             hydSpiegel.set(a.id, { sp: t.id, V0: h.volumen, p0: h.vordruck });
         }
         F.filter(q => q.type === 'accumulator_hyd' && !spIds.has(q.id) && hydSpiegel.has(q.id)).forEach(q => { hydSpiegel.delete(q.id); hydAusKette(q); });
+        F = hydMessAbgleichen(fabrik());
         // Zylinder, die der Plan erzeugt oder übernommen hat und die es im Plan nicht mehr gibt
         F = fabrik();
+        const weg = new Set();
         for (const [id, w] of [...hydSpiegel]) {
             if (!w.teil || benutzt.has(id)) continue;
-            hydSpiegel.delete(id);
+            hydSpiegel.delete(id); weg.add(id);
             const o = F.find(q => q.id === id); if (o) hydZyl2DLoeschen(F, o);
         }
-        plan.erzeugt = plan.erzeugt.filter(id => benutzt.has(id));
+        plan.erzeugt = plan.erzeugt.filter(id => !weg.has(id));
         if (typeof _applyHydManualConnections === 'function') try { _applyHydManualConnections(); } catch (e) {}
         if (typeof window.drawHydraulicHoses === 'function') try { window.drawHydraulicHoses(); } catch (e) {}
         try { if (window._syncCircuitFromFactory) window._syncCircuitFromFactory(); } catch (e) {}
         try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
     }
 
+    // ---- Druckschalter und Manometer: Versorgung (P) oder Zylinderseite (A/B) ----
+    const MESS_2D = { dschalter: 'pressure_switch_hyd', manometer: 'manometer_hyd' };
+    const istMess2D = q => q.type === 'pressure_switch_hyd' || q.type === 'manometer_hyd';
+    // Wo hängt das Messteil im Plan? Am Netz eines Hydraulikzylinders (A = Kolbenseite, B = Stangenseite), sonst P
+    function hydMessOrt(t) {
+        const nb = nachbarn(), gesehen = new Set([t.id + ':1']), stapel = [t.id + ':1'];
+        while (stapel.length) {
+            const k = stapel.pop();
+            for (const n of nb[k] || []) {
+                if (gesehen.has(n)) continue; gesehen.add(n);
+                const [tid, pid] = n.split(':'), q = teil(tid); if (!q) continue;
+                if (hydZylT(q) && q.o.anlage) return { ziel: q.o.anlage, rolle: pid === 'S' ? 'B' : 'A' };
+                if (q.typ === 'knoten') for (const w of nb[n] || []) stapel.push(w);
+                if (q.typ === 'knoten') for (const p of geo(q).ports) stapel.push(tid + ':' + p.id);
+            }
+        }
+        return { ziel: null, rolle: 'P' };
+    }
+    function hydMessSig(m) {
+        const h = m.hyd || {};
+        return JSON.stringify([m.role || 'P', (m.role || 'P') === 'P' ? null : m.targetCylinderId || null, h.schaltdruck, h.hysterese, !!h.oeffner, m.linkedVar || '']);
+    }
+    function hydMessWeg(m) {
+        const C = hydSchlaeuche();
+        for (let i = C.length - 1; i >= 0; i--) if (C[i]._sys === 'hyd' && (C[i].aObjId === m.id || C[i].bObjId === m.id)) C.splice(i, 1);
+        try { deleteObjRecursive(m); } catch (e) {}
+    }
+    // Planteil an P (Aggregat) oder an Zylinderseite A/B anschließen
+    function hydMessAnschliessen(t, rolle, ziel2D) {
+        plan.leitungen = plan.leitungen.filter(l => l.a.t !== t.id && l.b.t !== t.id);
+        let an = null;
+        if (rolle !== 'P') { const z = plan.teile.find(q => hydZylT(q) && q.o.anlage === ziel2D); if (z) an = { t: z.id, p: rolle === 'B' && z.typ === 'zyl_dw' ? 'S' : 'K' }; }
+        if (!an) { const ag = plan.teile.find(q => q.typ === 'aggregat'); if (ag) an = { t: ag.id, p: 'P' }; }
+        if (!an) return;
+        const L0 = portLage(teil(an.t), an.p);
+        if (L0) { t.x = snap(L0.x + 60 + 40 * plan.teile.filter(q => MESS_2D[q.typ] && q !== t && Math.abs(q.y - (L0.y - 30)) < 5).length); t.y = L0.y - 30; }
+        plan.leitungen.push({ id: neueId(), a: { t: t.id, p: '1' }, b: { t: an.t, p: an.p } });
+    }
+    function hydMessAus2D(t, m) {
+        const h = m.hyd || {};
+        if (t.typ === 'dschalter') { t.o.p = Math.max(1, Number(h.schaltdruck) || 80); t.o.hyst = Math.max(0.5, Number(h.hysterese) || Math.max(2, t.o.p * 0.05)); t.o.oeffner = !!h.oeffner; t.o.var = m.linkedVar || ''; }
+    }
+    function hydMessNeu(m) {
+        const typ = m.type === 'pressure_switch_hyd' ? 'dschalter' : 'manometer';
+        const t = { id: neueId(), typ, x: 0, y: 0, rot: 0, bez: m.normLabel || neueBezeichnung(typ, { hyd: true }), o: Object.assign({}, TYP[typ].optionen, { hyd: true, anlage: m.id }) };
+        hydMessAus2D(t, m);
+        plan.teile.push(t);
+        hydMessAnschliessen(t, m.role || 'P', m.targetCylinderId);
+        return t;
+    }
+    // Plan → 2D
+    function hydMessAbgleichen(F) {
+        const ids = new Set();
+        for (const t of plan.teile) {
+            const art = MESS_2D[t.typ];
+            if (!art || !istHyd(t)) continue;
+            const ort = hydMessOrt(t);
+            let m = t.o.anlage ? F.find(q => q.id === t.o.anlage && q.type === art) : null;
+            if (m && ((m.role || 'P') !== ort.rolle || (ort.rolle !== 'P' && m.targetCylinderId !== ort.ziel))) { hydSpiegel.delete(m.id); hydMessWeg(m); F = fabrik(); m = null; }
+            if (!m && typeof window._hydAnbauen === 'function') { const id = window._hydAnbauen(ort.ziel, art, ort.rolle); F = fabrik(); m = F.find(q => q.id === id); }
+            if (!m) continue;
+            if (art === 'pressure_switch_hyd') {
+                const h = m.hyd || (m.hyd = {}), p = Math.max(1, zahl(t.o.p, 80));
+                h.schaltdruck = p; h.hysterese = Math.max(0.5, zahl(t.o.hyst, Math.max(2, p * 0.05))); h.oeffner = !!t.o.oeffner;
+                m.linkedVar = t.o.var || null;
+            }
+            t.o.anlage = m.id; kennNach2D(m, t); ids.add(m.id);
+            hydSpiegel.set(m.id, { mess: t.id, sig: hydMessSig(m) });
+        }
+        for (const [id, w] of [...hydSpiegel]) {
+            if (!w.mess || ids.has(id)) continue;
+            hydSpiegel.delete(id);
+            const m = F.find(q => q.id === id); if (m) hydMessWeg(m);
+        }
+        return fabrik();
+    }
+    // 2D → Plan
+    function hydMessRueck(F, neu) {
+        let masse = false;
+        for (const [id, w] of hydSpiegel) {
+            if (!w.mess) continue;
+            const t = teil(w.mess); if (!t) continue;
+            const m = F.find(q => q.id === id);
+            if (!m) { masse = true; hydSpiegel.delete(id); neu.push(() => { plan.teile = plan.teile.filter(q => q.id !== t.id); plan.leitungen = plan.leitungen.filter(l => l.a.t !== t.id && l.b.t !== t.id); }); continue; }
+            const sig = hydMessSig(m); if (sig === w.sig) continue;
+            const alt = JSON.parse(w.sig), jetzt = JSON.parse(sig);
+            w.sig = sig; masse = true;
+            neu.push(() => { hydMessAus2D(t, m); if (alt[0] !== jetzt[0] || alt[1] !== jetzt[1]) hydMessAnschliessen(t, m.role || 'P', m.targetCylinderId); });
+        }
+        // in der 2D-Anlage neu angebaut
+        for (const m of F) {
+            if (!istMess2D(m) || hydSpiegel.has(m.id) || plan.teile.some(t => t.o && t.o.anlage === m.id)) continue;
+            if ((m.role || 'P') !== 'P' && !plan.teile.some(q => hydZylT(q) && q.o.anlage === m.targetCylinderId)) continue;
+            masse = true; hydSpiegel.set(m.id, { mess: '?', sig: hydMessSig(m) });
+            neu.push(() => { const t = hydMessNeu(m); hydSpiegel.set(m.id, { mess: t.id, sig: hydMessSig(m) }); });
+        }
+        return masse;
+    }
     // ---- 2D-Anlage → Plan (Kontextmenü, Auto-Schaltplan) ----
     // Rückschlagventil in die Leitung am Ventilanschluss setzen (entsperrbar: X von der Gegenseite)
     function hydRvEinsetzen(zt, port, typ) {
@@ -4731,6 +4872,7 @@
         if (!hydSpiegel.size) return;
         const neu = [];
         let masse = hydRueck(F, neu);
+        if (hydMessRueck(F, neu)) masse = true;
         for (const [id, w] of kennSpiegel) {
             const o = F.find(q => q.id === id), t = teil(w.teil);
             if (!o || !t) { kennSpiegel.delete(id); continue; }
@@ -4755,6 +4897,7 @@
                 if (o.pressure !== w.p || o.maxFlow !== w.q) { w.p = o.pressure; w.q = o.maxFlow; masse = true; neu.push(() => { ag.o.p = zahl(o.pressure, 100); ag.o.q = zahl(o.maxFlow, 20); }); }
                 continue;
             }
+            if (w.mess) continue;
             if (w.sp) {
                 const sp = teil(w.sp), h = o.hyd || {}; if (!sp) continue;
                 if (h.volumen !== w.V0 || h.vordruck !== w.p0) { w.V0 = h.volumen; w.p0 = h.vordruck; masse = true; neu.push(() => { sp.o.V0 = zahl(h.volumen, 0.7); sp.o.p0 = zahl(h.vordruck, 30); }); }
@@ -4766,6 +4909,8 @@
                 w.d = o.pistonD; w.ds = o.rodD; w.hub = o.stroke; masse = true;
                 neu.push(() => { t.o.d = o.pistonD || 20; t.o.dStange = o.rodD || t.o.dStange; t.o.hub = o.stroke || 100; });
             }
+            const oh = o.hyd || {}, lastJ = JSON.stringify([oh.last, oh.lastArt, oh.lastAb]);
+            if (w.last != null && lastJ !== w.last) { w.last = lastJ; neu.push(() => { t.o.last = Math.max(0, Number(oh.last) || 0); t.o.lastArt = oh.lastArt || 'presse'; t.o.lastAb = Math.max(0, Number(oh.lastAb) || 0); }); }
             const vt = w.vt && teil(w.vt);
             const ext = dw ? o.linkedVarExt || '' : o.linkedVar || o.linkedVarExt || '', ret = dw ? o.linkedVarRet || '' : '';
             if (vt && (ext !== w.ext || ret !== w.ret)) {

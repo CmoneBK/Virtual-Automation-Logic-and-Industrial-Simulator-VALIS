@@ -31770,6 +31770,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             'valve_pneu': {
                 directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                // Handbetätigung (Taster, Hebel …) des verbundenen Fluidplan-Ventils per Klick
+                clickSimulateWenn: function(obj) { return !!(window._fpHandVentilHat && window._fpHandVentilHat(obj)); },
+                clickSimulate: function(obj, e) { if (window._fpHandVentil2D) window._fpHandVentil2D(obj, e); },
                 build: function(obj, el, var1, var2) {
                     // 🌟 FIX: Ventil ist wieder 50px breit! (Schläuche können so exakt ankern)
                     obj.width = 50; obj.height = 40; obj.isDouble = (var2 === 'double' || var2 === 'triple'); obj.isTriple = (var2 === 'triple');
@@ -32168,6 +32171,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             },
             'valve_hyd': {
                 directSpawn: true, noRodAttach: true, hideFromPluginManager: true,
+                // Handbetätigung (Taster, Hebel …) des verbundenen Fluidplan-Ventils per Klick
+                clickSimulateWenn: function(obj) { return !!(window._fpHandVentilHat && window._fpHandVentilHat(obj)); },
+                clickSimulate: function(obj, e) { if (window._fpHandVentil2D) window._fpHandVentil2D(obj, e); },
                 build: function(obj, el, var1, var2) {
                     obj.width = 50; obj.height = 40; obj.isDouble = (var2 === 'double' || var2 === 'triple'); obj.isTriple = (var2 === 'triple');
                     el.className = 'f2d-obj f2d-valve-hyd';
@@ -32200,6 +32206,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 },
                 animate: function(obj, spsState) {
                     let isActive = false;
+                    // Von Hand betätigtes Planventil (Hebel, Taster …): Stellung kommt aus dem Fluidplan
+                    const _hs = window._fpHydStellung2D ? window._fpHydStellung2D(obj) : null;
+                    if (_hs) {
+                        if (_hs !== obj.valveState) { obj.valveState = _hs; if (typeof SoundEngine !== 'undefined') SoundEngine.clack(); }
+                        const _a = _hs === 'ext';
+                        obj.el.classList.toggle('active-ext', obj.isTriple && _hs === 'ext'); obj.el.classList.toggle('active-ret', obj.isTriple && _hs === 'ret');
+                        obj.el.classList.toggle('active', !obj.isTriple && _a); obj.isActive = _a;
+                        return;
+                    }
                     let extVar = obj.linkedVarExt, retVar = obj.linkedVarRet;
                     if (obj.targetCylinderId) {
                         let parentCyl = factoryObjects.find(o => o.id === obj.targetCylinderId);
@@ -39929,7 +39944,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (e.button !== 0) return; 
                 // 1. Klicks im Simulationsmodus (Taster/Schalter)
                 // 1. Klicks im Simulationsmodus (Taster/Schalter)
-                if (isSimulationActive && (dataObj.type === 'taster' || dataObj.type === 'schalter' || dataObj.type === 'nothalt' || (ComponentRegistry[dataObj.type] && ComponentRegistry[dataObj.type].clickSimulate))) {
+                if (isSimulationActive && (dataObj.type === 'taster' || dataObj.type === 'schalter' || dataObj.type === 'nothalt' || (ComponentRegistry[dataObj.type] && ComponentRegistry[dataObj.type].clickSimulate && !(ComponentRegistry[dataObj.type].clickSimulateWenn && !ComponentRegistry[dataObj.type].clickSimulateWenn(dataObj))))) {
                     e.stopPropagation(); 
                     let varName = dataObj.linkedVar; 
                     let domBox = document.getElementById(`sim_in_${varName}`);
@@ -78774,7 +78789,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zo"></script>
+<script src="fluidplan.js?v=20261115zq"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115b"></script>
 </body>

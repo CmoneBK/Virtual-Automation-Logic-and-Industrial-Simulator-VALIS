@@ -73807,6 +73807,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 Hebel rastet bei an = true um) → true/false
         //   b.fpEinstellen(id, { offen, p, zeit … })   Einstellung eines Fluidplan-Teils → true/false;
         //                                 b.drossel(id, prozent) stellt auch Drossel/DRV als pneu_fp
+        // Ab Version 17 (Melde- und Analoggeräte in 3D):
+        //   zustand().objekte[id].anzeige   Text, den die Anzeige des Bauteils in 2D gerade zeigt
+        //                                 (7-Seg-Display, Drucksensor, Durchflusssensor, Messumformer,
+        //                                 Sollwertsteller, Zeiger-/Balkenanzeige, Regelstrecke …)
+        //   zustand().objekte[id].ana       einfache Werte der Analog-Einstellungen (obj.ana: min, max,
+        //                                 einheit, wert, art …), damit 3D Skala und Zeiger wie in 2D zeigt
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -73880,7 +73886,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 16,
+            version: 17,
             fpBetaetigen: function(id, seite, an) {
                 return typeof window._fpHand3D === 'function' ? window._fpHand3D(id, seite, an) : false;
             },
@@ -73944,6 +73950,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (o.isActive != null) z.isActive = !!o.isActive;
                     if (o.type === 'pneu_fp' && typeof window._fp3d === 'function') z.fp = window._fp3d(o);
+                    // Ab Version 17: Anzeigetext und Analog-Einstellungen (Melde- und Analoggeräte in 3D)
+                    if (o.ana && typeof o.ana === 'object') {
+                        const a = {};
+                        for (const k in o.ana) {
+                            const v = o.ana[k], t = typeof v;
+                            if (t === 'number' ? isFinite(v) : t === 'boolean' || (t === 'string' && v.length < 40)) a[k] = v;
+                        }
+                        z.ana = a;
+                    }
+                    if (o.el && o.el.querySelector) {
+                        const anz = o.el.querySelector('.f2d-display-val, .f2d-psen-display, .f2d-ana-wert');
+                        if (anz && anz.textContent) z.anzeige = String(anz.textContent).trim().slice(0, 24);
+                    }
                     objekte[o.id] = z;
                 });
                 const teile = factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), w: Math.round(i.width || i.w || 0),

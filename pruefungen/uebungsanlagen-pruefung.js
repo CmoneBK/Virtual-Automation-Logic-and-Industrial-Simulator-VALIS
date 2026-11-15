@@ -36,15 +36,15 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
 const BEIDE_T = [['d', 'TASTER_LINKS'], ['d', 'TASTER_RECHTS'], ['w', 0.3], ['u', 'TASTER_LINKS'], ['u', 'TASTER_RECHTS']];
 const NH_ENTRIEGELN_START_QUITT = (start, bis) => [['u', 'NOT_HALT'], ['w', 0.5], ['t', start], ['w', 1.5], ['t', 'TASTER_QUITTIEREN'], ['w', 0.6], ['t', start], ['bis', bis, 10]];
 const SZ = {
-  'ua-sortieranlage-1': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 5], ['bis', 3, 45], ['t', 'TASTER_STOPP'], ['bis', 1, 3],
+  'ua-sortieranlage-1': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 5], ['bis', 3, 45], ['t', 'TASTER_STOPP'], ['bis', 1, 3],
     ['t', 'TASTER_START'], ['w', 1], ['d', 'NOT_HALT'], ['bis', 2, 3], ['u', 'NOT_HALT']],
-  'ua-sortieranlage-2': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 90], ['bis', 1, 60], ['bis', 2, 30]],
-  'ua-sortieranlage-3': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 120], ['t', 'TASTER_QUITTIEREN'], ['w', 0.6], ['t', 'TASTER_START'], ['bis', 1, 5],
+  'ua-sortieranlage-2': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 90], ['bis', 1, 60], ['bis', 2, 30]],
+  'ua-sortieranlage-3': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 120], ['t', 'TASTER_QUITTIEREN'], ['w', 0.6], ['t', 'TASTER_START'], ['bis', 1, 5],
     ['w', 2], ['d', 'NOT_HALT'], ['bis', 2, 3], ['w', 0.5]].concat(NH_ENTRIEGELN_START_QUITT('TASTER_START', 3)),
-  'ua-abfuellstation-1': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 5], ['bis', 3, 60], ['t', 'TASTER_STOPP'], ['bis', 1, 3],
+  'ua-abfuellstation-1': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 5], ['bis', 3, 60], ['t', 'TASTER_STOPP'], ['bis', 1, 3],
     ['t', 'TASTER_START'], ['w', 1], ['d', 'NOT_HALT'], ['bis', 2, 3], ['u', 'NOT_HALT']],
-  'ua-abfuellstation-2': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 150], ['bis', 1, 60], ['bis', 2, 30]],
-  'ua-abfuellstation-3': [['w', 1], ['t', 'TASTER_START'], ['bis', 0, 200], ['t', 'TASTER_QUITTIEREN'], ['w', 0.6], ['t', 'TASTER_START'], ['bis', 1, 5],
+  'ua-abfuellstation-2': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 150], ['bis', 1, 60], ['bis', 2, 30]],
+  'ua-abfuellstation-3': [['w', 1], ['tw', 'TASTER_START', 'S.MOTOR_BAND'], ['bis', 0, 200], ['t', 'TASTER_QUITTIEREN'], ['w', 0.6], ['t', 'TASTER_START'], ['bis', 1, 5],
     ['w', 3], ['d', 'NOT_HALT'], ['bis', 2, 3], ['w', 0.5]].concat(NH_ENTRIEGELN_START_QUITT('TASTER_START', 3)),
   'ua-praegestation-1': [['bis', 0, 4], ['d', 'TASTER_LINKS'], ['bis', 1, 3], ['d', 'TASTER_RECHTS'], ['bis', 2, 10], ['u', 'TASTER_LINKS'], ['u', 'TASTER_RECHTS'], ['bis', 3, 10]],
   'ua-praegestation-2': [['w', 1]].concat(BEIDE_T, [['bis', 0, 20], ['bis', 3, 3]], BEIDE_T, [['bis', 1, 20], ['bis', 2, 20]]),
@@ -53,16 +53,16 @@ const SZ = {
     ['u', 'TASTER_LINKS'], ['u', 'TASTER_RECHTS'], ['bis', 2, 3], ['w', 0.3],
     ['d', 'TASTER_LINKS'], ['d', 'TASTER_RECHTS'], ['bis', 1, 10], ['d', 'NOT_HALT'], ['bis', 3, 6], ['u', 'TASTER_LINKS'], ['u', 'TASTER_RECHTS'],
     ['u', 'NOT_HALT'], ['w', 0.5], ['t', 'TASTER_QUITTIEREN'], ['bis', 4, 15]],
-  'ua-bohrstation-1': [['bis', 0, 4], ['t', 'TASTER_START'], ['bis', 1, 30], ['w', 1], ['t', 'TASTER_START'], ['bis', 2, 30]],
-  'ua-bohrstation-2': [['w', 1], ['wenn', 'S.LAMPE_BEREIT', 5], ['t', 'TASTER_START'], ['bis', 0, 20], ['bis', 2, 20], ['bis', 1, 20], ['wenn', 'S.LAMPE_BEREIT', 10], ['w', 0.5], ['t', 'TASTER_START'], ['bis', 3, 40]],
-  'ua-bohrstation-3': [['w', 1], ['wenn', 'S.LAMPE_BEREIT', 5], ['t', 'TASTER_START'], ['bis', 0, 40], ['d', 'SCHALTER_DAUER'], ['w', 0.3], ['t', 'TASTER_START'], ['bis', 1, 90],
+  'ua-bohrstation-1': [['bis', 0, 4], ['tw', 'TASTER_START', '!S.REED_SPANNER_HINTEN || S.SPULE_SPANNEN'], ['bis', 1, 30], ['w', 1], ['tw', 'TASTER_START', '!S.REED_SPANNER_HINTEN || S.SPULE_SPANNEN'], ['bis', 2, 30]],
+  'ua-bohrstation-2': [['w', 1], ['wenn', 'S.LAMPE_BEREIT', 5], ['tw', 'TASTER_START', '!S.REED_SPANNER_HINTEN || S.SPULE_SPANNEN'], ['bis', 0, 20], ['bis', 2, 20], ['bis', 1, 20], ['wenn', 'S.LAMPE_BEREIT', 10], ['w', 0.5], ['t', 'TASTER_START'], ['bis', 3, 40]],
+  'ua-bohrstation-3': [['w', 1], ['wenn', 'S.LAMPE_BEREIT', 5], ['tw', 'TASTER_START', '!S.REED_SPANNER_HINTEN || S.SPULE_SPANNEN'], ['bis', 0, 40], ['d', 'SCHALTER_DAUER'], ['w', 0.3], ['t', 'TASTER_START'], ['bis', 1, 90],
     ['wenn', 'S.SCHRITT_4 && S.REED_SPANNER_VORN && !S.REED_VORSCHUB_HINTEN && !S.REED_VORSCHUB_VORN', 30], ['d', 'NOT_HALT'], ['bis', 2, 10], ['u', 'SCHALTER_DAUER'], ['w', 0.3],
     ['u', 'NOT_HALT'], ['w', 0.5], ['t', 'TASTER_QUITTIEREN'], ['bis', 3, 20]],
   'ua-rolltor-1': [['w', 1], ['d', 'TASTER_AUF'], ['bis', 0, 8], ['u', 'TASTER_AUF'], ['w', 0.3], ['d', 'TASTER_ZU'], ['w', 1.2], ['d', 'TASTER_AUF'], ['bis', 2, 3],
     ['u', 'TASTER_AUF'], ['bis', 1, 8], ['u', 'TASTER_ZU'], ['bis', 3, 3]],
-  'ua-rolltor-2': [['w', 1], ['t', 'TASTER_AUF'], ['bis', 0, 8], ['t', 'TASTER_ZU'], ['w', 0.8], ['t', 'TASTER_AUF'], ['bis', 3, 3], ['bis', 1, 8],
+  'ua-rolltor-2': [['w', 1], ['tw', 'TASTER_AUF', 'S.MOTOR_AUF'], ['bis', 0, 8], ['tw', 'TASTER_ZU', 'S.MOTOR_ZU'], ['w', 0.8], ['t', 'TASTER_AUF'], ['bis', 3, 3], ['bis', 1, 8],
     ['t', 'TASTER_AUF'], ['w', 1.2], ['t', 'TASTER_STOPP'], ['bis', 2, 3]],
-  'ua-rolltor-3': [['w', 1], ['t', 'TASTER_AUF'], ['bis', 0, 15], ['bis', 1, 2], ['w', 0.8], ['d', 'LICHTGITTER'], ['w', 0.4], ['u', 'LICHTGITTER'],
+  'ua-rolltor-3': [['w', 1], ['tw', 'TASTER_AUF', 'S.MOTOR_AUF'], ['bis', 0, 15], ['bis', 1, 2], ['w', 0.8], ['d', 'LICHTGITTER'], ['w', 0.4], ['u', 'LICHTGITTER'],
     ['bis', 2, 10], ['bis', 3, 15]]
 };
 
@@ -78,6 +78,16 @@ async function bedienen(page, schritte, vorlage) {
   const setz = (n, b) => page.evaluate(([n, b]) => window.valisBruecke.setzeEingang(n, b), [n, b]);
   for (const s of schritte) {
     if (s[0] === 't') { await setz(s[1], true); await w(s[2] || 0.3); await setz(s[1], false); }
+    else if (s[0] === 'tw') {
+      // Taster tippen, bis die erwartete Wirkung eintritt (höchstens drei Mal)
+      for (let n = 1; n <= 3; n++) {
+        await setz(s[1], true); await w(0.3); await setz(s[1], false);
+        const frist = Date.now() + 1500; let da = false;
+        while (!da && Date.now() < frist) { const S = (await zustand(page)).S; da = new Function('S', 'return ' + s[2])(S); if (!da) await w(0.1); }
+        if (da || vorlage) break;
+        console.log('      … ' + s[1] + ' ohne Wirkung, noch einmal (' + n + ')');
+      }
+    }
     else if (s[0] === 'd') await setz(s[1], true);
     else if (s[0] === 'u') await setz(s[1], false);
     else if (s[0] === 'w') await w(s[1]);
@@ -166,6 +176,7 @@ async function bedienen(page, schritte, vorlage) {
       const labels = await page.evaluate(() => (0, eval)('activeTask').conditions.map(c => c.label));
       const z = await bedienen(page, SZ[id], vorlage);
       const alle = labels.every((l, i) => z.ok[i]);
+      if (!vorlage && !(alle && z.geloest)) console.log('      Zustand: ' + Object.keys(z.S).filter(k => z.S[k] === true).join(' '));
       if (!vorlage && versuch === 1 && !(alle && z.geloest)) { console.log(id + ' – erster Versuch nicht vollständig, zweiter Versuch'); await page.close(); continue; }
       if (!vorlage) {
         console.log(id + ' – Musterlösung (' + z.t.toFixed(1) + ' s Simulation)');

@@ -42286,7 +42286,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             factoryObjects.forEach(obj => {
                 if (obj.type === 'pneumatic_zone') {
                     let insideIds = [];
-                    let pneuTypes = ['compressor', 'manifold', 'valve_pneu', 'throttle'];
+                    let pneuTypes = ['compressor', 'manifold', 'valve_pneu', 'throttle', 'pneu_fp'];
+                    // pneu_fp (Fluidplan-Teile) ragen je nach Darstellung etwas über: Mitte zählt
+                    const pneuDrin = (o, zx, zy) => {
+                        if (o.type === 'pneu_fp') { const cx = o.x + (o.width || 0) / 2, cy = o.y + (o.height || 30) / 2; return cx >= zx - 5 && cx <= zx + obj.width + 5 && cy >= zy - 5 && cy <= zy + obj.height + 5; }
+                        return o.x >= zx - 5 && o.y >= zy - 5 && o.x + o.width <= zx + obj.width + 5 && o.y + (o.height || 30) <= zy + obj.height + 5;
+                    };
                     // 1. Bewegung synchronisieren (Hat sich die Kiste bewegt?)
                     if (obj.lastX !== undefined && obj.lastY !== undefined) {
                         let dx = obj.x - obj.lastX;
@@ -42295,9 +42300,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             factoryObjects.forEach(o => {
                                 if (o !== obj && pneuTypes.includes(o.type)) {
                                     // War das Bauteil VOR der Bewegung innerhalb der Zone? (+/- 5px Toleranz)
-                                    let isInside = (o.x >= obj.lastX - 5 && o.y >= obj.lastY - 5 && 
-                                                    o.x + o.width <= obj.lastX + obj.width + 5 && 
-                                                    o.y + (o.height || 30) <= obj.lastY + obj.height + 5);
+                                    let isInside = pneuDrin(o, obj.lastX, obj.lastY);
                                     if (isInside) {
                                         o.x += dx; 
                                         o.y += dy;
@@ -42313,10 +42316,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // 2. Speicher-Liste für den Garbage Collector aktualisieren
                     factoryObjects.forEach(o => {
                         if (o !== obj && pneuTypes.includes(o.type)) {
-                            let isInside = (o.x >= obj.x - 5 && o.y >= obj.y - 5 && 
-                                            o.x + o.width <= obj.x + obj.width + 5 && 
-                                            o.y + (o.height || 30) <= obj.y + obj.height + 5);
-                            if (isInside) insideIds.push(o.id);
+                            if (pneuDrin(o, obj.x, obj.y)) insideIds.push(o.id);
                         }
                     });
                     window.pneumaticZoneMemory[obj.id] = insideIds;
@@ -78257,7 +78257,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115l"></script>
+<script src="fluidplan.js?v=20261115n"></script>
 <script src="elektro-messen.js?v=20261115a"></script>
 </body>
 </html>

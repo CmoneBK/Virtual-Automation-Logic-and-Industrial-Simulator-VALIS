@@ -5508,15 +5508,15 @@ function versorgungMerken(F) {
         sichtbarGeworden();
     }
 
-    // Vorerst nur auf Freischaltung sichtbar: einmal ?fluidplan=1 aufrufen (merkt sich der Browser),
-    // ?fluidplan=0 blendet den Knopf wieder aus.
+    // Knopf standardmäßig sichtbar; ?fluidplan=0 blendet ihn aus (merkt sich der Browser).
     function freigeschaltet() {
         try {
             const q = new URLSearchParams(location.search).get('fluidplan');
+            // Seit 15.11.2026 standardmäßig an (Christoph); ?fluidplan=0 blendet ihn aus, ?fluidplan=1 wieder ein
             if (q === '1') localStorage.setItem('valisFluidplan', '1');
-            else if (q === '0') localStorage.removeItem('valisFluidplan');
-            return localStorage.getItem('valisFluidplan') === '1';
-        } catch (e) { return false; }
+            else if (q === '0') localStorage.setItem('valisFluidplan', '0');
+            return localStorage.getItem('valisFluidplan') !== '0';
+        } catch (e) { return true; }
     }
     function knopfSichtbar() {
         const b = document.getElementById('btn-view-fluid');

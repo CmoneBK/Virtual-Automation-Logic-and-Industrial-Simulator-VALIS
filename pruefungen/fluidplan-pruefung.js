@@ -975,7 +975,8 @@ const FAELLE = {
     // Zurück ins Hauptfenster
     await pop.evaluate(() => document.querySelector('.detached-cell[data-panel-id="fluid-wrapper"] .detached-cell-reattach-btn').click());
     await page.waitForTimeout(800);
-    await page.evaluate(() => { try { if (typeof closeHub === 'function') closeHub(); } catch (e) {} Fluidplan.umschalten(); }); await page.waitForTimeout(800);
+    await page.evaluate(() => { try { if (typeof closeHub === 'function') closeHub(); } catch (e) {} }); await page.waitForTimeout(800);
+    // „Zurück ins Hauptfenster“ blendet den Plan dort gleich wieder ein (kein umschalten nötig)
     const e = await page.evaluate(() => { const p = document.getElementById('fluid-wrapper'), f = document.getElementById('fp-fenster'); return { im: !!f && f.parentElement === p, w: p.offsetWidth, teile: f.querySelectorAll('.fp-svg [data-t]').length, abk: document.getElementById('fp-abk').style.display }; });
     ok('zurückgeholt: wieder Panel im Hauptfenster und gezeichnet', e.im && e.w > 100 && e.teile >= 4, JSON.stringify(e));
     ok('zurückgeholt: Knopf „Abkoppeln“ wieder da', e.abk === '', e.abk);

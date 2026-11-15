@@ -1666,6 +1666,12 @@
         .f2d-obj.f2d-zylinder-wrapper .f2d-zyl-magnet { top: 1px; background: linear-gradient(90deg, #455a64 0 2px, #e53935 2px 6px, #455a64 6px); border-radius: 1.5px; box-shadow: 0 0 0 1px rgba(28,38,43,0.45); }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-zyl-kolben { background: linear-gradient(180deg, #b0bec5, #fafafa 35%, #cfd8dc 55%, #78909c); border: 1px solid #607d8b; border-radius: 0 2px 2px 0; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-zyl-kolben::after { content: ''; position: absolute; right: -3px; top: -3px; width: 6px; height: 14px; border-radius: 1px; background: linear-gradient(180deg, #78909c, #b0bec5 30%, #546e7a); border: 1px solid #263238; box-sizing: border-box; }
+        /* Darstellungen des Zylinders (Bild aus fluidplan.js über dem Gehäuse): aufgeschnitten, echt geschlossen, Normsymbol */
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder, .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder { background: transparent; border-color: transparent; box-shadow: none; }
+        .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-schnitt > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-aussen > .f2d-zylinder::after, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::before, .f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zylinder::after { display: none; }
+        .f2d-zylinder-wrapper.zyl-bild-schnitt .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-aussen .f2d-zyl-magnet, .f2d-zylinder-wrapper.zyl-bild-symbol .f2d-zyl-magnet { opacity: 0; }
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben { background: #000; border: none; height: 3.2px; top: 13.4px; border-radius: 0; }
+        .f2d-obj.f2d-zylinder-wrapper.zyl-bild-symbol > .f2d-zyl-kolben::after { background: #000; border: none; width: 2px; right: 0; top: -2px; height: 7px; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-resize-handle { background: transparent; border-left: none; }
         .f2d-obj.f2d-zylinder-wrapper > .f2d-resize-handle:hover { background: rgba(255,255,255,0.35); }
         .f2d-obj.f2d-zylinder-wrapper .f2d-pneu-port { background: radial-gradient(circle at 50% 30%, #4fc3f7 0 2px, #90a4ae 2.5px); border-width: 1.5px; border-radius: 2px; }
@@ -40420,6 +40426,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         saveFactoryState(); ctxMenu.style.display = 'none';
                     };
                     ctxMenu.appendChild(btnV);
+                    if (!obj.hasHydraulics && window._fpZylBild) {
+                        const _dw = document.createElement('label'); _dw.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 15px;font-size:11px;color:#ddd;';
+                        _dw.onclick = e => e.stopPropagation(); _dw.onmousedown = e => e.stopPropagation();
+                        _dw.innerHTML = '<span>🖼 Darstellung</span>';
+                        const _ds = document.createElement('select'); _ds.style.cssText = 'font-size:11px;max-width:150px';
+                        [['gehaeuse', 'Gehäuse (gewohnt)'], ['symbol', 'Normsymbol'], ['schnitt', 'Echt, aufgeschnitten'], ['aussen', 'Echt, geschlossen']].forEach(([v, n]) => { const op = document.createElement('option'); op.value = v; op.textContent = n; _ds.appendChild(op); });
+                        _ds.value = (obj.pneu && obj.pneu.bild) || (window._fpBildStandard ? window._fpBildStandard() : 'gehaeuse');
+                        _ds.onchange = () => { (obj.pneu = obj.pneu || {}).bild = _ds.value; window._fpZylBild(obj); saveFactoryState(); };
+                        _dw.appendChild(_ds); ctxMenu.appendChild(_dw);
+                    }
                     if (obj.type === 'zylinder_double' && !obj.hasPneumatics) {
                         let brakeOn = obj.hasBrake !== false;
                         let btnBrake = document.createElement('div'); btnBrake.className = 'ctx-item';
@@ -43124,6 +43140,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (obj.extension < 0) obj.extension = 0;
                         let extPixels = (obj.extension / 100) * obj.width;
                         if (obj.rodEl) obj.rodEl.style.transform = `translateX(${extPixels}px)`; 
+                        if (window._fpZylBild) window._fpZylBild(obj);
                         let magTravel = obj.width - 20; let magPos = 5 + (obj.extension / 100) * magTravel;
                         if (obj.magnetEl) obj.magnetEl.style.left = `${magPos}px`; 
                         let rad = (obj.rotation || 0) * Math.PI / 180;
@@ -78046,6 +78063,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115f"></script>
+<script src="fluidplan.js?v=20261115i"></script>
 </body>
 </html>

@@ -778,16 +778,16 @@ const FAELLE = {
     const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
     factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
     window.pneuConnections = []; Fluidplan._leeren();
-    const typen = ['rueck', 'drossel', 'drv', 'wechsel', 'zweidruck', 'schnell', 'druckregel', 'manometer', 'dschalter', 'daempfer', 'stopfen', 'zeit', 'folge'];
+    const typen = ['rueck', 'drossel', 'drv', 'wechsel', 'zweidruck', 'schnell', 'druckregel', 'manometer', 'dschalter', 'daempfer', 'stopfen', 'zeit', 'folge', 'wartung', 'quelle', 'schwenk'];
     const teile = typen.map(t => Fluidplan._neu2D(t));
     const n0 = teile.map(o => window._fpPorts2D(o).length).join();
     const erg = {};
     for (const b of ['gehaeuse', 'schnitt', 'aussen', 'symbol']) {
       window._fpAlleVentile(b); await warte(50);
       erg[b] = teile.filter(o => b === 'symbol' ? !o.el.querySelector('svg.fp-bau') : !!o.el.querySelector('svg.fp-bau-' + b)).length;
-      R.push(['alle 13 Teile als ' + b + ', Anschlüsse gleich', erg[b] === typen.length && teile.map(o => window._fpPorts2D(o).length).join() === n0, erg[b]]);
+      R.push(['alle ' + typen.length + ' Teile als ' + b + ', Anschlüsse gleich', erg[b] === typen.length && teile.map(o => window._fpPorts2D(o).length).join() === n0, erg[b]]);
     }
-    R.push(['aufgeschnitten zeigt Luftwege, geschlossen nicht', (window._fpAlleVentile('schnitt'), teile.every(o => o.el.querySelector('.fp-b-luft') || /stopfen/.test(o.pneu.fp.typ))) && (window._fpAlleVentile('aussen'), teile.every(o => !o.el.querySelector('.fp-b-luft')))]);
+    R.push(['aufgeschnitten zeigt Luftwege, geschlossen nicht', (window._fpAlleVentile('schnitt'), teile.every(o => o.el.querySelector('.fp-b-luft') || /stopfen|daempfer/.test(o.pneu.fp.typ))) && (window._fpAlleVentile('aussen'), teile.every(o => !o.el.querySelector('.fp-b-luft')))]);
     teile.forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
     // Beispiel mit Drosselrückschlagventilen: im Gehäusebild färben sich die Luftwege in der Simulation
     window.loadExample('code'); await warte(800);
@@ -799,6 +799,40 @@ const FAELLE = {
     let ok = false; for (let i = 0; i < 40 && !ok; i++) { await warte(100); ok = blau(); }
     R.push(['Luftwege eines Drosselrückschlagventils zeigen Druck', ok]);
     window.toggleSimulation(); await warte(200);
+    // Normsymbol: Rückschlagkugel hebt in der Simulation ab
+    window._fpAlleVentile('symbol'); await warte(100);
+    window.toggleSimulation(); await warte(600);
+    const zw = setInterval(() => { spsState.ZYL_AUS = true; spsState.ZYL_EIN = false; }, 5);
+    let hebt = false;
+    for (let i = 0; i < 300 && !hebt; i++) { await warte(20); hebt = drvs.some(d => { const k = d.el.querySelector('.fp-kugel'); return k && /translate/.test(k.getAttribute('transform') || ''); }); }
+    clearInterval(zw);
+    R.push(['Normsymbol: Kugel des Drosselrückschlagventils hebt ab', hebt]);
+    window.toggleSimulation(); await warte(200);
+    window._fpAlleVentile('gehaeuse');
+    return R;
+  },
+  'Zylinder in vier Darstellungen, Kolben und Kammerdruck laufen mit': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    window.loadExample('code'); await warte(800);
+    const z = factoryObjects.find(o => o.type === 'zylinder_double');
+    window._fpAlleVentile('gehaeuse'); await warte(50);
+    R.push(['Gehäuse: gewohntes 2D-Bild ohne Zusatzbild', !z.el.querySelector('svg.f2d-zyl-bild')]);
+    for (const b of ['symbol', 'schnitt', 'aussen']) {
+      window._fpAlleVentile(b); await warte(50);
+      R.push(['Zylinder als ' + b, !!z.el.querySelector('svg.f2d-zyl-bild') && z.el.classList.contains('zyl-bild-' + b) && z.pneu.bild === b]);
+    }
+    window._fpAlleVentile('schnitt'); await warte(50);
+    window.toggleSimulation();
+    let ok = false;
+    for (let i = 0; i < 60 && !ok; i++) { spsState.ZYL_AUS = true; await warte(100); const k = z.el.querySelectorAll('svg.f2d-zyl-bild rect'); ok = Array.from(k).some(e => /rgba\(41,182,246/.test(e.getAttribute('fill') || '')); }
+    R.push(['aufgeschnitten: Kammer zeigt Druck in der Simulation', ok]);
+    window.toggleSimulation(); await warte(200);
+    const st = JSON.parse(JSON.stringify(getFactoryStateObj())); const zz = st.objects ? st.objects.find(o => o.id === z.id) : (st.factoryObjects || []).find(o => o.id === z.id);
+    R.push(['Darstellung wird gespeichert', !!zz && zz.pneu && zz.pneu.bild === 'schnitt']);
+    window._fpAlleVentile('gehaeuse'); await warte(50);
+    R.push(['zurück auf Gehäuse', !z.el.querySelector('svg.f2d-zyl-bild')]);
     return R;
   },
   'Rollenhebel und altes Magnetventil in der 2D-Anlage': async () => {

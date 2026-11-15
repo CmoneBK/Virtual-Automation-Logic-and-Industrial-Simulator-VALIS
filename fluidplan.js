@@ -4176,7 +4176,10 @@
         const zyl = F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics);
         if (!zyl.length && F.some(o => o.type === 'hydraulic_unit') && hydZylinder(F).length) return ausAnlageHyd(F);
         if (!zyl.length) { status('In der 2D-Anlage gibt es keinen Zylinder mit Pneumatik oder Hydraulik.'); return 0; }
-        if (plan.teile.length && !W().confirm('Der Fluidplan wird durch die Pneumatik der 2D-Anlage ersetzt. Weiter?')) return 0;
+        // Pneumatik und Hydraulik in derselben 2D-Anlage: beide kommen in den Plan, die Hydraulik rechts daneben
+        const hz = F.some(o => o.type === 'hydraulic_unit') ? hydZylinder(F) : [];
+        if (plan.teile.length && !W().confirm(`Der Fluidplan wird durch die ${hz.length ? 'Pneumatik und Hydraulik' : 'Pneumatik'} der 2D-Anlage ersetzt. Weiter?`)) return 0;
+        if (hz.length) hydSpiegel.clear();
         aendern(() => {
             const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'), null, F.filter(o => o.type === 'pneu_fp'));
             // Fluidplan-Teile der 2D-Anlage gehören jetzt zum Plan
@@ -4190,9 +4193,24 @@
                 t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
             });
             plan.teile = r.teile; plan.leitungen = r.leitungen; plan.erzeugt = []; plan.anlage = true;
+            if (hz.length) {
+                const h = planAusHyd2D(F, hz);
+                let maxX = -Infinity; for (const t of plan.teile) maxX = Math.max(maxX, boxWelt(t)[2]);
+                let minX = Infinity; for (const t of h.plan.teile) minX = Math.min(minX, t.x - 80);
+                const dx = isFinite(maxX) && isFinite(minX) ? snap(maxX + 160 - minX) : 0;
+                h.plan.teile.forEach(t => { t.x += dx; });
+                hz.forEach(o => {
+                    const k = h.karte[o.id], t = k && h.plan.teile.find(q => q.id === k.zyl);
+                    if (!t) return;
+                    const R = reeds2D(o, F);
+                    t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
+                });
+                plan.teile = plan.teile.concat(h.plan.teile); plan.leitungen = plan.leitungen.concat(h.plan.leitungen);
+                F.filter(istMess2D).forEach(m => { if ((m.role || 'P') === 'P' || hz.some(o => o.id === m.targetCylinderId)) hydMessNeu(m); });
+            }
         });
         einpassen();
-        return zyl.length;
+        return zyl.length + hz.length;
     }
 
     // Hydraulik der 2D-Anlage als Plan übernehmen und verbinden
@@ -4349,7 +4367,8 @@
         const H = Object.assign({}, { hyd: true });
         const L = (a, ap, b, bp) => { const l = { id: nid(), a: { t: a, p: ap }, b: { t: b, p: bp } }; leitungen.push(l); return l.id; };
         const ag = { id: nid(), typ: 'aggregat', x: 0, y: 400, rot: 0, bez: unit.normLabel || '', o: Object.assign({}, TYP.aggregat.optionen, H, { q: unit.maxFlow || 20, p: unit.pressure || 100, anlage: unit.id }) };
-        const tk = { id: nid(), typ: 'tank', x: 220 + 340 * Math.max(0, zyl.length - 1) + 140, y: 440, rot: 0, bez: '', o: Object.assign({}, TYP.tank.optionen, H) };
+        // Tank gleich neben dem Aggregat (in 2D steckt er im Aggregat), mit Kennzeichen
+        const tk = { id: nid(), typ: 'tank', x: 90, y: 460, rot: 0, bez: '-CLA1', o: Object.assign({}, TYP.tank.optionen, H) };
         teile.push(ag, tk);
         const cfg = o => o.hyd || {};
         F.filter(o => o.type === 'accumulator_hyd').forEach((a, i) => {
@@ -5536,6 +5555,7 @@
             try { symbol2D(o); updateObjTransform(o); } catch (e) {}
         }
         for (const o of (fabrik() || [])) if (zylArt(o)) { (o.pneu = o.pneu || {}).bild = bild; n++; try { window._fpZylBild(o); } catch (e) {} }
+        for (const o of (fabrik() || [])) if (hydBildArt(o)) { (o.pneu = o.pneu || {}).bild = bild; n++; try { window._fpHydBild(o); } catch (e) {} }
         knopfBild();
         try { if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
         try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
@@ -5554,7 +5574,7 @@
         const k = document.getElementById('btn-pneubild'); if (!k) return;
         const b = bildStandard(), i = BILDER.indexOf(b), n = BILDER[(i + 1) % BILDER.length];
         k.innerHTML = `<svg width="22" height="20" viewBox="0 0 22 20" style="display:block">${BILD_ICON[b]}</svg>`;
-        k.title = `Pneumatik-Teile: ${BILD_NAME[b]}. Klick: alle Teile als ${BILD_NAME[n]}. Einzelne Teile per Rechtsklick → Darstellung.`;
+        k.title = `Pneumatik- und Hydraulikteile: ${BILD_NAME[b]}. Klick: alle Teile als ${BILD_NAME[n]}. Einzelne Teile per Rechtsklick → Darstellung.`;
         k.setAttribute('data-bild', b);
     }
     window._fpBildWeiter = () => { const i = BILDER.indexOf(bildStandard()); return window._fpAlleVentile(BILDER[(i + 1) % BILDER.length]); };
@@ -6509,9 +6529,10 @@
     // Magnetring, Feder), 'symbol' = Normsymbol. Gezeichnet als Bild über dem Gehäuse; Kolben und
     // Kammerdruck laufen in jedem Bild mit (window._fpZylBild je Bild der Simulation).
     // ------------------------------------------------------------
-    const zylArt = obj => !!obj && typeof obj.type === 'string' && obj.type.startsWith('zylinder') && !obj.hasHydraulics;
+    const zylArt = obj => !!obj && typeof obj.type === 'string' && obj.type.startsWith('zylinder');
     const zylMode = obj => { const b = obj.pneu && obj.pneu.bild; return BILDER.includes(b) ? b : bildStandard(); };
     function zylDruck(obj) {
+        if (obj.hasHydraulics) return [Number(obj.hydPA) || 0, Number(obj.hydPB) || 0];
         const m = (window._fluidPressures && window._fluidPressures.pneu) || {};
         return [Number(m[obj.id + ':1']) || 0, Number(m[obj.id + ':2']) || 0];
     }
@@ -6556,10 +6577,21 @@
             for (const y of [10.2, 18.6]) mk('rect', { x: W - 5.5, y, width: 2.4, height: 1.2, fill: '#212121' }, s);
             R.kolben = mk('g', {}, s);
             mk('rect', { x: 0, y: 4.3, width: 7, height: 21.4, rx: 0.6, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.6 }, R.kolben);
-            mk('rect', { x: 2, y: 4.3, width: 3, height: 21.4, fill: '#c62828', opacity: 0.85 }, R.kolben);   // Magnetring
+            if (!obj.hasHydraulics) mk('rect', { x: 2, y: 4.3, width: 3, height: 21.4, fill: '#c62828', opacity: 0.85 }, R.kolben);   // Magnetring
+            else for (const x of [1.6, 4.2]) mk('rect', { x, y: 4.3, width: 1.2, height: 21.4, fill: '#37474f' }, R.kolben);   // Führungsband
             for (const x of [0.4, 5.4]) for (const y of [4.3, 23.9]) mk('rect', { x, y, width: 1.2, height: 1.8, fill: '#212121' }, R.kolben);
             // Deckel (Endlagen)
             for (const x of [0, W - 7]) mk('rect', { x, y: 0, width: 7, height: 30, fill: `url(#fpk-${uid})`, opacity: 0.35 }, s);
+        } else if (obj.hasHydraulics) {
+            // geschlossen, Hydraulik: Stahlrohr, kräftige Köpfe mit Zugankern
+            for (const y of [3, 27]) mk('line', { x1: 9, y1: y, x2: W - 9, y2: y, stroke: '#455a64', 'stroke-width': 1.4 }, s);   // Zuganker
+            for (const x of [0, W - 10]) {
+                mk('rect', { x, y: -2, width: 10, height: 34, rx: 0.8, fill: `url(#fpk-${uid})`, stroke: '#1c262b', 'stroke-width': 0.8 }, s);
+                for (const y of [3, 27]) mk('circle', { cx: x + 5, cy: y, r: 1.8, fill: '#b0bec5', stroke: '#1c262b', 'stroke-width': 0.5 }, s);   // Mutter
+            }
+            mk('rect', { x: W - 2, y: 9, width: 4, height: 12, rx: 1, fill: '#78909c', stroke: '#263238', 'stroke-width': 0.5 }, s);
+            const tx = mk('text', { x: W / 2, y: 17.5, 'font-size': 6, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }, s);
+            tx.textContent = `Ø${obj.pistonD || 20} × ${obj.stroke || 100}`;
         } else {
             // geschlossen: Aluprofil mit Sensornuten, Deckel mit Schrauben
             for (const y of [6, 24]) { mk('line', { x1: 8, y1: y, x2: W - 8, y2: y, stroke: '#455a64', 'stroke-width': 0.8 }, s); mk('line', { x1: 8, y1: y + 1, x2: W - 8, y2: y + 1, stroke: '#fff', 'stroke-opacity': 0.6, 'stroke-width': 0.6 }, s); }
@@ -6597,13 +6629,75 @@
             R.feder.setAttribute('points', pts.join(' '));
         }
         if (R.kA) {
-            const [pa, pb] = zylDruck(obj), fa = luftFarbe(pa), fb = luftFarbe(pb);
+            const H = !!obj.hasHydraulics, [pa, pb] = zylDruck(obj), fa = luftFarbe(pa, H), fb = luftFarbe(pb, H);
             R.kA.setAttribute('x', 7); R.kA.setAttribute('width', Math.max(0, x - 7)); R.kA.setAttribute('fill', fa);
             R.kB.setAttribute('x', x + kw); R.kB.setAttribute('width', Math.max(0, W - 7 - x - kw)); R.kB.setAttribute('fill', R.ew ? '#eceff1' : fb);
             if (R.pA) R.pA.setAttribute('stroke', fa); if (R.pB) R.pB.setAttribute('stroke', fb);
         }
     };
     window._fpZylAlle = () => { for (const o of (fabrik() || [])) if (zylArt(o)) { try { window._fpZylBild(o); } catch (e) {} } };
+    // ------------------------------------------------------------
+    // Hydraulikteile der 2D-Anlage in den vier Darstellungen: 'gehaeuse' = gewohntes 2D-Bild,
+    // 'symbol' = Normsymbol, 'schnitt'/'aussen' = echt (dieselben Bilder wie die Fluidplan-Teile).
+    // Als Bild über dem Teil; Anschlüsse, Kennzeichen und Messwert bleiben die des 2D-Teils.
+    // ------------------------------------------------------------
+    const HYD_BILD = {
+        valve_hyd: o => {
+            const zyl = (fabrik() || []).find(q => q.id === o.targetCylinderId), ew = zyl && zyl.type === 'zylinder_single';
+            if (o.isTriple) return { typ: 'ventil', o: { wege: '4/3', mitte: 'gesperrt', links: 'magnet', rechts: 'magnet' } };
+            if (ew || !o.isDouble && !(zyl && zyl.type === 'zylinder_double')) return { typ: 'ventil', o: { wege: '3/2', links: 'magnet', rechts: 'feder' } };
+            return { typ: 'ventil', o: { wege: '4/2', links: 'magnet', rechts: o.isDouble ? 'magnet' : 'feder' } };
+        },
+        throttle_hyd: o => ({ typ: 'stromregel', o: { q: Math.round(zahl(o.opening, 50) / 5) } }),
+        check_valve_hyd: o => ({ typ: (o.hyd || {}).entsperrbar === false ? 'rueck' : 'entsperr', o: {} }),
+        hydraulic_unit: o => ({ typ: 'aggregat', o: { p: zahl(o.pressure, 100), q: zahl(o.maxFlow, 20) } }),
+        accumulator_hyd: o => ({ typ: 'speicher', o: { V0: zahl((o.hyd || {}).volumen, 0.7), p0: zahl((o.hyd || {}).vordruck, 30) } }),
+        pressure_switch_hyd: o => ({ typ: 'dschalter', o: { p: zahl((o.hyd || {}).schaltdruck, 50) } }),
+        manometer_hyd: o => ({ typ: 'manometer', o: {} })
+    };
+    const hydBildArt = obj => !!obj && !!HYD_BILD[obj.type];
+    const hydMode = obj => { const b = obj.pneu && obj.pneu.bild; return BILDER.includes(b) ? b : bildStandard(); };
+    window._fpHydBildArt = hydBildArt;
+    function hydBildBauen(obj, mode) {
+        const f = HYD_BILD[obj.type](obj);
+        f.o = Object.assign({ hyd: true }, f.o); f.rot = 0; f.bild = mode;
+        const doc = obj.el.ownerDocument || document, halter = doc.createElement('div');
+        const schein = { id: 'hb' + obj.id, el: halter, type: 'pneu_fp', pneu: { fp: f }, normLabel: '' };
+        symbol2D(schein);
+        const svg = halter.querySelector('svg'); if (!svg) return null;
+        // Höhe des 2D-Teils, Breite nach dem Bild (ein Wegeventil ragt seitlich über)
+        const W = Math.max(1, obj.el.offsetWidth || obj.width || 40), H = Math.max(1, obj.el.offsetHeight || obj.height || 40), w = Math.max(1, schein.width || W), h = Math.max(1, schein.height || H);
+        const k = Math.min(1.3 * H / h, (obj.type === 'valve_hyd' ? 2.8 : 1.6) * W / w), bw = w * k, bh = h * k;
+        svg.setAttribute('width', bw.toFixed(1)); svg.setAttribute('height', bh.toFixed(1));
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.setAttribute('class', (svg.getAttribute('class') || '') + ' f2d-hyd-bild');
+        svg.style.cssText = `position:absolute;left:${((W - bw) / 2).toFixed(1)}px;top:${((H - bh) / 2).toFixed(1)}px;width:${bw.toFixed(1)}px;height:${bh.toFixed(1)}px;max-width:none;max-height:none;overflow:visible;pointer-events:none;z-index:1;color:#263238;--fp-papier:#fff;--fp-aktiv:#ffb300`;
+        if (mode === 'symbol') svg.style.background = 'rgba(255,255,255,.92)';
+        return svg;
+    }
+    window._fpHydBild = function (obj) {
+        if (!obj || !obj.el || !hydBildArt(obj)) return;
+        const mode = hydMode(obj), f = HYD_BILD[obj.type](obj);
+        const key = mode + '|' + (obj.el.offsetWidth || 0) + 'x' + (obj.el.offsetHeight || 0) + '|' + JSON.stringify(f);
+        if (obj._hydKey !== key) {
+            obj._hydKey = key;
+            const alt = obj.el.querySelector('svg.f2d-hyd-bild'); if (alt) alt.remove();
+            BILDER.forEach(b => obj.el.classList.toggle('hyd-bild-' + b, b === mode && b !== 'gehaeuse'));
+            obj.el.classList.toggle('hyd-bild', mode !== 'gehaeuse');
+            if (mode === 'gehaeuse') return;
+            const svg = hydBildBauen(obj, mode);
+            if (svg) obj.el.insertBefore(svg, obj.el.firstChild);
+        }
+        // Wegeventil: geschaltete Stellung wie in der 2D-Anlage (Kastenblock verschieben)
+        if (obj.type === 'valve_hyd' && mode === 'symbol') {
+            const b = obj.el.querySelector('svg.f2d-hyd-bild .fp-block'); if (!b) return;
+            const ext = obj.el.classList.contains('active-ext'), ret = obj.el.classList.contains('active-ret');
+            const dx = obj.isTriple ? (ext ? KASTEN : ret ? -KASTEN : 0) : (ext ? KASTEN : 0);
+            b.setAttribute('transform', dx ? `translate(${dx},0)` : '');
+        }
+    };
+    window._fpHydAlle = () => { for (const o of (fabrik() || [])) if (hydBildArt(o)) { try { window._fpHydBild(o); } catch (e) {} } };
+    setInterval(() => { try { window._fpHydAlle(); } catch (e) {} }, 250);
     setInterval(() => { try { if (!simLaeuft()) window._fpZylAlle(); } catch (e) {} }, 500);
     function stand2D(obj) {
         if (!simLaeuft()) return null;

@@ -198,6 +198,62 @@ const FAELLE = {
     F.importieren(roh); await warte(800);
     R.push(['2D-Zylinder bleibt nach dem Import', factoryObjects.some(o => o.id === z.o.anlage), '']);
     R.push(['Plan bleibt vollständig', typen() === 'drv,drv,quelle,ventil,wartung,zyl_dw', typen()]);
+  },
+  'Strg+Z: ein gemeinsamer Schritt für 2D-Anlage und Plan (Hydraulik und Pneumatik)': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const RE = /^(zylinder|valve_hyd|throttle_hyd|check_valve_hyd|valve_pneu|throttle$|pneu_fp)/;
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 700; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    saveFactoryState();
+    F.ausAnlage(); await warte(900);
+    const p0 = typen(), d0 = zwei(RE);
+    R.push(['Ausgangslage: Pneumatik und Hydraulik im Plan', /zyl_dw.*zyl_dw/.test(p0) && /stromregel/.test(p0), p0]);
+    // 1) In 2D löschen (wie die Entf-Taste: löschen, dann speichern)
+    const th = factoryObjects.find(o => o.type === 'throttle_hyd' && o.targetCylinderId === c.id && o.role === 'ext');
+    deleteObjRecursive(th); saveFactoryState(); await warte(900);
+    const p1 = typen();
+    R.push(['2D-Drossel gelöscht → Stromregelventil im Plan weg', (p1.match(/stromregel/g) || []).length === (p0.match(/stromregel/g) || []).length - 1, p1]);
+    window._undoFactory(); await warte(1200);
+    R.push(['Strg+Z in der 2D-Anlage: 2D und Plan wieder wie vorher', typen() === p0 && zwei(RE) === d0, [typen(), zwei(RE)]]);
+    // 2) Im Plan löschen, Strg+Z im Plan
+    const zp = F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd);
+    const id2 = zp.o.anlage;
+    F._entfernen(zp.id); await warte(900);
+    R.push(['Planzylinder gelöscht → 2D-Hydraulikzylinder weg', !factoryObjects.some(o => o.id === id2), id2]);
+    F._rueckgaengig(); await warte(1200);
+    R.push(['Strg+Z im Plan: Plan und 2D wieder wie vorher', typen() === p0 && zwei(RE) === d0, [typen(), zwei(RE)]]);
+    // 3) Danach wirkt der Abgleich weiter in beide Richtungen
+    const c2 = factoryObjects.find(o => o.id === F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd).o.anlage);
+    c2.pistonD = 63; await warte(900);
+    R.push(['nach Rückgängig: 2D-Änderung kommt im Plan an', F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd).o.d === 63, F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd).o.d]);
+  },
+  'Löschen während der Simulation: beide Richtungen, nichts kommt beim Stopp zurück': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const RE = /^(zylinder|valve_hyd|throttle_hyd|check_valve_hyd|valve_pneu|throttle$|pneu_fp)/;
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 700; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    saveFactoryState();
+    F.ausAnlage(); await warte(900);
+    toggleSimulation(); await warte(600);
+    // 2D-Hydraulikventil löschen
+    const v = factoryObjects.find(o => o.type === 'valve_hyd' && o.targetCylinderId === c.id);
+    deleteObjRecursive(v); saveFactoryState(); await warte(900);
+    R.push(['Sim läuft: 2D-Hydraulikventil gelöscht → Ventil im Plan weg', F.plan().teile.filter(t => t.typ === 'ventil').length === 1, typen()]);
+    // Pneumatikzylinder im Plan löschen
+    const zp = F.plan().teile.find(t => t.typ === 'zyl_dw' && !t.o.hyd), id = zp.o.anlage;
+    F._entfernen(zp.id); await warte(900);
+    R.push(['Sim läuft: Planzylinder gelöscht → 2D-Zylinder weg', !factoryObjects.some(o => o.id === id), id]);
+    const p1 = typen(), d1 = zwei(RE);
+    toggleSimulation(); await warte(1200);
+    R.push(['nach dem Stopp: Plan und 2D unverändert', typen() === p1 && zwei(RE) === d1, [p1, typen(), d1, zwei(RE)]]);
   }
 };
 

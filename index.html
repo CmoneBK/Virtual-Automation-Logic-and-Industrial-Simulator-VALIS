@@ -45028,12 +45028,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (window._fluidSchemaRedrawTimer) clearTimeout(window._fluidSchemaRedrawTimer);
             window._fluidSchemaRedrawTimer = setTimeout(_doRedraw, 80);
         };
-        function saveFactoryState() {
+        function saveFactoryState(art) {
             if (isLoadingFactory || isApplyingHistory) return;
+            // Fluidplan gleicht gerade ab: ein Schritt, gespeichert wird am Ende (eine Wahrheit, ein Rückgängig)
+            if (window._histStumm) return;
             const json = JSON.stringify(getFactoryStateObj());
             localStorage.setItem('logikFactoryState', json);
             factoryHistory.splice(historyIndex + 1);
-            factoryHistory.push(json);
+            // 'ersetzen': Folge einer Änderung, die eben gespeichert wurde (2D → Fluidplan) – gehört zum selben Schritt
+            if (art === 'ersetzen' && factoryHistory.length) factoryHistory[factoryHistory.length - 1] = json;
+            else factoryHistory.push(json);
             while (factoryHistory.length > HISTORY_MAX) factoryHistory.shift();
             historyIndex = factoryHistory.length - 1;
             window._syncCircuitFromFactory();
@@ -45048,6 +45052,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 try { window._refreshFactoryGlowMarkers(); } catch(_e) {}
             }
         }
+        window._undoFactory = () => undoFactory();
+        window._redoFactory = () => redoFactory();
+        window._factoryHistorie = () => ({ index: historyIndex, laenge: factoryHistory.length });
         function undoFactory() {
             if (historyIndex <= 0) return;
             historyIndex--;
@@ -78736,7 +78743,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zi"></script>
+<script src="fluidplan.js?v=20261115zj"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115b"></script>
 </body>

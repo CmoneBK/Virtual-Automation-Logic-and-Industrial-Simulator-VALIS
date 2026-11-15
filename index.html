@@ -106,6 +106,10 @@
            enthält. JS togglet `legend-grid.has-sk` nach jedem Parse. */
         .legend-sk-only { display: none; }
         .legend-grid.has-sk .legend-sk-only { display: block; }
+        /* Würde ein Legendentext umbrechen (Zoom, schmale Fenster), bleiben nur die Zeichen in einer Zeile; die Bedeutung steht im Tooltip (Christoph 15.11.2026) */
+        .legend-grid.kompakt { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+        .legend-grid.kompakt > span:not(.legend-code) { display: none !important; }
+        .legend-grid.kompakt > .legend-code { min-width: 2.2em; text-align: center; }
         .legend-code.assign { color: #C586C0; }
         .legend-code.rs { color: #CE9178; border-color: transparent; background: transparent; padding: 0;}
         .legend-rs-note { padding-top: 8px; border-top: 1px dashed #444; font-size: 11.5px; }
@@ -603,6 +607,12 @@
             font-size:13px !important; padding:4px 10px !important; line-height:1.25 !important; min-height:24px; box-sizing:border-box;
         }
         #left-panel .header-area button svg.vi, #left-panel .section-header button svg.vi, #left-panel .leg-ext-row button svg.vi { width:14px; height:14px; }
+        /* Logik-Editor-Kopf: wird es eng (Zoom, schmale Fenster), bleiben von Erklärmodus und Leeren nur die Symbole (Christoph 15.11.2026) */
+        #left-panel > .section-header { container-type:inline-size; }
+        @container (max-width: 500px) {
+            body:not(.vi-aus) #btn-explain-toggle, body:not(.vi-aus) #btn-code-leeren { font-size:0 !important; padding:4px 9px !important; }
+            body:not(.vi-aus) #btn-explain-toggle svg.vi, body:not(.vi-aus) #btn-code-leeren svg.vi { width:15px; height:15px; margin:0; }
+        }
         /* Layout: mit Text, solange Platz ist; wird es eng, nur das Symbol (wie Ton/Simulation) */
         .graph-top-bar #btn-layout-text { padding:5px 12px !important; }
         @container (max-width: 1160px) {
@@ -698,6 +708,8 @@
         #panel-resizer { height: 6px; cursor: ns-resize; background: #252526; border-top: 1px solid #444; border-bottom: 1px solid #444; margin: 2px 0; transition: background 0.2s; flex-shrink: 0; }
         #panel-resizer:hover, #panel-resizer.active { background: #007acc; border-color: #007acc; }
         #editor-container { display: flex; flex-direction: column; flex-grow: 1; min-height: 50px; gap: 10px; }
+        /* Zoom/kleine Höhe: Klartext, Speicher-Hilfe usw. bleiben im Logik-Editor und scrollen dort, statt unter das Sim-Panel zu rutschen (Christoph 15.11.2026) */
+        #editor-container { overflow-y: auto; overflow-x: hidden; }
         #simulator-container { display: flex; flex-direction: column; height: 40%; min-height: 50px; }
         #code, #highlighting {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -807,6 +819,8 @@
             transition: max-height 0.18s ease, padding 0.18s ease;
             flex-shrink: 0;
         }
+        /* Bei wenig Höhe (Zoom) schrumpft der Klartext und scrollt, statt unter das Sim-Panel zu rutschen */
+        #code-inspector.explain-active.has-content { flex-shrink: 1; min-height: 72px; }
         #code-inspector.explain-active.has-content { max-height: 280px; padding: 6px 10px 8px; overflow-y: auto; }
         #code-inspector .ci-header { color: #569cd6; font-weight: bold; font-size: 11px; margin-bottom: 4px; }
         #code-inspector .ci-row { margin: 2px 0; line-height: 1.5; }
@@ -3183,7 +3197,7 @@
             <span style="display:flex;gap:5px;align-items:center;" onclick="event.stopPropagation();">
                 <button id="btn-redstone-snippets" onclick="window._showRedstoneSnippetMenu()" title="Redstone-Schaltungen als VALIS-Code" style="display:none;background:#c93838;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🔴 Redstone-Snippets</button>
                 <button id="btn-explain-toggle" onclick="toggleExplainMode()" title="Aktivierbarer Code-/Logik-Erklärmodus: Blendet unter dem Editor ein Panel ein, das die aktuelle Code-Zeile in einen lesbaren deutschen Satz übersetzt. Folgt der Cursor-Position." style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">📖 Code-/Logik-Erklärmodus</button>
-                <button onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" title="Code-Editor leeren" style="background:#555;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🗑️ Leeren</button>
+                <button id="btn-code-leeren" onclick="if(!textarea.readOnly && confirm('Code-Editor leeren?')){textarea.value='';textarea.dispatchEvent(new Event('input'));}" title="Code-Editor leeren" style="background:#555;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">🗑️ Leeren</button>
                 <button onclick="window._codeUndo()" title="Rückgängig (Strg+Z)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">↶</button>
                 <button onclick="window._codeRedo()" title="Wiederholen (Strg+Y / Strg+Shift+Z)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">↷</button>
                 <button id="btn-code-editor-settings" onclick="window._openCodeEditorSettings(event)" title="Editor-Einstellungen (Zeilennummern, …)" style="background:#37474f;color:#fff;border:none;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer;line-height:1.4;">⚙️</button>
@@ -6005,6 +6019,32 @@ const aktiv = resolveLinked(obj, spsState);
 		</div>
     <script>
         // Legende: vier Knöpfe öffnen je einen Abschnitt; immer nur einer offen, nochmal klicken schließt.
+        // Legende kompakt: nur die Zeichen, sobald ein Text sonst umbrechen würde
+        (function () {
+            const g = document.getElementById('legend-grid');
+            if (!g || typeof ResizeObserver === 'undefined') return;
+            let laeuft = false;
+            const pruefen = () => {
+                if (laeuft) return; laeuft = true;
+                const war = g.classList.contains('kompakt');
+                g.classList.remove('kompakt');
+                const texte = [...g.children].filter(e => !e.classList.contains('legend-code') && e.offsetParent);
+                const umbruch = texte.some(e => { const lh = parseFloat(getComputedStyle(e).lineHeight) || 17; return e.getBoundingClientRect().height > lh * 1.4; });
+                g.classList.toggle('kompakt', umbruch);
+                g.querySelectorAll('.legend-code').forEach(c => {
+                    if (!c.dataset.titelAlt) c.dataset.titelAlt = c.title || '';
+                    const t = c.nextElementSibling && !c.nextElementSibling.classList.contains('legend-code') ? c.nextElementSibling.textContent.trim() : '';
+                    c.title = umbruch && t ? t + ' · ' + c.dataset.titelAlt : c.dataset.titelAlt;
+                });
+                if (war !== umbruch) window.dispatchEvent(new Event('resize'));
+                laeuft = false;
+            };
+            new ResizeObserver(() => requestAnimationFrame(pruefen)).observe(g.parentElement);
+            const sig = () => g.className.replace(/\bkompakt\b/, '').trim() + '|' + g.textContent;
+            let letzte = sig();
+            new MutationObserver(() => { const n = sig(); if (n !== letzte) { letzte = n; requestAnimationFrame(pruefen); } }).observe(g, { attributes: true, attributeFilter: ['class'], characterData: true, childList: true, subtree: true });
+            window._legendeKompaktPruefen = pruefen;
+        })();
         window._legExtToggle = function (k) {
             document.querySelectorAll('.leg-ext-btn').forEach(function (b) {
                 const auf = b.dataset.legExt === k && b.getAttribute('aria-expanded') !== 'true';

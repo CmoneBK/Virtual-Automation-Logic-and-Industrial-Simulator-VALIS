@@ -231,6 +231,35 @@ const FAELLE = {
     c2.pistonD = 63; await warte(900);
     R.push(['nach Rückgängig: 2D-Änderung kommt im Plan an', F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd).o.d === 63, F.plan().teile.find(t => t.typ === 'zyl_dw' && t.o.hyd).o.d]);
   },
+  'Versorgung: Quelle/Kompressor, Wartung/Verteiler, Aggregat, Tank in beide Richtungen': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan; window._findHydTankForCylinder = () => null;
+    const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
+    const hat = typ => factoryObjects.some(o => o.type === typ);
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 700; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    saveFactoryState();
+    F.ausAnlage(); await warte(900);
+    const T = typ => F.plan().teile.find(t => t.typ === typ);
+    R.push(['Ausgangslage: Quelle, Wartung, Aggregat, Tank', !!(T('quelle') && T('wartung') && T('aggregat') && T('tank')) && hat('compressor') && hat('manifold') && hat('hydraulic_unit') && hat('oil_tank'), typen()]);
+    // Plan → 2D
+    F._entfernen(T('wartung').id); await warte(700);
+    R.push(['Plan: Wartungseinheit gelöscht → 2D-Verteiler weg', !hat('manifold'), factoryObjects.map(o => o.type).filter(t => /manifold|compressor/.test(t))]);
+    F._entfernen(T('tank').id); await warte(700);
+    R.push(['Plan: Tank gelöscht → 2D-Öltank weg', !hat('oil_tank'), hat('oil_tank')]);
+    F._rueckgaengig(); await warte(1000); F._rueckgaengig(); await warte(1200);
+    R.push(['Strg+Z zweimal: Verteiler, Öltank, Wartung und Tank wieder da', hat('manifold') && hat('oil_tank') && !!T('wartung') && !!T('tank'), typen()]);
+    // 2D → Plan
+    deleteObjRecursive(factoryObjects.find(o => o.type === 'compressor')); saveFactoryState(); await warte(900);
+    R.push(['2D: Kompressor gelöscht → Quelle im Plan weg', !T('quelle'), typen()]);
+    deleteObjRecursive(factoryObjects.find(o => o.type === 'oil_tank')); saveFactoryState(); await warte(900);
+    R.push(['2D: Öltank gelöscht → Tank im Plan weg', !T('tank'), typen()]);
+    F._entfernen(T('aggregat').id); await warte(800);
+    R.push(['Plan: Aggregat gelöscht → 2D-Hydraulikaggregat und -verteiler weg', !hat('hydraulic_unit') && !hat('hydraulic_manifold'), [hat('hydraulic_unit'), hat('hydraulic_manifold')]]);
+    const nachher = typen(); await warte(1200);
+    R.push(['nichts kommt von selbst zurück', typen() === nachher && !hat('compressor') && !hat('oil_tank'), typen()]);
+  },
   'Löschen während der Simulation: beide Richtungen, nichts kommt beim Stopp zurück': async (R) => {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;

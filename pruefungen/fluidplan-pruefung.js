@@ -734,6 +734,27 @@ const FAELLE = {
     F.verbinden2D(false); F._leeren();
     return R;
   },
+  'Zentraler Umschalter: alle Ventile, Federteller und Anker im Schnitt': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    window.loadExample('code'); await warte(800);
+    R.push(['Beispiel hat altes Magnetventil', factoryObjects.some(o => o.type === 'valve_pneu')]);
+    const n = window._fpAlleVentile('schnitt'); await warte(300);
+    const vs = factoryObjects.filter(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'ventil');
+    R.push(['alle Ventile aufgeschnitten (altes umgebaut)', n >= 1 && !factoryObjects.some(o => o.type === 'valve_pneu') && vs.every(o => o.el.querySelector('svg.fp-echt')), n]);
+    R.push(['Schalter zeigt die Wahl', document.getElementById('sel-ventilbild').value === 'schnitt']);
+    const v = vs[0];
+    R.push(['Anker liegen auf dem Schieber (je Magnet)', v.el.querySelectorAll('.fp-r-schieber .fp-r-anker').length === ['links', 'rechts'].filter(k => v.pneu.fp.o[k] === 'magnet').length, v.pneu.fp.o.links + '/' + v.pneu.fp.o.rechts]);
+    v.pneu.fp.o.rechts = 'feder'; window._fp2d.refreshLabel(v); await warte(50);
+    R.push(['Federteller liegt auf dem Schieber', !!v.el.querySelector('.fp-r-schieber .fp-r-teller') && !!v.el.querySelector('.fp-r-feder[data-l]')]);
+    const neu = window.Fluidplan._neu2D('ventil'); await warte(100);
+    R.push(['neues Ventil übernimmt die zentrale Wahl', !!neu && !!neu.el.querySelector('svg.fp-echt')]);
+    try { deleteObjRecursive(neu); } catch (e) {}
+    window._fpAlleVentile('gehaeuse'); await warte(200);
+    R.push(['zurück auf Gehäuse', vs.every(o => !o.el.querySelector('svg.fp-echt'))]);
+    return R;
+  },
   'Rollenhebel und altes Magnetventil in der 2D-Anlage': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

@@ -63,11 +63,16 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const ist = svg && svg.querySelector('[data-festo-zaehler-ist="C1_S1"]'), vw = svg && svg.querySelector('[data-festo-zaehler-vorwahl="C1_S1"]');
     const q = svg && svg.querySelector('[data-festo-zaehler-led="q"][data-festo-slot="C1_S1"]');
     const fn = svg && svg.querySelector('[data-festo-zr-funktion="Z1_S1"]');
-    return { cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1, ist: ist && ist.textContent, vw: vw && vw.textContent, q: q && q.getAttribute('fill'), fn: fn && fn.textContent };
+    return { cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1, ist: ist && ist.textContent, vw: vw && vw.textContent, q: q && q.getAttribute('fill'), fn: fn && fn.textContent,
+      fiktivC: !!svg.querySelector('[data-festo-panel-type="zaehler"] [data-festo-fiktiv="zaehler"]'), fiktivTP: !!svg.querySelector('[data-festo-fiktiv="tp"]'),
+      fiktivAndere: svg.querySelectorAll('[data-festo-fiktiv]').length,
+      wirkX1: (() => { const l = svg.querySelector('[data-festo-zaehler-wirk="C1_S1"]'); return l ? +l.getAttribute('x1') : null; })() };
   });
   ok('Drei Impulse: Vorwahl erreicht, H1 an', z.cv === 3 && z.h1, JSON.stringify(z));
   ok('Anzeige am Brett: Stand 3, Vorwahl 3, LED „erreicht“ an', z.ist === '3' && z.vw === '3' && z.q === '#ff6d00');
   ok('Zeitrelais-Slot zeigt Funktion TP', z.fn === 'Funktion TP', z.fn);
+  ok('Wirkungslinie berührt die Rücksetzspule nicht (beginnt rechts davon mit Abstand)', z.wirkX1 >= 140, z.wirkX1);
+  ok('Vorwahlzähler und TP tragen „gibt es so nicht“ (nur diese zwei)', z.fiktivC && z.fiktivTP && z.fiktivAndere === 2, JSON.stringify([z.fiktivC, z.fiktivTP, z.fiktivAndere]));
   await page.evaluate(() => setTaster('RESET', true)); await w(200); await page.evaluate(() => setTaster('RESET', false)); await w(200);
   z = await page.evaluate(() => ({ cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1 }));
   ok('RESET: Stand 0, H1 aus', z.cv === 0 && !z.h1, JSON.stringify(z));

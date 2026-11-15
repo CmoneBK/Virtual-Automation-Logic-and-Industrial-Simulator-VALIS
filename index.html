@@ -4043,8 +4043,8 @@
                             <button type="button" onclick="window._fbAddModule('led')" title="FESTO 162244 · Meldeeinrichtung (8 LEDs + Hupe + Verteiler)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">💡 Meldeeinrichtung (LED/Hupe)</button>
                             <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
-                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
-                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU)</button>
+                            <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
+                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht. Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU) · Lernmodell</button>
                         </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
@@ -67311,6 +67311,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const _fw = el('text', { x: ZEITRELAIS.w - 42, y: baseY + 30, 'text-anchor': 'middle', 'font-size': 7, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g);
                     _fw.textContent = 'Funktion ' + (cType === 'tp' ? 'TP' : (r === 0 ? 'TON' : 'TOF'));
                     _fw.setAttribute('data-festo-zr-funktion', slotKey);
+                    // TP am Zeitrelais ist eine VALIS-Ergänzung: am FESTO 162243 gibt es sie so nicht
+                    if (cType === 'tp') {
+                        const _fn = el('text', { x: ZEITRELAIS.w - 42, y: baseY + 39, 'text-anchor': 'middle', 'font-size': 6, 'font-weight': 'bold', fill: '#c62828', 'font-family': 'Segoe UI, sans-serif' }, g);
+                        _fn.textContent = 'gibt es so nicht';
+                        _fn.setAttribute('data-festo-fiktiv', 'tp');
+                    }
                     // Spulen-LED rechts im Coil (neben dem Symbol)
                     const coilLed = el('circle', { cx: coilRight - 6, cy: mechLineY, r: 3.5, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
                     coilLed.setAttribute('data-festo-relais-led', '1');
@@ -67423,7 +67429,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 el('rect', { x: 0, y: 0, width: ZAEHLER.w, height: ZAEHLER.h, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
                 drawScrews(g, 0, 0, ZAEHLER.w, ZAEHLER.h);
                 el('text', { x: ZAEHLER.w/2, y: 24, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: PALETTE.titleText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = `Vorwahlzähler ${panelIdx}`;
-                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC · Festo 8605';
+                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC';
+                // Kein FESTO-Dokument: VALIS-Lernmodell, das es so als Steckmodul nicht gibt
+                const _fz = el('text', { x: ZAEHLER.w/2, y: 47, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold', fill: '#c62828', 'font-family': 'Segoe UI, sans-serif' }, g);
+                _fz.textContent = 'Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht';
+                _fz.setAttribute('data-festo-fiktiv', 'zaehler');
                 const busXs = [40, 95, 150, 210, 270, 330, 390];
                 busXs.forEach((bx, i) => drawSocket(g, bx, 56, PALETTE.socketRed, `C${panelIdx}_24V_${i+1}`, `C${panelIdx}`));
                 el('text', { x: 14, y: 55, 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' }, g).textContent = '+24V';
@@ -67459,8 +67469,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     });
                     el('text', { x: 52, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählen';
                     el('text', { x: 112, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Rücksetzen';
-                    // Wirkungslinie vom Zählwerk zu den Kontakten
-                    el('line', { x1: 127, y1: mechLineY, x2: 345, y2: mechLineY, stroke: PALETTE.trace, 'stroke-width': 1, 'stroke-dasharray': '4 3' }, g);
+                    // Wirkungslinie vom Zählwerk (Anzeige rechts) zu den Kontakten; sie endet vor der
+                    // Rücksetzspule, damit es nicht so aussieht, als schalte das Rücksetzen die Kontakte
+                    el('line', { x1: 150, y1: mechLineY, x2: 350, y2: mechLineY, stroke: PALETTE.trace, 'stroke-width': 1, 'stroke-dasharray': '4 3' }, g).setAttribute('data-festo-zaehler-wirk', slotKey);
                     for (let k = 1; k <= 4; k++) {
                         const cx = 165 + (k-1) * 48;
                         const isNC = k > 2;
@@ -73807,6 +73818,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         //                                 Hebel rastet bei an = true um) → true/false
         //   b.fpEinstellen(id, { offen, p, zeit … })   Einstellung eines Fluidplan-Teils → true/false;
         //                                 b.drossel(id, prozent) stellt auch Drossel/DRV als pneu_fp
+        // Ab Version 17 (Melde- und Analoggeräte in 3D):
+        //   zustand().objekte[id].anzeige   Text, den die Anzeige des Bauteils in 2D gerade zeigt
+        //                                 (7-Seg-Display, Drucksensor, Durchflusssensor, Messumformer,
+        //                                 Sollwertsteller, Zeiger-/Balkenanzeige, Regelstrecke …)
+        //   zustand().objekte[id].ana       einfache Werte der Analog-Einstellungen (obj.ana: min, max,
+        //                                 einheit, wert, art …), damit 3D Skala und Zeiger wie in 2D zeigt
         // zustand().objekte enthält ab Version 2 alle einfachen Werte der Bauteile
         // (Zahlen, Wahrheitswerte, kurze Texte), zustand().teile die Werkstücke.
         // Ab Version 4 (Elektro-Seite):
@@ -73880,7 +73897,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 16,
+            version: 17,
             fpBetaetigen: function(id, seite, an) {
                 return typeof window._fpHand3D === 'function' ? window._fpHand3D(id, seite, an) : false;
             },
@@ -73944,6 +73961,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (o.isActive != null) z.isActive = !!o.isActive;
                     if (o.type === 'pneu_fp' && typeof window._fp3d === 'function') z.fp = window._fp3d(o);
+                    // Ab Version 17: Anzeigetext und Analog-Einstellungen (Melde- und Analoggeräte in 3D)
+                    if (o.ana && typeof o.ana === 'object') {
+                        const a = {};
+                        for (const k in o.ana) {
+                            const v = o.ana[k], t = typeof v;
+                            if (t === 'number' ? isFinite(v) : t === 'boolean' || (t === 'string' && v.length < 40)) a[k] = v;
+                        }
+                        z.ana = a;
+                    }
+                    if (o.el && o.el.querySelector) {
+                        const anz = o.el.querySelector('.f2d-display-val, .f2d-psen-display, .f2d-ana-wert');
+                        if (anz && anz.textContent) z.anzeige = String(anz.textContent).trim().slice(0, 24);
+                    }
                     objekte[o.id] = z;
                 });
                 const teile = factoryItems.map(i => ({ x: Math.round(i.x), y: Math.round(i.y), w: Math.round(i.width || i.w || 0),

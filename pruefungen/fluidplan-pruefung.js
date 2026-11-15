@@ -960,6 +960,25 @@ const FAELLE = {
     R.push(['Wieder einlesen', F.exportieren().teile.length === 2, '']);
     return R;
   },
+  'Brücke v17 für die 3D-Werkstatt: Anzeigetext und Analogwerte': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    const b = window.valisBruecke;
+    R.push(['Brücke ab Version 17', b.version >= 17, b.version]);
+    const pid = b.hinzufuegen('setpoint_pot', { x: 100, y: 100, var1: 'SOLL3D' });
+    const mid = b.hinzufuegen('analog_meter', { x: 200, y: 100, var1: 'SOLL3D' });
+    const did = b.hinzufuegen('display', { x: 300, y: 100, var1: 'ZAHL3D' });
+    b.analog(pid, { min: 0, max: 100, einheit: '%' });
+    window.toggleSimulation(); await warte(400);
+    b.analog(pid, { wert: 70 }); await warte(400);
+    const z = b.zustand();
+    R.push(['Sollwertsteller: ana mit Bereich und Wert', z.objekte[pid].ana && z.objekte[pid].ana.max === 100 && z.objekte[pid].ana.wert === 70, JSON.stringify(z.objekte[pid].ana)]);
+    R.push(['… Anzeigetext wie in 2D', /70/.test(z.objekte[pid].anzeige || ''), z.objekte[pid].anzeige]);
+    R.push(['Zeigeranzeige: Anzeigetext und ana', typeof z.objekte[mid].anzeige === 'string' && !!z.objekte[mid].ana, z.objekte[mid].anzeige]);
+    R.push(['7-Seg-Display: Text auch ohne Wert', typeof z.objekte[did].anzeige === 'string', z.objekte[did].anzeige]);
+    window.toggleSimulation(); await warte(200);
+    return R;
+  },
   'Brücke v16 für die 3D-Werkstatt: Zustand, Handbetätigung, Drossel': async () => {
     const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
     factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });

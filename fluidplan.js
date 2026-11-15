@@ -1100,6 +1100,8 @@
         plan.teile = plan.teile.filter(t => TYP[t.typ]);
         kennzeichenAuffrischen(plan);   // alte Bezeichnungen 1A1/1V1 → -MM1/-QM1
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
+        // Spiegel gehören zum alten Plan (sonst hielte der Abgleich gleich benannte 2D-Teile für gelöscht)
+        try { spiegel.clear(); spiegel2D.clear(); kennSpiegel.clear(); hydSpiegel.clear(); gesehen2D = null; } catch (e) {}
         window._fpRoh = planExport();
         if (fenster) { zeichnen(); }
         knopfZustand();
@@ -3167,6 +3169,7 @@
             knopfZustand(); status();
         }
         if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } }
+        else if (!plan.anlage) gesehen2D = null;
         if (ts - plakettenZeit > 500) { plakettenZeit = ts; try { plaketten2D(); } catch (e) {} }
         if (!plan.teile.length) { letzte = ts; return; }
         const dt = Math.min(0.05, Math.max(0, (ts - letzte) / 1000)) * (window.simSpeed || 1);
@@ -3366,6 +3369,64 @@
     // statt beim nächsten Abgleich still überschrieben zu werden.
     const spiegel = new Map();
     let rueckZeit = 0;
+    // 2D-Ids, die nach dem letzten Abgleich da waren: fehlt eins davon, wurde es in der 2D-Anlage gelöscht
+    let gesehen2D = null;
+    const gesehenNeu = () => { const F = fabrik(); gesehen2D = F ? new Set(F.map(o => o.id)) : null; };
+    // In der 2D-Anlage gelöscht (einzeln, ganze Anlage oder „Alles löschen“) → auch im Plan weg.
+    // Eine Wahrheit: was in 2D fehlt, kommt beim nächsten Abgleich nicht still zurück.
+    function weg2D(F) {
+        const da = new Set(F.map(o => o.id));
+        if (!gesehen2D) { gesehen2D = da; return false; }
+        const fehlt = id => !!id && gesehen2D.has(id) && !da.has(id);
+        const weg = new Set(), auch2D = new Set();
+        const KETTE = ['valve_pneu', 'valve_hyd', 'throttle', 'throttle_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd'];
+        // Zylinder weg: was in 2D an ihm hing (Ventil, Drosseln, Rückschlagventile …) geht mit
+        const zylWeg = new Set();
+        for (const [id, w] of spiegel) if (w.reed != null && fehlt(id)) zylWeg.add(id);
+        for (const [id, w] of hydSpiegel) if (w.teil && fehlt(id)) zylWeg.add(id);
+        for (const t of plan.teile) if ((t.typ === 'zyl_dw' || t.typ === 'zyl_ew') && fehlt(t.o.anlage)) zylWeg.add(t.o.anlage);
+        for (const q of F) if (zylWeg.has(q.targetCylinderId) && KETTE.includes(q.type)) auch2D.add(q.id);
+        // Pneumatik: Ventil und Drosseln des Zylinders (die Drosseln verlieren in 2D ihren Zylinder)
+        for (const id of zylWeg) {
+            const z = spiegel.get(id); if (!z || z.reed == null) continue;
+            if (z.vt) weg.add(z.vt);
+            const dr = [z.drT && z.drT.ext, z.drT && z.drT.ret].filter(Boolean);
+            dr.forEach(d => weg.add(d));
+            for (const [tid, x] of spiegel) if (x.offen != null && dr.includes(x.teil)) auch2D.add(tid);
+        }
+        const gone = id => fehlt(id) || auch2D.has(id);
+        // Planteile, deren 2D-Gegenstück fehlt (Fluidplan-Teile mit Gästen macht rueck2D)
+        for (const t of plan.teile) if (t.o && t.o.anlage && !spiegel2D.has(t.o.anlage) && gone(t.o.anlage)) weg.add(t.id);
+        let quelleWeg = false;
+        for (const [id, w] of spiegel) {
+            if (!gone(id)) continue;
+            if (w.ventil) {
+                weg.add(w.ventil);
+                // Ventil weg, Zylinder bleibt: seine Drosseln bleiben im Plan und kommen als Fluidplan-Teile zurück
+                for (const [zid, z] of spiegel) if (z.vt === w.ventil && !gone(zid) && z.drT)
+                    for (const [tid, x] of spiegel) if (x.offen != null && (x.teil === z.drT.ext || x.teil === z.drT.ret)) { auch2D.add(tid); spiegel.delete(tid); }
+            } else if (w.quelle) { weg.add(w.quelle); quelleWeg = true; }
+            else if (w.teil && (w.reed != null || w.offen != null)) weg.add(w.teil);
+        }
+        if (!weg.size && !auch2D.size) { gesehen2D = da; return false; }
+        if (quelleWeg && !F.some(q => q.type === 'manifold' && da.has(q.id))) plan.teile.filter(t => t.typ === 'wartung').forEach(t => weg.add(t.id));
+        // Aggregat weg und kein Hydraulikaggregat mehr in 2D: der Tank gehört dazu
+        if (plan.teile.some(t => weg.has(t.id) && t.typ === 'aggregat') && !F.some(q => q.type === 'hydraulic_unit' && da.has(q.id)))
+            plan.teile.filter(t => t.typ === 'tank').forEach(t => weg.add(t.id));
+        for (const id of [...spiegel.keys()]) if (gone(id)) spiegel.delete(id);
+        for (const id of [...hydSpiegel.keys()]) if (gone(id)) hydSpiegel.delete(id);
+        aendern(() => {
+            F.filter(q => auch2D.has(q.id)).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
+            // Teile in der Leitung (Drosseln, Rückschlagventile) zuerst: die Leitung bleibt durchgehend
+            const inLeitung = id => { const t = teil(id); return t && (HYD_DROSSEL.includes(t.typ) || HYD_RUECK.includes(t.typ)); };
+            for (const id of weg) if (inLeitung(id)) drvEntfernen(id);
+            for (const id of weg) if (teil(id)) teilEntfernen(id);
+            plan.erzeugt = (plan.erzeugt || []).filter(id => !gone(id));
+        });
+        gesehenNeu();
+        if (weg.size) status('In der 2D-Anlage gelöscht – auch im Plan entfernt (Rückgängig holt es zurück).');
+        return true;
+    }
     // DRV in die Leitung zwischen Zylinderanschluss und Ventil setzen (1 zum Zylinder: Abluftdrosselung)
     function drvEinsetzen(zt, port, offen) {
         const l = plan.leitungen.find(q => (q.a.t === zt.id && q.a.p === port) || (q.b.t === zt.id && q.b.p === port));
@@ -3436,6 +3497,7 @@
     }
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage) return;
+        if (weg2D(F)) return;
         if (hydSpiegel.size) hydRueckAbgleich(F);
         if ((!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
         const neu = []; let masse = false;
@@ -3701,6 +3763,16 @@
         const wa = plan.teile.find(q => q.typ === 'wartung');
         if (wa) kennNach2D(F.find(q => q.type === 'manifold'), wa);
         teileNach2D(F, abgedeckt, benutzt);
+        // Aus der 2D-Anlage übernommene Zylinder, die im Plan gelöscht wurden, gehen auch in 2D
+        for (const [id, w] of [...spiegel]) {
+            if (w.reed == null || benutzt.has(id) || teil(w.teil)) continue;
+            spiegel.delete(id);
+            const o = F.find(q => q.id === id);
+            if (o && !plan.erzeugt.includes(id)) {
+                F.filter(q => ['valve_pneu', 'throttle'].includes(q.type) && q.targetCylinderId === id).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
+                try { deleteObjRecursive(o); } catch (e) {}
+            }
+        }
         // Vom Plan erzeugte 2D-Zylinder, die es im Plan nicht mehr gibt, wieder entfernen
         plan.erzeugt = plan.erzeugt.filter(id => {
             if (benutzt.has(id)) return true;
@@ -3714,6 +3786,7 @@
         });
         schlaeucheNach2D(fabrik() || F, abgedeckt);
         try { if (window._syncCircuitFromFactory) window._syncCircuitFromFactory(); } catch (e) {}
+        gesehenNeu();
     }
     // Gäste (Schalldämpfer/Stopfen), die direkt an einem Teil sitzen: Gast-Id → Wirt-Id
     function gaesteKarte() {
@@ -4664,6 +4737,8 @@
             const wahl = !dw ? 'single' : v && v.o.wege === '4/3' ? 'triple' : 'double';
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
             const typ2d = dw ? 'zylinder_double' : 'zylinder_single';
+            // Ventil gelöscht (Plan oder 2D): der 2D-Zylinder bleibt ein Hydraulikzylinder
+            if (o && o.type === typ2d && !o.hasHydraulics && hydSpiegel.has(o.id)) o.hasHydraulics = true;
             if (o && (o.type !== typ2d || !o.hasHydraulics)) {
                 if (plan.erzeugt.includes(o.id)) { hydZyl2DLoeschen(F, o); plan.erzeugt = plan.erzeugt.filter(id => id !== o.id); F = fabrik(); }
                 o = null;
@@ -4683,7 +4758,14 @@
                 F = fabrik();
             }
             if (v && !F.some(q => q.type === 'valve_hyd' && q.targetCylinderId === o.id)) { hydSetup2D(o, wahl); F = fabrik(); }
-            if (!v) { F.filter(q => ['valve_hyd', 'throttle_hyd', 'check_valve_hyd'].includes(q.type) && q.targetCylinderId === o.id).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} }); F = fabrik(); }
+            // Kein Wegeventil im Plan: in 2D steht nur der Zylinder (Drosseln und Rückschlagventile
+            // brauchen in 2D ein Ventil); im Plan bleiben sie stehen und kommen mit dem Ventil zurück
+            if (!v) {
+                const ids = new Set([K.sr, K.rv, S.sr, S.rv].filter(Boolean).map(q => q.o.anlage).filter(Boolean));
+                F.filter(q => ['valve_hyd', 'throttle_hyd', 'check_valve_hyd'].includes(q.type) && (q.targetCylinderId === o.id || ids.has(q.id))).forEach(q => { try { deleteObjRecursive(q); } catch (e) {} });
+                [K.sr, K.rv, S.sr, S.rv].forEach(q => { if (q) delete q.o.anlage; });
+                o.hasHydraulics = true; F = fabrik();
+            }
             benutzt.add(o.id);
             o.pistonD = zahl(t.o.d, 20); o.rodD = zahl(t.o.dStange, dw ? 8 : 6); o.stroke = zahl(t.o.hub, 100);
             o.linkedVarExt = ext || null; o.linkedVarRet = dw ? (ret || null) : null;
@@ -4702,7 +4784,7 @@
             for (const [rolle, W] of [['ext', K], ['ret', S]]) {
                 if (rolle === 'ret' && !dw) continue;
                 let th = hydAn2D(F, o, 'throttle_hyd').find(q => q.role === rolle);
-                if (W.sr) {
+                if (W.sr && v) {
                     if (!th) th = hydDrosselNeu(F, o, rolle, srNach2D(W.sr));
                     else drosselHyd2D(th, srNach2D(W.sr));
                     W.sr.o.anlage = th.id; kennNach2D(th, W.sr);
@@ -4718,7 +4800,7 @@
             for (const [seite, W] of [['A', K], ['B', S]]) {
                 if (seite === 'B' && !dw) continue;
                 let cv = hydAn2D(F, o, 'check_valve_hyd').find(q => (q.role || 'A') === seite);
-                if (W.rv) {
+                if (W.rv && v) {
                     if (!cv && typeof window._hydAnbauen === 'function') { const id = window._hydAnbauen(o.id, 'check_valve_hyd', seite); F = fabrik(); cv = F.find(q => q.id === id); }
                     if (cv) { (cv.hyd || (cv.hyd = {})).entsperrbar = W.rv.typ === 'entsperr'; W.rv.o.anlage = cv.id; kennNach2D(cv, W.rv); }
                     rv[seite] = W.rv.typ;
@@ -4963,7 +5045,8 @@
                     neu.push(() => { vt.o.wege = wahl === 'triple' ? '4/3' : '4/2'; if (wahl === 'triple' && !vt.o.mitte) vt.o.mitte = 'gesperrt'; vt.o.links = 'magnet'; vt.o.rechts = 'magnet'; });
                 }
             }
-            for (const rolle of dw ? ['ext', 'ret'] : ['ext']) {
+            // Ohne Wegeventil im Plan stehen Drosseln und Rückschlagventile nur im Plan
+            if (w.vt) for (const rolle of dw ? ['ext', 'ret'] : ['ext']) {
                 const th = hydAn2D(F, o, 'throttle_hyd').find(q => q.role === rolle), port = rolle === 'ext' ? 'K' : 'S';
                 const jetzt = th ? th.opening : null;
                 if (jetzt === w.dr[rolle]) continue;
@@ -4975,7 +5058,7 @@
                     else neu.push(() => { const sr = hydWeg(t, port).sr; if (sr) drvEntfernen(sr.id); });
                 }
             }
-            for (const seite of dw ? ['A', 'B'] : ['A']) {
+            if (w.vt) for (const seite of dw ? ['A', 'B'] : ['A']) {
                 const cv = hydAn2D(F, o, 'check_valve_hyd').find(q => (q.role || 'A') === seite), port = seite === 'A' ? 'K' : 'S';
                 const jetzt = cv ? ((cv.hyd || {}).entsperrbar !== false ? 'entsperr' : 'rueck') : null;
                 if (jetzt === w.rv[seite]) continue;
@@ -6934,6 +7017,7 @@
         },
         verbinden: (a, ap, b, bp) => { leitungAnlegen({ t: a, p: ap }, { t: b, p: bp }); },
         _ablegen: (typ, x, y, o) => setzen({ typ, o }, x, y),
+        _rueckgaengig: () => rueckgaengig(),
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },
         _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
         _neu: () => { sim = null; simInit(); aufzNeu(); },

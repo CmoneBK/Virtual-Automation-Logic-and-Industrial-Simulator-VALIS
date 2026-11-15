@@ -5454,6 +5454,23 @@ function versorgungMerken(F) {
     }
     // Nach Einblenden, Abkoppeln oder Zurückholen: Stil, Größe, Ansicht neu
     let letztesDok = null, letzteGroesse = '';
+    // Beim Öffnen: Ist der Plan leer und nicht verbunden, hat die 2D-Anlage aber schon
+    // Pneumatik oder Hydraulik, wird sie ohne Rückfrage übernommen und verbunden
+    // (Christoph 15.11.2026). Nur Versorgungsteile ohne Zylinder: leeren Plan verbinden.
+    function autoVerbinden() {
+        if (plan.anlage || plan.teile.length || window._fpKeinAutoVerbinden) return '';
+        if (typeof isLoadingFactory !== 'undefined' && isLoadingFactory) return '';
+        const F = fabrik(); if (!F || !F.length) return '';
+        const zyl = F.some(q => (q.type === 'zylinder_double' || q.type === 'zylinder_single') && (q.hasPneumatics || q.hasHydraulics));
+        const fluid = zyl || F.some(q => /^(compressor|manifold|pneu_fp|valve_pneu|valve_hyd|hydraulic_unit|oil_tank|throttle)$/.test(q.type));
+        if (!fluid) return '';
+        if (zyl) {
+            let n = 0; try { n = ausAnlage(); } catch (e) { console.warn('Fluidplan: Übernahme', e); }
+            if (n) { geoCache.clear(); einpassen(); return n + ' Zylinder aus der 2D-Anlage übernommen, Plan ist verbunden.'; }
+        }
+        aendern(() => { plan.anlage = true; });
+        return 'Mit der 2D-Anlage verbunden.';
+    }
     function sichtbarGeworden() {
         if (kennKonflikteLoesen()) { geoCache.clear(); speichern(); }
         fensterBauen();
@@ -5462,7 +5479,9 @@ function versorgungMerken(F) {
         letztesDok = D(); letzteGroesse = '';
         const ab = D().getElementById('fp-abk'); if (ab) ab.style.display = abgekoppelt() ? 'none' : '';
         W().requestAnimationFrame(() => {
+            const auto = autoVerbinden();
             ansichtSetzen(); zeichnen(); eigenschaften(); status(); knopfZustand();
+            if (auto) W().setTimeout(() => status(auto), 80);
             if (!fenster._eingepasst && svg && svg.getBoundingClientRect().width > 50) { einpassen(); fenster._eingepasst = true; }
         });
     }

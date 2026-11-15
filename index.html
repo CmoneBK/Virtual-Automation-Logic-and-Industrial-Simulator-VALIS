@@ -52590,7 +52590,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // T-port return lines (Tankrücklauf) — positions from port defs
             if (tankObj) {
                 factoryObjects.filter(o => o.type === 'valve_hyd').forEach(valve => {
-                    let tx = tankObj.x + tankObj.width / 2, ty = tankObj.y;
+                    let tT = hydVP(tankObj, 'T'), tx = tT ? tT.x : tankObj.x + tankObj.width / 2, ty = tT ? tT.y : tankObj.y;
                     if (valve.isDouble || valve.isTriple) {
                         let t1 = hydVP(valve, 'T1'), t2 = hydVP(valve, 'T2');
                         if (t1 && _hasHydAutoConn(valve.id, 'T1', tankObj.id, 'S')) drawHose(t1.x, t1.y, tx, ty, 'return');
@@ -52729,9 +52729,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._hydPortWorld = _portWorldPos;
         window._pneuPortWorld = _portWorldPos;
 
+        // Zeigt das Teil ein Bild aus fluidplan.js (Normsymbol, echt), liegen die Anschlüsse dort
         window._hydPortDefs = function(obj) {
+            const defs = _hydPortDefsRoh(obj), B = obj && obj._hydBildPorts;
+            if (!B) return defs;
+            return defs.map(d => B[d.id] ? Object.assign({}, d, { lx: B[d.id].lx, ly: B[d.id].ly }) : d);
+        };
+        function _hydPortDefsRoh(obj) {
             if (obj.type === 'hydraulic_unit') return [
-                { id:'P', label:'P', lx:90, ly:60, ptype:'pressure', rot:true },
+                { id:'P', label:'P', lx:(obj.width||110), ly:55, ptype:'pressure', rot:true },
                 { id:'S', label:'S', lx:20, ly:70, ptype:'pressure', rot:true }
             ];
             if (obj.type === 'oil_tank') return [
@@ -78711,7 +78717,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zb"></script>
+<script src="fluidplan.js?v=20261115zd"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115a"></script>
 </body>

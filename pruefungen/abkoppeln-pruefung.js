@@ -58,9 +58,22 @@ function server() {
     pruef(id + ': abgekoppelt ins eigene Fenster', r.imFenster && !r.imHaupt);
     pruef(id + ': im Fenster kein Abkoppel-Knopf', r.knopf === false);
   }
-  await pg.evaluate(() => window._reattachSinglePanel('factory-wrapper'));
-  await pg.waitForTimeout(400);
-  pruef('2D-Anlage zurück im Hauptfenster', await pg.evaluate(() => !!document.querySelector('#factory-wrapper > .panel-abk-btn')));
+  // „Zurück ins Hauptfenster“ im Kopf der Zelle: Panel ist danach im Hauptfenster aktiv
+  await pg.evaluate(() => window._sharedDetachWindow.document.querySelector('.detached-cell[data-panel-id="factory-wrapper"] .detached-cell-reattach-btn').click());
+  await pg.waitForTimeout(600);
+  const z = await pg.evaluate(() => { const p = document.getElementById('factory-wrapper'); return { da: !!p.querySelector(':scope > .panel-abk-btn'), sichtbar: getComputedStyle(p).display !== 'none' && p.offsetWidth > 50 }; });
+  pruef('2D-Anlage zurück im Hauptfenster', z.da);
+  pruef('2D-Anlage nach „Zurück“ wieder aktiv', z.sichtbar);
+  // Ansichts-Knopf (aus) bei abgekoppeltem Panel holt es ausgeblendet zurück
+  await pg.evaluate(() => toggleWorkspaceView('fluid-wrapper'));
+  await pg.waitForTimeout(600);
+  pruef('Fluidplan über Ansichts-Knopf aus: zurück und ausgeblendet', await pg.evaluate(() => { const p = document.getElementById('fluid-wrapper'); return !!p && getComputedStyle(p).display === 'none'; }));
+  // Fenster schließen: alle Panels wieder aktiv im Hauptfenster
+  await pg.evaluate(() => detachPanel('circuit-editor-wrapper', 'Editor'));
+  await pg.waitForTimeout(800);
+  await pg.evaluate(() => window._sharedDetachWindow.close());
+  await pg.waitForTimeout(800);
+  pruef('Fenster geschlossen: Logikplan und Editor wieder aktiv', await pg.evaluate(() => ['fbs-wrapper', 'circuit-editor-wrapper'].every(id => { const p = document.getElementById(id); return p && getComputedStyle(p).display !== 'none'; })));
   await pg.evaluate(() => openAnalyzerModal());
   const pop = ctx.waitForEvent('page', { timeout: 3000 }).catch(() => null);
   await pg.click('#analyzer-header .panel-abk-btn'); await pop; await pg.waitForTimeout(800);

@@ -6778,7 +6778,7 @@
     };
     // Anschlüsse des Bildes (Planteil) → Anschlüsse des 2D-Teils: die Schläuche enden am Bild
     const HYD_BILD_PORT = {
-        valve_hyd: (f, o) => f.o.wege === '3/2' ? { '1': ['P'], '2': ['A'], '3': ['T'] } : { '1': ['P'], '4': ['A'], '2': ['B'], '3': ['T1', 'T2', 'T'] },
+        valve_hyd: (f, o) => f.o.wege === '3/2' ? { '1': ['P'], '2': ['A'], '3': ['T'] } : { '1': ['P'], '4': ['A'], '2': ['B'], '3': ['T1', 'T'] },
         throttle_hyd: () => ({ '1': ['OUT'], '2': ['IN'] }),
         check_valve_hyd: () => ({ '1': ['IN'], '2': ['OUT'] }),
         hydraulic_unit: () => ({ 'P': ['P'] }),
@@ -6805,7 +6805,6 @@
         try {
             const L = lage2D(schein), map = HYD_BILD_PORT[obj.type](f, obj), P = {};
             for (const pt of L.ports || []) for (const id2 of (map[pt.id] || [])) P[id2] = { lx: (W - bw) / 2 + pt.lx * k, ly: (H - bh) / 2 + pt.ly * k };
-            if (P.T1 && P.T2) { P.T1 = { lx: P.T1.lx - 2, ly: P.T1.ly }; P.T2 = { lx: P.T2.lx + 2, ly: P.T2.ly }; }
             // Öltank: Rücklauf (T) und Saugleitung (S) tauchen beide von oben ein
             if (obj.type === 'oil_tank' && P.T && P.S) { P.T = { lx: P.T.lx - 5, ly: P.T.ly }; P.S = { lx: P.S.lx + 5, ly: P.S.ly }; }
             // Aggregat: die Saugleitung vom Öltank endet im Tank des Aggregatbildes (unter der Pumpe)

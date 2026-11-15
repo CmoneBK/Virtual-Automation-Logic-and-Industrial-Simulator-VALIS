@@ -6679,7 +6679,17 @@
         hydraulic_unit: o => ({ typ: 'aggregat', o: { p: zahl(o.pressure, 100), q: zahl(o.maxFlow, 20) } }),
         accumulator_hyd: o => ({ typ: 'speicher', o: { V0: zahl((o.hyd || {}).volumen, 0.7), p0: zahl((o.hyd || {}).vordruck, 30) } }),
         pressure_switch_hyd: o => ({ typ: 'dschalter', o: { p: zahl((o.hyd || {}).schaltdruck, 50) } }),
-        manometer_hyd: o => ({ typ: 'manometer', o: {} })
+        manometer_hyd: o => ({ typ: 'manometer', o: {} }),
+        oil_tank: o => ({ typ: 'tank', o: {} })
+    };
+    // Anschlüsse des Bildes (Planteil) → Anschlüsse des 2D-Teils: die Schläuche enden am Bild
+    const HYD_BILD_PORT = {
+        valve_hyd: (f, o) => f.o.wege === '3/2' ? { '1': ['P'], '2': ['A'], '3': ['T'] } : { '1': ['P'], '4': ['A'], '2': ['B'], '3': ['T1', 'T2', 'T'] },
+        throttle_hyd: () => ({ '1': ['OUT'], '2': ['IN'] }),
+        check_valve_hyd: () => ({ '1': ['IN'], '2': ['OUT'] }),
+        hydraulic_unit: () => ({ 'P': ['P'] }),
+        accumulator_hyd: () => ({ '1': ['P'] }), pressure_switch_hyd: () => ({ '1': ['P'] }), manometer_hyd: () => ({ '1': ['P'] }),
+        oil_tank: () => ({ '1': ['T', 'S'] })
     };
     const hydBildArt = obj => !!obj && !!HYD_BILD[obj.type];
     const hydMode = obj => { const b = obj.pneu && obj.pneu.bild; return BILDER.includes(b) ? b : bildStandard(); };
@@ -6693,10 +6703,24 @@
         const svg = halter.querySelector('svg'); if (!svg) return null;
         // Höhe des 2D-Teils, Breite nach dem Bild (ein Wegeventil ragt seitlich über)
         const W = Math.max(1, obj.el.offsetWidth || obj.width || 40), H = Math.max(1, obj.el.offsetHeight || obj.height || 40), w = Math.max(1, schein.width || W), h = Math.max(1, schein.height || H);
-        const k = Math.min(1.3 * H / h, (obj.type === 'valve_hyd' ? 2.8 : 1.6) * W / w), bw = w * k, bh = h * k;
+        const k = Math.min((obj.type === 'oil_tank' ? 0.9 : 1.3) * H / h, (obj.type === 'valve_hyd' ? 2.8 : 1.6) * W / w), bw = w * k, bh = h * k;
         svg.setAttribute('width', bw.toFixed(1)); svg.setAttribute('height', bh.toFixed(1));
         svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         svg.setAttribute('class', (svg.getAttribute('class') || '') + ' f2d-hyd-bild');
+        // Lage der Anschlüsse im Bild (2D-Pixel im Teil), für die Schläuche (window._hydPortDefs)
+        try {
+            const L = lage2D(schein), map = HYD_BILD_PORT[obj.type](f, obj), P = {};
+            for (const pt of L.ports || []) for (const id2 of (map[pt.id] || [])) P[id2] = { lx: (W - bw) / 2 + pt.lx * k, ly: (H - bh) / 2 + pt.ly * k };
+            if (P.T1 && P.T2) { P.T1 = { lx: P.T1.lx - 2, ly: P.T1.ly }; P.T2 = { lx: P.T2.lx + 2, ly: P.T2.ly }; }
+            // Öltank: Rücklauf (T) und Saugleitung (S) tauchen beide von oben ein
+            if (obj.type === 'oil_tank' && P.T && P.S) { P.T = { lx: P.T.lx - 5, ly: P.T.ly }; P.S = { lx: P.S.lx + 5, ly: P.S.ly }; }
+            // Aggregat: die Saugleitung vom Öltank endet im Tank des Aggregatbildes (unter der Pumpe)
+            if (obj.type === 'hydraulic_unit') {
+                const pP = (L.ports || []).find(q => q.id === 'P'), pT = (L.ports || []).find(q => q.id === 'T');
+                if (pP && pT && pT.lx !== pP.lx) { const sk = (pT.lx - pP.lx) / 30; P.S = { lx: (W - bw) / 2 + pP.lx * k, ly: (H - bh) / 2 + (pP.ly + 80 * sk) * k }; }
+            }
+            obj._hydBildPorts = P;
+        } catch (e) { obj._hydBildPorts = null; }
         svg.style.cssText = `position:absolute;left:${((W - bw) / 2).toFixed(1)}px;top:${((H - bh) / 2).toFixed(1)}px;width:${bw.toFixed(1)}px;height:${bh.toFixed(1)}px;max-width:none;max-height:none;overflow:visible;pointer-events:none;z-index:1;color:#263238;--fp-papier:#fff;--fp-aktiv:#ffb300`;
         if (mode === 'symbol') svg.style.background = 'rgba(255,255,255,.92)';
         return svg;
@@ -6710,9 +6734,12 @@
             const alt = obj.el.querySelector('svg.f2d-hyd-bild'); if (alt) alt.remove();
             BILDER.forEach(b => obj.el.classList.toggle('hyd-bild-' + b, b === mode && b !== 'gehaeuse'));
             obj.el.classList.toggle('hyd-bild', mode !== 'gehaeuse');
+            obj._hydBildPorts = null;
+            if (mode !== 'gehaeuse') { const svg = hydBildBauen(obj, mode); if (svg) obj.el.insertBefore(svg, obj.el.firstChild); }
+            // Schläuche an die neuen Anschlüsse
+            try { if (typeof _applyHydManualConnections === 'function') _applyHydManualConnections(); } catch (e) {}
+            try { if (typeof window.drawHydraulicHoses === 'function') window.drawHydraulicHoses(); } catch (e) {}
             if (mode === 'gehaeuse') return;
-            const svg = hydBildBauen(obj, mode);
-            if (svg) obj.el.insertBefore(svg, obj.el.firstChild);
         }
         // Wegeventil: geschaltete Stellung wie in der 2D-Anlage (Kastenblock verschieben)
         if (obj.type === 'valve_hyd' && mode === 'symbol') {

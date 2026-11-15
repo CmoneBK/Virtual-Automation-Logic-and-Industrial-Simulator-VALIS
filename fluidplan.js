@@ -1054,24 +1054,35 @@
         zeichnen();
         if (sim) sim = null;
     }
+    // Mit der 2D-Anlage verbunden: ein gemeinsames Rückgängig (der Verlauf der 2D-Anlage enthält den Plan)
+    const gemeinsam = () => !!plan.anlage && typeof window._undoFactory === 'function';
     function rueckgaengig() {
+        if (gemeinsam()) { window._undoFactory(); return; }
         if (!undoStapel.length) return;
         redoStapel.push(JSON.stringify(plan));
         plan = JSON.parse(undoStapel.pop());
         auswahl.clear(); geoCache.clear(); speichern(); zeichnen(); sim = null;
     }
     function wiederholen() {
+        if (gemeinsam()) { window._redoFactory(); return; }
         if (!redoStapel.length) return;
         undoStapel.push(JSON.stringify(plan));
         plan = JSON.parse(redoStapel.pop());
         auswahl.clear(); geoCache.clear(); speichern(); zeichnen(); sim = null;
     }
-    let speicherTimer = null;
+    let abgleichNachImport = false;
+    let speicherTimer = null, ausRueck = false, ersetzenOffen = false;
+    function abgleichStumm(fn) {
+        const war = window._histStumm; window._histStumm = true;
+        try { fn(); } finally { window._histStumm = war; }
+    }
     function speichern() {
-        if (plan.anlage) { try { anlageAbgleichen(); } catch (e) { console.warn('Fluidplan → 2D', e); } }
+        if (plan.anlage) abgleichStumm(() => { try { anlageAbgleichen(); } catch (e) { console.warn('Fluidplan → 2D', e); } });
         window._fpRoh = planExport();
+        // Kommt die Änderung aus der 2D-Anlage, gehört sie zum Schritt, den die 2D-Anlage eben gespeichert hat
+        if (ausRueck) ersetzenOffen = true;
         clearTimeout(speicherTimer);
-        speicherTimer = setTimeout(() => { try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {} }, 150);
+        speicherTimer = setTimeout(() => { const art = ersetzenOffen ? 'ersetzen' : undefined; ersetzenOffen = false; try { if (typeof saveFactoryState === 'function') saveFactoryState(art); } catch (e) {} }, 150);
         status();
     }
     function planExport() {
@@ -1102,6 +1113,7 @@
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
         // Spiegel gehören zum alten Plan (sonst hielte der Abgleich gleich benannte 2D-Teile für gelöscht)
         try { spiegel.clear(); spiegel2D.clear(); kennSpiegel.clear(); hydSpiegel.clear(); gesehen2D = null; } catch (e) {}
+        abgleichNachImport = !!plan.anlage;
         window._fpRoh = planExport();
         if (fenster) { zeichnen(); }
         knopfZustand();
@@ -2526,8 +2538,9 @@
             const id = an ? 'v_simStop' : 'v_simStart';
             if (s.getAttribute('data-vi') !== id || !s.querySelector('svg.vi')) knopfIkon(s, id, an ? 'Stopp' : 'Simulation', an ? '■' : '▶');
         }
-        const u = D().getElementById('fp-undo'); if (u) u.disabled = !undoStapel.length;
-        const r = D().getElementById('fp-redo'); if (r) r.disabled = !redoStapel.length;
+        const hi = gemeinsam() && typeof window._factoryHistorie === 'function' ? window._factoryHistorie() : null;
+        const u = D().getElementById('fp-undo'); if (u) u.disabled = hi ? hi.index <= 0 : !undoStapel.length;
+        const r = D().getElementById('fp-redo'); if (r) r.disabled = hi ? hi.index >= hi.laenge - 1 : !redoStapel.length;
         // Den Ansicht-Knopf oben (aktiv / abgekoppelt) setzt updateWorkspace
     }
 
@@ -3211,7 +3224,13 @@
             if (svg) { svg.classList.toggle('sim', laeuft); eigenschaften(); }
             knopfZustand(); status();
         }
-        if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } }
+        if (abgleichNachImport && plan.anlage && fabrik() && !(typeof isLoadingFactory !== 'undefined' && isLoadingFactory)) {
+            // Nach Laden/Rückgängig: Spiegel neu aufbauen, ohne einen neuen Schritt im Verlauf
+            abgleichNachImport = false;
+            abgleichStumm(() => { try { anlageAbgleichen(); } catch (e) { console.warn('Fluidplan → 2D', e); } });
+            rueckZeit = ts;
+        }
+        if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; ausRueck = true; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } finally { ausRueck = false; } }
         else if (!plan.anlage) gesehen2D = null;
         if (ts - plakettenZeit > 500) { plakettenZeit = ts; try { plaketten2D(); } catch (e) {} }
         if (!plan.teile.length) { letzte = ts; return; }

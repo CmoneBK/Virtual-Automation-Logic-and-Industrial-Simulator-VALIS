@@ -31948,6 +31948,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     mkRect(0, h - wt, w, wt);
                     obj.el.insertBefore(svg, obj.el.firstChild);
                 },
+                // Tank von unten bis zum Anteil füllen, nur innerhalb der Wände (kein Öl daneben)
+                _fuellen: function(obj, anteil) {
+                    let wt = obj.wallThickness || 10;
+                    let gx0 = Math.ceil((obj.x + wt) / FLUID_CELL), gx1 = Math.floor((obj.x + obj.width - wt) / FLUID_CELL);
+                    let gy0 = Math.ceil((obj.y + wt) / FLUID_CELL), gy1 = Math.floor((obj.y + obj.height - wt) / FLUID_CELL);
+                    let reihen = Math.max(1, Math.round((gy1 - gy0 + 1) * anteil));
+                    for (let gy = gy1; gy > gy1 - reihen && gy >= gy0; gy--)
+                        for (let gx = gx0; gx <= gx1; gx++) {
+                            let k = gx + ',' + gy;
+                            if (!fluidGrid.has(k) && !solidGrid.has(k)) fluidGrid.set(k, { mat: 'oil', viscosity: 0.55 });
+                        }
+                    fluidGridDirty = true;
+                },
                 build: function(obj, el) {
                     obj.width = 140; obj.height = 100; obj.wallThickness = obj.wallThickness || 10;
                     el.className = 'f2d-obj f2d-oil-tank';
@@ -31961,9 +31974,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle-xy'; obj.resizerEl = resizer; el.appendChild(resizer);
                     obj.useCollision = true;
                     setTimeout(() => {
-                        let wt = obj.wallThickness || 10;
-                        let fr = Math.ceil((Math.min(obj.width, obj.height) - wt * 2) / FLUID_CELL);
-                        addFluidBlob('oil', obj.x + obj.width / 2, obj.y + obj.height * 0.5, fr, true);
+                        ComponentRegistry['oil_tank']._fuellen(obj, 0.85);
                     }, 150);
                 },
                 animate: function(obj) {
@@ -32054,9 +32065,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (savedData.wallThickness) obj.wallThickness = savedData.wallThickness;
                     ComponentRegistry['oil_tank'].onResize(obj);
                     setTimeout(() => {
-                        let wt = obj.wallThickness || 10;
-                        let fr = Math.ceil((Math.min(obj.width, obj.height) - wt * 2) / FLUID_CELL);
-                        addFluidBlob('oil', obj.x + obj.width / 2, obj.y + obj.height * 0.5, fr, true);
+                        ComponentRegistry['oil_tank']._fuellen(obj, 0.85);
                     }, 300);
                 },
             },
@@ -43257,16 +43266,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (obj.hasHydraulics && (deltaExt !== 0 || (obj.leakageRate && deltaMs > 0))) {
                             let _tank = window._findHydTankForCylinder ? window._findHydTankForCylinder(obj) : factoryObjects.find(o => o.type === 'oil_tank');
                             if (_tank) {
-                                // Kalibration: Referenzzylinder D=20mm, Stange=8mm, Hub=100mm → BASE_CELLS Fluid-Zellen
-                                const BASE_CELLS = 25;
-                                const REF_ROD_AREA = Math.PI * 16; // π × 4² (8mm Stange)
+                                // Volumen statt fester Zellenzahl: Ein Tank fasst etwa das Dreifache des
+                                // Pumpenförderstroms je Minute (Faustregel), eine Zelle steht für Tankinhalt / Zellen.
                                 let aRodH = Math.PI * Math.pow((obj.rodD || 8) / 2, 2);
                                 let aExtH = Math.PI * Math.pow((obj.pistonD || 20) / 2, 2);
                                 let strokeH = obj.stroke || 100;
                                 // Doppelwirkend: netto = Stangenfläche (Differentialzylinder-Nettovolumen)
                                 // Einfachwirkend: netto = volle Kolbenfläche
                                 let netArea = (obj.type === 'zylinder_double') ? aRodH : aExtH;
-                                let cellsPerPercent = (BASE_CELLS * (netArea / REF_ROD_AREA) * (strokeH / 100)) / 100;
+                                let _unitV = factoryObjects.find(o => o.type === 'hydraulic_unit');
+                                let _tankL = Math.max(10, 3 * Math.max(1, Number(_unitV && _unitV.maxFlow) || 20));
+                                let _wtz = _tank.wallThickness || 10;
+                                let _zellen = Math.max(1, Math.floor((_tank.width - 2 * _wtz) / FLUID_CELL) * Math.floor((_tank.height - 2 * _wtz) / FLUID_CELL));
+                                let cellsPerPercent = netArea * strokeH / 1e6 / 100 / (_tankL / _zellen);
                                 // Drossel: Öffnungsgrad beeinflusst Geschwindigkeit (baseSpeed), nicht das Volumen pro Weg
                                 if (!obj._oilAccum) obj._oilAccum = 0;
                                 obj._oilAccum += deltaExt * cellsPerPercent;
@@ -78717,7 +78729,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261115zd"></script>
+<script src="fluidplan.js?v=20261115ze"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="uebungsanlagen.js?v=20261115a"></script>
 </body>

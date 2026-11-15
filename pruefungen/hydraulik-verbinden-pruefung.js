@@ -143,6 +143,97 @@ const FAELLE = {
     R.push(['Planzylinder gelöscht → 2D-Zylinder und Ventil weg', !factoryObjects.some(x => x.id === id) && !factoryObjects.some(x => x.type === 'valve_hyd' && x.targetCylinderId === id), '']);
     return R;
   }
+  ,
+  'Druckschalter, Manometer und Last gleichen sich ab': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan;
+    window._findHydTankForCylinder = () => null;
+    factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle'].includes(o.type)).forEach(o => deleteObjRecursive(o));
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2'; c.pistonD = 40; c.rodD = 20; c.stroke = 200;
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    c.extension = 0; c.hyd = { last: 6000, lastArt: 'gewicht' };
+    window._hydAnbauen(c.id, 'pressure_switch_hyd', 'A'); const ds = factoryObjects.find(x => x.type === 'pressure_switch_hyd'); ds.hyd = { schaltdruck: 30 }; ds.linkedVar = 'DS';
+    window._hydAnbauen(null, 'manometer_hyd', 'P'); const ma = factoryObjects.find(x => x.type === 'manometer_hyd');
+    F.ausAnlage();
+    await warte(300);
+    let p = F.plan();
+    const pd = p.teile.find(t => t.typ === 'dschalter'), pm = p.teile.find(t => t.typ === 'manometer'), pz = p.teile.find(t => t.typ === 'zyl_dw');
+    R.push(['Druckschalter im Plan: 30 bar, DS, Kennzeichen wie 2D', pd && pd.o.p === 30 && pd.o.var === 'DS' && pd.o.anlage === ds.id && pd.bez === ds.normLabel, pd && [pd.o.p, pd.o.var, pd.bez, ds.normLabel]]);
+    const anK = pd && p.leitungen.some(l => (l.a.t === pd.id && l.b.t === pz.id && l.b.p === 'K') || (l.b.t === pd.id && l.a.t === pz.id && l.a.p === 'K'));
+    R.push(['Druckschalter hängt an der Kolbenseite (A)', anK, '']);
+    R.push(['Manometer im Plan am Aggregat (P)', pm && pm.o.anlage === ma.id && p.leitungen.some(l => [l.a.t, l.b.t].includes(pm.id) && [l.a.p, l.b.p].includes('P')), pm && pm.o.anlage]);
+    R.push(['Last 6 kN Gewicht im Plan', pz.o.last === 6000 && pz.o.lastArt === 'gewicht', [pz.o.last, pz.o.lastArt]]);
+    await warte(500);
+    R.push(['nach dem Abgleich: keine doppelten 2D-Messgeräte', factoryObjects.filter(x => x.type === 'pressure_switch_hyd').length === 1 && factoryObjects.filter(x => x.type === 'manometer_hyd').length === 1, [factoryObjects.filter(x => x.type === 'pressure_switch_hyd').length, factoryObjects.filter(x => x.type === 'manometer_hyd').length]]);
+    toggleSimulation(); await warte(400);
+    setTaster('S1', true);
+    for (let i = 0; i < 80; i++) { await warte(50); if (c.extension > 99) break; }
+    await warte(800);
+    R.push(['Druckschalter schaltet in der Endlage (2D zeigt den Planwert)', ds.hydSchaltet === true && ds.hydP > 90 && F.zustand().teile[pd.id].an === true, [ds.hydSchaltet, ds.hydP]]);
+    R.push(['Manometer zeigt den Systemdruck', ma.hydP > 90, ma.hydP]);
+    setTaster('S1', false); setTaster('S2', true);
+    for (let i = 0; i < 80; i++) { await warte(50); if (c.extension < 1) break; }
+    setTaster('S2', false);
+    toggleSimulation(); await warte(300);
+    // 2D → Plan
+    ds.hyd.schaltdruck = 40; c.hyd.lastAb = 60; c.hyd.lastArt = 'presse'; c.hyd.last = 50000;
+    await warte(900);
+    p = F.plan();
+    R.push(['2D-Schaltdruck 40 bar → Plan', p.teile.find(t => t.id === pd.id).o.p === 40, p.teile.find(t => t.id === pd.id).o.p]);
+    const z2 = p.teile.find(t => t.id === pz.id);
+    R.push(['2D-Last Werkstück 50 kN ab 60 % → Plan', z2.o.last === 50000 && z2.o.lastArt === 'presse' && z2.o.lastAb === 60, [z2.o.last, z2.o.lastArt, z2.o.lastAb]]);
+    // Plan → 2D
+    F.aendern(pd.id, { p: 55, oeffner: true });
+    R.push(['Plan 55 bar, Öffner → 2D', ds.hyd.schaltdruck === 55 && ds.hyd.oeffner === true, [ds.hyd.schaltdruck, ds.hyd.oeffner]]);
+    F.aendern(pz.id, { lastAb: 50 });
+    R.push(['Plan Werkstück ab 50 % → 2D', c.hyd.lastAb === 50 && c.hyd.lastArt === 'presse' && c.hyd.last === 50000, c.hyd]);
+    // Werkstück stärker als der Zylinder: bleibt bei 50 % stehen
+    c.extension = 0;
+    toggleSimulation(); await warte(400);
+    setTaster('S1', true); await warte(2500);
+    R.push(['Plan rechnet das Werkstück: Zylinder steht bei 50 %', Math.abs(c.extension - 50) < 3 && c.hydPA > 90, [c.extension, c.hydPA]]);
+    setTaster('S1', false); setTaster('S2', true); await warte(2000); setTaster('S2', false);
+    toggleSimulation(); await warte(300);
+    // Manometer im Plan löschen → in 2D weg; in 2D anbauen → im Plan da
+    F._entfernen(pm.id); await warte(200);
+    R.push(['Plan-Manometer gelöscht → 2D-Manometer weg', !factoryObjects.some(x => x.type === 'manometer_hyd'), factoryObjects.filter(x => x.type === 'manometer_hyd').length]);
+    window._hydAnbauen(c.id, 'manometer_hyd', 'B');
+    await warte(900);
+    p = F.plan();
+    const pm2 = p.teile.find(t => t.typ === 'manometer');
+    R.push(['2D-Manometer an B → Plan-Manometer an der Stangenseite', pm2 && p.leitungen.some(l => (l.a.t === pm2.id && l.b.t === pz.id && l.b.p === 'S') || (l.b.t === pm2.id && l.a.t === pz.id && l.a.p === 'S')), pm2 && pm2.id]);
+    deleteObjRecursive(ds); await warte(900);
+    R.push(['2D-Druckschalter entfernt → aus dem Plan weg', !F.plan().teile.some(t => t.typ === 'dschalter'), '']);
+  }
+  ,
+  'Pneumatikplan mit Hydraulikteilen: Pneumatik bleibt, Hydraulik nur für Hydraulikzylinder': async (R) => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const F = Fluidplan, H = { hyd: true };
+    window._findHydTankForCylinder = () => null;
+    const i = F.beispiele().findIndex(n => /sortier/i.test(n));
+    if (i >= 0) { F.beispielLaden(i); F.verbinden2D(true); } else { F._leeren(); F.ausAnlage(); }
+    await warte(300);
+    const zyl2d = () => factoryObjects.filter(o => /^zylinder_/.test(o.type));
+    const n0 = zyl2d().length, pneu0 = zyl2d().filter(o => o.hasPneumatics).length;
+    R.push(['Pneumatikplan verbunden (' + (i >= 0 ? F.beispiele()[i] : 'Startszene') + ')', F.plan().anlage && pneu0 > 0, [n0, pneu0]]);
+    const ag = F.setzen('aggregat', 900, 400, Object.assign({ q: 10, p: 80 }, H), '0G9');
+    const v = F.setzen('ventil', 900, 250, Object.assign({ wege: '4/2', links: 'magnet', rechts: 'feder', varL: 'YH' }, H), '9Q1');
+    F.verbinden(ag, 'P', v, '1');
+    await warte(300);
+    R.push(['Aggregat und Ventil gesetzt: kein neuer 2D-Zylinder, keine 2D-Hydraulik', zyl2d().length === n0 && !factoryObjects.some(o => ['hydraulic_unit', 'valve_hyd'].includes(o.type)), [zyl2d().length, factoryObjects.filter(o => /hyd/.test(o.type)).map(o => o.type)]]);
+    R.push(['Pneumatikzylinder behalten ihre Pneumatik', zyl2d().filter(o => o.hasPneumatics).length === pneu0 && !zyl2d().some(o => o.hasHydraulics), zyl2d().map(o => [o.hasPneumatics, !!o.hasHydraulics])]);
+    R.push(['keine Pneumatik-Teile aus Hydraulikteilen', !factoryObjects.some(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && ['aggregat', 'tank'].includes(o.pneu.fp.typ)) && !factoryObjects.some(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.o && o.pneu.fp.o.hyd), '']);
+    const z = F.setzen('zyl_dw', 900, 0, Object.assign({ d: 32, dStange: 16, hub: 100 }, H), '9M1');
+    F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    await warte(300);
+    const id = F.plan().teile.find(t => t.id === z).o.anlage, o = factoryObjects.find(x => x.id === id);
+    R.push(['Hydraulikzylinder im Plan → genau ein 2D-Hydraulikzylinder', !!o && o.hasHydraulics && zyl2d().length === n0 + 1 && zyl2d().filter(q => q.hasHydraulics).length === 1, [zyl2d().length, n0]]);
+    R.push(['Pneumatik danach unverändert', zyl2d().filter(q => q.hasPneumatics).length === pneu0, zyl2d().filter(q => q.hasPneumatics).length]);
+    F._entfernen(z);
+    await warte(300);
+    R.push(['Hydraulikzylinder gelöscht → 2D-Hydraulikzylinder weg, Pneumatik bleibt', zyl2d().length === n0 && zyl2d().filter(q => q.hasPneumatics).length === pneu0, [zyl2d().length, n0]]);
+  }
 };
 
 (async () => {

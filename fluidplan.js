@@ -4660,7 +4660,11 @@
         if (x > n * KASTEN) return rad(R.o.rechts) ? [R.kR + 17, 38] : [R.kR + 18, 20];
         return [(R.kL + R.kR) / 2, y];
     }
-    const luftFarbe = p => p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : '#eceff1';
+    // Luft blau nach Druck (bis 6 bar), Öl bernstein in Ruhe und rot nach Druck (bis 100 bar)
+    const fluidFarbe = (p, hyd, geh) => hyd ? (p > P_AN_H ? `rgba(229,57,53,${(0.35 + 0.6 * Math.min(1, p / 100)).toFixed(2)})` : '#ffe082')
+        : p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : (geh ? '#fff' : '#eceff1');
+    const luftFarbe = (p, hyd) => fluidFarbe(p, hyd, false);
+    const pAn = hyd => hyd ? P_AN_H : P_AN;
     function echtZeichnen(obj, doc, L) {
         const R = echtRoh(obj), t = R.t, o = R.o, G = geo(t), S = R.S, schnitt = darst(obj) === 'schnitt';
         const uid = String(obj.id).replace(/[^\w-]/g, '');
@@ -4683,7 +4687,7 @@
             const [x, y] = R.portXY(p), ob = y < 20;
             mk('rect', { x: x - 2, y: ob ? y : 38, width: 4, height: ob ? 2 - y : y - 38, fill: '#90a4ae', stroke: '#455a64', 'stroke-width': 0.6 }, g);
             mk('rect', { class: 'fp-r-ring', 'data-p': p.id, x: x - 5, y: ob ? -3 : 38, width: 10, height: 5, rx: 1, fill: '#b0bec5', stroke: '#455a64', 'stroke-width': 0.8 }, g);
-            txt(x + 9, ob ? 0 : 45, p.id, { 'font-weight': 'bold' });
+            txt(x + 9, ob ? 0 : 45, p.nr || p.id, { 'font-weight': 'bold' });
         }
         // Gehäuse
         mk('rect', { x: R.kL, y: 2, width: R.kR - R.kL, height: 36, rx: schnitt ? 1 : 3, fill: fuell, stroke: '#37474f', 'stroke-width': 1.4 }, g);
@@ -4894,18 +4898,19 @@
         if (obj._echtTakt && obj._echtLuft) return;
         const ids = geo(R.t).ports.map(p => p.id), pd = st ? echtDruecke(st, ids) : ids.map(() => 0), P = {};
         ids.forEach((id, i) => { P[id] = pd[i]; });
-        const key = ids.map(id => (P[id] > P_AN ? Math.round(P[id] * 4) : 0)).join(',') + '|' + k;
+        const H = istHyd(R.t), PA = pAn(H);
+        const key = ids.map(id => (P[id] > PA ? Math.round(P[id] * (H ? 0.25 : 4)) : 0)).join(',') + '|' + k;
         if (obj._echtLuft === key) return;
         obj._echtLuft = key;
-        el2.querySelectorAll('.fp-r-kanal').forEach(e => { const f = luftFarbe(P[e.getAttribute('data-p')] || 0); if (e.tagName === 'path') e.setAttribute('stroke', P[e.getAttribute('data-p')] > P_AN ? f : '#90a4ae'); else e.setAttribute('fill', f); });
-        el2.querySelectorAll('.fp-r-ring').forEach(e => { const p = P[e.getAttribute('data-p')] || 0; e.setAttribute('stroke', p > P_AN ? '#0288d1' : '#455a64'); e.setAttribute('stroke-width', p > P_AN ? 1.6 : 0.8); });
+        el2.querySelectorAll('.fp-r-kanal').forEach(e => { const f = luftFarbe(P[e.getAttribute('data-p')] || 0, H); if (e.tagName === 'path') e.setAttribute('stroke', P[e.getAttribute('data-p')] > PA || H ? f : '#90a4ae'); else e.setAttribute('fill', f); });
+        el2.querySelectorAll('.fp-r-ring').forEach(e => { const p = P[e.getAttribute('data-p')] || 0; e.setAttribute('stroke', p > PA ? (H ? '#c62828' : '#0288d1') : '#455a64'); e.setAttribute('stroke-width', p > PA ? 1.6 : 0.8); });
         const Ps = R.S.pos[k] || R.S.pos[0];
         el2.querySelectorAll('.fp-r-nut').forEach(e => {
             const a = +e.getAttribute('data-a') + Ps.s, c = +e.getAttribute('data-c') + Ps.s;
             let p = 0; R.S.ord.forEach((id, i) => { if (i >= a - 0.01 && i <= c + 0.01) p = Math.max(p, P[G2Dport(R, id)] || 0); });
-            e.setAttribute('fill', luftFarbe(p));
+            e.setAttribute('fill', luftFarbe(p, H));
         });
-        el2.querySelectorAll('.fp-r-steuer').forEach(e => { const g = e.closest('.fp-g-bet'), sd = g && g.getAttribute('data-seite'); const pp = geo(R.t).ports.find(q => q.art === 's' && q.seite === sd); e.setAttribute('fill', luftFarbe(pp ? P[pp.id] || 0 : 0)); });
+        el2.querySelectorAll('.fp-r-steuer').forEach(e => { const g = e.closest('.fp-g-bet'), sd = g && g.getAttribute('data-seite'); const pp = geo(R.t).ports.find(q => q.art === 's' && q.seite === sd); e.setAttribute('fill', luftFarbe(pp ? P[pp.id] || 0 : 0, H)); });
     }
     const G2Dport = (R, id) => R.S.ord.indexOf(id) >= 0 && !geo(R.t).ports.some(p => p.id === id) ? '3' : id;
     // Zustand aus dem Rechenkern: verbundener Plan oder Schattenplan
@@ -4914,13 +4919,13 @@
     // ('schnitt', schraffiert mit Luftwegen, Kugeln, Federn) oder geschlossen ('aussen').
     // Gezeichnet in Planeinheiten (Maßstab 1); die Anschlüsse liegen wie im Normsymbol.
     // ------------------------------------------------------------
-    function bauStift(mode, uid, g) {
+    function bauStift(mode, uid, g, hyd) {
         const innen = mode !== 'aussen', geh = mode === 'gehaeuse';
         const D = {
             mode, innen, geh,
             kontur: geh ? '#333' : '#37474f', sw: geh ? 1.8 : 1.2,
             koerper: mode === 'schnitt' ? `url(#fps-${uid})` : mode === 'aussen' ? `url(#fpa-${uid})` : '#ffe0b2',
-            luft: p => p > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, p / 6)).toFixed(2)})` : (geh ? '#fff' : '#eceff1'),
+            luft: p => fluidFarbe(p, hyd, geh), hyd: !!hyd,
             mk: (tag, a, p) => el(tag, a, p || g),
             g, uid
         };
@@ -5129,7 +5134,7 @@
             D.mk('circle', { cx: 0, cy: 0, r: 12, fill: D.mode === 'gehaeuse' ? '#ffe0b2' : '#263238', stroke: D.kontur, 'stroke-width': D.sw });
             D.mk('circle', { cx: 0, cy: 0, r: 10, fill: '#fff', stroke: '#90a4ae', 'stroke-width': 0.5 });
             for (let i = 0; i <= 10; i++) { const w = (-135 + i * 27) * Math.PI / 180, a = i % 5 ? 8.3 : 7.2; D.mk('line', { x1: 9.4 * Math.sin(w), y1: -9.4 * Math.cos(w), x2: a * Math.sin(w), y2: -a * Math.cos(w), stroke: '#263238', 'stroke-width': i % 5 ? 0.4 : 0.8 }); }
-            for (const [i, s] of [[0, '0'], [5, '5'], [10, '10']]) { const w = (-135 + i * 27) * Math.PI / 180; D.mk('text', { x: 5.3 * Math.sin(w), y: -5.3 * Math.cos(w) + 1.6, 'font-size': 3.6, 'text-anchor': 'middle', fill: '#263238', 'font-family': 'sans-serif' }).textContent = s; }
+            for (const [i, s] of (istHyd(t) ? [[0, '0'], [5, '80'], [10, '160']] : [[0, '0'], [5, '5'], [10, '10']])) { const w = (-135 + i * 27) * Math.PI / 180; D.mk('text', { x: 5.3 * Math.sin(w), y: -5.3 * Math.cos(w) + 1.6, 'font-size': 3.6, 'text-anchor': 'middle', fill: '#263238', 'font-family': 'sans-serif' }).textContent = s; }
             if (D.innen) D.mk('path', { class: 'fp-b-luft', 'data-p': '1', d: 'M0,10 C-7,10 -7.5,-2 -3,-5.5 C0,-7.5 4,-6 5,-3', fill: 'none', stroke: '#c0a060', 'stroke-width': 1.6, 'stroke-opacity': 0.8 });
             D.mk('line', { class: 'fp-b-nadel', x1: 0, y1: 0, x2: 0, y2: -8.6, stroke: '#c62828', 'stroke-width': 0.9, style: 'transform-box:view-box;transform-origin:0px 0px;transform:rotate(-135deg);transition:transform .2s' });
             D.mk('circle', { cx: 0, cy: 0, r: 1.1, fill: '#263238' });
@@ -5137,8 +5142,9 @@
         },
         anim(r, t, z, P) {
             const p = z ? P('1') : 0, n = r.querySelector('.fp-b-nadel');
-            if (n) n.style.transform = `rotate(${-135 + Math.max(0, Math.min(10, p)) / 10 * 270}deg)`;
-            const w = r.querySelector('.fp-b-wert'); if (w) w.textContent = z ? p.toFixed(1) + ' bar' : 'bar';
+            const voll = istHyd(t) ? 160 : 10;
+            if (n) n.style.transform = `rotate(${-135 + Math.max(0, Math.min(voll, p)) / voll * 270}deg)`;
+            const w = r.querySelector('.fp-b-wert'); if (w) w.textContent = z ? p.toFixed(istHyd(t) ? 0 : 1) + ' bar' : 'bar';
         }
     };
     // Druckschalter: Membran gegen Stellfeder, Stößel betätigt den Mikroschalter
@@ -5315,6 +5321,167 @@
             const f = r.querySelector('.fp-b-fluegel'); if (f) f.style.transform = `rotate(${s * 180}deg)`;
         }
     };
+    // ---------- Hydraulik-Teile in der 2D-Anlage (Gehäuse, Schnitt, geschlossen) ----------
+    // Öl ist immer da: in Ruhe bernstein, unter Druck rot (D.luft).
+    // Druckbegrenzungsventil: Kegel auf dem Sitz, von der Feder gegen den Druck an P gehalten
+    BAU.dbv = {
+        rand: [-11, -20, 22, 20],
+        zeichne(t, D) {
+            D.body(-11, -20, 22, 40);
+            D.body(11, -2, 9, 16, 1.5);
+            if (D.innen) {
+                D.luftweg('P', 'M0,-20 V-5', 5);
+                D.kammer('T', -8, -3, 16, 15); D.luftweg('T', 'M0,12 V20', 5);
+                D.lippe(-6, -5, 3.5, 2); D.lippe(2.5, -5, 3.5, 2);
+                const k = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .1s' });
+                D.mk('path', { d: 'M-3.5,-1 L0,-5 L3.5,-1 Z', fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.6 }, k);
+                D.metall(-4, -1, 8, 2, null, k);
+                D.feder(-4.5, 1, -4.5, 11, 2, 6, 'fp-b-feder'); D.feder(4.5, 1, 4.5, 11, 2, 6, 'fp-b-feder');
+                D.mk('rect', { x: 12, y: 0, width: 7, height: 12, fill: '#f5f5f5', stroke: '#455a64', 'stroke-width': 0.4 });
+            } else { D.glanz(-9, -18, 9); D.pfeil(-5, -10, -5, 10); }
+            D.knopf(20, 2, 3, 8);
+            const tx = D.mk('text', { x: 15.5, y: 19, 'font-size': 4.6, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }); tx.textContent = (t.o.p != null ? t.o.p : 60) + ' bar';
+        },
+        anim(r, t, z) {
+            const auf = !!(z && z.auf), k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = auf ? 'translateY(2.5px)' : '';
+            r.querySelectorAll('.fp-b-feder').forEach(f => { f.style.transform = auf ? 'scaleY(0.78)' : ''; });
+        }
+    };
+    // Stromregelventil: Druckwaage (Kolben mit Feder) vor der einstellbaren Drossel
+    BAU.stromregel = {
+        rand: [-12, -20, 12, 20],
+        zeichne(t, D) {
+            D.body(-12, -20, 24, 40);
+            if (D.innen) {
+                D.luftweg('1', 'M0,20 V9', 5);
+                D.kammer('1', -8, 5, 16, 4);
+                D.metall(-8, 2.2, 16, 2.8, 'fp-b-waage');
+                D.feder(-5, 2.2, -5, -4, 1.6, 5); D.feder(5, 2.2, 5, -4, 1.6, 5);
+                D.kammer('M', -8, -6, 16, 8);
+                D.lippe(-2.6, -8.5, 0.9, 2.5);
+                D.kammer('2', -2.6, -20, 5.2, 12);
+            } else { D.glanz(-10, -18, 10); D.pfeil(-6, 12, -6, -12); }
+            nadel(D, 12, 1, Math.min(100, zahl(t.o.q, 4) * 8), -10);
+            const tx = D.mk('text', { x: 0, y: 25.5, 'font-size': 4.4, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' }); tx.textContent = (t.o.q != null ? t.o.q : 4) + ' l/min';
+        },
+        druck(id, P) { return id === 'M' ? (P('1') + P('2')) / 2 : P(id); },
+        anim(r, t, z, P) {
+            const d = z ? Math.max(0, Math.min(1, (P('1') - P('2')) / 40)) : 0, w = r.querySelector('.fp-b-waage');
+            if (w) w.style.transform = `translateY(${-2 * d}px)`;
+        }
+    };
+    // Entsperrbares Rückschlagventil: Kugel frei von 1 nach 2; der Steuerkolben X drückt sie für 2 → 1 auf
+    BAU.entsperr = {
+        rand: [-12, -18, 10, 18],
+        zeichne(t, D) {
+            D.body(-12, -18, 22, 36);
+            if (D.innen) {
+                D.kammer('2', -6, -14, 12, 14); D.kammer('1', -1, 4, 4, 14);
+                D.lippe(-6, 2, 3.2, 2); D.lippe(2.8, 2, 3.2, 2);
+                const k = D.mk('g', { class: 'fp-b-ventil', style: 'transition:transform .12s' });
+                D.kugel(0, 0, 3.4, null, k);
+                D.feder(0, -12, 0, -3.4, 2.6, 6, 'fp-b-feder');
+                D.kammer('X', -10, 12, 8, 5); D.luftweg('X', 'M-12,14.5 H-10', 3);
+                D.metall(-5.5, 3.6, 3, 8.4, 'fp-b-stoessel');
+            } else { D.glanz(-10, -16, 8); D.pfeil(0, 12, 0, -10); }
+        },
+        anim(r, t, z, P) {
+            const ent = !!(z && z.entsperrt), auf = !!z && (ent || P('1') > P('2') + 0.05);
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = auf ? 'translateY(-3px)' : '';
+            const f = r.querySelector('.fp-b-feder'); if (f) f.style.transform = auf ? 'scaleY(0.7)' : '';
+            const s = r.querySelector('.fp-b-stoessel'); if (s) s.style.transform = ent ? 'translateY(-3px)' : '';
+        }
+    };
+    // Filter: Gehäuse mit Faltenfilterelement
+    BAU.filter = {
+        rand: [-10, -14, 10, 14],
+        zeichne(t, D) {
+            D.body(-10, -14, 20, 28);
+            if (D.innen) {
+                D.kammer('1', -7, 2, 14, 9); D.kammer('2', -7, -11, 14, 9);
+                D.mk('polyline', { points: '-7,0 -5.5,-2 -4,0 -2.5,-2 -1,0 0.5,-2 2,0 3.5,-2 5,0 6.5,-2 7,-1', fill: 'none', stroke: '#6d4c41', 'stroke-width': 1.2 });
+            } else { D.glanz(-8, -12, 8); D.pfeil(0, 9, 0, -9); }
+        }
+    };
+    // Hydrospeicher: Stahlflasche, oben Stickstoff in der Blase, unten Öl
+    BAU.speicher = {
+        rand: [-11, -20, 11, 18],
+        zeichne(t, D) {
+            D.body(-11, -20, 22, 38, 10);
+            if (D.innen) {
+                D.mk('rect', { x: -8, y: -17, width: 16, height: 32, rx: 7, fill: '#cfd8dc', stroke: '#455a64', 'stroke-width': 0.5 });
+                D.mk('rect', { class: 'fp-b-luft fp-b-oel', 'data-p': '1', x: -8, y: 13, width: 16, height: 2, fill: D.luft(0), stroke: 'none' });
+                D.mk('path', { class: 'fp-b-blase', d: 'M-7,13 Q0,11 7,13', fill: 'none', stroke: '#212121', 'stroke-width': 1 });
+                const tx = D.mk('text', { x: 0, y: -6, 'font-size': 4.4, 'text-anchor': 'middle', fill: '#455a64', 'font-family': 'sans-serif' }); tx.textContent = 'N₂';
+                D.kammer('1', -2.5, 15, 5, 3);
+            } else { D.glanz(-8, -17, 8); }
+            const tx = D.mk('text', { x: 0, y: 4, 'font-size': 4, 'text-anchor': 'middle', fill: D.innen ? '#455a64' : '#eceff1', 'font-family': 'sans-serif' }); tx.textContent = (t.o.p0 != null ? t.o.p0 : 30) + ' bar';
+        },
+        anim(r, t, z) {
+            const a = z ? Math.max(0, Math.min(1, (z.voil || 0) / Math.max(0.05, zahl(t.o.V0, 0.7)))) : 0, h = 2 + 26 * a;
+            const o = r.querySelector('.fp-b-oel'); if (o) { o.setAttribute('y', 15 - h); o.setAttribute('height', h); }
+            const b = r.querySelector('.fp-b-blase'); if (b) b.setAttribute('d', `M-7,${15 - h} Q0,${13 - h} 7,${15 - h}`);
+        }
+    };
+    // Tank: Behälter mit Ölstand, die Rücklaufleitung taucht ein
+    BAU.tank = {
+        rand: [-14, -10, 14, 8],
+        zeichne(t, D) {
+            D.body(-14, -10, 28, 18, 1.5);
+            if (D.innen) { D.kammer('1', -12, -3, 24, 9); D.luftweg('1', 'M0,-10 V3', 3); }
+            else D.glanz(-12, -8, 12);
+        }
+    };
+    // Hydraulikaggregat: Tank, Motor, Zahnradpumpe, eingebautes Druckbegrenzungsventil, Rücklauf
+    BAU.aggregat = {
+        rand: [-46, -18, 34, 50],
+        zeichne(t, D) {
+            D.body(-46, 20, 80, 30, 2);                                    // Tank
+            if (D.innen) D.kammer('T', -43, 27, 74, 20);
+            D.mk('rect', { x: -44, y: -12, width: 22, height: 30, rx: 2, fill: D.mode === 'gehaeuse' ? '#90caf9' : '#1565c0', stroke: D.kontur, 'stroke-width': D.sw });   // Motor
+            for (let y = -8; y < 16; y += 4) D.mk('line', { x1: -42, y1: y, x2: -24, y2: y, stroke: D.mode === 'gehaeuse' ? '#1565c0' : '#0d47a1', 'stroke-width': 0.8 });
+            const m = D.mk('text', { x: -33, y: 6, 'font-size': 9, 'text-anchor': 'middle', fill: '#fff', 'font-family': 'sans-serif', 'font-weight': 'bold' }); m.textContent = 'M';
+            D.body(-20, -6, 22, 24);                                       // Pumpe
+            if (D.innen) {
+                D.kammer('P', -18, -4, 18, 6);
+                for (const cx of [-13, -5]) {
+                    const z = D.mk('g', { class: 'fp-b-rad' });
+                    D.mk('circle', { cx, cy: 10, r: 4.2, fill: '#90a4ae', stroke: '#37474f', 'stroke-width': 0.6 }, z);
+                    for (let i = 0; i < 8; i++) { const w = i * Math.PI / 4; D.mk('line', { x1: cx + 3.6 * Math.cos(w), y1: 10 + 3.6 * Math.sin(w), x2: cx + 5.2 * Math.cos(w), y2: 10 + 5.2 * Math.sin(w), stroke: '#37474f', 'stroke-width': 1.2 }, z); }
+                }
+                D.luftweg('T', 'M-9,18 V34', 3);                           // Saugrohr
+                D.luftweg('P', 'M-10,-6 V-18', 4);
+                D.luftweg('P', 'M-10,-12 H10 V-4', 3);                     // zur Druckbegrenzung
+            } else D.glanz(-18, -4, 0);
+            D.body(5, -4, 12, 18, 1);                                      // eingebautes DBV
+            if (D.innen) {
+                D.kammer('P', 8, -4, 6, 5);
+                D.metall(8, 1, 6, 2, 'fp-b-ventil');
+                D.feder(11, 3, 11, 12, 2, 5, 'fp-b-feder');
+                D.luftweg('T', 'M11,14 V30', 2.5);
+                D.luftweg('T', 'M20,-18 V34', 4);                          // Rücklauf taucht ein
+            }
+            D.knopf(9, 14, 4, 4);
+            const tx = D.mk('text', { x: -6, y: 46, 'font-size': 5, 'text-anchor': 'middle', fill: '#37474f', 'font-family': 'sans-serif' });
+            tx.textContent = (t.o.q != null ? t.o.q : 8) + ' l/min · ' + (t.o.p != null ? t.o.p : 60) + ' bar';
+        },
+        anim(r, t, z, P) {
+            const laeuft = !!z;
+            // Zahnräder drehen gegenläufig, solange die Pumpe läuft (SMIL, braucht kein CSS im 2D-Dokument)
+            r.querySelectorAll('.fp-b-rad').forEach((e, i) => {
+                const da = e.querySelector('animateTransform');
+                if (laeuft && !da) {
+                    const c = e.querySelector('circle'), cx = c ? c.getAttribute('cx') : 0, cy = c ? c.getAttribute('cy') : 0;
+                    const an = e.ownerDocument.createElementNS(NS, 'animateTransform');
+                    [['attributeName', 'transform'], ['type', 'rotate'], ['from', `0 ${cx} ${cy}`], ['to', `${i ? -360 : 360} ${cx} ${cy}`], ['dur', '0.5s'], ['repeatCount', 'indefinite']].forEach(([k, v]) => an.setAttribute(k, v));
+                    e.appendChild(an);
+                } else if (!laeuft && da) da.remove();
+            });
+            const auf = laeuft && P('P') >= zahl(t.o.p, 60) - 1;
+            const k = r.querySelector('.fp-b-ventil'); if (k) k.style.transform = auf ? 'translateY(2px)' : '';
+            const f = r.querySelector('.fp-b-feder'); if (f) f.style.transform = auf ? 'scaleY(0.8)' : '';
+        }
+    };
     // Bild eines Teils (Maßstab 1, Planeinheiten) in g zeichnen
     // Angedockter Schalldämpfer/Blindstopfen am Wegeventil in der Darstellung des Ventils
     // (Gehäuse, Schnitt, geschlossen): eingeschraubt am Anschlusspunkt, Luftraum färbt sich mit dem Anschluss.
@@ -5331,7 +5498,7 @@
     }
     function bauZeichnen(t, g, mode, uid, rot) {
         const B = BAU[t.typ]; if (!B) return false;
-        const D = bauStift(mode, uid, g);
+        const D = bauStift(mode, uid, g, istHyd(t));
         const G = geo(t);
         for (const p of G.ports) bauStutzen(D, t, p, B.rand, rot);
         B.zeichne(t, D);
@@ -5375,15 +5542,19 @@
         if (typ === 'schnell' && kugel) kugel.setAttribute('cy', z && z.ab ? 6 : -2);
         if (typ === 'zeit' || typ === 'folge') { const b = g.querySelector('.fp-block'); if (b) b.setAttribute('transform', `translate(${z && z.an ? KASTEN : 0},0)`); const sp = g.querySelector('.fp-speicher'); if (sp) sp.setAttribute('fill', z && z.pr > 0.3 ? `rgba(21,101,192,${Math.min(0.85, z.pr / 6)})` : 'var(--fp-papier)'); }
         if (typ === 'manometer') {
-            const p = z ? P('1') : 0, w = (-135 + Math.max(0, Math.min(10, p)) / 10 * 270) * Math.PI / 180, n = g.querySelector('.fp-nadel'), wt = g.querySelector('.fp-wert');
+            const voll = istHyd(t0) ? 160 : 10;
+            const p = z ? P('1') : 0, w = (-135 + Math.max(0, Math.min(voll, p)) / voll * 270) * Math.PI / 180, n = g.querySelector('.fp-nadel'), wt = g.querySelector('.fp-wert');
             if (n) { n.setAttribute('x2', 9 * Math.sin(w)); n.setAttribute('y2', -9 * Math.cos(w)); }
-            if (wt) wt.textContent = z ? p.toFixed(1) + ' bar' : '';
+            if (wt) wt.textContent = z ? p.toFixed(istHyd(t0) ? 0 : 1) + ' bar' : '';
         }
+        if (typ === 'dbv') { const k = g.querySelector('.fp-dbv-pfeil'); if (k) k.setAttribute('transform', z && z.auf ? 'translate(-4,0)' : ''); }
+        if (typ === 'entsperr' && kugel) kugel.setAttribute('transform', z && (z.entsperrt || P('1') > P('2') + 0.05) ? 'translate(0,-5)' : '');
+        if (typ === 'speicher') { const k = g.querySelector('.fp-oelstand'); if (k) { const a = z ? Math.max(0, Math.min(1, (z.voil || 0) / Math.max(0.05, zahl(t0.o.V0, 0.7)))) : 0; k.setAttribute('height', 16 * a); k.setAttribute('y', 15 - 16 * a); } }
         if (typ === 'dschalter') { const k = g.querySelector('.fp-kontakt'); if (k) k.setAttribute('d', z && z.an ? 'M12,2 H18 L26,-4' : 'M12,2 H18 L26,-8'); }
         if (typ === 'schwenk') { const zg = g.querySelector('.fp-zeiger'); if (zg) { const s2 = z && z.x != null ? z.x / zylHub(t0) : 0, w = Math.PI - s2 * Math.PI; zg.setAttribute('x2', 16 * Math.cos(w)); zg.setAttribute('y2', 8 - 16 * Math.sin(w)); } }
         // Leitungsstriche des Symbols färben sich mit dem Druck des nächsten Anschlusses
-        const an = pr.some(p => p > P_AN);
-        obj.el.style.boxShadow = an ? '0 0 0 1px rgba(41,182,246,.6)' : '';
+        const an = pr.some(p => p > pAn(istHyd(t0)));
+        obj.el.style.boxShadow = an ? (istHyd(t0) ? '0 0 0 1px rgba(229,57,53,.6)' : '0 0 0 1px rgba(41,182,246,.6)') : '';
     }
     // Animation: Druck in den Luftwegen und bewegte Teile
     function bauAnimieren(obj, st) {
@@ -5392,15 +5563,15 @@
         const pr = st ? echtDruecke(st, ids) : ids.map(() => 0);
         const P = id => { const i = ids.indexOf(id); return i < 0 ? 0 : pr[i]; };
         const z = st ? Object.assign({ fehler: (() => { try { return st.p === plan ? fehlerAktiv(st.t.id) : null; } catch (e) { return null; } })() }, st.z) : null;
-        const sig = pr.map(p => p.toFixed(1)).join(',') + '|' + (z ? [z.seite, z.an, z.ab, z.pr != null ? z.pr.toFixed(1) : '', z.x != null ? z.x.toFixed(3) : ''].join() : '-');
+        const sig = pr.map(p => p.toFixed(1)).join(',') + '|' + (z ? [z.seite, z.an, z.ab, z.auf, z.entsperrt, z.voil != null ? z.voil.toFixed(3) : '', z.pr != null ? z.pr.toFixed(1) : '', z.x != null ? z.x.toFixed(3) : ''].join() : '-');
         if (obj._fpSig === sig) return;
         obj._fpSig = sig;
         const geh = darst(obj) === 'gehaeuse';
         const Pv = id => B.druck ? B.druck(id, P, z) : P(id);
         el2.querySelectorAll('.fp-b-luft').forEach(e => {
-            const f = (pp => pp > P_AN ? `rgba(41,182,246,${(0.35 + 0.6 * Math.min(1, pp / 6)).toFixed(2)})` : (geh ? '#fff' : '#eceff1'))(Pv(e.getAttribute('data-p')));
+            const H = istHyd(t0), f = fluidFarbe(Pv(e.getAttribute('data-p')), H, geh);
             if (e.tagName === 'rect') e.setAttribute('fill', f); else if (e.classList.contains('fp-b-kanal')) e.setAttribute('stroke', f);
-            else e.setAttribute('stroke', Pv(e.getAttribute('data-p')) > P_AN ? '#29b6f6' : '#c0a060');
+            else e.setAttribute('stroke', Pv(e.getAttribute('data-p')) > pAn(H) ? (H ? '#e53935' : '#29b6f6') : '#c0a060');
         });
         if (B.anim) B.anim(el2, t0, z, P);
     }
@@ -5795,9 +5966,9 @@
     }
     if (!registrieren2D()) document.addEventListener('DOMContentLoaded', registrieren2D);
     // Neues Fluidplan-Teil aus dem Menü Pneumatik der 2D-Anlage
-    function neu2D(typ) {
+    function neu2D(typ, oo) {
         if (!TYP[typ] || typeof createFactoryObject !== 'function') return null;
-        const o = createFactoryObject('pneu_fp', typ);
+        const o = createFactoryObject('pneu_fp', oo ? { typ, o: Object.assign({}, TYP[typ].optionen, oo) } : typ);
         try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
         try { if (typeof _updatePneuPortLayer === 'function') _updatePneuPortLayer(); } catch (e) {}
         return o;

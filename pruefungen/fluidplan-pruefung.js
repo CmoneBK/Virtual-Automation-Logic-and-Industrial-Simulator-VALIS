@@ -851,6 +851,18 @@ const FAELLE = {
     }
     R.push(['aufgeschnitten zeigt Luftwege, geschlossen nicht', (window._fpAlleVentile('schnitt'), teile.every(o => o.el.querySelector('.fp-b-luft') || /stopfen|daempfer/.test(o.pneu.fp.typ))) && (window._fpAlleVentile('aussen'), teile.every(o => !o.el.querySelector('.fp-b-luft')))]);
     teile.forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    // Hydraulik-Teile: dieselben vier Darstellungen, Öl bernstein statt Luft grau
+    const H = { hyd: true }, hl = [['aggregat'], ['tank'], ['dbv'], ['stromregel'], ['speicher'], ['entsperr'], ['filter'], ['rueck', H], ['drv', H], ['manometer', H], ['ventil', { hyd: true, wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf' }]];
+    const ht = hl.map(([t, o]) => Fluidplan._neu2D(t, o)), hn = ht.map(o => window._fpPorts2D(o).length).join();
+    for (const b of ['gehaeuse', 'schnitt', 'aussen', 'symbol']) {
+      window._fpAlleVentile(b); await warte(50);
+      const n = ht.filter(o => b === 'symbol' ? !o.el.querySelector('svg.fp-bau') : !!(o.el.querySelector('svg.fp-bau-' + b) || o.pneu.fp.typ === 'ventil')).length;
+      R.push(['Hydraulik: alle ' + hl.length + ' Teile als ' + b + ', Anschlüsse gleich', n === hl.length && ht.map(o => window._fpPorts2D(o).length).join() === hn, n]);
+    }
+    window._fpAlleVentile('schnitt'); await warte(50);
+    R.push(['Hydraulik aufgeschnitten: Öl in Ruhe bernstein', ht.filter(o => o.pneu.fp.typ !== 'ventil').every(o => Array.from(o.el.querySelectorAll('.fp-b-luft')).some(e => /#ffe082/i.test((e.getAttribute('fill') || '') + (e.getAttribute('stroke') || ''))))]);
+    R.push(['Hydraulik-Wegeventil: Anschlüsse P, T, A, B', ['P', 'T', 'A', 'B'].every(n => Array.from(ht[ht.length - 1].el.querySelectorAll('text')).some(e => e.textContent === n))]);
+    ht.forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
     // Beispiel mit Drosselrückschlagventilen: im Gehäusebild färben sich die Luftwege in der Simulation
     window.loadExample('code'); await warte(800);
     window._fpAlleVentile('schnitt'); await warte(200); window._fpAlleVentile('gehaeuse'); await warte(200);

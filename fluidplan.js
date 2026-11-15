@@ -249,7 +249,7 @@
         name: 'Zylinder, doppeltwirkend', buchstabe: 'A', antrieb: true,
         optionen: { d: 20, dStange: 8, hub: 100, last: 0, start: 'hinten', daempfung: false, sensH: '', sensV: '', anlage: '' },
         geometrie() {
-            return { ports: [{ id: 'K', x: 14, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }, { id: 'S', x: ZYL_L - 14, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }],
+            return { ports: [{ id: 'K', x: 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }, { id: 'S', x: ZYL_L - 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }],
                 box: [-2, -16, ZYL_L * 2 - 10, ZYL_H + 12] };
         },
         zeichne(t, g, geo) { zylinderZeichnen(t, g, true); }
@@ -258,7 +258,7 @@
         name: 'Zylinder, einfachwirkend', buchstabe: 'A', antrieb: true,
         optionen: { d: 20, dStange: 8, hub: 50, last: 0, start: 'hinten', sensH: '', sensV: '', anlage: '' },
         geometrie() {
-            return { ports: [{ id: 'K', x: 14, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }], box: [-2, -16, ZYL_L * 2 - 10, ZYL_H + 12] };
+            return { ports: [{ id: 'K', x: 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }], box: [-2, -16, ZYL_L * 2 - 10, ZYL_H + 12] };
         },
         zeichne(t, g, geo) { zylinderZeichnen(t, g, false); }
     };

@@ -774,6 +774,20 @@ const FAELLE = {
     R.push(['zurück auf Gehäuse', vs.every(o => !o.el.querySelector('svg.fp-echt'))]);
     return R;
   },
+  'Pneumatik-Bereich verschieben nimmt umgebaute Teile mit': async () => {
+    const R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; Fluidplan._leeren();
+    window.loadExample('code'); await warte(800);
+    window._fpAlleVentile('schnitt'); await warte(300);
+    const z = factoryObjects.find(o => o.type === 'pneumatic_zone');
+    const drin = factoryObjects.filter(o => o.type === 'pneu_fp' && z && o.x + o.width / 2 >= z.x && o.x + o.width / 2 <= z.x + z.width && o.y + o.height / 2 >= z.y && o.y + o.height / 2 <= z.y + z.height);
+    const vor = drin.map(o => [o.x, o.y]);
+    z.x += 40; z.y += 20; updateObjTransform(z); await warte(300);
+    R.push(['Bereich hat umgebaute Teile', drin.length >= 2, drin.length]);
+    R.push(['alle umgebauten Teile wandern mit', drin.every((o, i) => o.x === vor[i][0] + 40 && o.y === vor[i][1] + 20), drin.map((o, i) => (o.x - vor[i][0]) + '/' + (o.y - vor[i][1])).join(' ')]);
+    return R;
+  },
   'Leitungen: fremde Netze nie aufeinander, Bogen an Kreuzungen, Punkt am Abzweig': async () => {
     const R = [], warte = ms => new Promise(r => setTimeout(r, ms)), F = Fluidplan;
     factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });

@@ -66863,12 +66863,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Opt-out: Der freien Steckaufbau setzt window._cedNoProxy, damit ein
                 // PHYSISCH platziertes Relais NICHT wegoptimiert (inline-substituiert)
                 // wird — der reale Baustein soll als eigene Variable im Code stehen.
-                if (!window._cedNoProxy) Object.keys(coilGroups).forEach(coilVar => {
+                // Ausnahme: Koppelrelais K_<Quelle>, die „Aktuelle Schaltung übernehmen“
+                // für Sensoren und Zähler anlegt, fallen auch dort weg. Im Code der
+                // übernommenen Schaltung standen sie nie (Rundlauf, Christoph 16.11.2026).
+                Object.keys(coilGroups).forEach(coilVar => {
+                    if (window._cedNoProxy && !/^K_/.test(coilVar)) return;
                     const coil = coilGroups[coilVar][0];
                     if (coil.type !== 'relais') return;
                     if (!usedAsAux.has(coilVar)) return;
                     const e = _exprForCoil(coil);
                     if (e && SIMPLE_VAR_RE.test(e.trim())) {
+                        if (window._cedNoProxy && coilVar !== 'K_' + e.trim()) return;
                         // Nur Koppelrelais eines Sensors fallen weg (K_BG1, K_<SENSOR>).
                         // Ein selbst benannter Merker (ANLAGE_EIN := Q1) bleibt mit
                         // seinem Namen im Code — Aufgaben prüfen solche Namen.
@@ -70757,7 +70762,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return b;
                 };
                 // Zähler heißen im Plan CTU_<Name>; im Code (und im freien Aufbau) <Name>
-                const vName = v => String(v || '').replace(/^CTU_/, '');
+                // Flipflops heißen im Plan SR_<n>/RS_<n>, im Code Q<n>/Q<n>_RS
+                const vName = v => String(v || '').replace(/^CTU_/, '').replace(/^SR_(\d+)$/, 'Q$1').replace(/^RS_(\d+)$/, 'Q$1_RS');
                 const belegen = (b, key, slot) => { if (A[slot]) b.slotVars[key] = vName(A[slot]); };
                 for (let i = 1; i <= (data.tCount || 0); i++) { const b = brett('taster', i); for (let s = 1; s <= 4; s++) belegen(b, 'S' + s, `T${i}_S${s}`); }
                 // Koppelrelais eines Sensors (und Hilfsrelais eines Zählers) heißt im Plan wie dieser. Im freien
@@ -71319,8 +71325,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const verified = new Set();
                 FB.boards.forEach(b => Object.values(b.slotVars||{}).forEach(v => {
                     if (!v) return;
-                    const re = new RegExp('(^|[^A-Za-z0-9_])' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z0-9_]|$)');
-                    if (re.test(code)) verified.add(v.toUpperCase());
+                    const da = n => new RegExp('(^|[^A-Za-z0-9_])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z0-9_]|$)').test(code);
+                    // Koppelrelais K_<Quelle> stehen nicht im Code, ihre Quelle schon
+                    if (da(v) || (/^K_./.test(v) && da(v.slice(2)))) verified.add(v.toUpperCase());
                 }));
                 FB.verifiedVars = verified;
                 const totalVars = _fbAllVars().size;

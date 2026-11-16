@@ -98,7 +98,8 @@
             window.addFactoryDevice(typ);
         } catch (e) { console.error('Komponenten-Tutorial: Einsetzen', typ, e); }
     }
-    function beispielLaden(key) { schliessen(); try { window.loadExample(key); } catch (e) { console.error(e); } }
+    // Nach dem Laden die 2D-Anlage zeigen: Um die geht es im Tutorial
+    function beispielLaden(key) { schliessen(); try { window.loadExample(key); setTimeout(anlageZeigen, 400); } catch (e) { console.error(e); } }
     function menueAn(art) { try { if (art === 'pneu') window.togglePneumaticMenu(true); else window.toggleHydraulicMenu(true); } catch (e) {} schliessen(); anlageZeigen(); }
     function oeffne(was) {
         schliessen();
@@ -573,23 +574,130 @@
             code('kt_hand_kran', '// Achsverriegelung: nie gleichzeitig rechts und links\nKRAN_RECHTS := T_RECHTS && ¬T_LINKS\nKRAN_LINKS := T_LINKS && ¬T_RECHTS\n// Seitlich fahren nur mit oben stehendem Haken\nKRAN_RECHTS_FREI := KRAN_RECHTS && S_HUB_OBEN\nKRAN_AB := T_AB\nKRAN_AUF := T_AUF\nSAUGER := T_GREIFEN') +
             tipp('Das Beispiel „Portalkran“ steuert den Kran mit WASD und Leertaste und zeigt die Achsverriegelung.') +
             knoepfe(beispiel('portal_crane', 'Portalkran'), knopf('➕ Portalkran einsetzen', "KompTut.einsetzen('portal_crane')"))) },
-        { num: 3, title: 'Roboterarm', content: kap('Der 2D-Roboterarm (SCARA)', 'Zwei Betriebsarten',
-            h3('Modus 1: Manuell (Tippen über die SPS)') +
-            p('Im Rechtsklick unter <strong>🦾 Achsen-Variablen</strong> gibst du X+, X−, Y+, Y− und den Greifer an. Solange ein Ausgang 1 ist, fährt der Greifer in diese Richtung.') +
-            h3('Modus 2: Pfadverfolgung') +
-            schritte([
-                'Rechtsklick → <strong>✏️ Pfad bearbeiten</strong>: Punkte in die Anlage klicken.',
-                'Optional eine <strong>Aktivierung</strong>: Nur wenn sie 1 ist, fährt der Arm den Pfad ab.',
-                'Mehrere Pfade: <strong>⬆ Mehrpfad-Modus</strong>, mit Reihenfolge, Übergang und Zykluszähler.',
-                '<strong>⚡ Pfadgeschwindigkeit</strong> und die Armlängen stellst du ebenfalls dort ein.'
+        { num: 3, title: 'Roboter', content: kap('Roboterarm und humanoider Roboter', 'Eigenes Tutorial „Roboter“',
+            p('Der <strong>2D-Roboterarm (SCARA)</strong> und der <strong>humanoide Roboter</strong> arbeiten in der Draufsicht. Beide fährst du von Hand über die SPS oder lässt sie einen Pfad abfahren, auf dem sie greifen, warten und der SPS etwas melden.') +
+            p('Das alles steht ausführlich im Tutorial <strong>🦾 Roboter</strong>: Arbeitsraum, Pfad-Editor, Wegpunkt-Aktionen, Handshake mit der SPS, mehrere Pfade, Mensch am Lichtgitter, mit zwei Beispielanlagen.') +
+            knoepfe(zuTutorial('roboter', '🦾 Zum Tutorial Roboter'), knopf('➕ Roboterarm einsetzen', "KompTut.einsetzen('robot_arm_2d')"), knopf('➕ Humanoiden Roboter einsetzen', "KompTut.einsetzen('worker_2d')"))) }
+    ]};
+
+    // ------------------------------------------------------------------
+    // 8b Roboter: 2D-Roboterarm (SCARA) und humanoider Roboter
+    // ------------------------------------------------------------------
+    const roboter = { title: 'Roboter', icon: '🦾', chapters: [
+        { num: 1, title: 'Überblick', content: kap('🦾 Roboter', 'Roboterarm und humanoider Roboter',
+            p('Beide Roboter liegen im Menü <strong>⚙️ Aktoren ▼</strong> unter <strong>Handling</strong> und arbeiten nur in der <strong>Draufsicht</strong>. Stell dafür die Anlage oben auf <strong>Global: Draufsicht</strong> oder lege eine <strong>Zone (Draufsicht)</strong> an.') +
+            teile([
+                ['🦾', '2D-Roboterarm (SCARA)', 'Sockel mit zwei Gelenkarmen und Greifer. Erreicht nur Punkte in seinem <strong>Arbeitsraum</strong>.', 'robot_arm_2d'],
+                ['👷', 'Humanoider Roboter', 'Mensch von oben. Läuft frei durch die Anlage, dreht sich in Laufrichtung und trägt Teile.', 'worker_2d']
             ]) +
-            info('Im Pfadmodus ignoriert der Arm X+/X−; der Greifer-Ausgang gilt weiter. „ℹ️ Variablen-Hilfe anzeigen“ im Rechtsklick fasst alles zusammen.') +
+            tabelle(['', 'Roboterarm', 'Humanoider Roboter'], [
+                ['Bewegung', 'Greifer im Kreis um den Sockel', 'überall hin, ohne Grenze'],
+                ['Greifen', 'Teil im Umkreis von 35 px um den Greifer', 'Teil im Umkreis von 40 px um den Körper'],
+                ['Einstellen', 'Armlängen, Pfadgeschwindigkeit', 'Laufgeschwindigkeit, Helmfarbe'],
+                ['Erkannt von', '–', 'Lichtgitter (Körperfeld 30 × 30 px)']
+            ]) +
+            p('Beide kennen dieselben zwei Betriebsarten: <strong>Tippen</strong> über SPS-Ausgänge und <strong>Pfadverfolgung</strong> mit Wegpunkten. Alles, was in diesem Tutorial über Pfade steht, gilt für beide.') +
+            knoepfe(beispiel('roboter_handshake', 'Roboterarm am Band'), beispiel('mensch_lichtgitter', 'Mensch am Lichtgitter'))) },
+        { num: 2, title: 'Arbeitsraum', content: kap('Der Arbeitsraum des Roboterarms', 'Was der Greifer erreicht',
+            p('Der Arm hat zwei Glieder: <strong>Arm 1</strong> (80 px) am Sockel und <strong>Arm 2</strong> (60 px) mit dem Greifer. Beide Längen stellst du im Rechtsklick unter <strong>📏 Arm 1 / Arm 2 Länge</strong> ein.') +
+            formel('Reichweite außen = Arm 1 + Arm 2 &nbsp;&nbsp;|&nbsp;&nbsp; toter Bereich innen = |Arm 1 − Arm 2|') +
+            p('Der gestrichelte blaue Kreis um den Sockel zeigt die Reichweite. Mit den Grundwerten erreicht der Greifer alles zwischen 20 px und 140 px vom Sockel. Ein Punkt außerhalb wird an den Rand gezogen, auch beim Setzen und Aufzeichnen im Pfad-Editor.') +
+            h3('Richtungen') +
+            tabelle(['Achse', 'Richtung auf dem Bildschirm'], [
+                ['X+', 'nach rechts'], ['X−', 'nach links'], ['Y+', '<strong>nach unten</strong>'], ['Y−', 'nach oben']
+            ]) +
+            info('Y+ zeigt nach unten, wie beim Portalkran: Der Bildschirm zählt von oben nach unten.') +
+            p('Der Greifer ist offen <strong>grün</strong> und geschlossen <strong>rot</strong>. Er nimmt das nächste Teil, das höchstens 35 px entfernt liegt. Lässt er los, gilt für das Teil wieder die Schwerkraft der Zone.') +
+            tipp('Stell den Sockel so, dass Abholpunkt und Ablage beide im Kreis liegen, aber nicht im toten Bereich am Sockel.')) },
+        { num: 3, title: 'Tippen', content: kap('Tippen über die SPS', 'Betriebsart 1: von Hand',
+            p('Im Rechtsklick unter <strong>🦾 Achsen-Variablen</strong> wählst du für X+, X−, Y+, Y− und den Greifer je einen SPS-Ausgang. Solange ein Achsausgang 1 ist, fährt der Greifer in diese Richtung, mit der Geschwindigkeit aus <strong>⚡ Pfadgeschwindigkeit</strong> (Pixel je Bild). Am Rand des Arbeitsraums bleibt er stehen.') +
+            code('kt_rob_tippen', '// Achsverriegelung: nie zwei Richtungen gleichzeitig\nARM_RECHTS := T_RECHTS && ¬T_LINKS\nARM_LINKS := T_LINKS && ¬T_RECHTS\nARM_RUNTER := T_RUNTER && ¬T_RAUF\nARM_RAUF := T_RAUF && ¬T_RUNTER\n// Greifer mit Schalter: 1 = zu\nGREIFER := S_GREIFER') +
+            schritte([
+                'Code einfügen, Roboterarm einsetzen.',
+                'Rechtsklick auf den Arm: X+ = <code>ARM_RECHTS</code>, X− = <code>ARM_LINKS</code>, Y+ = <code>ARM_RUNTER</code>, Y− = <code>ARM_RAUF</code>, Greifer = <code>GREIFER</code>.',
+                'Im Sim-Panel bei jedem Taster mit <strong>⌨️</strong> eine Taste belegen (z. B. WASD), dann fährt der Arm wie mit einem Joystick.'
+            ]) +
+            info('Der humanoide Roboter hat dieselben fünf Variablen, heißt dort nur „Laufen rechts/links/nach unten/nach oben“ und „Greifen / Halten“.') +
             knoepfe(knopf('➕ Roboterarm einsetzen', "KompTut.einsetzen('robot_arm_2d')"))) },
-        { num: 4, title: 'Humanoider Roboter', content: kap('Der humanoide Roboter', 'Ein Mensch in der Anlage',
-            p('Der humanoide Roboter läuft wie der Roboterarm Pfade ab (Draufsicht), greift Werkstücke und trägt sie. Er hat eine Laufgeschwindigkeit und eine Helmfarbe.') +
-            p('Er eignet sich, um Mensch und Maschine zu zeigen: Ein <strong>Lichtgitter</strong> erkennt ihn, wenn er in den Gefahrenbereich läuft.') +
-            code('kt_hand_mensch', '// Band stoppt, wenn der Mensch das Lichtgitter unterbricht\nBAND := Q1 && LICHTGITTER') +
-            knoepfe(knopf('➕ Humanoiden Roboter einsetzen', "KompTut.einsetzen('worker_2d')"), zuTutorial('sicherheit', '🚨 Zum Lichtgitter'))) }
+        { num: 4, title: 'Pfad zeichnen', content: kap('Einen Pfad zeichnen', 'Betriebsart 2: Pfadverfolgung',
+            p('Statt jede Achse zu steuern, gibst du dem Roboter einen Weg aus <strong>Wegpunkten</strong>. Die Wegpunkte hängen am Roboter: Verschiebst du ihn, wandert der Pfad mit.') +
+            schritte([
+                'Rechtsklick auf den Roboter → <strong>✏️ Pfad bearbeiten</strong>. Unten erscheint die blaue Leiste des Pfad-Editors.',
+                '<strong>Linksklick</strong> in die Anlage setzt einen Punkt. Einen Punkt <strong>ziehen</strong> verschiebt ihn, <strong>Rechtsklick</strong> auf einen Punkt löscht ihn.',
+                'Oder <strong>🔴 Aufzeichnen</strong>: Die Maus fährt vor, alle paar Pixel entsteht ein Punkt.',
+                '<strong>Modus</strong>: <em>Linear</em> fährt gerade von Punkt zu Punkt, <em>Spline</em> rundet die Ecken ab.',
+                '<strong>Loop</strong>: Nach dem letzten Punkt geht es zurück zum ersten. Ein Klick auf den ersten Punkt schließt den Kreis und beendet den Editor.',
+                '<strong>✔ Fertig</strong> speichert. <strong>🗑 Alle Punkte</strong> fängt von vorn an.',
+                'Rechtsklick → <strong>▶ Pfadverfolgung aktivieren</strong>.'
+            ]) +
+            p('Mit <strong>Aktivierung Pfadmodus</strong> wählst du einen Ausgang, ohne den der Roboter steht: Ist er 0, bleibt der Roboter, wo er ist, und fährt bei 1 von dort weiter. Ohne Variable fährt er immer.') +
+            info('Im Pfadmodus zählen die Achs-Variablen nicht. Der Greifer-Ausgang gilt weiter, solange kein Wegpunkt selbst greift oder loslässt.')) },
+        { num: 5, title: 'Wegpunkt-Schilder', content: kap('Die Schilder über jedem Wegpunkt', 'Greifen, Pause, Tempo, Aktion',
+            p('Im Pfad-Editor sitzen über jedem Punkt vier kleine Schilder. Ein Klick schaltet sie weiter:') +
+            tabelle(['Schild', 'Was es tut', 'Werte'], [
+                ['⚡ Tempo', 'Faktor für die Strecke <strong>zu</strong> diesem Punkt', '1× · 0,25× · 0,5× · 2× · 3× · 5×'],
+                ['○ Greifer', '✊ greift hier, 🖐 lässt hier los', 'nichts · greifen · loslassen'],
+                ['⏸ Pause', 'bleibt hier stehen', '0 · 0,5 · 1 · 2 · 3 · 5 s'],
+                ['⚙ Aktion', 'spricht mit der SPS (nächstes Kapitel)', 'Warten · Setzen · Überspringen']
+            ]) +
+            p('Eine Pause nach dem Greifen gibt dem Greifer Zeit, das Teil sicher zu fassen. Ein langsamer letzter Abschnitt (0,25×) setzt das Teil sanft ab.') +
+            h3('Das Statusschild am Roboter') +
+            tabelle(['Anzeige', 'Bedeutung'], [
+                ['▶ Fährt', 'fährt den Pfad ab'], ['✊ Greift', 'hält ein Teil'], ['⏸ Pause', 'steht an einem Wegpunkt mit Pause'],
+                ['⏳ Warte', 'wartet auf eine Variable'], ['→ Transit', 'wechselt zum nächsten Pfad (Mehrpfad, Übergang linear)']
+            ])) },
+        { num: 6, title: 'Handshake mit der SPS', content: kap('Handshake: Roboter und SPS', 'Freigabe hin, Fertigmeldung zurück',
+            p('In einer echten Anlage sprechen Roboter und SPS über Signale: Die SPS gibt <strong>frei</strong>, der Roboter meldet <strong>fertig</strong>. Das baust du mit dem Schild <strong>⚙ Aktion</strong> am Wegpunkt:') +
+            tabelle(['Aktion', 'Was der Roboter tut', 'Typische Variable'], [
+                ['⏳ Warten bis Variable', 'bleibt am Punkt stehen, bis die Variable 1 ist', 'SPS-Ausgang <code>FREIGABE</code> oder ein Sensor'],
+                ['📤 Variable setzen', 'schreibt beim Ankommen 1 (TRUE) oder 0 (FALSE)', 'SPS-Eingang <code>ROBO_FERTIG</code>'],
+                ['⏭ Überspringen wenn', 'ist die Variable 1, geht er gleich zum nächsten Punkt weiter', 'z. B. <code>KEIN_TEIL</code>']
+            ]) +
+            warn('„Variable setzen“ schreibt nur einmal beim Ankommen. Nimm dafür eine Variable, die die SPS nur <strong>liest</strong> (rechts vom :=). Steht sie links vom :=, überschreibt die SPS sie im nächsten Zyklus sofort wieder.') +
+            code('kt_rob_handshake', 'S1 := START && ¬STOP\nR1 := STOP\n// Band läuft, bis ein Teil an der Lichtschranke steht\nBAND := Q1 && ¬TEIL_DA\n// SPS → Roboter: Teil liegt bereit\nFREIGABE := Q1 && TEIL_DA\n// Roboter → SPS: setzt der Roboter selbst\nLED_ABGELEGT := ROBO_FERTIG') +
+            h3('Der Pfad dazu') +
+            tabelle(['Punkt', 'Ort', 'Schilder'], [
+                ['1', 'Grundstellung', '⚙ Warten bis <code>FREIGABE</code>'],
+                ['2', 'Abholpunkt am Bandende', '✊ greifen, ⏸ 0,5 s, ⚙ <code>ROBO_FERTIG</code> = FALSE'],
+                ['3', 'zurück über die Grundstellung', '–'],
+                ['4', 'Ablage', '🖐 loslassen, ⚙ <code>ROBO_FERTIG</code> = TRUE']
+            ]) +
+            p('Mit <strong>Loop</strong> geht es danach zurück zu Punkt 1. Ein „Warten“ am ersten Punkt gilt schon beim Start: Der Roboter bleibt in Grundstellung, bis die SPS ihn freigibt.') +
+            knoepfe(beispiel('roboter_handshake', 'Roboterarm am Band'))) },
+        { num: 7, title: 'Mehrere Pfade', content: kap('Mehrere Pfade', 'Mehrpfad-Modus',
+            p('Rechtsklick → <strong>⬆ Mehrpfad-Modus aktivieren</strong>. Ein vorhandener Pfad wird zu „Pfad 1“. Mit <strong>➕ Pfad hinzufügen</strong> kommen weitere dazu, jeder in einer eigenen Farbe, mit Namen, eigenem ✏️ und 🗑.') +
+            tabelle(['Einstellung', 'Bedeutung'], [
+                ['Aktivierung je Pfad', '<em>-- immer --</em> oder ein Ausgang. Nur Pfade, deren Variable 1 ist (und die mindestens zwei Punkte haben), fährt der Roboter.'],
+                ['🔀 Reihenfolge', '▶ Hintereinander · ◀ Umgekehrt · ↔ Pendeln · 🎲 Zufällig'],
+                ['🔗 Übergang', '⚡ Springen: sofort zum Anfang des nächsten Pfads · ➡ Linear: dorthin fahren'],
+                ['🔢 Zykluszähler', 'zählt jeden fertig abgefahrenen Pfad in eine Variable (geht auch im Einpfad-Modus)'],
+                ['📋 Pfade kopieren / einfügen', 'überträgt alle Pfade auf einen anderen Roboter']
+            ]) +
+            p('So steuert die SPS, <strong>welchen</strong> Weg der Roboter nimmt: Gutteil-Pfad aktiv, wenn <code>GUT</code> = 1, Schlechtteil-Pfad, wenn <code>SCHLECHT</code> = 1.') +
+            code('kt_rob_zaehler', '// Zykluszähler des Roboters steht in ZYKLEN (Eingang der SPS)\n// Nach 10 Teilen ist der Behälter voll\nBEHAELTER_VOLL := ZYKLEN > 9\nBAND := Q1 && ¬BEHAELTER_VOLL') +
+            info('⬇ Einpfad-Modus (zurück) übernimmt Pfad 1 als einzigen Pfad.')) },
+        { num: 8, title: 'Humanoider Roboter', content: kap('Der humanoide Roboter', 'Ein Mensch in der Anlage',
+            p('Der humanoide Roboter kann alles aus den Kapiteln 3 bis 7: Tippen, Pfad, Schilder, Handshake, Mehrpfad. Dazu kommt:') +
+            schritte([
+                '<strong>Keine Reichweite</strong>: Er läuft überall hin. Er dreht sich in Laufrichtung, ein Drehgriff entfällt.',
+                '<strong>🪖 Helmfarbe</strong> und <strong>⚡ Laufgeschwindigkeit</strong> im Rechtsklick.',
+                'Er greift Teile im Umkreis von 40 px und trägt sie sichtbar vor sich her.',
+                'Sein Körper ist für das <strong>Lichtgitter</strong> ein Feld von 30 × 30 px: Läuft er hinein, meldet das Gitter 0.'
+            ]) +
+            p('Damit zeigst du, wie eine Anlage einen Menschen schützt. Das Lichtgitter ist ein Öffner: <code>LICHTGITTER</code> = 1 heißt „Feld frei“.') +
+            code('kt_rob_mensch', '// Lichtgitter mit Wiederanlaufsperre\nS1 := START && ¬STOP && LICHTGITTER\nR1 := STOP || ¬LICHTGITTER\nBAND := Q1\nLED_GESPERRT := ¬LICHTGITTER') +
+            warn('Nach dem Verlassen des Schutzfelds darf das Band nicht von selbst anlaufen. Erst ein neuer START-Befehl gibt es frei (Wiederanlaufsperre).') +
+            knoepfe(beispiel('mensch_lichtgitter', 'Mensch am Lichtgitter'), knopf('➕ Humanoiden Roboter einsetzen', "KompTut.einsetzen('worker_2d')"), zuTutorial('sicherheit', '🚨 Zum Tutorial Sicherheitstechnik'))) },
+        { num: 9, title: 'Übungen', content: kap('Übungen', 'Selbst bauen',
+            p('Lade das Beispiel „Roboterarm am Band“ und baue es aus:') +
+            schritte([
+                '<strong>Grundstellung melden</strong>: Setze am ersten Punkt <code>ROBO_GS</code> = TRUE und am Abholpunkt FALSE. Lass das Band nur laufen, wenn der Roboter in Grundstellung ist.',
+                '<strong>Zwei Ablagen</strong>: Stelle den Mehrpfad-Modus ein. Pfad 1 legt links ab, Pfad 2 rechts. Ein Schalter <code>WAHL</code> entscheidet, welcher Pfad aktiv ist.',
+                '<strong>Behälter voll</strong>: Zähle mit dem Zykluszähler. Nach 5 Teilen stoppt das Band, bis du quittierst.',
+                '<strong>Mensch und Roboter</strong>: Stelle ein Lichtgitter vor den Arbeitsraum des Arms. Läuft der humanoide Roboter hinein, nimmt die SPS die <code>FREIGABE</code> weg.'
+            ]) +
+            tipp('Teste jeden Schritt mit dem Statusschild am Roboter: Steht dort „⏳ Warte“, fehlt ihm eine Freigabe.') +
+            knoepfe(beispiel('roboter_handshake', 'Roboterarm am Band'))) }
     ]};
 
     // ------------------------------------------------------------------
@@ -718,7 +826,7 @@
     // ------------------------------------------------------------------
     // Eintragen
     // ------------------------------------------------------------------
-    const NEU = { pneumatik, bedienen, foerdern, messen, sicherheit, hydraulik, analog, handling, anbauteile, fluessig, kamera, struktur };
+    const NEU = { pneumatik, bedienen, foerdern, messen, sicherheit, hydraulik, analog, handling, roboter, anbauteile, fluessig, kamera, struktur };
     Object.keys(NEU).forEach(k => { window._tutData[k] = NEU[k]; });
 
     const alt = {};
@@ -742,7 +850,8 @@
             E('hydraulik', 'Aggregat, Tank, 4/3-Ventile, Stromregelventil, Druck und Temperatur')
         ]},
         { cat: 'Handling und Werkzeuge', entries: [
-            E('handling', 'Portalkran, SCARA-Roboterarm, humanoider Roboter'),
+            E('handling', 'Portalkran, Zonen, Ordnung in großen Anlagen'),
+            E('roboter', 'SCARA-Roboterarm, humanoider Roboter, Pfade, Handshake mit der SPS'),
             E('anbauteile', 'Schieber, Stempel, Bohrspindel, Greifer, an den Kolben montieren')
         ]},
         { cat: 'Sicherheit', entries: [

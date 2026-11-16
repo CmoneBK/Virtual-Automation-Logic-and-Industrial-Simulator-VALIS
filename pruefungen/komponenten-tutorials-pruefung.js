@@ -40,12 +40,12 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     keys: window._tutIndex.flatMap(c => c.entries.map(e => e.key)),
     fehlend: window._tutIndex.flatMap(c => c.entries.map(e => e.key)).filter(k => !window._tutData[k])
   }));
-  ok('14 Tutorials in 11 Kategorien', idx.keys.length === 14 && idx.kats.length === 11, idx.keys.join(' '));
+  ok('15 Tutorials in 11 Kategorien', idx.keys.length === 15 && idx.kats.length === 11, idx.keys.join(' '));
   ok('Zylinder und Sensoren bleiben erhalten', idx.keys.includes('zylinder') && idx.keys.includes('sensor_ber'));
   ok('Jeder Eintrag hat Inhalt', idx.fehlend.length === 0, idx.fehlend.join(' '));
   await page.evaluate(() => openHub('tutorials')); await w(500);
   const karten = await page.evaluate(() => document.querySelectorAll('#tut-index-body .tut-card').length);
-  ok('Lernzentrum zeigt 14 Karten', karten === 14, karten);
+  ok('Lernzentrum zeigt 15 Karten', karten === 15, karten);
   await page.evaluate(() => closeHub()); await w(200);
 
   console.log('Jedes Kapitel');
@@ -160,6 +160,45 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const zp = [];
   for (const t of [40, 56, 52, 49]) { await page.evaluate(t => { spsState.OELTEMP = t; }, t); await w(250); zp.push(!!(await st('UEBERTEMP')).UEBERTEMP); }
   ok('Zweipunkt: ein über 55, bleibt bei 52, aus unter 50', JSON.stringify(zp) === '[false,true,true,false]', JSON.stringify(zp));
+  await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); });
+
+  console.log('Roboter');
+  const fabrik = () => page.evaluate(() => { const fw = document.getElementById('factory-wrapper'); if (getComputedStyle(fw).display === 'none') toggleWorkspaceView('factory-wrapper'); });
+  const robo = () => page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d' || o.type === 'worker_2d'); return { grab: !!(r && r.grabbedItem), status: r && r._statusBadge ? r._statusBadge.textContent : '', zyklen: r && r._cycleCount, tx: r && r.targetX, ty: r && r.targetY, ansicht: globalViewMode }; });
+  await page.evaluate(() => KompTut.beispiel('roboter_handshake')); await w(1500); await fabrik(); await w(300); await start(); await w(500);
+  const r0 = await robo();
+  await tippe('START');
+  let gegriffen = false, fertig = false, abgelegt = false, freigabeVorGreifen = true;
+  for (let i = 0; i < 40 && !(gegriffen && fertig); i++) {
+    await w(400);
+    const a = await robo(), s = await st('FREIGABE', 'ROBO_FERTIG', 'LED_ABGELEGT');
+    if (a.grab && !gegriffen) { gegriffen = true; freigabeVorGreifen = !!s.FREIGABE || freigabeVorGreifen; }
+    if (gegriffen && s.ROBO_FERTIG && s.LED_ABGELEGT) fertig = true;
+    if (gegriffen && !a.grab) abgelegt = true;
+  }
+  ok('Beispiel Roboterarm lädt in der Draufsicht und wartet in Grundstellung', r0.ansicht === 'top' && r0.status.includes('Warte'), JSON.stringify(r0));
+  ok('Handshake: Roboter greift nach FREIGABE, legt ab und meldet ROBO_FERTIG', gegriffen && abgelegt && fertig, JSON.stringify({ gegriffen, abgelegt, fertig }));
+  // Zykluszähler im Einpfad-Modus, Wegpunkt-Aktion schreibt in einen SPS-Eingang
+  await page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d'); r.cycleCountVar = 'ZYKLEN'; r._cycleCount = 0; r.pathSpeed = 8; });
+  await w(6000);
+  const zz = await page.evaluate(() => ({ z: spsState.ZYKLEN, r: factoryObjects.find(o => o.type === 'robot_arm_2d')._cycleCount }));
+  ok('Zykluszähler zählt im Einpfad-Modus', zz.r >= 1 && zz.z === zz.r, JSON.stringify(zz));
+  const popup = await page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d'); window._showWpActionPopup(100, 100, r.waypoints, 0); const el = document.getElementById('_wp-action-popup'); const n = el ? el.querySelectorAll('option').length : 0; const t = el ? el.textContent : ''; if (el) el.remove(); return { n, eingang: t.includes('ROBO_FERTIG'), ausgang: t.includes('FREIGABE') }; });
+  ok('⚙ Aktion bietet Ein- und Ausgänge an', popup.eingang && popup.ausgang && popup.n > 10, JSON.stringify(popup));
+  // Tippen: Zielpunkt bleibt im Arbeitsraum
+  await page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d'); r.pathEnabled = false; r.linkedVarX_Plus = 'BAND'; r.targetX = 0; r.targetY = 100; spsState.BAND = true; });
+  await w(1500);
+  const rand = await page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d'); return Math.round(Math.hypot(r.targetX, r.targetY)); });
+  ok('Tippen über den Rand: Zielpunkt bleibt am Rand des Arbeitsraums', rand <= 140, rand);
+  await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); });
+  await page.evaluate(() => KompTut.beispiel('mensch_lichtgitter')); await w(1500); await fabrik(); await w(300); await start(); await w(300);
+  await tippe('START');
+  const m0 = await st('BAND');
+  let gestoppt = false, frei = false;
+  for (let i = 0; i < 40 && !(gestoppt && frei); i++) { await w(400); const s = await st('BAND', 'LICHTGITTER'); if (!s.LICHTGITTER && !s.BAND) gestoppt = true; if (gestoppt && s.LICHTGITTER) frei = true; }
+  await w(400); const m1 = await st('BAND');
+  await tippe('START'); const m2 = await st('BAND');
+  ok('Mensch am Lichtgitter: Band stoppt, bleibt nach Verlassen aus, läuft nach START', m0.BAND && gestoppt && frei && !m1.BAND && m2.BAND, JSON.stringify({ m0, gestoppt, frei, m1, m2 }));
   await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); });
 
   console.log('Beispiele laden');

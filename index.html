@@ -62135,14 +62135,168 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
             // ---------- Init / Render ----------
             window.cedInit = function() {
-                if (ST._initialized) { cedRender(); return; }
+                if (ST._initialized) { cedRender(); _autoAusCode(); return; }
                 ST._initialized = true;
                 _loadStateFromStorage();
                 _bindPalette();
                 _bindCanvas();
                 _bindCodeListener();
                 cedRender();
+                _autoAusCode();
             };
+            // Beim Öffnen des Elektroplans: Gibt es im Code eine Schaltung und ist der
+            // Plan leer (oder unverändert seit der letzten Generierung, der Code aber
+            // neuer), wird er still „aus Code" aufgebaut (Christoph 16.11.2026).
+            // Von Hand Gezeichnetes wird nie überschrieben.
+            // Gleichwertigkeit von Programm und Plan-Code: dieselbe Prüfung wie
+            // pruefungen/schaltplan-editor-rundlauf.js (Kommentare egal, Logik über alle Belegungen)
+            const _cedVergleich = (function () {
+                const ID = '[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*';
+                function norm(code) {
+                  const out = { zeilen: {}, ketten: [], inputs: new Set() };
+                  const L = code.split('\n');
+                  for (let i = 0; i < L.length; i++) {
+                    const z = L[i].replace(/\/\/.*/, '').trim();
+                    if (!z) continue;
+                    if (/^SCHRITTKETTE\b/i.test(z)) {
+                      const blk = [];
+                      for (; i < L.length; i++) { const y = L[i].replace(/\/\/.*/, '').trim(); if (y) blk.push(y); if (/^END\b/i.test(y)) break; }
+                      out.ketten.push(blk.join('\n')); continue;
+                    }
+                    if (/^INPUT\s+/.test(z)) { z.slice(6).split(/[\s,]+/).filter(Boolean).forEach(v => out.inputs.add(v)); continue; }
+                    const m = z.match(new RegExp('^(' + ID + ')\\s*:=\\s*(.+)$'));
+                    if (m) out.zeilen[m[1]] = m[2].replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '¬').replace(/(\d+)\.0\b/g, '$1').replace(/\s+/g, ' ').trim();
+                    else out.zeilen['#' + z] = z;
+                  }
+                  // Speicher-Kurzform X := SR(a, b) / RS(a, b) → Qx-Zeile
+                  for (const [k, v] of Object.entries(out.zeilen)) {
+                    const m = v.match(/^(SR|RS)\((.+),(.+)\)$/);
+                    if (m) out.zeilen[k] = m[1] === 'SR' ? `((${m[2]}) || ${k}) && ¬(${m[3]})` : `(${m[2]}) || (${k} && ¬(${m[3]}))`;
+                  }
+                  // S/R-Paare → Q-Zeile
+                  for (const k of Object.keys(out.zeilen)) {
+                    const m = k.match(/^S(\d+)(_RS)?$/);
+                    if (!m) continue;
+                    const q = 'Q' + m[1] + (m[2] || ''), r = 'R' + m[1] + (m[2] || '');
+                    const S = out.zeilen[k], R = out.zeilen[r] || 'FALSE';
+                    out.zeilen[q] = m[2] ? `(${S}) || (${q} && ¬(${R}))` : `((${S}) || ${q}) && ¬(${R})`;
+                    delete out.zeilen[k]; delete out.zeilen[r];
+                  }
+                  // reine Aliase (X := Y) einsetzen bzw. Q-Namen auf den Merker umbenennen
+                  for (let runde = 0; runde < 3; runde++) for (const [k, v] of Object.entries(out.zeilen)) {
+                    if (!new RegExp('^' + ID + '$').test(v) || v === k) continue;
+                    const reV = new RegExp('\\b' + v + '\\b', 'g'), reK = new RegExp('\\b' + k + '\\b', 'g');
+                    if (/^Q\d+(_RS)?$/.test(v) && out.zeilen[v]) {
+                      // Merker := Qn → Qn heißt künftig wie der Merker
+                      out.zeilen[k] = out.zeilen[v].replace(reV, k); delete out.zeilen[v];
+                      for (const k2 of Object.keys(out.zeilen)) out.zeilen[k2] = out.zeilen[k2].replace(reV, k);
+                      continue;
+                    }
+                    let benutzt = false;
+                    for (const k2 of Object.keys(out.zeilen)) if (k2 !== k && reK.test(out.zeilen[k2])) { out.zeilen[k2] = out.zeilen[k2].replace(reK, v); benutzt = true; }
+                    if (benutzt) delete out.zeilen[k];
+                  }
+                  return out;
+                }
+                // Zwei Ausdrücke über alle Belegungen vergleichen (nur boolesche Logik)
+                function gleich(a, b) {
+                  if (a === b) return true;
+                  if (a == null || b == null) return false;
+                  const nurBool = x => !/[<>=+\-*\/,]|\b(?!NOT\b)[A-Z_]\w*\s*\(/.test(x);
+                  if (!nurBool(a) || !nurBool(b)) return a.replace(/\s/g, '') === b.replace(/\s/g, '');
+                  const vars = [...new Set((a + ' ' + b).match(new RegExp(ID, 'g')).filter(v => !/^(TRUE|FALSE)$/.test(v)))];
+                  if (vars.length > 14) return a.replace(/\s/g, '') === b.replace(/\s/g, '');
+                  const js = x => x.replace(/¬/g, '!').replace(new RegExp(ID, 'g'), v => v === 'TRUE' ? 'true' : v === 'FALSE' ? 'false' : 'w[' + JSON.stringify(v) + ']');
+                  const fa = new Function('w', 'return !!(' + js(a) + ')'), fb = new Function('w', 'return !!(' + js(b) + ')');
+                  for (let n = 0; n < (1 << vars.length); n++) {
+                    const w = {}; vars.forEach((v, i) => w[v] = !!(n >> i & 1));
+                    if (fa(w) !== fb(w)) return false;
+                  }
+                  return true;
+                }
+                function vergleiche(a, b) {
+                  const fehler = [];
+                  for (const k of new Set([...Object.keys(a.zeilen), ...Object.keys(b.zeilen)])) {
+                    if (!gleich(a.zeilen[k], b.zeilen[k])) fehler.push(`${k}: «${a.zeilen[k]}» → «${b.zeilen[k]}»`);
+                  }
+                  if (a.ketten.join('\n#\n') !== b.ketten.join('\n#\n')) fehler.push('Schrittkette verändert');
+                  const fehltIn = [...a.inputs].filter(v => !b.inputs.has(v) && !b.zeilen[v]);
+                  if (fehltIn.length) fehler.push('INPUT fehlt: ' + fehltIn.join(', '));
+                  return fehler;
+                }
+                return (codeA, codeB) => vergleiche(norm(codeA), norm(codeB));
+            })();
+            window._cedCodeVergleich = _cedVergleich;
+            function _codeKern(t) {
+                return String(t || '').replace(/\(\*[\s\S]*?\*\)/g, '').split('\n')
+                    .map(l => l.replace(/\/\/.*$/, '').replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+            }
+            function _abweichungPruefen(code, skipped) {
+                const alt = _d().getElementById('ced-abweichung'); if (alt) alt.remove();
+                if (skipped && skipped.length) return;          // bekannte Grenzen stehen schon im Hinweis
+                if (!/:=/.test(code)) return;
+                const planCode = _generateCode();
+                const unterschiede = _cedVergleich(code, planCode);
+                if (!unterschiede.length) return;
+                const nurCode = unterschiede, nurPlan = [];
+                ST._abweichung = { unterschiede, code, plan: planCode };
+                console.warn('VALIS: Elektroplan weicht vom Code ab', ST._abweichung);
+                const wrap = _d().getElementById('circuit-editor-wrapper'); if (!wrap) return;
+                const box = _d().createElement('div'); box.id = 'ced-abweichung';
+                box.style.cssText = 'position:absolute;left:8px;right:8px;top:44px;z-index:30;background:#fff3e0;color:#4e342e;border:1px solid #fb8c00;border-radius:6px;padding:8px 10px;font:12px/1.45 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2);';
+                box.innerHTML = '<b>⚠ Der Elektroplan ergibt nicht genau dein Programm.</b> Das ist ein Fehler in VALIS, nicht in deinem Code. '
+                    + '<div style="margin:4px 0;font:11px/1.4 Consolas,monospace;white-space:pre-wrap;max-height:90px;overflow:auto;">'
+                    + nurCode.slice(0, 8).map(l => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('\n') + '</div>'
+                    + '<span class="ced-ab-rolle">Ich bin <label><input type="radio" name="ced-ab-rolle" value="schueler" checked> Schüler/in</label> <label><input type="radio" name="ced-ab-rolle" value="lehrkraft"> Lehrkraft</label></span> '
+                    + '<button type="button" class="ced-ab-melden" style="background:#fb8c00;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-weight:600;">Fehler melden</button> '
+                    + '<button type="button" class="ced-ab-zu" title="Schließen" style="background:none;border:none;cursor:pointer;font-size:14px;float:right;">✕</button>'
+                    + '<span class="ced-ab-msg" style="margin-left:6px;"></span>';
+                wrap.appendChild(box);
+                const api = window.TBK_FEEDBACK_API || '/api/feedback.php';
+                let token = null;
+                fetch(api + '?action=token', { headers: { Accept: 'application/json' } }).then(r => r.json()).then(d => { if (d && d.token) token = d; }).catch(() => {});
+                box.querySelector('.ced-ab-zu').onclick = () => box.remove();
+                box.querySelector('.ced-ab-melden').onclick = async ev => {
+                    const knopf = ev.currentTarget, msg = box.querySelector('.ced-ab-msg');
+                    const rolle = (box.querySelector('input[name="ced-ab-rolle"]:checked') || {}).value || 'schueler';
+                    let text = '[VALIS Elektroplan: Code weicht nach „Aus Code" ab]\nAbweichungen (Programm → Plan):\n' + unterschiede.join('\n') + '\n--- Programm ---\n' + _codeKern(code) + '\n--- aus dem Plan ---\n' + _codeKern(planCode);
+                    text = text.slice(0, 1990);
+                    const kopieren = () => { try { navigator.clipboard.writeText(text); msg.textContent = 'Senden ging nicht; der Bericht liegt in der Zwischenablage.'; } catch (e) { msg.textContent = 'Senden ging nicht.'; } };
+                    knopf.disabled = true; msg.textContent = 'Wird gesendet …';
+                    try {
+                        if (!token) { const r = await fetch(api + '?action=token'); token = await r.json(); }
+                        const warte = 3200 - (Date.now() - token.ts * 1000); if (warte > 0) await new Promise(r => setTimeout(r, warte));
+                        const body = new URLSearchParams({ ts: token.ts, token: token.token, hp: '', role: rolle, category: 'fehler', message: text, path: location.pathname, title: 'VALIS Elektroplan: Code weicht ab' });
+                        const r = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+                        const d = await r.json().catch(() => ({}));
+                        if (d && d.ok) { msg.textContent = 'Danke, ist gemeldet.'; box.querySelector('.ced-ab-rolle').remove(); knopf.remove(); }
+                        else { knopf.disabled = false; kopieren(); }
+                    } catch (e) { knopf.disabled = false; kopieren(); }
+                };
+            }
+            window._cedAbweichungPruefen = (code, skipped) => _abweichungPruefen(code, skipped || []);
+            function _autoAusCode() {
+                if (window._cedKeinAutoAusCode) return;
+                if (typeof activeTask !== 'undefined' && activeTask && activeTask.blockAreas && activeTask.blockAreas.disableFromCode) return;
+                const ta = document.getElementById('code');
+                if (!ta) return;
+                const code = ta.value || '';
+                const hatSchaltung = code.split('\n').some(l => /\S\s*(:=|<-|=)\s*\S/.test(l.replace(/\/\/.*$/, '').replace(/\(\*.*?\*\)/g, '')));
+                if (!hatSchaltung) return;
+                const leer = ST.components.length === 0 && ST.wires.length === 0;
+                // Gleicher Code (Kommentare, Leerzeilen und Abstände egal): nichts überschreiben
+                if (!leer) {
+                    let ausPlan = null;
+                    try { ausPlan = _generateCode(); } catch (e) {}
+                    if (ausPlan != null && (_codeKern(ausPlan) === _codeKern(code) || !_cedVergleich(code, ausPlan).length)) return;
+                    if (ST._genCode != null && _codeKern(ST._genCode) === _codeKern(code)) return;
+                }
+                const unveraendert = !leer && ST._lastGenFp && ST._lastGenFp === JSON.stringify({ c: ST.components, w: ST.wires });
+                if (!(leer || unveraendert)) return;
+                ST._autoAusCode = true; ST._suppressFromCodeConfirm = true;
+                try { window.cedGenerateFromCode(); } catch (e) { console.warn('Elektroplan aus Code', e); }
+                finally { ST._autoAusCode = false; ST._suppressFromCodeConfirm = false; }
+            }
             // Hört auf Änderungen am Code-Textarea und schiebt sie — sofern
             // liveSyncMode === 'both' und nicht durch Task-Lock blockiert — in den
             // Editor zurück (Code → Editor). Schutz gegen Endlos-Schleife: jede
@@ -63801,7 +63955,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
 
                 cedRender();
-                if (typeof _maybeSync === 'function') _maybeSync();
+                // Automatisch beim Öffnen: Plan nur speichern, den Code nicht zurückschreiben
+                if (ST._autoAusCode) { ST.components.forEach(c => _ensureNormPrefix(c)); _saveStateToStorage(); }
+                else if (typeof _maybeSync === 'function') _maybeSync();
+                ST._genCode = code;
+                // Kontrolle: Der frisch gebaute Plan muss denselben Code ergeben
+                // (Kommentare egal). Weicht er ab, ist das ein VALIS-Fehler -> melden lassen.
+                try { _abweichungPruefen(code, skipped); } catch (e) {}
                 // Fingerprint des frisch generierten Zustands speichern, damit ein
                 // erneutes „Aus Code" ohne zwischenzeitliche manuelle Änderung
                 // ohne Rückfrage durchläuft (oben am Anfang der Funktion verglichen).
@@ -63817,7 +63977,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (skipped.length > 0) {
                     msg += '\n\nNicht automatisch erzeugt:\n' + skipped.map(s => `  • ${s.lhs}: ${s.reason}`).join('\n');
                 }
-                if (skipped.length > 0) alert(msg);
+                if (skipped.length > 0 && !ST._autoAusCode) alert(msg);
                 const stat = _d().getElementById('ced-status');
                 if (stat) { stat.textContent = '🪄 ' + assigns.length + ' Stränge generiert' + (bausteine.length ? ', ' + bausteine.length + ' Programmbaustein' + (bausteine.length === 1 ? '' : 'e') : ''); setTimeout(() => { if (stat.textContent.startsWith('🪄')) stat.textContent = ''; }, 3000); }
             };

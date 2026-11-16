@@ -7598,6 +7598,57 @@ You must output exactly this JSON format. The logic code goes as a single string
                 }
             },
             // ==========================================
+            // ROBOTER (Draufsicht): Handshake Roboterarm ↔ SPS und
+            // humanoider Roboter am Lichtgitter. Aus dem Komponenten-Tutorial
+            // „Roboter“. `draufsicht: true` lädt sie in der Draufsicht.
+            // ==========================================
+            roboter_handshake: {
+                draufsicht: true,
+                code: `// --- Band und Roboter: Handshake über FREIGABE und ROBO_FERTIG ---\nS1 := START && ¬STOP\nR1 := STOP\n// Band läuft, bis ein Teil an der Lichtschranke steht\nBAND := Q1 && ¬TEIL_DA\n// SPS → Roboter: Teil liegt bereit, du darfst greifen\nFREIGABE := Q1 && TEIL_DA\n// Roboter → SPS: Teil abgelegt (setzt der Roboter am Wegpunkt selbst)\nLED_ABGELEGT := ROBO_FERTIG`,
+                types: { "START": "taster", "STOP": "taster", "TEIL_DA": "sensor_opt", "ROBO_FERTIG": "taster", "BAND": "motor", "FREIGABE": "relais", "LED_ABGELEGT": "led", "Q1": "relais" },
+                factory: {
+                    globalViewMode: "top", items: [],
+                    pins: [{ id: "pin_rob", x: 20, y: 420, text: "Rechtsklick auf den Arm → ✏️ Pfad bearbeiten:\n① Grundstellung wartet auf FREIGABE\n② greifen, ROBO_FERTIG = 0\n③ ablegen, ROBO_FERTIG = 1", color: "#ffd54f", minimized: false }],
+                    objects: [
+                        { id: "b1", type: "taster", x: 40, y: 30, width: 40, height: 40, linkedVar: "START", color: "green" },
+                        { id: "b2", type: "taster", x: 90, y: 30, width: 40, height: 40, linkedVar: "STOP", color: "red" },
+                        { id: "l1", type: "led", x: 150, y: 35, width: 30, height: 30, linkedVar: "LED_ABGELEGT", color: "green" },
+                        { id: "sp1", type: "spawner_kunststoff", x: 25, y: 175, width: 50, height: 50, linkedVar: "BAND", spawnSolid: true, interval: 4, useCollision: false },
+                        { id: "cv1", type: "conveyor", x: 20, y: 180, width: 260, height: 40, linkedVar: "BAND", useCollision: true },
+                        { id: "w1", type: "wall", x: 280, y: 170, width: 10, height: 60, useCollision: true },
+                        { id: "s1", type: "sensor_opt", x: 245, y: 135, width: 20, height: 40, rotation: 90, linkedVar: "TEIL_DA", useCollision: false },
+                        { id: "dp1", type: "despawner", x: 390, y: 360, width: 50, height: 50, useCollision: false },
+                        { id: "rob", type: "robot_arm_2d", x: 340, y: 300, width: 24, height: 24, pathEnabled: true, pathLoop: true, pathMode: "linear", pathSpeed: 2.5,
+                          waypoints: [
+                              { x: 40, y: -90, waitVar: "FREIGABE" },
+                              { x: -75, y: -100, grip: "grab", pause: 0.5, setVar: "ROBO_FERTIG", setVal: false },
+                              { x: 40, y: -90 },
+                              { x: 75, y: 85, grip: "release", setVar: "ROBO_FERTIG" }
+                          ] }
+                    ]
+                }
+            },
+            mensch_lichtgitter: {
+                draufsicht: true,
+                code: `// --- Mensch am Band: Lichtgitter mit Wiederanlaufsperre ---\n// LICHTGITTER = 1, solange das Schutzfeld frei ist (Öffner)\nS1 := START && ¬STOP && LICHTGITTER\nR1 := STOP || ¬LICHTGITTER\n// Nach dem Verlassen läuft das Band NICHT von selbst wieder an\nBAND := Q1\nLED_GESPERRT := ¬LICHTGITTER`,
+                types: { "START": "taster", "STOP": "taster", "LICHTGITTER": "light_curtain", "BAND": "motor", "LED_GESPERRT": "led", "Q1": "relais" },
+                factory: {
+                    globalViewMode: "top", items: [],
+                    pins: [{ id: "pin_mensch", x: 20, y: 440, text: "Der humanoide Roboter läuft durch das Schutzfeld.\nBand steht, bis er raus ist UND START gedrückt wird.", color: "#ffd54f", minimized: false }],
+                    objects: [
+                        { id: "b1", type: "taster", x: 40, y: 30, width: 40, height: 40, linkedVar: "START", color: "green" },
+                        { id: "b2", type: "taster", x: 90, y: 30, width: 40, height: 40, linkedVar: "STOP", color: "red" },
+                        { id: "l1", type: "led", x: 150, y: 35, width: 30, height: 30, linkedVar: "LED_GESPERRT", color: "red" },
+                        { id: "sp1", type: "spawner_kunststoff", x: 25, y: 175, width: 50, height: 50, linkedVar: "BAND", spawnSolid: true, interval: 4, useCollision: false },
+                        { id: "cv1", type: "conveyor", x: 20, y: 180, width: 340, height: 40, linkedVar: "BAND", useCollision: true },
+                        { id: "dp1", type: "despawner", x: 355, y: 175, width: 50, height: 50, useCollision: false },
+                        { id: "lg", type: "light_curtain", x: 140, y: 228, width: 100, height: 60, linkedVar: "LICHTGITTER", useCollision: false },
+                        { id: "mensch", type: "worker_2d", x: 190, y: 340, width: 1, height: 1, color: "#ffc107", pathEnabled: true, pathLoop: true, pathMode: "linear", pathSpeed: 1.5,
+                          waypoints: [ { x: -150, y: 30, pause: 3 }, { x: 0, y: -75, pause: 2 }, { x: 150, y: 30, pause: 3 } ] }
+                    ]
+                }
+            },
+            // ==========================================
             // SCHRITTKETTE BOHRER (4 Schritte)
             // Demo für die SCHRITTKETTE-DSL: klassische Bohrmaschine-Sequenz
             // Grundstellung → Positionieren → Bohren → Zurückfahren → Grundstellung.
@@ -17359,7 +17410,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (typeof window._setZeitraffer === 'function') window._setZeitraffer((typeof exData === 'object' && exData.zeitraffer) || 1);
                     // Anlage aufbauen und Physik vorbereiten
                     if (newFactory) {
-                        newFactory.globalViewMode = 'side';
+                        // Beispiele sind Seitenansicht; nur wer `draufsicht: true` trägt
+                        // (Roboterarm, humanoider Roboter), lädt in der Draufsicht.
+                        newFactory.globalViewMode = (typeof exData === 'object' && exData.draufsicht) ? 'top' : 'side';
                         localStorage.setItem('logikFactoryState', JSON.stringify(newFactory));
                         loadFactoryState();
                     } else {
@@ -17416,6 +17469,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 title: 'Portalkran (Pick & Place)',     title_en: 'Portal Crane (Pick & Place)',
                 desc:  'Steuere einen Vakuum-Portalkran mit WASD und Leertaste. Mit Achsverriegelung und Tastenbelegung.',
                 desc_en: 'Control a vacuum portal crane with WASD and spacebar. With axis interlocking and key bindings.',
+            },
+            {
+                key: 'roboter_handshake', category: 'anlage',
+                title: 'Roboterarm am Band (Handshake)', title_en: 'Robot Arm at the Conveyor (Handshake)',
+                desc:  'SCARA-Roboter in der Draufsicht: wartet auf FREIGABE der SPS, greift, legt ab und meldet ROBO_FERTIG zurück. Alles über Wegpunkt-Aktionen im Pfad-Editor.',
+                desc_en: 'SCARA robot in top view: waits for the PLC FREIGABE signal, picks, places and reports ROBO_FERTIG. All via waypoint actions in the path editor.',
+            },
+            {
+                key: 'mensch_lichtgitter', category: 'anlage',
+                title: 'Mensch am Band (Lichtgitter)', title_en: 'Person at the Conveyor (Light Curtain)',
+                desc:  'Ein humanoider Roboter läuft durch das Schutzfeld eines Lichtgitters. Das Band stoppt und läuft erst nach erneutem START wieder an (Wiederanlaufsperre).',
+                desc_en: 'A humanoid robot walks through the protective field of a light curtain. The conveyor stops and restarts only after START is pressed again (restart interlock).',
             },
             {
                 key: 'schrittkette_bohrer', category: 'schrittkette',
@@ -31472,6 +31537,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
         // Wegpunkte sind LOKAL (relative Offsets vom Arm-Ursprung)
         // targetX/targetY entspricht direkt dem Greifer-Offset → einfach interpolieren
+        // spsState ist ein globales `let` (kein window.spsState). Die Wegpunkt-
+        // Aktionen (Warten, Setzen, Überspringen) und der Zykluszähler lasen
+        // window.spsState und liefen deshalb ins Leere: Warten hing für immer.
+        function _spsSt() { return (typeof spsState !== 'undefined') ? spsState : (window.spsState || null); }
+        // Statusschild über Roboterarm und humanoidem Roboter (beide gleich)
+        window._robotStatus = function(obj) {
+            const src = obj._activePathRef || obj;
+            if (obj._inTransition) return '→ Transit';
+            if (src._waitingAtWp != null) return '⏳ Warte';
+            if (src._pauseTimer > 0) return '⏸ Pause';
+            if (obj._pathGrip === true) return '✊ Greift';
+            return (obj._activePathRef || obj.pathEnabled) ? '▶ Fährt' : '';
+        };
+        // Zykluszähler: zählt jeden fertig abgefahrenen Pfad (Einpfad- und Mehrpfad-Modus)
+        function _robotZyklus(obj) {
+            if (!obj.cycleCountVar || !_spsSt()) return;
+            obj._cycleCount = (obj._cycleCount || 0) + 1;
+            _spsSt()[obj.cycleCountVar] = obj._cycleCount;
+        }
         window._robotFollowPath = function(obj, speed, pathSrc) {
             let src = pathSrc || obj;
             let pts = src.waypoints;
@@ -31486,11 +31570,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Warten bis Variable aktiv (waitVar)
             if (src._waitingAtWp !== null && src._waitingAtWp !== undefined) {
                 let wWp = pts[src._waitingAtWp];
-                if (wWp && wWp.waitVar && !(window.spsState && window.spsState[wWp.waitVar])) {
+                if (wWp && wWp.waitVar && !(_spsSt() && _spsSt()[wWp.waitVar])) {
                     obj.targetX = wWp.x; obj.targetY = wWp.y;
                     return;
                 }
                 src._waitingAtWp = null;
+            }
+            // Am Startpunkt gilt „Warten bis Variable“ schon beim ersten Losfahren,
+            // nicht erst, wenn der Pfad einmal herum ist (Grundstellung wartet).
+            if (!src._pathT && pts[0] && pts[0].waitVar && !(_spsSt() && _spsSt()[pts[0].waitVar])) {
+                src._waitingAtWp = 0;
+                obj.targetX = pts[0].x; obj.targetY = pts[0].y;
+                return;
             }
             let ePts = src.pathLoop ? [...pts, pts[0]] : pts;
             let maxT = ePts.length - 1;
@@ -31531,17 +31622,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.targetX = wp.x; obj.targetY = wp.y;
                 }
                 // Variable setzen
-                if (wp && wp.setVar && window.spsState) {
-                    window.spsState[wp.setVar] = (wp.setVal !== false);
+                if (wp && wp.setVar && _spsSt()) {
+                    _spsSt()[wp.setVar] = (wp.setVal !== false);
                 }
                 // Wegpunkt überspringen?
-                if (wp && wp.skipVar && window.spsState && window.spsState[wp.skipVar]) {
+                if (wp && wp.skipVar && _spsSt() && _spsSt()[wp.skipVar]) {
                     src._pathT = Math.min(newFloor + 1, maxT - 0.0001);
                 } else if (wp && wp.waitVar) {
-                    if (!(window.spsState && window.spsState[wp.waitVar])) {
+                    if (!(_spsSt() && _spsSt()[wp.waitVar])) {
                         src._waitingAtWp = wpIdx;
                         src._pathT = newFloor;
                         obj.targetX = wp.x; obj.targetY = wp.y;
+                        if (_pathDone && !pathSrc) _robotZyklus(obj);
                         return _pathDone ? 'done' : undefined;
                     }
                 } else if (wp && wp.pause > 0) {
@@ -31551,7 +31643,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     obj.targetX = wp.x; obj.targetY = wp.y;
                 }
             }
-            return _pathDone ? 'done' : undefined;
+            if (_pathDone && !pathSrc) _robotZyklus(obj);
+                        return _pathDone ? 'done' : undefined;
         };
         // Shared multi-path sequencer + transition handler for robot_arm_2d / worker_2d
         window._robotAdvancePath = function(obj, speed, activePaths) {
@@ -31582,7 +31675,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             // --- follow current path ---
             let _r = window._robotFollowPath(obj, speed, obj._activePathRef);
-            if (_r !== 'done' || activePaths.length < 2) return;
+            if (_r !== 'done') return;
+            _robotZyklus(obj);
+            if (activePaths.length < 2) return;
             // --- pick next path ---
             let m = obj.pathSequenceMode || 'sequential';
             let _i = activePaths.indexOf(obj._activePathRef);
@@ -31599,11 +31694,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _next = activePaths[Math.max(0, Math.min(activePaths.length - 1, ni))];
             } else { // random
                 _next = activePaths[Math.floor(Math.random() * activePaths.length)];
-            }
-            // Zykluszähler
-            if (obj.cycleCountVar && window.spsState) {
-                obj._cycleCount = (obj._cycleCount || 0) + 1;
-                window.spsState[obj.cycleCountVar] = obj._cycleCount;
             }
             // --- apply transition ---
             let tr = obj.pathTransition || 'instant';
@@ -31749,9 +31839,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             setValBtn.textContent = pts[i].setVal === false ? 'FALSE' : 'TRUE';
             setValBtn.style.cssText = `background:${pts[i].setVal===false?'#c62828':'#1b5e20'};color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:10px;white-space:nowrap;`;
             setValBtn.onclick = () => { pts[i].setVal = (pts[i].setVal === false ? true : false); setValBtn.textContent = pts[i].setVal===false?'FALSE':'TRUE'; setValBtn.style.background=pts[i].setVal===false?'#c62828':'#1b5e20'; saveFactoryState(); };
-            pop.appendChild(mkSel('📤 Variable setzen:', 'setVar', window.globalOutputs||[], setValBtn));
-            pop.appendChild(mkSel('⏳ Warten bis Variable:', 'waitVar', [...(window.globalOutputs||[]),...(window.globalInputs||[])]));
-            pop.appendChild(mkSel('⏭ Überspringen wenn:', 'skipVar', [...(window.globalOutputs||[]),...(window.globalInputs||[])]));
+            // Meldungen des Roboters an die SPS sind SPS-Eingänge: Eingänge zuerst anbieten.
+            // (window.globalInputs gibt es nicht, die Listen sind globale `let`.)
+            const _gIn = (typeof globalInputs !== 'undefined') ? globalInputs : (window.globalInputs || []);
+            const _gOut = (typeof globalOutputs !== 'undefined') ? globalOutputs : (window.globalOutputs || []);
+            pop.appendChild(mkSel('📤 Variable setzen:', 'setVar', [..._gIn, ..._gOut], setValBtn));
+            pop.appendChild(mkSel('⏳ Warten bis Variable:', 'waitVar', [..._gIn, ..._gOut]));
+            pop.appendChild(mkSel('⏭ Überspringen wenn:', 'skipVar', [..._gIn, ..._gOut]));
             let cBtn = document.createElement('button'); cBtn.textContent = '✕ Schließen'; cBtn.style.cssText = 'float:right;background:#333;color:#fff;border:none;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:10px;';
             cBtn.onclick = () => pop.remove(); pop.appendChild(cBtn);
             document.body.appendChild(pop);
@@ -35139,8 +35233,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (spsState[obj.linkedVarX_Minus]) obj.targetX -= speed;
                         if (spsState[obj.linkedVarY_Plus])  obj.targetY += speed;
                         if (spsState[obj.linkedVarY_Minus]) obj.targetY -= speed;
+                        // Zielpunkt im Arbeitsraum halten: Sonst läuft er beim Tippen über
+                        // den Rand hinaus weiter, und der Arm „klebt“ beim Zurückfahren.
+                        let _rMax = (obj.arm1Len || 80) + (obj.arm2Len || 60) - 0.5;
+                        let _d = Math.sqrt(obj.targetX * obj.targetX + obj.targetY * obj.targetY);
+                        if (_d > _rMax) { obj.targetX *= _rMax / _d; obj.targetY *= _rMax / _d; }
                     }
-                    if (obj._statusBadge) { let _st = obj._inTransition ? '→ Transit' : (obj._waitingAtWp!=null||obj._activePathRef&&obj._activePathRef._waitingAtWp!=null ? '⏳ Warte' : (obj._pathGrip===true ? '✊ Greift' : (obj._activePathRef||obj.pathEnabled ? '▶ Fährt' : ''))); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
+                    if (obj._statusBadge) { let _st = window._robotStatus(obj); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
                     window._robotUpdateIK(obj);
                     let grabNow = obj._pathGrip === true ? true : (obj._pathGrip === false ? false : !!spsState[obj.linkedVarGrab]);
                     obj.isGrabbing = grabNow;
@@ -35309,7 +35408,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     _cycWrap.innerHTML = '<div style="color:#90a4ae;font-size:10px;margin-bottom:2px;">🔢 Zykluszähler → Variable:</div>';
                     let _cycSel = document.createElement('select'); _cycSel.style.cssText = 'width:100%;padding:2px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:10px;';
                     let _cycOptN = document.createElement('option'); _cycOptN.value = ''; _cycOptN.textContent = '-- Keine --'; _cycSel.appendChild(_cycOptN);
-                    globalOutputs.forEach(v => { let o = document.createElement('option'); o.value = v; o.textContent = v; if (v === obj.cycleCountVar) o.selected = true; _cycSel.appendChild(o); });
+                    [...globalInputs, ...globalOutputs].forEach(v => { let o = document.createElement('option'); o.value = v; o.textContent = v; if (v === obj.cycleCountVar) o.selected = true; _cycSel.appendChild(o); });
                     _cycSel.onchange = () => { obj.cycleCountVar = _cycSel.value || null; if (!obj.cycleCountVar) obj._cycleCount = 0; saveCallback(); };
                     _cycWrap.appendChild(_cycSel); ctxMenu.appendChild(_cycWrap);
                 },
@@ -35442,7 +35541,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         if (spsState[obj.linkedVarY_Minus]) obj.targetY = (obj.targetY || 0) - speed;
                     }
 
-                    if (obj._statusBadge) { let _st = obj._inTransition ? '→ Transit' : (obj._pathGrip===true ? '✊ Greift' : (obj._activePathRef||obj.pathEnabled ? '▶ Fährt' : '')); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
+                    if (obj._statusBadge) { let _st = window._robotStatus(obj); obj._statusBadge.textContent = _st; obj._statusBadge.style.display = _st ? '' : 'none'; }
                     let ax = obj.x + (obj.targetX || 0);
                     let ay = obj.y + (obj.targetY || 0);
 
@@ -38042,7 +38141,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 wrapVib.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:4px;">⚙️ Vibrations-Variable (z.B. M_AB)</div>`;
                 let selVib = document.createElement('select'); selVib.style.cssText = 'width:100%;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;padding:3px;font-size:11px;';
                 let optNone = document.createElement('option'); optNone.value = ''; optNone.textContent = '— keine —'; selVib.appendChild(optNone);
-                (window.globalOutputs || []).forEach(v => { let o2 = document.createElement('option'); o2.value = v; o2.textContent = v; if (v === obj.linkedVarVib) o2.selected = true; selVib.appendChild(o2); });
+                globalOutputs.forEach(v => { let o2 = document.createElement('option'); o2.value = v; o2.textContent = v; if (v === obj.linkedVarVib) o2.selected = true; selVib.appendChild(o2); });
                 selVib.onchange = e => { obj.linkedVarVib = e.target.value || null; saveFactoryState(); };
                 wrapVib.appendChild(selVib); ctxMenu.appendChild(wrapVib);
                 // Aussetzer-Wahrscheinlichkeit
@@ -80586,6 +80685,6 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>
-<script src="komponenten-tutorials.js?v=20261116a"></script>
+<script src="komponenten-tutorials.js?v=20261116b"></script>
 </body>
 </html>

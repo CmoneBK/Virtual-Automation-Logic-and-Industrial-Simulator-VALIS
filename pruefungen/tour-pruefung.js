@@ -22,7 +22,7 @@ function server() {
 let gut = 0, schlecht = 0;
 const ok = (b, t) => { if (b) gut++; else { schlecht++; console.log('FEHLER:', t); } };
 // Schritte, die bewusst nichts markieren (Text in der Mitte).
-const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft/;
+const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft|Kapitel \d+ von \d+:/;
 (async () => {
   const srv = await server(), browser = await chromium.launch();
   for (const [fassung, w, h] of [['kurz', 1920, 1000], ['lang', 1920, 1000], ['lang', 1280, 720]]) {
@@ -55,6 +55,10 @@ const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft/;
     ok(fluid >= (fassung === 'kurz' ? 1 : 3), `${fassung}: Fluidplan-Schritte ${fluid}`);
     ok(titel.some(t => /Elektroplan/.test(t)), `${fassung}: Schritt „Elektroplan“ fehlt`);
     if (fassung === 'lang') ok(titel.some(t => /forcen/.test(t)), 'lang: Schritt „Sensoren forcen“ fehlt');
+    // Kapitelkarten (Christoph 16.11.2026): in der ausführlichen Tour vor jedem der zehn Kapitel, in der kurzen keine.
+    const karten = titel.filter(t => /Kapitel \d+ von \d+:/.test(t));
+    ok(karten.length === (fassung === 'lang' ? 10 : 0), `${fassung}: ${karten.length} Kapitelkarten`);
+    if (fassung === 'lang') ok(/Willkommen/.test(titel[0]) && /Kapitel 1 von 10/.test(titel[1]) && /Kapitel 10 von 10/.test(karten[9] || ''), 'lang: Karten an falscher Stelle');
     ok(fehler.length === 0, `${fassung} ${w}x${h}: Seitenfehler ${fehler.join(' | ')}`);
     console.log(`${fassung} ${w}x${h}: ${titel.length} Schritte`);
     await page.close();

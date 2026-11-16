@@ -1,8 +1,9 @@
 const { chromium } = require('playwright');
-// Prüfung Vorwahlzähler und Zeitrelais-Funktion TP im Steckaufbau:
-// Belegung, Verdrahtung (Zähleingang A1/A2, Rücksetzen A3/A4), Zählen in
-// der Simulation, Anzeige, Multimeter-Modell und Freier Aufbau (Code aus
-// Aufbau mit CTU).
+// Prüfung Vorwahlzähler FESTO 162355 und Zeitrelais-Funktion TP im Steckaufbau:
+// Belegung, Verdrahtung (Zähleingang A1/A2, Rücksetzen R1/R2, Wechsler 1/2/4),
+// Hilfsrelais bei mehr als einem Kontaktsatz, Zählen in der Simulation,
+// Anzeige, Vorwahl-Tasten, Rückstelltaste, Multimeter-Modell, Freier Aufbau
+// (Code aus Aufbau mit CTU) und Umschreiben alter Lernmodell-Aufbauten.
 //
 //   node pruefungen/zaehler-pruefung.js
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -43,12 +44,12 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('TP liegt auf dem Zeitrelais', a.asg.Z1_S1 === 'IMP');
   const hat = k => a.kabel.includes(k);
   ok('Zählstrang: +24 V → ZAEHL → A1, A2 → 0 V', hat('__BUS_24V__>T1_S2_13') && hat('T1_S2_14>C1_S1_A1') && hat('C1_S1_A2>__BUS_0V__'));
-  ok('Rücksetzstrang eigenständig: +24 V → RESET → A3, A4 → 0 V', hat('__BUS_24V__>T1_S3_13') && hat('T1_S3_14>C1_S1_A3') && hat('C1_S1_A4>__BUS_0V__'));
+  ok('Rücksetzstrang eigenständig: +24 V → RESET → R1, R2 → 0 V', hat('__BUS_24V__>T1_S3_13') && hat('T1_S3_14>C1_S1_R1') && hat('C1_S1_R2>__BUS_0V__'));
   ok('ZAEHL und RESET nicht in Reihe', !hat('T1_S2_14>T1_S3_13'));
-  ok('Schließer 13/14 des Zählers schaltet weiter', hat('__BUS_24V__>C1_S1_13') && a.kabel.some(k => k.startsWith('C1_S1_14>')));
-  ok('Multimeter-Modell kennt beide Spulen und vier Kontakte', a.el.filter(x => x.startsWith('last')).length === 2 && a.el.filter(x => x.startsWith('kontakt')).length === 4, a.el.join(' '));
-  const beschr = await page.evaluate(() => [window._elBuchseName('C1_S1_A3'), window._elBuchseName('C1_S1_32')]);
-  ok('Buchsen haben Namen', /Rücksetzen A3/.test(beschr[0]) && /Öffner/.test(beschr[1]), beschr.join(' | '));
+  ok('Schließer 4–1 des Wechslers schaltet weiter (ein Kontaktsatz, kein Hilfsrelais)', hat('__BUS_24V__>C1_S1_4') && a.kabel.some(k => k.startsWith('C1_S1_1>')) && !Object.entries(a.asg).some(([k, v]) => /^R/.test(k) && v === 'CTU_VOLL'), a.kabel.filter(k => /C1/.test(k)).join(' '));
+  ok('Multimeter-Modell kennt beide Spulen und den Wechsler (Schließer 4–1, Öffner 2–1)', a.el.filter(x => x.startsWith('last')).length === 2 && a.el.filter(x => x.startsWith('kontakt')).sort().join(' ') === 'kontakt:C1_S1_2-C1_S1_1 kontakt:C1_S1_4-C1_S1_1', a.el.join(' '));
+  const beschr = await page.evaluate(() => [window._elBuchseName('C1_S1_R1'), window._elBuchseName('C1_S1_2'), window._elBuchseName('C1_S1_4')]);
+  ok('Buchsen haben Namen', /Rücksetzen R1/.test(beschr[0]) && /Öffner/.test(beschr[1]) && /Schließer/.test(beschr[2]), beschr.join(' | '));
   // Simulation: zählen
   await page.evaluate(() => { if (!isSimulationActive) toggleSimulation(); }); await w(300);
   for (let i = 0; i < 2; i++) { await page.evaluate(() => setTaster('ZAEHL', true)); await w(200); await page.evaluate(() => setTaster('ZAEHL', false)); await w(200); }
@@ -60,19 +61,32 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   await w(1200);
   z = await page.evaluate(() => {
     const svg = _festoDoc().getElementById('festo-svg');
-    const ist = svg && svg.querySelector('[data-festo-zaehler-ist="C1_S1"]'), vw = svg && svg.querySelector('[data-festo-zaehler-vorwahl="C1_S1"]');
-    const q = svg && svg.querySelector('[data-festo-zaehler-led="q"][data-festo-slot="C1_S1"]');
+    const stellen = sel => Array.from(svg.querySelectorAll(sel)).sort((a, b) => a.getAttribute('data-festo-stelle') - b.getAttribute('data-festo-stelle')).map(t => t.textContent).join('');
+    const hebel = svg.querySelector('[data-festo-zl-wechsler][data-festo-slot="C1_S1"]');
     const fn = svg && svg.querySelector('[data-festo-zr-funktion="Z1_S1"]');
-    return { cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1, ist: ist && ist.textContent, vw: vw && vw.textContent, q: q && q.getAttribute('fill'), fn: fn && fn.textContent,
-      fiktivC: !!svg.querySelector('[data-festo-panel-type="zaehler"] [data-festo-fiktiv="zaehler"]'), fiktivTP: !!svg.querySelector('[data-festo-fiktiv="tp"]'),
-      fiktivAndere: svg.querySelectorAll('[data-festo-fiktiv]').length,
-      wirkX1: (() => { const l = svg.querySelector('[data-festo-zaehler-wirk="C1_S1"]'); return l ? +l.getAttribute('x1') : null; })() };
+    const brett = svg.querySelector('[data-festo-panel-type="zaehler"]');
+    const buchsen = Array.from(brett.querySelectorAll('[data-festo-socket]')).map(e => e.getAttribute('data-festo-socket'));
+    return { cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1, ist: stellen('[data-festo-zaehler-ist="C1_S1"]'), vw: stellen('[data-festo-zaehler-vorwahl="C1_S1"]'),
+      hebelX: hebel && +hebel.getAttribute('x2'), fn: fn && fn.textContent,
+      fiktivC: !!svg.querySelector('[data-festo-panel-type="zaehler"] [data-festo-fiktiv]'), fiktivTP: !!svg.querySelector('[data-festo-fiktiv="tp"]'),
+      fiktivAndere: svg.querySelectorAll('[data-festo-fiktiv]').length, buchsen: buchsen.length,
+      pins: ['A1', 'A2', 'R1', 'R2', '1', '2', '4'].every(p => buchsen.includes('C1_S1_' + p)), titel: brett.textContent.includes('162355') };
   });
   ok('Drei Impulse: Vorwahl erreicht, H1 an', z.cv === 3 && z.h1, JSON.stringify(z));
-  ok('Anzeige am Brett: Stand 3, Vorwahl 3, LED „erreicht“ an', z.ist === '3' && z.vw === '3' && z.q === '#ff6d00');
+  ok('Zählwerk: Stand 003, Vorwahl 003, Wechsler liegt am Schließer 4', z.ist === '003' && z.vw === '003' && z.hebelX === 140, JSON.stringify(z));
+  ok('Frontplatte wie FESTO 162355: 6+6 Verteiler, A1 A2 R1 R2 1 2 4', z.titel && z.pins && z.buchsen === 19, JSON.stringify(z));
   ok('Zeitrelais-Slot zeigt Funktion TP', z.fn === 'Funktion TP', z.fn);
-  ok('Wirkungslinie berührt die Rücksetzspule nicht (beginnt rechts davon mit Abstand)', z.wirkX1 >= 140, z.wirkX1);
-  ok('Vorwahlzähler und TP tragen „gibt es so nicht“ (nur diese zwei)', z.fiktivC && z.fiktivTP && z.fiktivAndere === 2, JSON.stringify([z.fiktivC, z.fiktivTP, z.fiktivAndere]));
+  ok('Zähler ist ein echtes Modul (kein „gibt es so nicht“), TP bleibt markiert', !z.fiktivC && z.fiktivTP && z.fiktivAndere === 1, JSON.stringify([z.fiktivC, z.fiktivTP, z.fiktivAndere]));
+  // Vorwahl-Taste der Einerstelle: 3 → 4 in der Codezeile
+  await page.evaluate(() => { const t = _festoDoc().querySelector('[data-festo-zaehler-taste="2"][data-festo-slot="C1_S1"]'); t.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await w(900);
+  z = await page.evaluate(() => document.getElementById('code').value);
+  ok('Taste am Zählwerk stellt die Vorwahl in der Codezeile (3 → 4)', /VOLL := CTU\(ZAEHL, RESET, 4\)/.test(z), z.split('\n')[0]);
+  // Weiße Rückstelltaste
+  await page.evaluate(() => { const t = _festoDoc().querySelector('[data-festo-zaehler-hand="C1_S1"]'); t.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await w(300);
+  z = await page.evaluate(() => ({ cv: window.simTimers.CTU_VOLL ? window.simTimers.CTU_VOLL.cv : -1 }));
+  ok('Rückstelltaste setzt den Zählerstand auf 0', z.cv === 0, JSON.stringify(z));
   await page.evaluate(() => setTaster('RESET', true)); await w(200); await page.evaluate(() => setTaster('RESET', false)); await w(200);
   z = await page.evaluate(() => ({ cv: window.simTimers.CTU_VOLL.cv, h1: !!spsState.H1 }));
   ok('RESET: Stand 0, H1 aus', z.cv === 0 && !z.h1, JSON.stringify(z));
@@ -86,8 +100,8 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const T = A.modul('taster'), C = A.modul('zaehler'), L = A.modul('led');
     const st = (a, b) => A.stecken(a, b).ok;
     const r = [st(T + '_24V_1', T + '_S2_13'), st(T + '_S2_14', C + '_S1_A1'), st(C + '_S1_A2', C + '_0V_1'),
-      st(T + '_24V_2', T + '_S3_13'), st(T + '_S3_14', C + '_S1_A3'), st(C + '_S1_A4', C + '_0V_2'),
-      st(C + '_24V_1', C + '_S1_13'), st(C + '_S1_14', L + '_S1_24V_a')];
+      st(T + '_24V_2', T + '_S3_13'), st(T + '_S3_14', C + '_S1_R1'), st(C + '_S1_R2', C + '_0V_2'),
+      st(C + '_24V_1', C + '_S1_1'), st(C + '_S1_4', L + '_S1_24V_a')];
     const v = A.vorwahl(C + '_S1', 2);
     const c = A.code();
     return { r, v, c, src: document.getElementById('code').value, typen: A.typen().map(t => t.art) };
@@ -103,6 +117,23 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   z = await page.evaluate(([v, l]) => ({ q: !!spsState[v], led: !!spsState[l] }), [f.v, led]);
   ok('Zwei Impulse im Freien Aufbau: Zähler schaltet die LED', z.q && z.led, JSON.stringify(z));
   await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); window._toggleFestoFreeBuild(false); });
+
+  console.log('Alter freier Aufbau mit dem Lernmodell (2-fach) wird umgeschrieben');
+  const p2 = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  p2.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
+  await p2.addInitScript(() => { try {
+    localStorage.setItem('valisTourSeen', '1');
+    if (!sessionStorage.getItem('altGesetzt')) {
+      sessionStorage.setItem('altGesetzt', '1');
+      localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ idc: 3, tc: {}, boards: [
+        { id: 'b1', type: 'zaehler', idx: 1, prefix: 'C1', x: 0, y: 0, slotVars: { S1: 'KF1', S2: 'KF2' }, zaehlerCfg: { S1: { pv: 4 }, S2: { pv: 2 } } }],
+        cables: [{ id: 'k1', a: 'C1_S1_A3', b: 'C1_0V_7' }, { id: 'k2', a: 'C1_24V_1', b: 'C1_S1_13' }, { id: 'k3', a: 'C1_S1_32', b: 'C1_S1_A1' }, { id: 'k4', a: 'C1_S2_A1', b: 'C1_24V_2' }] }));
+    } } catch (e) {} });
+  await p2.goto(url); await p2.waitForTimeout(2500);
+  const alt = await p2.evaluate(() => JSON.parse(localStorage.getItem('valisFestoFreeBuildData2')));
+  const ks = alt.cables.map(c => c.a + '>' + c.b).sort().join(' ');
+  ok('Kabel umgeschrieben (A3→R1, 13→1, 32→2, Bus 7→6), Zähler 2 entfällt', ks === 'C1_24V_1>C1_S1_1 C1_S1_2>C1_S1_A1 C1_S1_R1>C1_0V_6' && !alt.boards[0].slotVars.S2 && alt.boards[0].zaehlerCfg.S1.pv === 4, ks);
+  await p2.close();
 
   ok('Keine Skriptfehler', fehler.length === 0, fehler.slice(0, 3).join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);

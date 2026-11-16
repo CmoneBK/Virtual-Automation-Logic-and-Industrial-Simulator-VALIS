@@ -3782,7 +3782,7 @@
                             <button type="button" onclick="window._fbAddModule('relais')" title="FESTO 162241 · Relais 3-fach (Spule A1/A2 + 4 Wechslerkontakte)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🧲 Relais-Panel (Hilfsschütz)</button>
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
                             <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
-                            <button type="button" onclick="window._fbAddModule('zaehler')" title="Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht. Vorwahlzähler 2-fach: Zähleingang A1/A2 (+1 je Impuls), Rücksetzen A3/A4, Vorwahl einstellbar; bei erreichter Vorwahl schalten 13/14, 23/24 und öffnen 31/32, 41/42. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU) · Lernmodell</button>
+                            <button type="button" onclick="window._fbAddModule('zaehler')" title="FESTO 162355 · Vorwahlzähler (Hengstler-Zählwerk): Zählspule A1/A2 (+1 je Impuls), Rücksetzen R1/R2, ein Wechsler 1/2/4 (bei erreichter Vorwahl 1–4 zu, 1–2 offen). Vorwahl mit den drei Tasten am Zählwerk, weiße Taste setzt von Hand zurück. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU)</button>
                         </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
@@ -24655,8 +24655,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 const labelX = x - 30;
                 addLabelText(g, labelX, y, label, true, 'end');
-                let pinTop = type === 'valve' ? '1' : (label.includes('(R)') ? 'A3' : 'A1');
-                let pinBot = type === 'valve' ? '2' : (label.includes('(R)') ? 'A4' : 'A2');
+                let pinTop = type === 'valve' ? '1' : (label.includes('(R)') ? 'R1' : 'A1');
+                let pinBot = type === 'valve' ? '2' : (label.includes('(R)') ? 'R2' : 'A2');
                 drawSmallText(g, x + 5, y - 15, pinTop, 'start'); drawSmallText(g, x + 5, y + 20, pinBot, 'start');
                 circuitContent.appendChild(g);
                 return g;
@@ -68298,14 +68298,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 return g;
             }
-            // ============ Vorwahlzähler (Zählrelais mit Vorwahl, 2-fach) ============
-            // Gehört zum CTU des Auto-Schaltplans: Zähleingang A1/A2 (+1 bei
-            // jeder steigenden Flanke), Rücksetzen A3/A4 (R), Anzeige mit
-            // Zählerstand und Vorwahl. Ist die Vorwahl erreicht, schalten die
-            // Kontakte: Schließer 13/14, 23/24, Öffner 31/32, 41/42.
-            const ZAEHLER = { w: 460, h: 460, slots: 2 };
-            const ZL_NO = { 1: ['13', '14'], 2: ['23', '24'] };
-            const ZL_NC = { 1: ['31', '32'], 2: ['41', '42'] };
+            // ============ Vorwahlzähler FESTO 162355 (D:ETER1-MOD-POSCOUNT) ============
+            // Nach dem Foto der Frontplatte (EduTrainer): oben +24 V-Verteiler
+            // (6 Buchsen), unten 0 V-Verteiler (6 Buchsen). Links die Zählspule
+            // A1/A2 mit dem Rückstellteil „→0“, dessen Eingang R1/R2 rechts
+            // liegt (über den Rahmen der Platte geführt). In der Mitte EIN
+            // Wechsler 1 (Wurzel), 2 (Öffner), 4 (Schließer). Darunter das
+            // Zählwerk (Hengstler): oben der Zählerstand, unten die Vorwahl mit
+            // drei Tasten (je Stelle +1) und der weißen Rückstelltaste.
+            // Je Brett ein Zähler (Slot S1). Braucht der Plan mehr als einen
+            // Wechsler, steuert der Zähler ein Hilfsrelais (wie im Betrieb).
+            const ZAEHLER = { w: 300, h: 425, slots: 1 };
+            // Kontaktpaare des Wechslers: Schließer 1–4, Öffner 1–2
+            const ZL_NO = { 1: ['1', '4'] };
+            const ZL_NC = { 1: ['1', '2'] };
             // Vorwahl einer CTU-Variable (CTU_X) aus dem Logikgraphen („CTU (5)")
             function _zaehlerVorwahl(v) {
                 try {
@@ -68319,99 +68325,149 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return 0;
             }
             window._zaehlerVorwahl = _zaehlerVorwahl;
-            function drawZaehlerPanel(parent, x, y, panelIdx, assignments, vorwahlVon) {
-                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'zaehler', 'data-festo-panel-idx': panelIdx }, parent);
-                el('rect', { x: 0, y: 0, width: ZAEHLER.w, height: ZAEHLER.h, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
-                drawScrews(g, 0, 0, ZAEHLER.w, ZAEHLER.h);
-                el('text', { x: ZAEHLER.w/2, y: 24, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 'bold', fill: PALETTE.titleText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = `Vorwahlzähler ${panelIdx}`;
-                el('text', { x: ZAEHLER.w/2, y: 36, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählrelais mit Vorwahl, 2-fach · 24 V DC';
-                // Kein FESTO-Dokument: VALIS-Lernmodell, das es so als Steckmodul nicht gibt
-                const _fz = el('text', { x: ZAEHLER.w/2, y: 47, 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold', fill: '#c62828', 'font-family': 'Segoe UI, sans-serif' }, g);
-                _fz.textContent = 'Lernmodell – dieses Steckmodul gibt es so bei FESTO nicht';
-                _fz.setAttribute('data-festo-fiktiv', 'zaehler');
-                const busXs = [40, 95, 150, 210, 270, 330, 390];
-                busXs.forEach((bx, i) => drawSocket(g, bx, 56, PALETTE.socketRed, `C${panelIdx}_24V_${i+1}`, `C${panelIdx}`));
-                el('text', { x: 14, y: 55, 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' }, g).textContent = '+24V';
-                el('line', { x1: 30, y1: 56, x2: ZAEHLER.w - 28, y2: 56, stroke: PALETTE.socketRed, 'stroke-width': 1.5, 'stroke-dasharray': '2 2', opacity: 0.4 }, g);
-                const y0v = ZAEHLER.h - 28;
-                busXs.forEach((bx, i) => drawSocket(g, bx, y0v, PALETTE.socketBlue, `C${panelIdx}_0V_${i+1}`, `C${panelIdx}`));
-                el('text', { x: 14, y: y0v + 3, 'font-size': 8, fill: PALETTE.socketBlue, 'font-weight': 'bold' }, g).textContent = '0V';
-                el('line', { x1: 30, y1: y0v, x2: ZAEHLER.w - 28, y2: y0v, stroke: PALETTE.socketBlue, 'stroke-width': 1.5, 'stroke-dasharray': '2 2', opacity: 0.4 }, g);
-                const blockH = 155, startY = 76;
-                for (let r = 0; r < 2; r++) {
-                    const baseY = startY + r * (blockH + 8);
-                    const slotKey = `C${panelIdx}_S${r+1}`;
-                    const assigned = assignments[slotKey];
-                    if (r > 0) el('line', { x1: 14, y1: baseY-4, x2: ZAEHLER.w-14, y2: baseY-4, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
-                    const mechY = baseY + 75, mechLineY = mechY - 5;
-                    const halbW = 15, halbH = 11;
-                    // Zwei Spulen: Zähleingang (+1) und Rücksetzen (R)
-                    [['A1', 'A2', 52, '+1', 'zaehl'], ['A3', 'A4', 112, 'R', 'reset']].forEach(([pOben, pUnten, sx, zeichen, rolle]) => {
-                        const sockX = sx - 22;
-                        el('text', { x: sockX - 17, y: baseY+33, 'font-size': 9, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = pOben;
-                        drawSocket(g, sockX, baseY+30, PALETTE.socketBlack, `${slotKey}_${pOben}`, `C${panelIdx}`);
-                        el('line', { x1: sockX, y1: baseY+30, x2: sx, y2: baseY+30, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: sx, y1: baseY+30, x2: sx, y2: mechLineY - halbH, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('rect', { x: sx - halbW, y: mechLineY - halbH, width: halbW*2, height: halbH*2, fill: '#fff', stroke: PALETTE.trace, 'stroke-width': 1.3 }, g);
-                        el('text', { x: sx - 4, y: mechLineY + 4, 'font-size': 10, 'font-weight': 'bold', fill: PALETTE.trace, 'text-anchor': 'middle', 'font-family': 'monospace' }, g).textContent = zeichen;
-                        const led = el('circle', { cx: sx + halbW - 5, cy: mechLineY, r: 3.2, fill: '#2e3b35', stroke: '#2e7d32', 'stroke-width': 0.6 }, g);
-                        led.setAttribute('data-festo-zaehler-led', rolle);
-                        led.setAttribute('data-festo-slot', slotKey);
-                        el('line', { x1: sx, y1: mechLineY + halbH, x2: sx, y2: baseY+125, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        el('line', { x1: sockX, y1: baseY+125, x2: sx, y2: baseY+125, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        drawSocket(g, sockX, baseY+125, PALETTE.socketBlack, `${slotKey}_${pUnten}`, `C${panelIdx}`);
-                        el('text', { x: sockX - 17, y: baseY+128, 'font-size': 9, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = pUnten;
-                    });
-                    el('text', { x: 52, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Zählen';
-                    el('text', { x: 112, y: baseY+148, 'font-size': 7, fill: PALETTE.labelText, 'text-anchor': 'middle', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Rücksetzen';
-                    // Wirkungslinie vom Zählwerk (Anzeige rechts) zu den Kontakten; sie endet vor der
-                    // Rücksetzspule, damit es nicht so aussieht, als schalte das Rücksetzen die Kontakte
-                    el('line', { x1: 150, y1: mechLineY, x2: 350, y2: mechLineY, stroke: PALETTE.trace, 'stroke-width': 1, 'stroke-dasharray': '4 3' }, g).setAttribute('data-festo-zaehler-wirk', slotKey);
-                    for (let k = 1; k <= 4; k++) {
-                        const cx = 165 + (k-1) * 48;
-                        const isNC = k > 2;
-                        const [topLabel, botLabel] = isNC ? ZL_NC[k-2] : ZL_NO[k];
-                        el('text', { x: cx-6, y: baseY+22, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = topLabel;
-                        drawSocket(g, cx, baseY+34, PALETTE.socketBlack, `${slotKey}_${topLabel}`, `C${panelIdx}`);
-                        el('line', { x1: cx, y1: baseY+42, x2: cx, y2: mechY-10, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        if (isNC) el('line', { x1: cx, y1: mechY-10, x2: cx+10, y2: mechY-10, stroke: PALETTE.trace, 'stroke-width': 1.2 }, g);
-                        const restX = isNC ? (cx+10) : (cx-10), restY = isNC ? (mechY-10) : (mechY-7);
-                        const hebel = el('line', { x1: cx, y1: mechY, x2: restX, y2: restY, stroke: PALETTE.trace, 'stroke-width': 1.4 }, g);
-                        hebel.setAttribute('data-festo-zr-lever', '1');
-                        hebel.setAttribute('data-festo-zr-mode', isNC ? 'nc' : 'no');
-                        hebel.setAttribute('data-festo-slot', slotKey);
-                        hebel.setAttribute('data-festo-cx', cx);
-                        hebel.setAttribute('data-festo-mech-y', mechY);
-                        el('line', { x1: cx, y1: mechY, x2: cx, y2: baseY+118, stroke: PALETTE.trace, 'stroke-width': 1 }, g);
-                        drawSocket(g, cx, baseY+125, PALETTE.socketBlack, `${slotKey}_${botLabel}`, `C${panelIdx}`);
-                        el('text', { x: cx-6, y: baseY+145, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'monospace' }, g).textContent = botLabel;
-                    }
-                    // Anzeige: Zählerstand groß, Vorwahl klein
-                    const vw = assigned ? ((typeof vorwahlVon === 'function' ? vorwahlVon(assigned) : 0) || _zaehlerVorwahl(assigned)) : 0;
-                    const dx = 350, dy = baseY + 34, dw = 96, dh = 70;
-                    el('rect', { x: dx, y: dy, width: dw, height: dh, rx: 4, fill: '#263238', stroke: '#11181c', 'stroke-width': 1.2 }, g);
-                    el('rect', { x: dx + 5, y: dy + 5, width: dw - 10, height: 34, rx: 2, fill: '#0b2e13', stroke: '#1b5e20', 'stroke-width': 0.6 }, g);
-                    const ist = el('text', { x: dx + dw - 10, y: dy + 31, 'font-size': 22, 'font-weight': 'bold', fill: '#76ff03', 'text-anchor': 'end', 'font-family': 'monospace' }, g);
-                    ist.textContent = '0';
-                    ist.setAttribute('data-festo-zaehler-ist', slotKey);
-                    el('text', { x: dx + 7, y: dy + 54, 'font-size': 8, fill: '#cfd8dc', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'Vorwahl';
-                    const vwT = el('text', { x: dx + dw - 8, y: dy + 55, 'font-size': 12, 'font-weight': 'bold', fill: '#ffca28', 'text-anchor': 'end', 'font-family': 'monospace' }, g);
-                    vwT.textContent = String(vw || 0);
-                    vwT.setAttribute('data-festo-zaehler-vorwahl', slotKey);
-                    const qLed = el('circle', { cx: dx + 10, cy: dy + 64, r: 3, fill: '#3e2723', stroke: '#bf360c', 'stroke-width': 0.6 }, g);
-                    qLed.setAttribute('data-festo-zaehler-led', 'q');
-                    qLed.setAttribute('data-festo-slot', slotKey);
-                    el('text', { x: dx + 17, y: dy + 67, 'font-size': 7, fill: '#cfd8dc', 'font-family': 'Segoe UI, sans-serif' }, g).textContent = 'erreicht';
-                    if (assigned) {
-                        const _iec = (window._festoIECLabelsByRole?.['coil']?.[assigned]) || (window._festoIECLabels || {})[assigned];
-                        const _main = _iec || assigned, _sub = _iec ? assigned : null, _boxH = _sub ? 24 : 16;
-                        el('rect', { x: 345, y: baseY-2, width: 106, height: _boxH, rx: 3, fill: '#fff', stroke: PALETTE.slotLabel, 'stroke-width': 1.2 }, g);
-                        el('text', { x: 398, y: baseY+9, 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: PALETTE.slotLabel, 'font-family': 'Segoe UI, sans-serif' }, g).textContent = _main.length > 13 ? _main.slice(0,13)+'…' : _main;
-                        if (_sub) el('text', { x: 398, y: baseY+19, 'text-anchor': 'middle', 'font-size': 7, fill: PALETTE.slotLabel, 'font-style': 'italic' }, g).textContent = `(${_sub.length > 15 ? _sub.slice(0,15)+'…' : _sub})`;
-                    } else {
-                        el('text', { x: 398, y: baseY+9, 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.emptySlot, 'font-style': 'italic' }, g).textContent = `Zähler ${r+1} (frei)`;
-                    }
+            // Vorwahl am Zählwerk verstellen: im freien Aufbau am Brett, sonst
+            // in der CTU-Zeile des Codes (VAR := CTU(Zählen, Rücksetzen, n)).
+            function _zaehlerVorwahlSetzen(v, n) {
+                n = Math.max(0, Math.min(999, Math.round(n) || 0));
+                if (!v) return false;
+                if (window.festoFreeBuildMode && window._fbAusSicht && typeof window._fbAusSicht.vorwahlVar === 'function') return window._fbAusSicht.vorwahlVar(v, n);
+                const aus = v.replace(/^CTU_/, '');
+                const ta = document.getElementById('code');
+                if (!ta) return false;
+                const zeilen = ta.value.split('\n');
+                const re = new RegExp('^(\\s*' + aus.replace(/[$]/g, '\\$&') + '\\s*:=\\s*CTU\\s*\\(\\s*)(.*)(\\)\\s*;?\\s*(?:\\/\\/.*)?)$', 'i');
+                for (let i = 0; i < zeilen.length; i++) {
+                    const m = zeilen[i].match(re);
+                    if (!m) continue;
+                    // Argumente: das letzte ist die Vorwahl (Klammern in den Strängen beachten)
+                    let tiefe = 0, letztes = -1;
+                    for (let j = 0; j < m[2].length; j++) { const c = m[2][j]; if (c === '(') tiefe++; else if (c === ')') tiefe--; else if (c === ',' && tiefe === 0) letztes = j; }
+                    if (letztes < 0) return false;
+                    zeilen[i] = m[1] + m[2].slice(0, letztes + 1) + ' ' + n + m[3];
+                    const halten = window.simTimers || {};
+                    ta.value = zeilen.join('\n');
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    window.simTimers = Object.assign(window.simTimers || {}, halten);
+                    return true;
                 }
+                return false;
+            }
+            window._zaehlerVorwahlSetzen = _zaehlerVorwahlSetzen;
+            // Weiße Taste am Zählwerk: Zählerstand von Hand auf 0
+            window._zaehlerHandReset = function(v) {
+                const t = window.simTimers || {};
+                const z = t[v] || t['CTU_' + v];
+                if (z) { z.cv = 0; z.q = false; }
+                try { if (typeof spsState !== 'undefined' && spsState && v) { spsState[v] = false; } } catch (_) {}
+                try { if (typeof _updateFestoLevers === 'function') _updateFestoLevers(); } catch (_) {}
+            };
+            function drawZaehlerPanel(parent, x, y, panelIdx, assignments, vorwahlVon) {
+                const W = ZAEHLER.w, H = ZAEHLER.h, P = `C${panelIdx}`, slotKey = `${P}_S1`;
+                const assigned = assignments[slotKey];
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'zaehler', 'data-festo-panel-idx': panelIdx }, parent);
+                const T = (tx, ty, txt, o) => { const t = el('text', Object.assign({ x: tx, y: ty, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, o || {}), g); t.textContent = txt; return t; };
+                const L = (x1, y1, x2, y2, o) => el('line', Object.assign({ x1, y1, x2, y2, stroke: PALETTE.trace, 'stroke-width': 1 }, o || {}), g);
+                el('rect', { x: 0, y: 0, width: W, height: H, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, W, H);
+                T(W / 2, 13, `Vorwahlzähler ${panelIdx}`, { 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 'bold', fill: PALETTE.titleText });
+                T(W / 2, 23, 'FESTO 162355 · Vorwahlzähler 24 V DC', { 'text-anchor': 'middle', 'font-size': 7 });
+                // +24 V-Verteiler: zwei Eckbuchsen tiefer, vier oben in einer Reihe
+                const oben = [[27, 57], [76, 38], [124, 38], [172, 38], [221, 38], [272, 57]];
+                el('polyline', { points: oben.map(p => p.join(',')).join(' '), fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                oben.forEach(([sx, sy], i) => drawSocket(g, sx, sy, PALETTE.socketRed, `${P}_24V_${i + 1}`, P));
+                T(16, 74, '+24V', { 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketRed });
+                T(W - 16, 74, '+24V', { 'text-anchor': 'end', 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketRed });
+                // 0 V-Verteiler unten
+                const unten = [[30, 368], [84, 387], [131, 387], [178, 387], [226, 387], [272, 366]];
+                el('polyline', { points: unten.map(p => p.join(',')).join(' '), fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                unten.forEach(([sx, sy], i) => drawSocket(g, sx, sy, PALETTE.socketBlue, `${P}_0V_${i + 1}`, P));
+                T(14, 391, '0V', { 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketBlue });
+                T(W - 14, 391, '0V', { 'text-anchor': 'end', 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketBlue });
+                // Rahmenlinie (Achteck) vom Rückstellteil der Spule zu R1 und R2
+                el('polyline', { points: '52,105 52,98 98,67 222,67 266,93', fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                el('polyline', { points: '52,140 52,158 100,185 225,185 266,157', fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                // Zählspule A1/A2 (Kasten) mit Rückstellteil (kleines Quadrat)
+                drawSocket(g, 28, 102, PALETTE.socketBlack, `${slotKey}_A1`, P);
+                drawSocket(g, 28, 156, PALETTE.socketBlack, `${slotKey}_A2`, P);
+                T(19, 121, 'A1', { 'font-size': 8, 'font-weight': 'bold', 'text-anchor': 'middle', 'font-family': 'monospace' });
+                T(19, 143, 'A2', { 'font-size': 8, 'font-weight': 'bold', 'text-anchor': 'middle', 'font-family': 'monospace' });
+                L(28, 110, 28, 106); L(28, 148, 28, 152);
+                L(36, 110, 36, 122); L(36, 135, 36, 148);
+                L(28, 110, 36, 110); L(28, 148, 36, 148);
+                const spule = el('rect', { x: 17, y: 122, width: 35, height: 13, fill: '#fff', stroke: PALETTE.trace, 'stroke-width': 1.2 }, g);
+                spule.setAttribute('data-festo-zaehler-spule', 'zaehl'); spule.setAttribute('data-festo-slot', slotKey);
+                const rueck = el('rect', { x: 52, y: 122, width: 11, height: 13, fill: '#fff', stroke: PALETTE.trace, 'stroke-width': 1.2 }, g);
+                rueck.setAttribute('data-festo-zaehler-spule', 'reset'); rueck.setAttribute('data-festo-slot', slotKey);
+                el('circle', { cx: 57.5, cy: 128.5, r: 2.4, fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                L(52, 105, 52, 122); L(52, 135, 52, 140);
+                T(56, 112, '→0', { 'font-size': 8, 'font-weight': 'bold', fill: PALETTE.trace });
+                drawSocket(g, 272, 97, PALETTE.socketBlack, `${slotKey}_R1`, P);
+                drawSocket(g, 272, 152, PALETTE.socketBlack, `${slotKey}_R2`, P);
+                T(272, 117, 'R1', { 'font-size': 8, 'font-weight': 'bold', 'text-anchor': 'middle', 'font-family': 'monospace' });
+                T(272, 140, 'R2', { 'font-size': 8, 'font-weight': 'bold', 'text-anchor': 'middle', 'font-family': 'monospace' });
+                // Wirkungslinie Zählwerk → Wechsler
+                L(63, 128.5, 152, 128.5, { 'stroke-dasharray': '4 3' }).setAttribute('data-festo-zaehler-wirk', slotKey);
+                // Wechsler: 1 oben, 4 (Schließer) links unten, 2 (Öffner) rechts unten
+                drawSocket(g, 149, 87, PALETTE.socketBlack, `${slotKey}_1`, P);
+                drawSocket(g, 126, 164, PALETTE.socketBlack, `${slotKey}_4`, P);
+                drawSocket(g, 178, 164, PALETTE.socketBlack, `${slotKey}_2`, P);
+                T(160, 112, '1', { 'font-size': 9, 'font-weight': 'bold', 'font-family': 'monospace' });
+                T(110, 146, '4', { 'font-size': 9, 'font-weight': 'bold', 'font-family': 'monospace' });
+                T(186, 146, '2', { 'font-size': 9, 'font-weight': 'bold', 'font-family': 'monospace' });
+                L(149, 95, 149, 116);
+                L(126, 156, 126, 140); L(126, 140, 143, 140, { 'stroke-width': 1.2 });   // Schließer-Gegenkontakt
+                L(178, 156, 178, 140); L(178, 140, 158, 140, { 'stroke-width': 1.2 });   // Öffner-Gegenkontakt
+                const hebel = L(149, 116, 160, 141, { 'stroke-width': 1.5 });
+                hebel.setAttribute('data-festo-zl-wechsler', '1');
+                hebel.setAttribute('data-festo-slot', slotKey);
+                // Variable bzw. IEC-Kennzeichen
+                if (assigned) {
+                    const _iec = (window._festoIECLabelsByRole?.['coil']?.[assigned]) || (window._festoIECLabels || {})[assigned];
+                    const _main = _iec || assigned, _sub = _iec ? assigned : null;
+                    el('rect', { x: 92, y: 190, width: 116, height: _sub ? 22 : 14, rx: 3, fill: '#fff', stroke: PALETTE.slotLabel, 'stroke-width': 1.1 }, g);
+                    T(150, 200, _main.length > 16 ? _main.slice(0, 16) + '…' : _main, { 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 'bold', fill: PALETTE.slotLabel });
+                    if (_sub) T(150, 209, `(${_sub.length > 18 ? _sub.slice(0, 18) + '…' : _sub})`, { 'text-anchor': 'middle', 'font-size': 6.5, fill: PALETTE.slotLabel, 'font-style': 'italic' });
+                } else {
+                    T(150, 201, 'Zähler (frei)', { 'text-anchor': 'middle', 'font-size': 8, fill: PALETTE.emptySlot, 'font-style': 'italic' });
+                }
+                // Zählwerk (Hengstler): Gehäuse, Zählerstand, Vorwahl, Tasten
+                const zx = 82, zy = 216, zw = 142, zh = 132;
+                el('rect', { x: zx, y: zy, width: zw, height: zh, rx: 2, fill: '#1e1f21', stroke: '#0b0c0d', 'stroke-width': 1.2 }, g);
+                T(zx + zw - 8, zy + 14, 'HENGSTLER', { 'text-anchor': 'end', 'font-size': 8.5, 'font-weight': 'bold', fill: '#e0e0e0' });
+                el('rect', { x: zx + 8, y: zy + 20, width: zw - 16, height: 34, rx: 1, fill: '#0d0d0e', stroke: '#3a3b3d', 'stroke-width': 0.8 }, g);
+                el('rect', { x: zx + 8, y: zy + 58, width: zw - 16, height: 32, rx: 1, fill: '#121314', stroke: '#3a3b3d', 'stroke-width': 0.8 }, g);
+                const xs = [zx + 44, zx + 76, zx + 108];
+                const vw = assigned ? ((typeof vorwahlVon === 'function' ? vorwahlVon(assigned) : 0) || _zaehlerVorwahl(assigned)) : 0;
+                const drei = n => String(Math.max(0, Math.min(999, n | 0))).padStart(3, '0');
+                xs.forEach((dx, i) => {
+                    const ist = T(dx, zy + 45, '0', { 'text-anchor': 'middle', 'font-size': 20, fill: '#f5f5f5', 'font-family': 'Consolas, monospace' });
+                    ist.setAttribute('data-festo-zaehler-ist', slotKey); ist.setAttribute('data-festo-stelle', String(i));
+                    const vor = T(dx, zy + 82, drei(vw)[i], { 'text-anchor': 'middle', 'font-size': 17, fill: '#eeeeee', 'font-family': 'Consolas, monospace' });
+                    vor.setAttribute('data-festo-zaehler-vorwahl', slotKey); vor.setAttribute('data-festo-stelle', String(i));
+                    // Taste darunter: diese Stelle der Vorwahl +1
+                    const taste = el('rect', { x: dx - 6, y: zy + 98, width: 12, height: 26, rx: 1.5, fill: '#0a0a0a', stroke: '#555', 'stroke-width': 0.8, style: assigned ? 'cursor:pointer' : '' }, g);
+                    taste.setAttribute('data-festo-zaehler-taste', String(i)); taste.setAttribute('data-festo-slot', slotKey);
+                    el('rect', { x: dx - 3, y: zy + 104, width: 6, height: 7, fill: '#2a2a2a' }, g);
+                    const tt = el('title', {}, taste); tt.textContent = ['Hunderter', 'Zehner', 'Einer'][i] + ' der Vorwahl +1 (Umschalt: −1)';
+                    if (assigned) taste.addEventListener('click', ev => {
+                        ev.stopPropagation();
+                        const alt = (typeof vorwahlVon === 'function' ? vorwahlVon(assigned) : 0) || _zaehlerVorwahl(assigned) || 0;
+                        const st = drei(alt).split('').map(Number);
+                        st[i] = (st[i] + (ev.shiftKey ? 9 : 1)) % 10;
+                        const neu = parseInt(st.join(''), 10);
+                        if (neu < 1) return;
+                        if (_zaehlerVorwahlSetzen(assigned, neu)) {
+                            window._festoZaehlerVorwahl = window._festoZaehlerVorwahl || {};
+                            window._festoZaehlerVorwahl[assigned] = neu;
+                            g.querySelectorAll('[data-festo-zaehler-vorwahl]').forEach(t => { t.textContent = drei(neu)[+t.getAttribute('data-festo-stelle')]; });
+                        }
+                    });
+                });
+                const weiss = el('rect', { x: zx + 14, y: zy + 100, width: 14, height: 22, rx: 2, fill: '#f2f2ee', stroke: '#9e9e9e', 'stroke-width': 0.8, style: 'cursor:pointer' }, g);
+                weiss.setAttribute('data-festo-zaehler-hand', slotKey);
+                T(zx + 21, zy + 116, '↓', { 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold', fill: '#424242', 'pointer-events': 'none' });
+                el('title', {}, weiss).textContent = 'Rückstelltaste: Zählerstand von Hand auf 0';
+                weiss.addEventListener('click', ev => { ev.stopPropagation(); if (assigned) window._zaehlerHandReset(assigned); });
                 return g;
             }
             // ============ Pair-Detektor: gepaarte Magnetventile aus Pneumatik ============
@@ -68470,6 +68526,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const svgCoilNames = new Set();
                 const svgContactNames = new Set();
                 const coilCtype = new Map();   // varName → 'ton'|'tof'|'tp'|'ctu'|'relais'|...
+                const kontaktSaetze = new Map(); // varName → Anzahl Kontaktsätze im Plan
                 const iecLabels = {};               // default: erstes Label
                 const iecLabelsByRole = { 'sensor-box': {}, 'coil': {}, 'contact': {} };
                 try {
@@ -68485,7 +68542,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 // CTU hat zwei Spulen (Zählen und Rücksetzen „(R)“)
                                 // mit derselben Variable: der Zähler bleibt ein Zähler.
                                 if (ct && coilCtype.get(v) !== 'ctu') coilCtype.set(v, ct);
-                            } else if (role === 'contact') svgContactNames.add(v);
+                            } else if (role === 'contact') {
+                                svgContactNames.add(v);
+                                // Kontaktsätze je Variable (ein Wechsler-Paar zählt einmal)
+                                if (elem.getAttribute('data-wechsler-weg') !== '1') kontaktSaetze.set(v, (kontaktSaetze.get(v) || 0) + 1);
+                            }
                             // Erstes <text>-Element ist die IEC-Bezeichnung
                             // (-SJ1, -KF1, -BG1, …). Pro Rolle getrennt
                             // speichern, weil dasselbe varName mehrere
@@ -68567,6 +68628,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         relaisVars.splice(i, 1);
                     }
                 }
+                // Vorwahlzähler 162355 hat EINEN Wechsler. Braucht der Plan mehr
+                // Kontakte, schaltet der Zähler über 1–4 ein Hilfsrelais, dessen
+                // vier Wechsler die Kontakte liefern (wie bei der Komparatorkarte).
+                const zaehlerHilfsrelais = zaehlerVars.filter(v => (kontaktSaetze.get(v) || 0) > 1);
+                zaehlerHilfsrelais.forEach(v => { if (!relaisVars.includes(v)) relaisVars.push(v); });
                 const TASTER_SLOTS_PER_PANEL = 3;  // Slots 2-4
                 const SCHALTER_SLOTS_PER_PANEL = 1; // Slot 1
                 // Auto-Skalierung: genug Panels für Schalter UND Taster
@@ -68795,7 +68861,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const loadVars = new Set([...ledVars, ...magnetVars, ...hornVars]);
                 return { tCount, rCount, lCount, sCount, mCount, zCount: _zCountActual, cCount, assignments, varToSlot,
                          schalterVars, tasterVars, relaisVars, ledVars, sensorVars, magnetVars, magnetUnits,
-                         hornVars, zeitrelaisVars, zaehlerVars, coilCtype, blockedVars,
+                         hornVars, zeitrelaisVars, zaehlerVars, zaehlerHilfsrelais, coilCtype, blockedVars,
                          iecLabels, iecLabelsByRole, dualCircuit, loadVars };
             }
             // ============ Warn-Modal für 230V-Darstellung ============
@@ -69597,6 +69663,34 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const raw = localStorage.getItem('valisFestoFreeBuildData2');
                 if (raw) { const d = JSON.parse(raw); if (d && Array.isArray(d.boards)) { FB.boards = d.boards; FB.cables = Array.isArray(d.cables) ? d.cables : []; FB.idc = d.idc || 1; FB.tc = d.tc || {}; } }
             } catch(_) {}
+            // Alte freie Aufbauten mit dem früheren Lernmodell-Zähler (2-fach,
+            // A3/A4, 13/14 …) auf den echten Vorwahlzähler 162355 umschreiben:
+            // Zähler 1 behält seine Kabel (A3→R1, A4→R2, Schließer →1/4,
+            // Öffner →1/2), Kabel von Zähler 2 und gedoppelte Kontakte entfallen.
+            (function _fbZaehlerUmschreiben() {
+                const zl = FB.boards.filter(b => b && b.type === 'zaehler');
+                if (!zl.length) return;
+                const pfx = new Set(zl.map(b => b.prefix));
+                const MAP = { A1: 'A1', A2: 'A2', A3: 'R1', A4: 'R2', '13': '1', '14': '4', '31': '1', '32': '2' };
+                const neu = k => {
+                    const m = /^([A-Za-z]+\d+)_S(\d)_(\w+)$/.exec(k || '');
+                    if (!m || !pfx.has(m[1])) return k;
+                    if (m[2] !== '1' || !MAP[m[3]]) return /^(A1|A2|R1|R2|1|2|4)$/.test(m[3]) && m[2] === '1' ? k : null;
+                    return `${m[1]}_S1_${MAP[m[3]]}`;
+                };
+                const busNeu = k => { const m = /^([A-Za-z]+\d+)_(24V|0V)_(\d+)$/.exec(k || ''); return (m && pfx.has(m[1]) && +m[3] > 6) ? `${m[1]}_${m[2]}_6` : k; };
+                let geaendert = false;
+                FB.cables = FB.cables.map(c => {
+                    const a = busNeu(neu(c.a)), b = busNeu(neu(c.b));
+                    if (a !== c.a || b !== c.b) geaendert = true;
+                    return (a && b && a !== b) ? Object.assign({}, c, { a, b }) : null;
+                }).filter(Boolean);
+                zl.forEach(b => {
+                    if (b.slotVars && b.slotVars.S2) { delete b.slotVars.S2; geaendert = true; }
+                    if (b.zaehlerCfg && b.zaehlerCfg.S2) { delete b.zaehlerCfg.S2; geaendert = true; }
+                });
+                if (geaendert) try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {}
+            })();
             try { if (localStorage.getItem('valisFbLiveSync') === '1') FB.liveSync = true; } catch(_) {}
             try { if (localStorage.getItem('valisFbMarkIncomplete') === '0') FB.markIncomplete = false; } catch(_) {}
             function _fbSave() { window._elVersion = (window._elVersion || 0) + 1; try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {} }
@@ -69676,15 +69770,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         [['35','36'],['45','46']].forEach((pr, j) => elems.push({ id:`s${i}nc${j+1}`, cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
                     }
                 } else if (b.type === 'zaehler') {
-                    // Zähleingang A1/A2 und Rücksetzen A3/A4 als neutrale Spulen
-                    // ('valve'); _fbApplyZaehler macht daraus VAR := CTU(IN, VAR_R, n).
-                    for (let i = 1; i <= 2; i++) {
-                        const vk = 'S' + i, cv = sv[vk] || '';
-                        elems.push({ id:'s'+i+'cu', cedType:'valve', varKey:vk, varName:cv, counter:{}, terms:{ [`${P}_S${i}_A1`]:'in', [`${P}_S${i}_A2`]:'out' } });
-                        elems.push({ id:'s'+i+'r', cedType:'valve', varKey:vk, varSuffix:'_R', varName: cv ? cv + '_R' : '', counter:{ reset:true }, terms:{ [`${P}_S${i}_A3`]:'in', [`${P}_S${i}_A4`]:'out' } });
-                        [ZL_NO[1], ZL_NO[2]].forEach((pr, j) => elems.push({ id:`s${i}no${j+1}`, cedType:'relay_no', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
-                        [ZL_NC[1], ZL_NC[2]].forEach((pr, j) => elems.push({ id:`s${i}nc${j+1}`, cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S${i}_${pr[0]}`]:'in', [`${P}_S${i}_${pr[1]}`]:'out' } }));
-                    }
+                    // FESTO 162355: Zählspule A1/A2 und Rückstellteil R1/R2 als
+                    // neutrale Spulen ('valve'); _fbApplyZaehler macht daraus
+                    // VAR := CTU(IN, VAR_R, n). Ein Wechsler: 1 Wurzel, 4 Schließer, 2 Öffner.
+                    const vk = 'S1', cv = sv[vk] || '';
+                    elems.push({ id:'s1cu', cedType:'valve', varKey:vk, varName:cv, counter:{}, terms:{ [`${P}_S1_A1`]:'in', [`${P}_S1_A2`]:'out' } });
+                    elems.push({ id:'s1r', cedType:'valve', varKey:vk, varSuffix:'_R', varName: cv ? cv + '_R' : '', counter:{ reset:true }, terms:{ [`${P}_S1_R1`]:'in', [`${P}_S1_R2`]:'out' } });
+                    elems.push({ id:'s1no', cedType:'relay_no', varKey:vk, varName:cv, terms:{ [`${P}_S1_4`]:'in', [`${P}_S1_1`]:'out' } });
+                    elems.push({ id:'s1nc', cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S1_2`]:'in', [`${P}_S1_1`]:'out' } });
                 }
                 return { elems };
             }
@@ -70071,6 +70164,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return !!FB.liveSync;
                 },
                 status: function() { return { liveSync: !!FB.liveSync, text: FB.status || '' }; },
+                // Vorwahl über die Variable (Tasten am Zählwerk) → true/false
+                vorwahlVar: function(v, n) {
+                    const b = FB.boards.find(x => x.type === 'zaehler' && (x.slotVars || {}).S1 === v); if (!b) return false;
+                    b.zaehlerCfg = b.zaehlerCfg || {};
+                    b.zaehlerCfg.S1 = { pv: Math.max(1, Math.round(n) || 1) };
+                    _fbSave();
+                    try { _fbMaybeLiveSync(); } catch (_) {}
+                    return true;
+                },
                 // Vorwahl eines Zählers (z. B. „C1_S1“) → Variable oder null
                 vorwahl: function(slot, n) {
                     const m = /^([A-Za-z]+\d+)_(S\d+)$/.exec(slot || ''); if (!m) return null;
@@ -70361,7 +70463,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // „VAR := CTU(<IN>, VAR_R, n)“ (ohne gesteckten Rücksetzstrang FALSE).
             function _fbApplyZaehler(code) {
                 FB.boards.filter(b => b.type === 'zaehler').forEach(b => {
-                    for (let i = 1; i <= 2; i++) {
+                    for (let i = 1; i <= ZAEHLER.slots; i++) {
                         const v = (b.slotVars || {})['S' + i]; if (!v) continue;
                         const pv = ((b.zaehlerCfg || {})['S' + i] || { pv: 3 }).pv;
                         const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -71828,21 +71930,26 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     } catch (_) {}
                     return rolle === 'reset' ? !!spsState[v + '_R'] : false;
                 };
+                const _zl3 = n => String(Math.max(0, Math.min(999, n | 0))).padStart(3, '0');
                 svg.querySelectorAll('[data-festo-zaehler-ist]').forEach(t => {
                     const v = assignments[t.getAttribute('data-festo-zaehler-ist')];
                     const z = v ? _zlTimer(v) : null;
-                    t.textContent = String(z && typeof z.cv === 'number' ? z.cv : 0);
+                    t.textContent = _zl3(z && typeof z.cv === 'number' ? z.cv : 0)[+t.getAttribute('data-festo-stelle') || 0];
                 });
                 svg.querySelectorAll('[data-festo-zaehler-vorwahl]').forEach(t => {
                     const v = assignments[t.getAttribute('data-festo-zaehler-vorwahl')];
-                    if (v && window._festoZaehlerVorwahl && window._festoZaehlerVorwahl[v]) t.textContent = String(window._festoZaehlerVorwahl[v]);
+                    if (v && window._festoZaehlerVorwahl && window._festoZaehlerVorwahl[v]) t.textContent = _zl3(window._festoZaehlerVorwahl[v])[+t.getAttribute('data-festo-stelle') || 0];
                 });
-                svg.querySelectorAll('[data-festo-zaehler-led]').forEach(led => {
-                    const rolle = led.getAttribute('data-festo-zaehler-led');
-                    const an = _zlSpule(assignments[led.getAttribute('data-festo-slot')], rolle);
-                    const farbe = rolle === 'q' ? '#ff6d00' : '#76ff03';
-                    led.setAttribute('fill', an ? farbe : (rolle === 'q' ? '#3e2723' : '#2e3b35'));
-                    led.style.filter = an ? `drop-shadow(0 0 3px ${farbe})` : '';
+                // Spule (Zählen bzw. Rückstellteil) färbt sich, solange Strom fließt
+                svg.querySelectorAll('[data-festo-zaehler-spule]').forEach(r => {
+                    const an = _zlSpule(assignments[r.getAttribute('data-festo-slot')], r.getAttribute('data-festo-zaehler-spule'));
+                    r.setAttribute('fill', an ? '#c8e6c9' : '#fff');
+                });
+                // Wechsler: Ruhe am Öffner 2, bei erreichter Vorwahl am Schließer 4
+                svg.querySelectorAll('[data-festo-zl-wechsler]').forEach(h => {
+                    const an = _zlSpule(assignments[h.getAttribute('data-festo-slot')], 'q');
+                    h.setAttribute('x2', an ? 140 : 160);
+                    h.setAttribute('y2', 141);
                 });
                 // --- Relais-Spulen-LED (leuchtet wenn Spule angezogen) ---
                 svg.querySelectorAll('[data-festo-relais-led]').forEach(led => {
@@ -72177,6 +72284,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const cx = zahl(e, 'data-festo-cx'), my = zahl(e, 'data-festo-mech-y');
                         hebel(e, 'wechsler', [cx - 10, my - 10], [cx + 10, my - 10]);
                     });
+                    // Wechsler des Vorwahlzählers 162355: Ruhe am Öffner 2, angezogen am Schließer 4
+                    g.querySelectorAll('[data-festo-zl-wechsler]').forEach(e => hebel(e, 'wechsler', [160, 141], [140, 141]));
                     g.querySelectorAll('[data-festo-zr-lever]').forEach(e => {
                         const cx = zahl(e, 'data-festo-cx'), my = zahl(e, 'data-festo-mech-y');
                         if (e.getAttribute('data-festo-zr-mode') === 'nc') hebel(e, 'oeffner', [cx + 10, my - 10], [cx + 12, my - 3]);
@@ -72213,7 +72322,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             e.remove();
                         });
                         k.querySelectorAll('[data-festo-act-group],[data-festo-relais-led],[data-festo-led-bulb],[data-festo-magnet-led],'
-                            + '[data-festo-sensor-led],[data-festo-lever],[data-festo-relais-lever],[data-festo-zr-lever],'
+                            + '[data-festo-sensor-led],[data-festo-lever],[data-festo-relais-lever],[data-festo-zr-lever],[data-festo-zl-wechsler],'
                             + '[data-festo-magnet-slider],[data-festo-magnet-slider-duo],[data-festo-ans-led-var],[data-festo-ans-in-var],'
                             + '[data-festo-ans-out-var],:scope > circle[r="17"]').forEach(e => e.remove());
                         const innen = new XMLSerializer().serializeToString(k);
@@ -72646,13 +72755,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const prev = varToSlot[v];
                     if (!prev) { varToSlot[v] = k; return; }
                     // R/Z > T > L/M > N (Walker-relevante Slots zuerst)
-                    const rank = (s) => s.startsWith('R') || s.startsWith('Z') || s.startsWith('C') ? 4
+                    const rank = (s) => s.startsWith('C') ? 5 : s.startsWith('R') || s.startsWith('Z') ? 4
                                       : s.startsWith('T') ? 3
                                       : s.startsWith('L') || s.startsWith('M') ? 2 : 1;
                     if (rank(k) > rank(prev)) varToSlot[v] = k;
                 });
                 const cc = _iecDoc().getElementById('circuit-content');
                 if (!cc) return cables;
+                // Vorwahlzähler mit Hilfsrelais: Variable → R-Slot
+                const zaehlerRelais = {};
+                Object.entries(assignments).forEach(([k, v]) => { if (/^R\d+_S\d+$/.test(k) && varToSlot[v] && varToSlot[v].startsWith('C')) zaehlerRelais[v] = k; });
                 // ─── Wechsler-Counter pro Hilfsrelais ───
                 const relayUsage = {};
                 const wechslerK = new Map();   // Wechsler-Paar → gemeinsamer Kontaktsatz
@@ -72733,13 +72845,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             const top = contact.isNC ? { 1:'35', 2:'45' }[k] : { 1:'17', 2:'27' }[k];
                             const bot = contact.isNC ? { 1:'36', 2:'46' }[k] : { 1:'18', 2:'28' }[k];
                             sock = { inputKey: `${slot}_${top}`, outputKey: `${slot}_${bot}` };
+                        } else if (slot.startsWith('C') && zaehlerRelais[contact.varName]) {
+                            // Zähler mit Hilfsrelais: Kontakte kommen von dessen Wechslern
+                            const rs = zaehlerRelais[contact.varName];
+                            const cnt = relayUsage[contact.varName] || 0;
+                            relayUsage[contact.varName] = cnt + 1;
+                            const k = (cnt % 4) + 1;
+                            sock = contact.isNC
+                                ? { inputKey: `${rs}_${k}2`, outputKey: `${rs}_${k}1` }
+                                : { inputKey: `${rs}_${k}4`, outputKey: `${rs}_${k}1` };
                         } else if (slot.startsWith('C')) {
-                            // Vorwahlzähler: Schließer 13/14, 23/24, Öffner 31/32, 41/42
-                            const usageKey = contact.varName + (contact.isNC ? '_CNC' : '_CNO');
-                            const cnt = relayUsage[usageKey] || 0;
-                            relayUsage[usageKey] = cnt + 1;
-                            const pr = (contact.isNC ? ZL_NC : ZL_NO)[(cnt % 2) + 1];
-                            sock = { inputKey: `${slot}_${pr[0]}`, outputKey: `${slot}_${pr[1]}` };
+                            // Vorwahlzähler 162355: ein Wechsler – Schließer 1–4, Öffner 1–2.
+                            // Als Wechsler-Paar im Plan: gemeinsame Wurzel 1.
+                            if (contact.elem && contact.elem._wPartnerG && window.configWechslerZusammen)
+                                sock = { inputKey: `${slot}_1`, outputKey: `${slot}_${contact.isNC ? 2 : 4}` };
+                            else
+                                sock = { inputKey: `${slot}_${contact.isNC ? 2 : 4}`, outputKey: `${slot}_1` };
                         } else if (slot.startsWith('N')) {
                             // Sensor: 24V ist „Eingang" (vom +24V-Bus), Q ist
                             // „Ausgang" (Signal). Kein NC/NO-Switch — der
@@ -72752,13 +72873,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return sock;
                 }
                 // Spule eines Zählers: Zähleingang A1/A2 (data-ctype ctu) oder
-                // Rücksetzen A3/A4 (die zweite Spule „(R)“ derselben Variable).
+                // Rücksetzen R1/R2 (die zweite Spule „(R)“ derselben Variable).
                 const _istRueckSpule = (elem) => !!(elem && elem.getAttribute && elem.getAttribute('data-ctype') !== 'ctu');
                 function coilSockOf(varName, elem) {
                     const slot = varToSlot[varName] || ensureSlot(varName);
                     if (!slot) return null;
                     if (slot.startsWith('C')) return _istRueckSpule(elem)
-                        ? { inputKey: `${slot}_A3`, returnKey: `${slot}_A4` }
+                        ? { inputKey: `${slot}_R1`, returnKey: `${slot}_R2` }
                         : { inputKey: `${slot}_A1`, returnKey: `${slot}_A2` };
                     if (slot.startsWith('R')) return { inputKey: `${slot}_A1`, returnKey: `${slot}_A2` };
                     // Zeitrelais: A1/A2 wie normales Relais
@@ -73089,6 +73210,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const iec = iecMap[v];
                     kompStr.push({ id: v, label: `${iec ? iec + ' ' : ''}(${v}) · Komparator ${k.slot.replace(/^KK\d+_/, '')}` });
                 });
+                // ─── Vorwahlzähler → Hilfsrelais: +24 V auf die Wurzel 1, der
+                // Schließer 4 auf A1 des Hilfsrelais, A2 auf 0 V.
+                Object.keys(zaehlerRelais).forEach(v => {
+                    const cs = varToSlot[v], rs = zaehlerRelais[v];
+                    cables.push({ fromKey: '__BUS_24V__', toKey: `${cs}_1`, color: 'red', strand: v + '__HR' });
+                    cables.push({ fromKey: `${cs}_4`, toKey: `${rs}_A1`, color: 'blue', strand: v + '__HR' });
+                    cables.push({ fromKey: `${rs}_A2`, toKey: '__BUS_0V__', color: 'blue', strand: v + '__HR' });
+                    const iec = iecMap[v];
+                    kompStr.push({ id: v + '__HR', label: `${iec ? iec + ' ' : ''}(${v}) · Zähler → Hilfsrelais` });
+                });
                 // ─── Versorgung der Analogkarten (+24 V / 0 V)
                 const vers = window._anaVersorgung || [];
                 vers.forEach(([p24, p0]) => {
@@ -73219,9 +73350,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         [['35', '36'], ['45', '46']].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: true }));
                     } else if (/^C\d+_S\d+$/.test(slot)) {
                         E('last', slot + '_A1', slot + '_A2', { v, last: 'zaehler' });
-                        E('last', slot + '_A3', slot + '_A4', { v, last: 'zaehler', rueck: true });
-                        [ZL_NO[1], ZL_NO[2]].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: false }));
-                        [ZL_NC[1], ZL_NC[2]].forEach(([a, b]) => E('kontakt', `${slot}_${a}`, `${slot}_${b}`, { v, sem: 'relais', nc: true }));
+                        E('last', slot + '_R1', slot + '_R2', { v, last: 'zaehler', rueck: true });
+                        E('kontakt', `${slot}_4`, `${slot}_1`, { v, sem: 'relais', nc: false });
+                        E('kontakt', `${slot}_2`, `${slot}_1`, { v, sem: 'relais', nc: true });
                     } else if (/^L\d+_HORN$/.test(slot)) {
                         E('last', slot + '_X1', slot + '_X2', { v, last: 'hupe' });
                     } else if (/^L\d+_S\d+$/.test(slot)) {
@@ -73777,12 +73908,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const isTop = (pin === '7' || pin === '5');
                     return `Zeitrelais ${m[1]} · Slot ${m[2]} Kontakt ${wechs} ${isTop ? 'oben' : 'verzögert'} (${wechs}${pin})`;
                 }
-                if ((m = key.match(/^C(\d+)_S(\d+)_(A[1-4])$/))) {
-                    return `Vorwahlzähler ${m[1]} · Zähler ${m[2]} ${m[3] === 'A1' || m[3] === 'A2' ? 'Zähleingang' : 'Rücksetzen'} ${m[3]}`;
+                if ((m = key.match(/^C(\d+)_S\d+_(A1|A2|R1|R2)$/))) {
+                    return `Vorwahlzähler ${m[1]} · ${m[2][0] === 'A' ? 'Zähleingang' : 'Rücksetzen'} ${m[2]}`;
                 }
-                if ((m = key.match(/^C(\d+)_S(\d+)_(\d)(\d)$/))) {
-                    const nc = m[4] === '1' || m[4] === '2';
-                    return `Vorwahlzähler ${m[1]} · Zähler ${m[2]} ${nc ? 'Öffner (NC)' : 'Schließer (NO)'} (${m[3]}${m[4]})`;
+                if ((m = key.match(/^C(\d+)_S\d+_([124])$/))) {
+                    return `Vorwahlzähler ${m[1]} · Wechsler ${m[2]} (${{ 1: 'Wurzel', 2: 'Öffner', 4: 'Schließer' }[m[2]]})`;
                 }
                 if ((m = key.match(/^C(\d+)_(24V|0V)_\d+$/))) {
                     return `Vorwahlzähler ${m[1]} · ${m[2]}-Sammelschiene`;

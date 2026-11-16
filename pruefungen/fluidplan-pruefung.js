@@ -632,6 +632,31 @@ const FAELLE = {
     F.verbinden2D(false);
     return R;
   },
+  'Quelle–Wartungseinheit im Plan = Schlauch Kompressor–Wartungseinheit in 2D (beide Richtungen)': async () => {
+    const F = Fluidplan, R = [], warte = ms => new Promise(r => setTimeout(r, ms));
+    const tick = async () => { for (let i = 0; i < 5; i++) { try { window._fpTakt(0.05); } catch (e) {} await warte(60); } };
+    factoryObjects.slice().forEach(o => { try { deleteObjRecursive(o); } catch (e) {} });
+    window.pneuConnections = []; F._leeren(); F.verbinden2D(true);
+    const typ = id => (factoryObjects.find(o => o.id === id) || {}).type;
+    const cm = () => window.pneuConnections.filter(c => [typ(c.aObjId), typ(c.bObjId)].sort().join() === 'compressor,manifold').length;
+    const q = F.setzen('quelle', 0, 400), w = F.setzen('wartung', 120, 400), m = F.setzen('manometer', 60, 300);
+    const ql = () => F.plan().leitungen.filter(l => [l.a.t, l.b.t].sort().join() === [q, w].sort().join()).length;
+    await warte(300);
+    F.verbinden(q, '1', w, '1'); await warte(300); await tick();
+    R.push(['Plan: Quelle–Wartungseinheit → 2D-Schlauch Kompressor–Wartungseinheit', cm() === 1, cm()]);
+    F.verbinden(q, '1', m, '1'); await warte(300); await tick();
+    const mano = window.pneuConnections.find(c => [c.aObjId, c.bObjId].some(id => typ(id) === 'pneu_fp') && [c.aObjId, c.bObjId].some(id => typ(id) === 'compressor'));
+    R.push(['Manometer an der Quelle hängt in 2D am Kompressor, nicht hinter der Wartungseinheit', !!mano]);
+    const pp = F.plan(); pp.leitungen = pp.leitungen.filter(l => [l.a.t, l.b.t].sort().join() !== [q, w].sort().join()); F.importieren(pp); await warte(300); await tick();
+    R.push(['Plan-Leitung gelöscht → 2D-Schlauch weg', cm() === 0, cm()]);
+    const comp = factoryObjects.find(o => o.type === 'compressor'), mf = factoryObjects.find(o => o.type === 'manifold');
+    window.pneuConnections.push({ aObjId: comp.id, aPortId: '1', bObjId: mf.id, bPortId: '1' }); await tick();
+    R.push(['2D: Kompressor–Wartungseinheit gesteckt → Leitung im Plan', ql() === 1, ql()]);
+    window.pneuConnections = window.pneuConnections.filter(c => [typ(c.aObjId), typ(c.bObjId)].sort().join() !== 'compressor,manifold'); await tick();
+    R.push(['2D: Schlauch abgezogen → Leitung im Plan weg', ql() === 0, ql()]);
+    F.verbinden2D(false);
+    return R;
+  },
   'Pneumatik der 2D-Anlage: Fluidplan-Teile und Schläuche in beide Richtungen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

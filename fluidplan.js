@@ -4123,8 +4123,13 @@ function versorgungMerken(F) {
         const t = teil(e.t); if (!t) return null;
         if (gast[t.id]) { const w = teil(gast[t.id]); if (w && w.o.anlage && F.some(q => q.id === w.o.anlage && q.type === 'pneu_fp')) return null; }
         const mf = F.find(q => q.type === 'manifold'), comp = F.find(q => q.type === 'compressor');
-        if (t.typ === 'quelle') return mf ? [mf.id, '1'] : comp ? [comp.id, '1'] : null;
-        if (t.typ === 'wartung') return e.p === '1' ? (comp ? [comp.id, '1'] : null) : (mf ? [mf.id, '1'] : null);
+        // Quelle = Kompressor. Nur wenn der Plan keine Wartungseinheit hat, steht in 2D der
+        // Verteiler (manifold) für den Abgang der Quelle. Die Wartungseinheit ist in 2D der
+        // Verteiler mit einem einzigen Anschluss 1 (Ein- und Ausgang zugleich): So wird
+        // Quelle–Wartungseinheit im Plan zum Schlauch Kompressor–Wartungseinheit in 2D.
+        const mitWartung = plan.teile.some(q => q.typ === 'wartung');
+        if (t.typ === 'quelle') return comp && (mitWartung || !mf) ? [comp.id, '1'] : mf ? [mf.id, '1'] : null;
+        if (t.typ === 'wartung') return mf ? [mf.id, '1'] : comp ? [comp.id, '1'] : null;
         if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') return t.o.anlage ? [t.o.anlage, e.p === 'S' ? '2' : '1'] : null;
         if (t.o.anlage && F.some(q => q.id === t.o.anlage)) return [t.o.anlage, e.p];
         // Teil eines 2D-Magnetventils (valve_pneu) oder seiner Drossel
@@ -4161,7 +4166,8 @@ function versorgungMerken(F) {
         const soll = [];
         const da = (A, B) => (window.pneuConnections || []).some(c => !c._broken && !c._fp && ((c.aObjId === A[0] && String(c.aPortId) === A[1] && c.bObjId === B[0] && String(c.bPortId) === B[1]) || (c.aObjId === B[0] && String(c.aPortId) === B[1] && c.bObjId === A[0] && String(c.bPortId) === A[1])));
         for (const [g, ends] of gruppen) {
-            if (ends.every(e => abgedeckt.has(e.t) || ['quelle', 'wartung'].includes((teil(e.t) || {}).typ))) continue;
+            // Versorgung (Quelle, Wartungseinheit) zählt mit: Was 2D schon selbst verschlaucht, fängt da() ab
+            if (ends.every(e => abgedeckt.has(e.t))) continue;
             const eind = [];
             for (const e of ends) {
                 const x = ende2D(F, e, gast); if (!x) continue;
@@ -4263,8 +4269,15 @@ function versorgungMerken(F) {
             if (c._fp || c._auto || c._broken) continue;
             const a = F.find(q => q.id === c.aObjId), b2 = F.find(q => q.id === c.bObjId);
             const frei = q => q && (q.type === 'pneu_fp' || ((/^zylinder_/.test(q.type)) && !F.some(v => v.type === 'valve_pneu' && v.targetCylinderId === q.id)));
-            if (!frei(a) && !frei(b2)) continue;
-            const A = planEnde(F, c.aObjId, c.aPortId), B = planEnde(F, c.bObjId, c.bPortId);
+            // Kompressor–Wartungseinheit von Hand gesteckt → Leitung Quelle–Wartungseinheit
+            const versorgung = a && b2 && [a.type, b2.type].sort().join() === 'compressor,manifold';
+            if (!frei(a) && !frei(b2) && !versorgung) continue;
+            let A = planEnde(F, c.aObjId, c.aPortId), B = planEnde(F, c.bObjId, c.bPortId);
+            if (versorgung) {
+                const qu = plan.teile.find(x => x.typ === 'quelle'), wa = plan.teile.find(x => x.typ === 'wartung');
+                if (!qu || !wa || plan.leitungen.some(l => (l.a.t === qu.id && l.b.t === wa.id) || (l.a.t === wa.id && l.b.t === qu.id))) continue;
+                A = { t: qu.id, p: '1' }; B = { t: wa.id, p: '1' };
+            }
             if (!A || !B) continue;
             c._fp = true; masse = true;
             const k = schlauchKey(c), lid = neueId();

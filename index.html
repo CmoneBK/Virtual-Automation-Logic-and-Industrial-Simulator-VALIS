@@ -56267,9 +56267,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     tip.style.overflowY = 'auto';
                 }
 
-                const _selsVorab = !step.target ? [] : (Array.isArray(step.target) ? step.target : [step.target]);
+                // target darf auch eine Funktion sein (Ziel hängt vom Zustand ab, z. B. ob es den Knopf gibt).
+                const _ziel = (typeof step.target === 'function') ? step.target() : step.target;
+                const _selsVorab = !_ziel ? [] : (Array.isArray(_ziel) ? _ziel : [_ziel]);
                 const _gefunden = _selsVorab.some(s => { const e = document.querySelector(s); return e && e.getClientRects().length > 0 && (e.offsetWidth > 0 || e.offsetHeight > 0); });
-                if (!step.target || !_gefunden) {
+                if (!_ziel || !_gefunden) {
                     spotlight.style.display = 'none';
                     // Tatsächliche Größe verwenden statt fixer 300×200 —
                     // sonst wird die Vertikal-Mitte falsch berechnet und das
@@ -56289,7 +56291,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // bauen wir das Spotlight um die UNION-BBox aller (sichtbaren)
                 // Treffer — so kann ein einziger Schritt z. B. alle drei
                 // Options-Buttons gleichzeitig hervorheben.
-                const sels = Array.isArray(step.target) ? step.target : [step.target];
+                const sels = Array.isArray(_ziel) ? _ziel : [_ziel];
                 const els = sels.map(s => document.querySelector(s))
                                 .filter(e => e && e.getClientRects().length > 0
                                           && (e.offsetWidth > 0 || e.offsetHeight > 0));
@@ -56639,15 +56641,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { id: 'editor',      titel: 'Logik-Editor', icon: '💻',
                   vorschau: 'Hier entsteht die Steuerung als Text. Du lernst die Schreibweise und die Legende kennen und siehst, wie VALIS Fehler zeigt und Zeilen in Sätze übersetzt.' },
                 { id: 'simpanel',    titel: 'Sim-Panel', icon: '🎛',
-                  vorschau: 'Alle Ein- und Ausgänge aus dem Code: Bauteiltyp wählen, Tasten zuweisen, SPS- oder E-Pneu-Modus und die Zuordnungsliste.' },
+                  vorschau: 'Alle Ein- und Ausgänge aus dem Code: Bauteiltyp wählen, Tasten zuweisen, Sensoren forcen, SPS- oder E-Pneu-Modus, Zuordnungsliste und die Knöpfe für Oszilloskop und Aufzeichnen.' },
                 { id: 'simulation',  titel: 'Simulation und Analyse', icon: '▶️',
-                  vorschau: 'Die Steuerung läuft. Du schaltest die Anlage selbst ein und schaust mit Oszilloskop, Zeitraffer und Aufzeichnung genauer hin.' },
+                  vorschau: 'Die Steuerung läuft. Du startest die Simulation, schaltest die Anlage selbst ein und schaust mit Oszilloskop und Zeitraffer genauer hin.' },
                 { id: 'logikplan',   titel: 'Logikplan', icon: '🧩',
                   vorschau: 'Der Code als Funktionsbausteine: Palette, Fokus und Glow und die Optionen bis zum FUP nach Norm.' },
                 { id: 'schaltplan',  titel: 'Pläne und Steckaufbau', icon: '⚡',
                   vorschau: 'Dieselbe Logik als Auto-Plan, selbst gezeichnet im Elektroplan, als Pneumatik im Fluidplan und gesteckt auf Lehrplatinen. Zum Schluss die Schrittkette.' },
                 { id: 'anlage',      titel: '2D-Anlage', icon: '🏭',
-                  vorschau: 'Die Anlage, an der die Steuerung läuft: Metall aussortieren, Sensoren forcen, bewegen und zoomen und ein Gang durch alle Bauteil-Menüs.' },
+                  vorschau: 'Die Anlage, an der die Steuerung läuft: Metall aussortieren, bewegen und zoomen, ein Gang durch alle Bauteil-Menüs und wie die Ventile aussehen.' },
                 { id: 'lernzentrum', titel: 'Lernzentrum und Aufgaben', icon: '🎓',
                   vorschau: 'Lektionen, Tutorials, Szenario-Analyse und Aufgaben. Für Lehrkräfte: Bereiche sperren oder ausblenden, mit drei Beispielen, wie Lernende das sehen.' },
                 { id: 'teilen',      titel: 'Speichern, Teilen, Zusammenarbeiten', icon: '💾',
@@ -56718,6 +56720,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 { k: 'simpanel', title: '⌨️ Tasten zuweisen',
                   text: 'Mit dem Tastatur-Knopf vor dem Namen legst du einen Eingang auf eine Taste. Dann bedienst du die Anlage mit der Tastatur, z. B. START auf <b>S</b>. Entf löscht die Zuweisung.',
                   target: '#sim-inputs .key-bind-btn', pos: 'right' },
+                { k: 'simpanel', title: '🅵 Sensoren forcen',
+                  text: 'Steuert die 2D-Anlage einen Eingang (hier den Sensor S_METALL), kannst du ihn im Sim-Panel <b>forcen</b>: Ein Klick auf seinen Schalter übersteuert ihn, die Logik sieht dann deinen Wert statt den Sensor. Ein orangefarbenes <b>F</b> zeigt das an, ein Klick auf das F gibt den Sensor wieder frei. Taster bleiben ganz normal bedienbar.'
+                      + mit('Klick im Sim-Panel auf den Schalter von <b>S_METALL</b>.'),
+                  before: () => panels(['fbs-wrapper', 'factory-wrapper']),
+                  after: () => { try { window._forceAufheben(); } catch (_) {} },
+                  mitmachen: { pruefen: () => !!(window._forciert && ('S_METALL' in window._forciert)), ok: 'S_METALL ist geforct. Das F rechts daneben gibt ihn wieder frei, das macht die Tour beim Weiterklicken.' },
+                  wait: 300, target: '[data-sim-in="S_METALL"]', pos: 'right' },
                 { k: 'simpanel', kurz: true, title: '⚡ SPS- oder E-Pneumatik-Modus',
                   text: 'Zwei Lesarten desselben Codes. Im <b>SPS-Modus</b> steht eine Variable für das Signal an der SPS-Klemme: ein Not-Halt (Öffner) liefert in Ruhe 1. Im <b>E-Pneu-Modus</b> ist der Code ein Abbild der Schaltplanlogik: die Variable sagt, ob das Bauteil gedrückt ist.<br><br>Der Unterschied zeigt sich nur bei Öffnern wie Not-Halt oder Lichtgitter.',
                   target: '#btn-epneu-mode', pos: 'right' },
@@ -56838,13 +56847,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   },
                   mitmachen: { pruefen: () => sps('ZYL_AUS'), ok: 'Der Zylinder ist ausgefahren und hat das Metallteil aussortiert.' },
                   wait: 300, target: '#factory-canvas-area', pos: 'left' },
-                { k: 'anlage', title: '🅵 Sensoren forcen',
-                  text: 'Einen Sensor der 2D-Anlage kannst du im Sim-Panel <b>forcen</b>: Ein Klick auf seinen Schalter übersteuert ihn, die Logik sieht dann deinen Wert statt den Sensor. Ein orangefarbenes <b>F</b> zeigt das an, ein Klick auf das F gibt den Sensor wieder frei. Taster bleiben ganz normal bedienbar.'
-                      + mit('Klick im Sim-Panel auf den Schalter von <b>S_METALL</b>.'),
-                  before: () => { panels(['fbs-wrapper', 'factory-wrapper']); sim(true); },
-                  after: () => { try { window._forceAufheben(); } catch (_) {} },
-                  mitmachen: { pruefen: () => !!(window._forciert && ('S_METALL' in window._forciert)), ok: 'S_METALL ist geforct. Das F rechts daneben gibt ihn wieder frei, das macht die Tour beim Weiterklicken.' },
-                  wait: 300, target: '[data-sim-in="S_METALL"]', pos: 'right' },
                 { k: 'anlage', title: '🖱 Bewegen und Zoomen',
                   text: 'Mit dem Mausrad zoomst du, mit gedrückter Maus auf freier Fläche verschiebst du die Ansicht. Bauteile ziehst du mit der Maus. <b>Rechtsklick</b> auf ein Bauteil öffnet das Kontextmenü: Variable zuweisen, Position, Ebene, Sperren, ohne Kollision und Beschriftung anheften.',
                   before: () => panels(['factory-wrapper']), target: '#factory-canvas-area', pos: 'left' },
@@ -56970,8 +56972,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   after: () => { try { window.closeSaveLoadModal(); } catch (_) {} },
                   wait: 350, target: '#saveload-modal .sl-section', pos: 'left' },
                 { k: 'teilen', title: '☁️ Meine Umgebung und Zusammenarbeiten',
-                  text: 'Mit <b>Meine Umgebung</b> rechts neben Datei meldest du dich an: Aufgaben und Pakete liegen dann auf dem Server und sind auf jedem Gerät da, eine Klasse tritt mit dem <b>Klassencode</b> bei. Über <b>👥 Zusammen</b> bearbeiten mehrere gleichzeitig dasselbe Projekt, live.<br><br>Wird es oben eng, schrumpfen PRO, Meine Umgebung und Datei zu Symbolen.',
-                  target: ['#btn-datei', '#btn-cloud'], pos: 'bottom' },
+                  text: 'Mit <b>Meine Umgebung</b> (auf dem Schulserver rechts neben Datei) meldest du dich an: Aufgaben und Pakete liegen dann auf dem Server und sind auf jedem Gerät da, eine Klasse tritt mit dem <b>Klassencode</b> bei. Über <b>👥 Zusammen</b> bearbeiten mehrere gleichzeitig dasselbe Projekt, live.<br><br>Wird es oben eng, schrumpfen PRO, Meine Umgebung und Datei zu Symbolen.',
+                  // Nur Meine Umgebung markieren; ohne Server (GitHub Pages) gibt es den Knopf nicht, dann Datei.
+                  target: () => document.getElementById('btn-cloud') ? '#btn-cloud' : '#btn-datei', pos: 'bottom' },
 
                 // 10 · Einstellungen und Extras
                 { k: 'extras', title: '⚙️ PRO-Modus',

@@ -3956,7 +3956,8 @@
                             <div class="tb-menu-cat">Pneumatik-Anlage</div>
                             <div onclick="addFactoryDevice('pneumatic_zone')">🏭 Pneumatik-Bereich</div>
                             <div onclick="addFactoryDevice('compressor')">⚙️ Kompressor</div>
-                            <div onclick="addFactoryDevice('manifold')">🔧 Wartungseinheit</div>
+                            <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('wartung')" title="Filter mit Wasserabscheider und Druckregler mit Manometer: Eingang 1 vom Kompressor, Ausgang 2 zur Anlage.">🔧 Wartungseinheit</div>
+                            <div onclick="addFactoryDevice('manifold')" title="Verteilt die aufbereitete Luft hinter der Wartungseinheit auf die Ventile.">▬ Verteilerleiste</div>
                             <div onclick="addFactoryDevice('valve_pneu')">🔀 Wegeventil</div>
                             <div onclick="addFactoryDevice('throttle')">🔩 Drosselrückschlagventil</div>
                             <div style="color:#78909c;font-size:10px;padding:2px 12px 4px;">Betätigung des Wegeventils (Taster, Hebel, Rolle, Steuerdruck …): Rechtsklick</div>
@@ -26524,7 +26525,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let supX = curX + 18, supY = supplyY;
                         _drawSupplySym(g, supX, supY, supplyObj, isPneu);
                         let outletX = supX + 14, outletY = supY;
-                        let mfldObj = isPneu ? factoryObjects.find(o => o.type === 'manifold') : null;
+                        let mfldObj = isPneu ? ((window._pneuWartung2D && window._pneuWartung2D()) || factoryObjects.find(o => o.type === 'manifold')) : null;
                         if (mfldObj) {
                             let muCx = outletX + 8 + 23, muCy = outletY;
                             let mu = _drawMaintenanceUnitSym(g, muCx, muCy, mfldObj);
@@ -32481,6 +32482,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 build: function(obj, el) {
                     obj.width = 200; obj.height = 15; el.className = 'f2d-obj f2d-manifold';
                     el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                    el.title = 'Verteilerleiste: verteilt die Luft hinter der Wartungseinheit auf die Ventile';
+                    let vLbl = document.createElement('div'); vLbl.className = 'f2d-label f2d-verteiler-label'; vLbl.style.top = '17px'; vLbl.textContent = 'Verteilerleiste'; el.appendChild(vLbl);
                     let resizer = document.createElement('div'); resizer.className = 'f2d-resize-handle'; obj.resizerEl = resizer; el.appendChild(resizer);
                     obj.useCollision = false;
                 }
@@ -43740,7 +43743,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                     return m.length > 0 && m.every(c => c._broken);
                                 };
                                 let _mf = factoryObjects.find(o => o.type === 'manifold');
-                                let _versorgungAb = _ab(comp, '1', _mf, '1') || _ab(_mf, '1', valve, '1');
+                                let _we = window._pneuWartung2D ? window._pneuWartung2D() : null;
+                                let _versorgungAb = (_we ? (_ab(comp, '1', _we, '1') || _ab(_we, '2', _mf, '1')) : _ab(comp, '1', _mf, '1')) || _ab(_mf, '1', valve, '1');
                                 const _leitungAb = (vp, thr, cp) => _versorgungAb || (thr ? (_ab(valve, vp, thr, '2') || _ab(thr, '1', obj, cp)) : _ab(valve, vp, obj, cp));
                                 if (valve.isTriple && valve.valveState === 'center') {
                                     // 5/3 Sperrmittelstellung: beide Kammern gesperrt → kein Antrieb
@@ -44668,6 +44672,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 drosselModell: 2,
                 // Pneumatik: Ausfahr-Drossel auf der Stangenseite (Abluftdrosselung, 14.11.2026)
                 drosselSeite: 'stange',
+                // Echte Wartungseinheit (pneu_fp) vor der Verteilerleiste (16.11.2026)
+                wartungEinheit: 2,
                 // Freier Fluidplan (fluidplan.js): reist mit .valisave, #state und Undo
                 fluidplan: (window.Fluidplan ? window.Fluidplan.exportieren() : (window._fpRoh || null)),
                 // Elektrische Fehlersuche (elektro-messen.js): versteckte Fehler im Steckaufbau
@@ -45979,6 +45985,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 if (typeof _applyHydManualConnections  === 'function') _applyHydManualConnections();
                 if (state.drosselSeite !== 'stange') { try { _pneuDrosselSeiteMigrieren(); } catch (e) { console.warn('Drosselseite', e); } }
+                if (state.wartungEinheit !== 2) { try { _pneuWartungMigrieren(); } catch (e) { console.warn('Wartungseinheit', e); } }
                 if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections();
                 // Drosseln bis Modell 1 rechneten die Öffnung als Anteil der Liefermenge von
                 // Kompressor bzw. Aggregat. Ab Modell 2 ist sie der Anteil am Nenndurchfluss
@@ -52549,7 +52556,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!zone) { zone = createFactoryObject('pneumatic_zone', ''); zone.x = 20; zone.y = 600; }
             let comp = factoryObjects.find(o => o.type === 'compressor');
             let manifold = factoryObjects.find(o => o.type === 'manifold');
-            const willC = opt ? !!opt.comp : !comp, willM = opt ? !!opt.manifold : !comp;
+            let wartung = window._pneuWartung2D();
+            const willC = opt ? !!opt.comp : !comp, willM = opt ? !!opt.manifold : !comp, willW = opt ? !!opt.wartung : !comp;
             if (willC && !comp) {
                 comp = createFactoryObject('compressor', ''); comp.x = zone.x + 20; comp.y = zone.y + zone.height - 80;
                 // 🌟 NORM-UPDATE (DIN EN 81346-2): Kompressor (GQA) und Wartungseinheit/Verteiler (GQ)
@@ -52559,23 +52567,38 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 comp.el.appendChild(cLbl);
                 try { updateObjTransform(comp); } catch (e) {}
             }
+            const bx = comp ? comp.x : zone.x + 20, by = comp ? comp.y : zone.y + zone.height - 80;
+            // Wartungseinheit (Filter, Druckregler, Manometer) direkt hinter dem Kompressor,
+            // die Verteilerleiste an ihrem Ausgang 2 (Fluidplan-Teil 'wartung', -GQ1)
+            if (willW && !wartung && window.Fluidplan) {
+                wartung = createFactoryObject('pneu_fp', 'wartung'); wartung.x = bx; wartung.y = by - 78;   // über dem Kompressor, die Ventile stehen rechts daneben
+                wartung.normLabel = '-GQ1';
+                if (comp && comp.pressure && wartung.pneu && wartung.pneu.fp) wartung.pneu.fp.o.p = comp.pressure;
+                try { updateObjTransform(wartung); } catch (e) {}
+            }
             if (willM && (!manifold || !opt)) {
-                const bx = comp ? comp.x : zone.x + 20, by = comp ? comp.y : zone.y + zone.height - 80;
                 manifold = createFactoryObject('manifold', ''); manifold.x = bx + 140; manifold.y = by + 45;
-                manifold.normLabel = '-GQ1';
-                let mLbl = document.createElement('div'); mLbl.className = 'f2d-label f2d-norm-label'; 
-                mLbl.style.top = '-25px'; mLbl.innerHTML = `Wartungseinheit<br><span style="color:#03a9f4; font-size:10px;">[${manifold.normLabel}]</span>`; 
-                manifold.el.appendChild(mLbl);
                 try { updateObjTransform(manifold); } catch (e) {}
             }
             if (!comp) {   // generatePneumaticSetup braucht einen Kompressor
                 if (!opt) return window._pneuVersorgung2D({ comp: true });
             }
-            return { zone, comp, manifold };
+            return { zone, comp, manifold, wartung };
+        };
+        // Echte Wartungseinheit der 2D-Anlage (Fluidplan-Teil), null in alten Anlagen vor dem Umbau
+        window._pneuWartung2D = () => factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung') || null;
+        // Versorgungsschläuche: Kompressor 1 → Wartungseinheit 1, Wartungseinheit 2 → Verteilerleiste 1
+        // (ohne Wartungseinheit wie früher Kompressor → Verteilerleiste)
+        window._pneuVersorgungSoll = (comp, manifold, wartung) => {
+            if (!wartung) return comp && manifold ? [[comp, '1', manifold, '1']] : [];
+            const l = [];
+            if (comp) l.push([comp, '1', wartung, '1']);
+            if (manifold) l.push([wartung, '2', manifold, '1']);
+            return l;
         };
         window.generatePneumaticSetup = function(cylObj, wahl, opt) {
             const _dr = (opt && opt.drosseln) || { ext: true, ret: true };
-            let { zone, comp, manifold } = window._pneuVersorgung2D();
+            let { zone, comp, manifold, wartung } = window._pneuVersorgung2D();
             let isDouble = cylObj.type === 'zylinder_double' || cylObj.type === 'gate_pneu';
             let existingValves = factoryObjects.filter(o => o.type === 'valve_pneu');
             let groupNum = existingValves.length + 1;
@@ -52649,7 +52672,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort));
                     if (!exists) window.pneuConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _auto:true});
                 };
-                if (comp && manifold) _pushPneuAuto(comp, '1', manifold, '1');
+                window._pneuVersorgungSoll(comp, manifold, wartung).forEach(([a, ap, b, bp]) => _pushPneuAuto(a, ap, b, bp));
                 if (manifold)         _pushPneuAuto(manifold, '1', valve, '1');
                 _pneuAutoSoll(valve, cylObj, tExt, tRet).forEach(([a, ap, b, bp]) => _pushPneuAuto(a, ap, b, bp));
                 const scrollArea = document.getElementById('factory-canvas-area');
@@ -52718,13 +52741,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     (c.aObjId===bObj.id&&c.aPortId===bPort&&c.bObjId===aObj.id&&c.bPortId===aPort));
                 if (!exists) window.pneuConnections.push({aObjId:aObj.id, aPortId:aPort, bObjId:bObj.id, bPortId:bPort, _auto:true});
             };
+            const _wartungM = window._pneuWartung2D();
+            // Die Verteilerleiste sitzt fest am Ausgang 2 der Wartungseinheit
+            if (_wartungM && manifold) _ensurePneuAuto(_wartungM, '2', manifold, '1');
             factoryObjects.filter(o => o.type === 'valve_pneu' && o.targetCylinderId).forEach(valve => {
                 let cyl = factoryObjects.find(o => o.id === valve.targetCylinderId);
                 if (!cyl) return;
                 let isCylDoubleM = cyl.type === 'zylinder_double' || cyl.type === 'gate_pneu';
                 let tExtM = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ext');
                 let tRetM = factoryObjects.find(o => o.type === 'throttle' && o.targetCylinderId === cyl.id && o.role === 'ret');
-                if (comp && manifold) _ensurePneuAuto(comp, '1', manifold, '1');
+                window._pneuVersorgungSoll(comp, manifold, _wartungM).forEach(([a, ap, b, bp]) => _ensurePneuAuto(a, ap, b, bp));
                 if (manifold)         _ensurePneuAuto(manifold, '1', valve, '1');
                 _pneuAutoSoll(valve, cyl, tExtM, tRetM).forEach(([a, ap, b, bp]) => _ensurePneuAuto(a, ap, b, bp));
             });
@@ -52787,9 +52813,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             });
-            // Manual pneu connections (überspringt _auto, da diese oben schon gezeichnet werden)
+            // Manual pneu connections (überspringt _auto, da diese oben schon gezeichnet werden;
+            // die automatischen Schläuche an der Wartungseinheit zeichnet diese Schleife mit)
             for (let conn of (window.pneuConnections || [])) {
-                if (conn._auto || conn._broken) continue;
+                if (conn._broken) continue;
+                if (conn._auto && !(_wartungM && (conn.aObjId === _wartungM.id || conn.bObjId === _wartungM.id))) continue;
                 let objA = factoryObjects.find(o => o.id === conn.aObjId);
                 let objB = factoryObjects.find(o => o.id === conn.bObjId);
                 if (!objA || !objB) continue;
@@ -53843,6 +53871,49 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         }
         // Gespeicherte Anlagen vor dem 14.11.2026: Drosseln saßen auf der falschen Leitung
         // (ext an Zylinder 1). Automatische Schläuche neu ziehen, Drosseln umsetzen.
+        // Bis 16.11.2026 war die blaue Leiste (manifold) zugleich Wartungseinheit und Verteiler.
+        // Alte Anlagen bekommen eine echte Wartungseinheit (Fluidplan-Teil) zwischen Kompressor
+        // und Leiste: Kennzeichen -GQ1 geht mit, Druck = Kompressordruck, Schläuche werden umgesteckt.
+        function _pneuWartungMigrieren() {
+            const F = factoryObjects;
+            const mf = F.find(o => o.type === 'manifold');
+            if (!mf || (window._pneuWartung2D && window._pneuWartung2D())) return;
+            // Beim Start lädt die Anlage vor fluidplan.js: dann holt fluidplan.js den Umbau nach
+            if (!window.Fluidplan) { window._wartungUmbauOffen = true; return; }
+            const comp = F.find(o => o.type === 'compressor');
+            const we = createFactoryObject('pneu_fp', 'wartung');
+            we.x = comp ? comp.x : mf.x - 100; we.y = comp ? comp.y - 78 : mf.y - 60;
+            we.normLabel = mf.normLabel || '-GQ1';
+            if (comp && comp.pressure && we.pneu && we.pneu.fp) we.pneu.fp.o.p = comp.pressure;
+            try { updateObjTransform(we); } catch (e) {}
+            window._pneuWartungEinbauen(we);
+        }
+        window._pneuWartungMigrieren = _pneuWartungMigrieren;
+        // Neue Wartungseinheit zwischen Kompressor und Verteilerleiste setzen: Schläuche
+        // Kompressor–Leiste umstecken auf Kompressor–Wartungseinheit 1, Leiste an Ausgang 2,
+        // Kennzeichen -GQ1 und Beschriftung wandern von der Leiste zur Wartungseinheit
+        window._pneuWartungEinbauen = function(we) {
+            const F = factoryObjects;
+            const mf = F.find(o => o.type === 'manifold'), comp = F.find(o => o.type === 'compressor');
+            if (!mf || !we) return;
+            if (mf.normLabel) { if (!we.normLabel) we.normLabel = mf.normLabel; delete mf.normLabel; }
+            window.pneuConnections = window.pneuConnections || [];
+            let dran = false;
+            window.pneuConnections.forEach(c => {
+                const istA = c.aObjId === mf.id && String(c.aPortId) === '1', istB = c.bObjId === mf.id && String(c.bPortId) === '1';
+                if (!comp || !((istA && c.bObjId === comp.id) || (istB && c.aObjId === comp.id))) return;
+                if (istA) { c.aObjId = we.id; c.aPortId = '1'; } else { c.bObjId = we.id; c.bPortId = '1'; }
+                dran = true;
+            });
+            const hat = (a, ap, b, bp) => window.pneuConnections.some(c => (c.aObjId === a && String(c.aPortId) === ap && c.bObjId === b && String(c.bPortId) === bp) || (c.bObjId === a && String(c.bPortId) === ap && c.aObjId === b && String(c.aPortId) === bp));
+            // doppelte Schläuche nach dem Umstecken zusammenfassen
+            const seen = new Set();
+            window.pneuConnections = window.pneuConnections.filter(c => { const k = [c.aObjId + ':' + c.aPortId, c.bObjId + ':' + c.bPortId].sort().join('|') + (c._broken ? '#' : ''); if (seen.has(k)) return false; seen.add(k); return true; });
+            if (!hat(we.id, '2', mf.id, '1')) window.pneuConnections.push({ aObjId: we.id, aPortId: '2', bObjId: mf.id, bPortId: '1', _auto: true });
+            if (!dran && comp && F.some(o => o.type === 'valve_pneu') && !hat(comp.id, '1', we.id, '1')) window.pneuConnections.push({ aObjId: comp.id, aPortId: '1', bObjId: we.id, bPortId: '1', _auto: true });
+            // Beschriftung der Leiste neu (alte Anlagen trugen „Wartungseinheit [-GQ1]“)
+            if (mf.el) mf.el.querySelectorAll('.f2d-norm-label').forEach(l => l.remove());
+        };
         function _pneuDrosselSeiteMigrieren() {
             const F = factoryObjects;
             window.pneuConnections = window.pneuConnections || [];
@@ -54929,7 +55000,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     name: 'Druck (Pneumatik)', einheit: 'bar', min: 0, max: 10, kz: 'BP', zeichen: 'p',
                     bezuege: () => {
                         const l = [];
-                        factoryObjects.filter(o => o.type === 'manifold').forEach(o => l.push([o.id + ':1', 'nach der Wartungseinheit' + (o.normLabel ? ' ' + o.normLabel : '')]));
+                        factoryObjects.filter(o => o.type === 'manifold').forEach(o => l.push([o.id + ':1', 'Verteilerleiste (nach der Wartungseinheit)' + (o.normLabel ? ' ' + o.normLabel : '')]));
                         factoryObjects.filter(o => o.type === 'compressor').forEach(o => l.push([o.id + ':1', 'Kompressor' + (o.normLabel ? ' ' + o.normLabel : '')]));
                         factoryObjects.filter(o => o.hasPneumatics && _isZyl(o)).forEach(c => {
                             l.push([c.id + ':1', (c.normLabel || c.linkedVar || c.id) + ' Kolbenseite']);
@@ -80684,10 +80755,10 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-<script src="fluidplan.js?v=20261116a"></script>
+<script src="fluidplan.js?v=20261116b"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>
-<script src="komponenten-tutorials.js?v=20261116b"></script>
+<script src="komponenten-tutorials.js?v=20261116c"></script>
 </body>
 </html>

@@ -3630,7 +3630,6 @@
         for (const [id, tid] of versSpiegel) if (fehlt(id) && !versEinweg.has(id)) weg.add(tid);
         for (const id of [...versSpiegel.keys()]) if (fehlt(id)) versSpiegel.delete(id);
         if (!weg.size && !auch2D.size) { gesehen2D = da; return false; }
-        if (quelleWeg && !F.some(q => q.type === 'manifold' && da.has(q.id))) plan.teile.filter(t => t.typ === 'wartung').forEach(t => weg.add(t.id));
         // Aggregat weg und kein Hydraulikaggregat mehr in 2D: der Tank gehört dazu
         if (plan.teile.some(t => weg.has(t.id) && t.typ === 'aggregat') && !F.some(q => q.type === 'hydraulic_unit' && da.has(q.id)))
             plan.teile.filter(t => t.typ === 'tank').forEach(t => weg.add(t.id));
@@ -3732,7 +3731,8 @@ function versorgungAnlegen(F) {
     const offen = t => t && [...versSpiegel].some(([id, tid]) => tid === t.id && !F.some(q => q.id === id));
     let neu = false;
     const q = T('quelle'), w = T('wartung'), ag = T('aggregat'), tk = T('tank');
-    const qFehlt = q && !offen(q) && !hat('compressor'), wFehlt = w && !offen(w) && !hat('manifold');
+    // Wartungseinheit: das 2D-Teil (pneu_fp) baut teileNach2D, hier nur die Verteilerleiste dahinter
+    const qFehlt = q && !offen(q) && !hat('compressor'), wFehlt = w && !offen(w) && !hat('manifold') && !w.o.anlage;   // nur beim ersten Anlegen (noch kein 2D-Teil), in 2D gelöscht bleibt gelöscht
     if ((qFehlt || wFehlt) && typeof window._pneuVersorgung2D === 'function') { try { window._pneuVersorgung2D({ comp: !!qFehlt, manifold: !!wFehlt }); neu = true; } catch (e) { console.warn(e); } }
     const agFehlt = ag && !offen(ag) && !hat('hydraulic_unit'), tkFehlt = tk && !offen(tk) && !hat('oil_tank');
     if ((agFehlt || tkFehlt) && typeof window._hydVersorgung2D === 'function') { try { window._hydVersorgung2D({ aggregat: !!agFehlt, tank: tkFehlt ? true : undefined }); neu = true; } catch (e) { console.warn(e); } }
@@ -3741,8 +3741,12 @@ function versorgungAnlegen(F) {
 function versorgungMerken(F) {
         const T = typ => plan.teile.find(t => t.typ === typ && (typ === 'aggregat' || typ === 'tank' ? istHyd(t) : true));
         const paar = (typ2d, typ) => { const o = F.find(q => q.type === typ2d), t = T(typ); if (o && t) versSpiegel.set(o.id, t.id); };
-        paar('compressor', 'quelle'); paar('manifold', 'wartung'); paar('hydraulic_unit', 'aggregat'); paar('oil_tank', 'tank');
+        paar('compressor', 'quelle'); paar('hydraulic_unit', 'aggregat'); paar('oil_tank', 'tank');
         const ag = T('aggregat'); if (ag) F.filter(q => q.type === 'hydraulic_manifold').forEach(q => { versSpiegel.set(q.id, ag.id); versEinweg.add(q.id); });
+        // Verteilerleiste hängt an der Wartungseinheit: geht mit ihr, aber nicht umgekehrt
+        const wa = T('wartung'); if (wa) F.filter(q => q.type === 'manifold').forEach(q => { versSpiegel.set(q.id, wa.id); versEinweg.add(q.id); });
+        // die echte Wartungseinheit selbst: im Plan gelöscht → in 2D weg (auch wenn sie aus der Anlage übernommen wurde)
+        if (wa && wa.o.anlage && F.some(q => q.id === wa.o.anlage)) versSpiegel.set(wa.o.anlage, wa.id);
     }
     function kennNach2D(obj, t) {
         if (!obj || !t || !t.bez) return;
@@ -3751,6 +3755,7 @@ function versorgungMerken(F) {
     }
     function rueckAbgleich() {
         const F = fabrik(); if (!F || !plan.anlage) return;
+        wartungUebernehmen(F);
         if (weg2D(F)) return;
         if (hydSpiegel.size) hydRueckAbgleich(F);
         if ((!spiegel.size && !spiegel2D.size && !F.some(q => q.type === 'pneu_fp'))) return;
@@ -3898,9 +3903,21 @@ function versorgungMerken(F) {
         return r;
     }
     const spiegel2D = new Map();   // pneu_fp-Id → { teil, sig }
+    // Wartungseinheit des Plans ohne 2D-Teil (z. B. nach dem Umbau alter Anlagen: die Verteilerleiste
+    // war die Wartungseinheit) übernimmt die freie echte Wartungseinheit der 2D-Anlage
+    function wartungUebernehmen(F) {
+        for (const t of plan.teile) {
+            if (t.typ !== 'wartung' || (t.o.anlage && F.some(q => q.id === t.o.anlage))) continue;
+            const we = F.find(q => q.type === 'pneu_fp' && fp2d(q).typ === 'wartung' && !plan.teile.some(x => x.o && x.o.anlage === q.id));
+            if (!we) continue;
+            t.o.anlage = we.id; delete t.o.durch;
+            (plan.erzeugt = plan.erzeugt || []).includes(we.id) || plan.erzeugt.push(we.id);
+        }
+    }
     function anlageAbgleichen() {
         const F = fabrik();
         if (!plan.anlage || !F || typeof createFactoryObject !== 'function') return;
+        wartungUebernehmen(F);
         // Quelle, Wartungseinheit, Aggregat oder Tank im Plan gelöscht: das 2D-Gegenstück geht auch
         if (versorgungLoeschen(F)) { anlageAbgleichen(); return; }
         if (versorgungAnlegen(F)) { anlageAbgleichen(); return; }
@@ -4017,8 +4034,6 @@ function versorgungMerken(F) {
         // Druck der Quelle = Druck des Kompressors
         const komp = F.find(q => q.type === 'compressor'), qu = plan.teile.find(q => q.typ === 'quelle');
         if (komp && qu) { komp.pressure = zahl(qu.o.p, 6); kennNach2D(komp, qu); spiegel.set(komp.id, { quelle: qu.id, p: komp.pressure }); }
-        const wa = plan.teile.find(q => q.typ === 'wartung');
-        if (wa) kennNach2D(F.find(q => q.type === 'manifold'), wa);
         versorgungMerken(fabrik() || F);
         teileNach2D(F, abgedeckt, benutzt);
         // Aus der 2D-Anlage übernommene Zylinder, die im Plan gelöscht wurden, gehen auch in 2D
@@ -4059,7 +4074,7 @@ function versorgungMerken(F) {
         const zx = zone ? zone.x : 20, zy = zone ? zone.y : 600;
         let nr = 0;
         for (const t of plan.teile) {
-            if (abgedeckt.has(t.id) || istHyd(t) || ['zyl_dw', 'zyl_ew', 'quelle', 'wartung', 'knoten'].includes(t.typ)) continue;
+            if (abgedeckt.has(t.id) || istHyd(t) || ['zyl_dw', 'zyl_ew', 'quelle', 'knoten'].includes(t.typ)) continue;
             if (gast[t.id] && !abgedeckt.has(gast[t.id])) continue;   // sitzt im Symbol seines Wirts
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
             if (o && o.type !== 'pneu_fp') o = null;
@@ -4067,7 +4082,11 @@ function versorgungMerken(F) {
             const rolleAlt = o && o.pneu && o.pneu.fp ? rollenSchluessel(o.pneu.fp) : null;
             if (!o) {
                 o = createFactoryObject('pneu_fp', fp);
-                if (!rolleAnZylinder(o, F)) { o.x = zx + 30 + (nr % 5) * 110; o.y = zy + 20 + Math.floor(nr / 5) * 80; nr++; }
+                const komp = t.typ === 'wartung' && F.find(q => q.type === 'compressor');
+                if (komp) { o.x = komp.x; o.y = komp.y - 78; }   // Wartungseinheit über dem Kompressor (rechts stehen die Ventile)
+                if (t.typ === 'wartung' && typeof window._pneuWartungEinbauen === 'function') { if (t.bez) o.normLabel = t.bez; try { window._pneuWartungEinbauen(o); } catch (e) {} }
+                if (komp) { /* steht */ }
+                else if (!rolleAnZylinder(o, F)) { o.x = zx + 30 + (nr % 5) * 110; o.y = zy + 20 + Math.floor(nr / 5) * 80; nr++; }
                 t.o.anlage = o.id; plan.erzeugt.push(o.id);
                 try { updateObjTransform(o); } catch (e) {}
             }
@@ -4123,13 +4142,17 @@ function versorgungMerken(F) {
         const t = teil(e.t); if (!t) return null;
         if (gast[t.id]) { const w = teil(gast[t.id]); if (w && w.o.anlage && F.some(q => q.id === w.o.anlage && q.type === 'pneu_fp')) return null; }
         const mf = F.find(q => q.type === 'manifold'), comp = F.find(q => q.type === 'compressor');
-        // Quelle = Kompressor. Nur wenn der Plan keine Wartungseinheit hat, steht in 2D der
-        // Verteiler (manifold) für den Abgang der Quelle. Die Wartungseinheit ist in 2D der
-        // Verteiler mit einem einzigen Anschluss 1 (Ein- und Ausgang zugleich): So wird
-        // Quelle–Wartungseinheit im Plan zum Schlauch Kompressor–Wartungseinheit in 2D.
+        // Quelle = Kompressor. Nur wenn der Plan keine Wartungseinheit hat, steht in 2D die
+        // Verteilerleiste (manifold) für den Abgang der Quelle.
         const mitWartung = plan.teile.some(q => q.typ === 'wartung');
         if (t.typ === 'quelle') return comp && (mitWartung || !mf) ? [comp.id, '1'] : mf ? [mf.id, '1'] : null;
-        if (t.typ === 'wartung') return mf ? [mf.id, '1'] : comp ? [comp.id, '1'] : null;
+        if (t.typ === 'wartung') {
+            // Echte Wartungseinheit (pneu_fp): Eingang 1 an ihr; Ausgang 2 an der Verteilerleiste
+            // dahinter (die hängt fest an Ausgang 2), ohne Leiste an der Wartungseinheit selbst
+            const we = t.o.anlage && F.find(q => q.id === t.o.anlage);
+            if (we) return e.p === '2' && mf ? [mf.id, '1'] : [we.id, e.p];
+            return mf ? [mf.id, '1'] : comp ? [comp.id, '1'] : null;
+        }
         if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') return t.o.anlage ? [t.o.anlage, e.p === 'S' ? '2' : '1'] : null;
         if (t.o.anlage && F.some(q => q.id === t.o.anlage)) return [t.o.anlage, e.p];
         // Teil eines 2D-Magnetventils (valve_pneu) oder seiner Drossel
@@ -4278,7 +4301,7 @@ function versorgungMerken(F) {
                 if (!qu || !wa || plan.leitungen.some(l => (l.a.t === qu.id && l.b.t === wa.id) || (l.a.t === wa.id && l.b.t === qu.id))) continue;
                 A = { t: qu.id, p: '1' }; B = { t: wa.id, p: '1' };
             }
-            if (!A || !B) continue;
+            if (!A || !B || (A.t === B.t && A.p === B.p)) continue;   // z. B. Wartungseinheit 2 – Verteilerleiste
             c._fp = true; masse = true;
             const k = schlauchKey(c), lid = neueId();
             schlauchLeit.set(k, [lid]);
@@ -4296,10 +4319,15 @@ function versorgungMerken(F) {
         teile.push(q);
         const L = (a, ap, b, bp) => { const l = { id: nid(), a: { t: a, p: ap }, b: { t: b, p: bp } }; leitungen.push(l); return l.id; };
         const versorgung = [];
-        // Wartungseinheit der 2D-Anlage (Verteiler): Kurzform im Bild, rechnet wie eine Leitung
+        // Wartungseinheit der 2D-Anlage (pneu_fp 'wartung') mit der Verteilerleiste (manifold) an
+        // Ausgang 2. Alte Anlagen ohne echte Wartungseinheit: die Leiste in Kurzform, rechnet wie eine Leitung
         const mf = F.find(q2 => q2.type === 'manifold');
-        const wa = mf ? { id: nid(), typ: 'wartung', x: 0, y: 360, rot: 0, bez: mf.normLabel || '', o: Object.assign({}, TYP.wartung.optionen, { kurz: true, durch: true, p: comp && comp.pressure || 6 }) } : null;
+        const we = F.find(q2 => q2.type === 'pneu_fp' && q2.pneu && q2.pneu.fp && q2.pneu.fp.typ === 'wartung');
+        const wa = we ? { id: nid(), typ: 'wartung', x: 0, y: 360, rot: 0, bez: we.normLabel || '', o: Object.assign({}, TYP.wartung.optionen, JSON.parse(JSON.stringify(we.pneu.fp.o || {}))) }
+            : mf ? { id: nid(), typ: 'wartung', x: 0, y: 360, rot: 0, bez: mf.normLabel || '', o: Object.assign({}, TYP.wartung.optionen, { kurz: true, durch: true, p: comp && comp.pressure || 6 }) } : null;
         if (wa) teile.push(wa);
+        if (we) karte2[we.id] = wa.id;
+        const weAn = !we || (window.pneuConnections || []).some(c => !c._broken && ((c.aObjId === we.id && String(c.aPortId) === '1' && comp && c.bObjId === comp.id) || (c.bObjId === we.id && String(c.bPortId) === '1' && comp && c.aObjId === comp.id)));
         const vsrc = wa ? [wa.id, '2'] : [q.id, '1'];
         zyl.forEach((o, i) => {
             const dw = o.type === 'zylinder_double', x = 140 + i * 260, nr = i + 1;
@@ -4352,11 +4380,12 @@ function versorgungMerken(F) {
         if (wa) {
             // Quelle links neben der Wartungseinheit, deren Ausgang unter dem ersten Ventil
             wa.x = q.x - 60; wa.y = q.y; q.x = wa.x - 80; q.rot = 90;
-            L(q.id, '1', wa.id, '1');
+            if (weAn) L(q.id, '1', wa.id, '1');
         }
         // Fluidplan-Teile der 2D-Anlage (pneu_fp) und ihre Schläuche
         const fpo = fpListe || [];
         fpo.forEach((o, i) => {
+            if (we && o.id === we.id) return;   // steht schon als Versorgung im Plan
             const fp = fp2d(o), T = TYP[fp.typ]; if (!T) return;
             const oo = Object.assign({}, T.optionen, JSON.parse(JSON.stringify(fp.o || {})));
             for (const k of ['zyl', 'zylR']) if (oo[k]) oo[k] = karte[oo[k]] ? karte[oo[k]].zyl : '';
@@ -4366,6 +4395,7 @@ function versorgungMerken(F) {
         });
         if (fpo.length) {
             const fpIds = new Set(fpo.map(o => o.id));
+            if (we) fpIds.add(we.id);
             const ende = (oid, port) => {
                 port = String(port);
                 if (karte2[oid]) return [karte2[oid], port];
@@ -4381,16 +4411,17 @@ function versorgungMerken(F) {
                 return null;
             };
             const gesehenL = new Set();
+            if (wa) gesehenL.add([q.id + ':1', wa.id + ':1'].sort().join('|'));
             for (const c of window.pneuConnections || []) {
                 if (c._broken) continue;
                 const frei = id => fpIds.has(id) || (karte[id] && !karte[id].ventil);
                 if (!frei(c.aObjId) && !frei(c.bObjId)) continue;
                 const A = ende(c.aObjId, c.aPortId), B = ende(c.bObjId, c.bPortId);
-                if (!A || !B) continue;
+                if (!A || !B || (A[0] === B[0] && A[1] === B[1])) continue;
                 const k = [A.join(':'), B.join(':')].sort().join('|'); if (gesehenL.has(k)) continue; gesehenL.add(k);
                 L(A[0], A[1], B[0], B[1]);
             }
-            fpAnordnen(teile, leitungen, new Set(Object.values(karte2)), q, wa);
+            fpAnordnen(teile, leitungen, new Set(Object.values(karte2).filter(id => !wa || id !== wa.id)), q, wa);
         }
         // Kennzeichen aus der 2D-Anlage (-MM1, -QM1, -RN1 …); fehlende und doppelte neu vergeben
         const gesehen = new Set();
@@ -4548,7 +4579,8 @@ function versorgungMerken(F) {
                 // Abluftdrosselung: doppeltwirkend sitzt ext in der Stangenleitung (2D-Ventil 4)
                 ab('2', o.type !== 'zylinder_single' ? tR : tE, '1'), o.type !== 'zylinder_single' && ab('4', tE, '2'), (o.leakRate || 0) > 0, v && (v.leakRate || 0) > 0, v && JSON.stringify(v.abschluss || null)].join(',');
         };
-        const versorgungAb = pneuAb(comp, '1', mf, '1') || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
+        const we = wartung2D(F);
+        const versorgungAb = (we ? pneuAb(comp, '1', we, '1') || pneuAb(we, '2', mf, '1') : pneuAb(comp, '1', mf, '1')) || zyl.some(o => pneuAb(mf, '1', F.find(q => q.type === 'valve_pneu' && q.targetCylinderId === o.id), '1'));
         const fpo = schattenFp(F);
         const fpSig = fpo.map(o => o.id + JSON.stringify(o.pneu && o.pneu.fp && Object.assign({}, o.pneu.fp, { rot: 0, bild: 0 }))).join(';') + '#'
             + (fpo.length ? (window.pneuConnections || []).filter(c => !c._broken).map(c => schlauchKey(c)).sort().join(',') : '');
@@ -5549,9 +5581,9 @@ function versorgungMerken(F) {
         if (!zyl.length) return null;
         if (schatten && schatten.plan && zyl.every(o => schatten.karte[o.id]) && Object.keys(schatten.karte).length === zyl.length) return schatten;
         // ohne laufende Simulation: Bild aus der 2D-Anlage, gemerkt bis sich dort etwas ändert
-        const comp = F.find(o => o.type === 'compressor'), mf = F.find(o => o.type === 'manifold');
-        const rel = o => o && [o.id, o.type, o.normLabel, o.pistonD, o.rodD, o.stroke, o.isDouble, o.isTriple, o.role, o.opening, o.pressure, JSON.stringify(o.abschluss || null)].join('/');
-        const sig = [rel(comp), rel(mf)].concat(zyl.map(o => [rel(o)].concat(F.filter(q => (q.type === 'valve_pneu' || q.type === 'throttle') && q.targetCylinderId === o.id).map(rel)).join('+'))).join('|');
+        const comp = F.find(o => o.type === 'compressor'), mf = F.find(o => o.type === 'manifold'), we = wartung2D(F);
+        const rel = o => o && [o.id, o.type, o.normLabel, o.pistonD, o.rodD, o.stroke, o.isDouble, o.isTriple, o.role, o.opening, o.pressure, JSON.stringify(o.abschluss || null), JSON.stringify(o.pneu && o.pneu.fp && o.pneu.fp.o || null)].join('/');
+        const sig = [rel(comp), rel(mf), rel(we)].concat(zyl.map(o => [rel(o)].concat(F.filter(q => (q.type === 'valve_pneu' || q.type === 'throttle') && q.targetCylinderId === o.id).map(rel)).join('+'))).join('|');
         if (bildSchatten && bildSchatten.sig === sig) return bildSchatten;
         const r = planAus2D(F, zyl, comp);
         bildSchatten = { sig, plan: { v: 2, teile: r.teile, leitungen: r.leitungen, fehler: {} }, sim: null, karte: r.karte, quelle: r.quelle };
@@ -5635,6 +5667,7 @@ function versorgungMerken(F) {
     // steht dort als 'pneu_fp' mit demselben Symbol und denselben Anschlüssen wie im
     // Plan. obj.pneu.fp = { typ, o, rot, ab } (ab: Abschlüsse an Abluftanschlüssen).
     const S2D = 0.6;
+    const wartung2D = F => F.find(q => q.type === 'pneu_fp' && q.pneu && q.pneu.fp && q.pneu.fp.typ === 'wartung');
     const fp2d = obj => { const p = obj.pneu || (obj.pneu = {}); if (!p.fp) p.fp = { typ: 'ventil', o: {}, rot: 0 }; return p.fp; };
     function teilAus2D(obj) {
         const f = fp2d(obj), T = TYP[f.typ] || TYP.rueck;
@@ -7650,5 +7683,14 @@ function versorgungMerken(F) {
             if (s && s.fluidplan) planImport(s.fluidplan);
         }
     } catch (e) {}
+    // Alte Anlage beim Start geladen, bevor es dieses Skript gab: echte Wartungseinheit jetzt einbauen
+    if (window._wartungUmbauOffen && typeof window._pneuWartungMigrieren === 'function') {
+        window._wartungUmbauOffen = false;
+        try {
+            window._pneuWartungMigrieren();
+            if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses();
+            if (typeof saveFactoryState === 'function') saveFactoryState('ersetzen');
+        } catch (e) { console.warn('Wartungseinheit', e); }
+    }
     requestAnimationFrame(schleife);
 })();

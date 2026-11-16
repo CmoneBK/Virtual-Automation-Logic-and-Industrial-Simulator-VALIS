@@ -70,6 +70,21 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('STOP: fällt ab', !z.k1 && !z.l, JSON.stringify(z));
   await sim(false);
 
+  console.log('Zoomen im freien Aufbau');
+  const zm = await page.evaluate(async () => {
+    const svg = _festoDoc().getElementById('festo-svg'), body = _festoDoc().getElementById('festo-body');
+    const b0 = svg.getBoundingClientRect().width;
+    festoZoomIn(); festoZoomIn();
+    const b1 = svg.getBoundingClientRect().width;
+    body.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, clientX: 300, clientY: 300, bubbles: true, cancelable: true }));
+    const b2 = svg.getBoundingClientRect().width;
+    window._fbAusSicht.module(); window._renderFestoPanel();
+    const b3 = svg.getBoundingClientRect().width;
+    festoZoomReset();
+    return { b0, b1, b2, b3, b4: svg.getBoundingClientRect().width, basis: +svg.dataset.baseW };
+  });
+  ok('Knopf + vergrößert, Mausrad verkleinert, Zoom bleibt beim Neuzeichnen, Reset = 100 %', zm.b1 > zm.b0 * 1.3 && zm.b2 < zm.b1 && Math.abs(zm.b3 - zm.b2) < 2 && Math.abs(zm.b4 - zm.basis) < 2, JSON.stringify(zm));
+
   console.log('Erweitern: zweiter Stopp-Taster in Reihe');
   const e = await page.evaluate(() => {
     const A = window._fbAusSicht, m = window._elSteckModell();

@@ -53,8 +53,8 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Count 544315 ist ein Modul des freien Aufbaus', f.typen.includes('count_fg'));
   ok('Präfix FG1', f.G === 'FG1', f.G);
   ok('Kabel gesteckt', f.r.every(Boolean));
-  ok('Code: Eingang S1 START/UP und STOP aus den Tastern', f.c.ok && /FG1_S1_UP := SJ\d+/.test(f.src) && /FG1_S1_STOP := SJ\d+/.test(f.src), f.src.replace(/\n+/g, ' | '));
-  ok('Code: LED hängt an OUT', /PF\d+ := FG1_OUT/.test(f.src), f.src.replace(/\n+/g, ' | '));
+  ok('Code: Eingang S1 START/UP und STOP aus den Tastern', f.c.ok && /FG1_S1_UP := TASTER_\d+/.test(f.src) && /FG1_S1_STOP := TASTER_\d+/.test(f.src), f.src.replace(/\n+/g, ' | '));
+  ok('Code: LED hängt an OUT', /LAMPE_\d+ := FG1_OUT/.test(f.src), f.src.replace(/\n+/g, ' | '));
   await w(800);
   const pl = await page.evaluate(() => {
     const g = _festoDoc().querySelector('[data-festo-panel-type="count_fg"]'); if (!g) return null;
@@ -66,7 +66,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Tasten START/UP, STOP, RESET/DOWN und Wahlschalter', pl && pl.tasten === 3 && pl.wahl && /START\/UP/.test(pl.text) && /RESET\/DOWN/.test(pl.text) && /Frequency/.test(pl.text) && /Pulse width/.test(pl.text) && /t3/.test(pl.text));
   ok('LCD zeigt Pulse 0', /^Pulse \| 0/.test(await lcd()), await lcd());
 
-  const sj = (f.src.match(/FG1_S1_UP := (SJ\d+)/) || [])[1], sjStop = (f.src.match(/FG1_S1_STOP := (SJ\d+)/) || [])[1];
+  const sj = (f.src.match(/FG1_S1_UP := (TASTER_\d+)/) || [])[1], sjStop = (f.src.match(/FG1_S1_STOP := (TASTER_\d+)/) || [])[1];
   const tippen = async n => { await page.evaluate(v => setTaster(v, true), n); await w(150); await page.evaluate(v => setTaster(v, false), n); await w(150); };
   await page.evaluate(() => { if (!isSimulationActive) toggleSimulation(); }); await w(300);
   for (let i = 0; i < 3; i++) await tippen(sj);
@@ -89,7 +89,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   // Frequency out: OUT taktet die LED
   await page.evaluate(() => window._fgModus('FG1', 'fout')); await w(400);
   await klick('[data-fg-taste="UP"][data-fg-panel="FG1"]'); await w(100);
-  const led = (f.src.match(/(PF\d+) := FG1_OUT/) || [])[1];
+  const led = (f.src.match(/(LAMPE_\d+) := FG1_OUT/) || [])[1];
   const proben = [];
   for (let i = 0; i < 12; i++) { proben.push(await page.evaluate(l => !!spsState[l], led)); await w(150); }
   ok('Frequency out 1 Hz: LED an OUT blinkt', proben.some(Boolean) && proben.some(x => !x), proben.map(x => x ? 1 : 0).join(''));

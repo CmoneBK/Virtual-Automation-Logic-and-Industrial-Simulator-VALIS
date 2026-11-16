@@ -112,6 +112,18 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const hin = await page.evaluate(() => document.body.textContent.includes('ZUSTAND braucht sechs Werte') || document.body.textContent.includes('Zustandsregler falsch aufgerufen'));
   ok('Falscher Aufruf wird erklärt', hin);
 
+  // Analog-Interface 162247: Rechenzeile liest Analogwerte, schreibt einen Analogausgang
+  await page.evaluate(() => toggleWorkspaceView('code-wrapper'));
+  await page.evaluate(() => { loadExample('analog_oelkuehlung'); }); await w(1500);
+  await page.evaluate(() => { if (!window.epneuMode) toggleEpneuMode(); componentTypes['STELLW'] = 'analog_out'; const ta = document.getElementById('code'); ta.value += '\nSTELLW := (OELTEMP - SOLLT) * 4'; ta.dispatchEvent(new Event('input', { bubbles: true })); });
+  await w(1500);
+  const d = await page.evaluate(() => { const d = window._anaSammeln(); return { e: d.ifEin, a: d.ifAus }; });
+  ok('Interface: OELTEMP/SOLLT über INPUT U, STELLW über OUTPUT', d.e.join() === 'OELTEMP,SOLLT' && d.a.join() === 'STELLW', JSON.stringify(d));
+  await page.evaluate(() => toggleWorkspaceView('festo-wrapper')); await w(1500);
+  const ik = await page.evaluate(() => { const g = document.querySelector('[data-festo-panel-type="ana_if"]'); if (!g) return null; return { text: g.textContent, bu: [...g.querySelectorAll('[data-socket-key],[data-key]')].map(e => e.getAttribute('data-socket-key') || e.getAttribute('data-key')) }; });
+  ok('Interface-Karte 162247 mit INPUT U, INPUT I, OUTPUT, COUNTER', !!ik && /162247/.test(ik.text) && /INPUT -U-/.test(ik.text) && /INPUT -I-/.test(ik.text) && /OUTPUT/.test(ik.text) && /COUNTER/.test(ik.text), ik && ik.text.slice(0, 100));
+  ok('Interface zeigt OELTEMP, SOLLT und STELLW', ik && /OELTEMP/.test(ik.text) && /SOLLT/.test(ik.text) && /STELLW/.test(ik.text));
+
   ok('Keine Skriptfehler', fehler.length === 0, fehler.slice(0, 3).join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

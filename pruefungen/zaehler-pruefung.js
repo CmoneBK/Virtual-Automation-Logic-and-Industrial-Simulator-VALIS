@@ -109,11 +109,11 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Vorwahlzähler ist ein Modul des Freien Aufbaus', f.typen.includes('zaehler'));
   ok('Kabel gesteckt', f.r.every(Boolean));
   ok('Code aus Aufbau: CTU mit Rücksetzen und Vorwahl', f.c.ok && new RegExp(f.v + ' := CTU\\(\\w+, ' + f.v + '_R, 2\\)').test(f.src), f.src.replace(/\n+/g, ' | '));
-  ok('Zähler heißt KF…', /^KF\d+$/.test(f.v || ''), f.v);
+  ok('Zähler heißt ZAEHLER_…', /^ZAEHLER_\d+$/.test(f.v || ''), f.v);
   await page.evaluate(() => { if (!isSimulationActive) toggleSimulation(); }); await w(300);
   const sj = (f.src.match(/CTU\((\w+),/) || [])[1];
   for (let i = 0; i < 2; i++) { await page.evaluate(n => setTaster(n, true), sj); await w(200); await page.evaluate(n => setTaster(n, false), sj); await w(200); }
-  const led = (f.src.match(/(PF\d+) := /) || [])[1];
+  const led = (f.src.match(/(LAMPE_\d+) := /) || [])[1];
   z = await page.evaluate(([v, l]) => ({ q: !!spsState[v], led: !!spsState[l] }), [f.v, led]);
   ok('Zwei Impulse im Freien Aufbau: Zähler schaltet die LED', z.q && z.led, JSON.stringify(z));
   await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); window._toggleFestoFreeBuild(false); });

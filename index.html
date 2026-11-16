@@ -44371,6 +44371,29 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 		// --- NEU: KEYBOARD SHORTCUTS (Kopieren, Einfügen, Löschen) ---
         let factoryClipboard = null;
         let pasteOffset = 0;
+        // Leertaste in der 2D-Anlage: Der Browser scrollt sonst den Bereich,
+        // in den zuletzt geklickt wurde (#factory-canvas-area), um eine
+        // Bildschirmhöhe; gedrückt gehalten wiederholt er das bis ganz unten
+        // (Christoph 16.11.2026). Eingabefelder, Code-Editoren, Notizen und
+        // Knöpfe behalten die Leertaste.
+        window._valisLeertasteAbfangen = function (doc) {
+            if (!doc || doc._valisLeertasteAn) return;
+            doc._valisLeertasteAn = true;
+            let zuletztInAnlage = false;
+            doc.addEventListener('pointerdown', (e) => {
+                zuletztInAnlage = !!(e.target && e.target.closest && e.target.closest('#factory-wrapper'));
+            }, true);
+            doc.addEventListener('keydown', (e) => {
+                if (e.key !== ' ' && e.code !== 'Space') return;
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                const t = e.target;
+                if (!t || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(t.tagName) || t.isContentEditable) return;
+                const inAnlage = t.closest ? !!t.closest('#factory-wrapper') : false;
+                const aufSeite = t === doc.body || t === doc.documentElement;
+                if (inAnlage || (aufSeite && zuletztInAnlage)) e.preventDefault();
+            }, true);
+        };
+        window._valisLeertasteAbfangen(document);
         document.addEventListener('keydown', (e) => {
 			// 1. Zuweisungs-Modus aktiv?
             if (window.isAssigningKey) {
@@ -44403,9 +44426,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // 3. Simulations-Steuerung
             if (isSimulationActive) {
                 let key = e.key.toLowerCase();
-                if (window.heldKeys.has(key)) return; // Verhindert Auto-Repeat Dauerfeuer des Browsers
                 // Alle Variablen finden, die auf diese Taste reagieren sollen
                 let boundVars = Object.keys(window.inputKeyBindings).filter(k => window.inputKeyBindings[k] === key);
+                // Auto-Repeat beim Gedrückthalten: nicht neu auslösen, aber auch
+                // hier das Scrollen verhindern (sonst wandert die Seite bei
+                // gehaltener Leertaste nach unten).
+                if (window.heldKeys.has(key)) { if (boundVars.length > 0) e.preventDefault(); return; }
                 if (boundVars.length > 0) {
                     e.preventDefault(); // Verhindert Scrollen (z.B. bei Leertaste)
                     window.heldKeys.add(key);
@@ -48414,6 +48440,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
             _bindWindowRelay(extWin);
+            // Leertaste in der abgekoppelten 2D-Anlage nicht scrollen lassen.
+            try { window._valisLeertasteAbfangen(extWin.document); } catch(_) {}
             // Strg+Z / Strg+Y / Strg+Shift+Z im abgekoppelten Fenster ans
             // Haupt-Hauptfenster-Undo weiterreichen. Sonst „verschluckt" der
             // Browser die Tastenkombi, weil der globale keydown-Listener nur

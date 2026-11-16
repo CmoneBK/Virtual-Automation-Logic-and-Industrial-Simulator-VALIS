@@ -47,6 +47,12 @@ const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft|Kapitel \d+ von \
       titel.push(s.titel);
       const wo = `${fassung} ${w}x${h} Schritt ${i + 1} „${s.titel}“`;
       if (OHNE_ZIEL.test(s.titel)) ok(true, wo);
+      else if (/Speicher, Zeiten, Zähler, Regler/.test(s.titel)) {
+        // Die Markierung muss die aufgeklappte Erklärung der Zeiten mit einschließen.
+        const drin = await page.evaluate(() => { const p = document.querySelector('.leg-ext-panel[data-leg-ext-panel="timer"]'), sp = document.getElementById('tutorial-spotlight');
+          if (!p || p.hidden) return false; const a = p.getBoundingClientRect(), b = sp.getBoundingClientRect(); return a.height > 0 && b.top <= a.top + 1 && b.bottom >= a.bottom - 1; });
+        ok(drin, wo + ': aufgeklappte Zeiten nicht markiert');
+      }
       else { ok(s.spot, wo + ': keine Markierung (Ziel fehlt oder unsichtbar)'); if (s.spot) ok(s.imBild, wo + ': Markierung außerhalb des Fensters'); }
       const weiter = await page.evaluate(() => { const b = document.getElementById('tut-next'); if (!b || /Fertig/.test(b.textContent)) return false; b.click(); return true; });
       if (!weiter) break;
@@ -55,6 +61,7 @@ const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft|Kapitel \d+ von \
     ok(fluid >= (fassung === 'kurz' ? 1 : 3), `${fassung}: Fluidplan-Schritte ${fluid}`);
     ok(titel.some(t => /Elektroplan/.test(t)), `${fassung}: Schritt „Elektroplan“ fehlt`);
     if (fassung === 'lang') ok(titel.some(t => /forcen/.test(t)), 'lang: Schritt „Sensoren forcen“ fehlt');
+    if (fassung === 'lang') ok(titel.indexOf('📊Knopf Oszilloskop') >= 0 || titel.some(t => /Knopf Oszilloskop/.test(t)), 'lang: Oszilloskop-Knopf im Sim-Panel fehlt');
     if (fassung === 'lang') ok(titel.some(t => /So sehen die Ventile aus/.test(t)), 'lang: Schritt zum Darstellungs-Knopf der 2D-Anlage fehlt');
     // Kapitelkarten (Christoph 16.11.2026): in der ausführlichen Tour vor jedem der zehn Kapitel, in der kurzen keine.
     const karten = titel.filter(t => /Kapitel \d+ von \d+:/.test(t));

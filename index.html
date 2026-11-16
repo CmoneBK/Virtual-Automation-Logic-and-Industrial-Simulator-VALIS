@@ -24859,6 +24859,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return varInv ? !edge.inverted : edge.inverted;
             };
             const nodesToDraw = Array.from(graph.nodes.values()).filter(n => ['GATE', 'SR', 'RS', 'TON', 'TOF', 'TP', 'CTU', 'OUTPUT'].includes(n.type)).sort((a,b) => a.level - b.level);
+            let _srSetzOhne = null;
             function getTreeW(nodeId) {
                 let node = graph.nodes.get(nodeId);
                 if (node && _analogVergleich(nodeId)) return Math.max(90, 2 * (_estimateLabelLeftPx(symMap[nodeId] || nodeId) + 44) - 90);
@@ -24919,6 +24920,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     else if (node.label === '≥1') effectiveLabel = '&';
                 }
                 const childInv = (edge) => (!!edge.inverted) !== (!!isTargetInverted);
+                // SR im Direkt-Modus: ein ¬R im UND des Setzeingangs ist doppelt,
+                // der Rücksetz-Öffner liegt ohnehin in Reihe zur Spule
+                // ((A && ¬R || Q) && ¬R = (A || Q) && ¬R). Ein Taster hat nur
+                // einen Öffner, im Steckaufbau wäre er sonst zweimal belegt.
+                if (_srSetzOhne && _srSetzOhne.gate === nodeId && effectiveLabel === '&' && !isTargetInverted) {
+                    const rest = inEdges.filter(e => !(e.sourceId === _srSetzOhne.src && !!e.inverted === _srSetzOhne.inv));
+                    if (rest.length) inEdges = rest;
+                }
                 if (effectiveLabel === '&') {
                     let currY = y; let currCond = baseCond;
                     inEdges.forEach(edge => {
@@ -25294,7 +25303,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         let joinY  = Math.max(230, 90 + sPinH);
                         let rEndY  = Math.max(coilApproachY, joinY + rPinH);
                         let rsCoilY = rEndY + 20;
-                        let sCond = drawInputPin(sEdge, startX, 90, joinY, p1, "true", false);
+                        _srSetzOhne = (sEdge && rEdge && isInlineGate(sEdge.sourceId) && !sEdge.inverted && rEdge.sourceId && graph.nodes.get(rEdge.sourceId)?.type !== 'GATE')
+                            ? { gate: sEdge.sourceId, src: rEdge.sourceId, inv: !rEdge.inverted } : null;
+                        let sCond;
+                        try { sCond = drawInputPin(sEdge, startX, 90, joinY, p1, "true", false); } finally { _srSetzOhne = null; }
                         setPower(drawLine(parX, 90, parX, 135, 2, node.id, col), "true");
                         setPower(drawContact(parX, 150, symMap[node.id], false, 'relais', node.id, col, p2, node.id), "true");
                         setPower(drawLine(parX, 165, parX, joinY, 2, node.id, col), qCond);
@@ -69099,7 +69111,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // rCount muss Sensor-Implicit-Relais mitzählen — jeder Sensor
                 // hat im Schaltplan ein eigenes auto-generiertes Hilfsrelais
                 // (-KFn), das einen Relais-Slot belegt.
-                const rCount = Math.max(2, Math.ceil((relaisVars.length + sensorVars.length) / RELAIS.slots));
+                // Kontaktvervielfältigung: Ein Relais hat 4 Wechsler. Braucht der
+                // Plan mehr Kontakte einer Variable, kommt ein zweites Relais mit
+                // parallel geschalteter Spule dazu (sonst teilten sich zwei
+                // Stränge die Wurzel 11 desselben Wechslers).
+                const kontaktErweiterung = {};
+                let _extraRelais = 0;
+                [...relaisVars, ...sensorVars].forEach(v => {
+                    const n = Math.ceil((kontaktSaetze.get(v) || 0) / 4) - 1;
+                    if (n > 0) { kontaktErweiterung[v] = n; _extraRelais += n; }
+                });
+                const rCount = Math.max(2, Math.ceil((relaisVars.length + sensorVars.length + _extraRelais) / RELAIS.slots));
                 // lCount muss auch die Hörmelder unterbringen: pro LED-Panel
                 // gibt es genau EINEN Hörmelder-Sockel, also bestimmt sich
                 // die Panel-Zahl als Maximum von LED-Bedarf und Hörmelder-Bedarf.
@@ -69179,6 +69201,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const key = `R${panel}_S${slot}`;
                     assignments[key] = v;
                     varToSlot[v] = key;
+                });
+                // Zusatzrelais der Kontaktvervielfältigung hinter den übrigen
+                // (gleiche Variable, varToSlot bleibt beim ersten Relais)
+                let _rIdx = coilOrder.length;
+                coilOrder.forEach(v => {
+                    const n = kontaktErweiterung[v] || 0;
+                    const slots = [];
+                    for (let j = 0; j < n; j++, _rIdx++) {
+                        const panel = Math.floor(_rIdx / RELAIS.slots) + 1;
+                        if (panel > rCount) break;
+                        const key = `R${panel}_S${(_rIdx % RELAIS.slots) + 1}`;
+                        assignments[key] = v;
+                        slots.push(key);
+                    }
+                    kontaktErweiterung[v] = slots;
                 });
                 // LED: ebenfalls nach IEC sortiert
                 ledSorted.forEach((v, idx) => {
@@ -69319,7 +69356,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return { tCount, rCount, lCount, sCount, mCount, zCount: _zCountActual, cCount, assignments, varToSlot,
                          schalterVars, tasterVars, relaisVars, ledVars, sensorVars, magnetVars, magnetUnits,
                          hornVars, zeitrelaisVars, zaehlerVars, zaehlerHilfsrelais, coilCtype, blockedVars,
-                         iecLabels, iecLabelsByRole, dualCircuit, loadVars };
+                         iecLabels, iecLabelsByRole, dualCircuit, loadVars, kontaktErweiterung };
             }
             // ============ Warn-Modal für 230V-Darstellung ============
             // Wird einmal pro Session beim Aktivieren des Dual-Stromkreis-
@@ -73813,7 +73850,23 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!cc) return cables;
                 // Vorwahlzähler mit Hilfsrelais: Variable → R-Slot
                 const zaehlerRelais = {};
-                Object.entries(assignments).forEach(([k, v]) => { if (/^R\d+_S\d+$/.test(k) && varToSlot[v] && varToSlot[v].startsWith('C')) zaehlerRelais[v] = k; });
+                Object.entries(assignments).forEach(([k, v]) => { if (/^R\d+_S\d+$/.test(k) && varToSlot[v] && varToSlot[v].startsWith('C') && !zaehlerRelais[v]) zaehlerRelais[v] = k; });
+                // Kontaktvervielfältigung: weitere Relais-Slots derselben Variable
+                // (buildAssignment, mehr als 4 Kontaktsätze). Kontakt 1–4 liegen
+                // am ersten Relais, 5–8 am zweiten usw.; die Spulen parallel.
+                const zusatzRelais = {};
+                Object.entries(assignments).forEach(([k, v]) => {
+                    if (!/^R\d+_S\d+$/.test(k)) return;
+                    const haupt = zaehlerRelais[v] || varToSlot[v];
+                    if (!haupt || haupt === k || !haupt.startsWith('R')) return;
+                    (zusatzRelais[v] = zusatzRelais[v] || []).push(k);
+                });
+                const relaisFuer = (v, haupt, cnt) => {
+                    const z = zusatzRelais[v];
+                    if (!z || !z.length) return haupt;
+                    const i = Math.floor(cnt / 4) % (z.length + 1);
+                    return i === 0 ? haupt : z[i - 1];
+                };
                 // ─── Wechsler-Counter pro Hilfsrelais ───
                 const relayUsage = {};
                 const wechslerK = new Map();   // Wechsler-Paar → gemeinsamer Kontaktsatz
@@ -73872,17 +73925,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             if (!k) {
                                 const cnt = relayUsage[contact.varName] || 0;
                                 relayUsage[contact.varName] = cnt + 1;
-                                k = (cnt % 4) + 1;
+                                k = { k: (cnt % 4) + 1, r: relaisFuer(contact.varName, slot, cnt) };
                                 wechslerK.set(paarKey, k);
                             }
-                            sock = { inputKey: `${slot}_${k}1`, outputKey: `${slot}_${k}${contact.isNC ? 2 : 4}` };
+                            sock = { inputKey: `${k.r}_${k.k}1`, outputKey: `${k.r}_${k.k}${contact.isNC ? 2 : 4}` };
                         } else if (slot.startsWith('R')) {
                             const cnt = relayUsage[contact.varName] || 0;
                             relayUsage[contact.varName] = cnt + 1;
                             const k = (cnt % 4) + 1;
+                            const r = relaisFuer(contact.varName, slot, cnt);
                             sock = contact.isNC
-                                ? { inputKey: `${slot}_${k}2`, outputKey: `${slot}_${k}1` }
-                                : { inputKey: `${slot}_${k}4`, outputKey: `${slot}_${k}1` };
+                                ? { inputKey: `${r}_${k}2`, outputKey: `${r}_${k}1` }
+                                : { inputKey: `${r}_${k}4`, outputKey: `${r}_${k}1` };
                         } else if (slot.startsWith('Z')) {
                             // Zeitrelais 162243: 2 Schließer LINKS (Pins
                             // 17/18, 27/28) + 2 Öffner RECHTS (35/36, 45/46).
@@ -73896,9 +73950,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             sock = { inputKey: `${slot}_${top}`, outputKey: `${slot}_${bot}` };
                         } else if (slot.startsWith('C') && zaehlerRelais[contact.varName]) {
                             // Zähler mit Hilfsrelais: Kontakte kommen von dessen Wechslern
-                            const rs = zaehlerRelais[contact.varName];
                             const cnt = relayUsage[contact.varName] || 0;
                             relayUsage[contact.varName] = cnt + 1;
+                            const rs = relaisFuer(contact.varName, zaehlerRelais[contact.varName], cnt);
                             const k = (cnt % 4) + 1;
                             sock = contact.isNC
                                 ? { inputKey: `${rs}_${k}2`, outputKey: `${rs}_${k}1` }
@@ -74383,6 +74437,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     cables.push({ fromKey: `${rs}_A2`, toKey: '__BUS_0V__', color: 'blue', strand: v + '__HR' });
                     const iec = iecMap[v];
                     kompStr.push({ id: v + '__HR', label: `${iec ? iec + ' ' : ''}(${v}) · Zähler → Hilfsrelais` });
+                });
+                // ─── Kontaktvervielfältigung: Spule des Zusatzrelais parallel zur
+                // Spule des ersten (A1 an A1, A2 auf 0 V)
+                Object.keys(zusatzRelais).forEach(v => {
+                    const haupt = zaehlerRelais[v] || varToSlot[v];
+                    const str = zaehlerRelais[v] ? v + '__HR' : v;
+                    zusatzRelais[v].forEach(z => {
+                        cables.push({ fromKey: `${haupt}_A1`, toKey: `${z}_A1`, color: 'blue', strand: str });
+                        cables.push({ fromKey: `${z}_A2`, toKey: get0V(v), color: 'blue', strand: str });
+                    });
                 });
                 // ─── Versorgung der Analogkarten (+24 V / 0 V)
                 const vers = window._anaVersorgung || [];

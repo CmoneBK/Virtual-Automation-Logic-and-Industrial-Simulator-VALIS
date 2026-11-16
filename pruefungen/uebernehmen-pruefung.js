@@ -176,6 +176,33 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Beide Spulen erscheinen im Code', d.s.every(Boolean) && d.r.ok && (d.src.match(/VENTIL_\d+ := TASTER_\d+/g) || []).length === 2, d.r.text.replace(/\n/g, ' ') + ' || ' + d.src.replace(/\n+/g, ' | '));
   await page.evaluate(() => window._toggleFestoFreeBuild(false));
 
+  console.log('Rundlauf SR mit fünf Kontakten (Christoph, 16.11.2026)');
+  await page.evaluate(() => { componentTypes.S_METALL = 'sensor_ind'; componentTypes.S_ZYL_VORN = 'sensor_reed'; });
+  await code('S1 := START && ¬STOP\nR1 := STOP\nLED_BETRIEB := Q1\nBAND := Q1\nZYL_AUS := Q1 && S_METALL\nZYL_EIN := ¬Q1 || S_ZYL_VORN');
+  await w(1500);
+  const sr = await page.evaluate(() => {
+    const r = window._fbUebernehmen(true);
+    const kabel = window._elSteckModell().kabel.map(k => k.a + '>' + k.b);
+    const fb = window._fbStandExport();
+    const g = window._fbAusSicht.code();
+    return { r, kabel, rel: fb.boards.filter(x => x.type === 'relais').map(x => Object.values(x.slotVars).join(',')).join(' | '), g, src: document.getElementById('code').value };
+  });
+  ok('Fünfter Kontakt von SR_1 auf zweitem Relais (Spule parallel)', (sr.rel.match(/\bSR_1\b/g) || []).length === 2, sr.rel);
+  ok('STOP-Öffner nur einmal gesteckt, nicht kurzgeschlossen', !sr.kabel.some(k => /^(T\d_S\d)_2[12]>\1_2[12]$/.test(k)), sr.kabel.join(' '));
+  const srSrc = sr.src.replace(/\n+/g, ' | ');
+  ok('Code aus Aufbau: Selbsthaltung erkannt, ZYL_EIN ohne Dauer-Wahr', sr.g.ok && !/Selbst-Referenz/.test(sr.src) && /ZYL_EIN := (K_S_ZYL_VORN \|\| ¬SR_1|¬SR_1 \|\| K_S_ZYL_VORN)/.test(sr.src) && /S1 := START\b/.test(sr.src) && /R1 := STOP\b/.test(sr.src), srSrc);
+  await sim(true); await w(300);
+  let zs = await page.evaluate(() => ({ band: !!spsState.BAND, ein: !!spsState.ZYL_EIN }));
+  ok('Ruhe: BAND aus, ZYL_EIN an', !zs.band && zs.ein, JSON.stringify(zs));
+  await tippen('START');
+  zs = await page.evaluate(() => ({ band: !!spsState.BAND, ein: !!spsState.ZYL_EIN }));
+  ok('START: BAND an, ZYL_EIN aus', zs.band && !zs.ein, JSON.stringify(zs));
+  await tippen('STOP');
+  zs = await page.evaluate(() => ({ band: !!spsState.BAND, ein: !!spsState.ZYL_EIN }));
+  ok('STOP: BAND aus', !zs.band && zs.ein, JSON.stringify(zs));
+  await sim(false);
+  await page.evaluate(() => window._toggleFestoFreeBuild(false));
+
   ok('Keine Skriptfehler', fehler.length === 0, fehler.slice(0, 3).join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

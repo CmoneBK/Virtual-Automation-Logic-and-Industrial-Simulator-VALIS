@@ -24860,14 +24860,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             const nodesToDraw = Array.from(graph.nodes.values()).filter(n => ['GATE', 'SR', 'RS', 'TON', 'TOF', 'TP', 'CTU', 'OUTPUT'].includes(n.type)).sort((a,b) => a.level - b.level);
             let _srSetzOhne = null;
-            function getTreeW(nodeId) {
+            // inv: Teilbaum wird negiert gezeichnet (De Morgan, z. B. FF-Rücksetzen):
+            // dann wird aus UND ein ODER und umgekehrt — Breite und Höhe mit.
+            function getTreeW(nodeId, inv = false) {
                 let node = graph.nodes.get(nodeId);
                 if (node && _analogVergleich(nodeId)) return Math.max(90, 2 * (_estimateLabelLeftPx(symMap[nodeId] || nodeId) + 44) - 90);
                 if (!node || node.type !== 'GATE') return 90; 
                 let inEdges = graph.edges.filter(e => e.targetId === nodeId);
                 if (inEdges.length === 0) return 90;
-                if (node.label === '&') return Math.max(90, ...inEdges.map(e => getTreeW(e.sourceId))); 
-                else return Math.max(90, inEdges.reduce((sum, e) => sum + getTreeW(e.sourceId), 0));    
+                // negierte Kante auf ein Gatter: drawTree zeichnet es per De Morgan
+                const ci = e => (!!e.inverted) !== !!inv;
+                const und = (node.label === '&') !== !!inv;
+                if (und) return Math.max(90, ...inEdges.map(e => getTreeW(e.sourceId, ci(e)))); 
+                else return Math.max(90, inEdges.reduce((sum, e) => sum + getTreeW(e.sourceId, ci(e)), 0));    
             }
             function drawTree(nodeId, cx, y, w, isTargetInverted, basePathNum, baseCond, edgeObjForPrefix = null) {
                 let targetLinePrefix = window.getLinePrefixForEdge(edgeObjForPrefix);
@@ -24925,7 +24930,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // ((A && ¬R || Q) && ¬R = (A || Q) && ¬R). Ein Taster hat nur
                 // einen Öffner, im Steckaufbau wäre er sonst zweimal belegt.
                 if (_srSetzOhne && _srSetzOhne.gate === nodeId && effectiveLabel === '&' && !isTargetInverted) {
-                    const rest = inEdges.filter(e => !(e.sourceId === _srSetzOhne.src && !!e.inverted === _srSetzOhne.inv));
+                    const rest = inEdges.filter(e => !_srSetzOhne.lit.some(l => e.sourceId === l.src && !!e.inverted === l.inv));
                     if (rest.length) inEdges = rest;
                 }
                 if (effectiveLabel === '&') {
@@ -24937,17 +24942,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return { bottomY: currY, cond: currCond };
                 } else if (effectiveLabel === '≥1') {
                     let branches = inEdges.length;
-                    let startXArray = []; let totalW = getTreeW(nodeId);
+                    let startXArray = []; let totalW = getTreeW(nodeId, isTargetInverted);
                     let startX = cx - totalW/2; let currX = startX;
                     inEdges.forEach(edge => {
-                        let bw = getTreeW(edge.sourceId); startXArray.push(currX + bw/2); currX += bw;
+                        let bw = getTreeW(edge.sourceId, childInv(edge)); startXArray.push(currX + bw/2); currX += bw;
                     });
                     let firstX = startXArray[0]; let lastX = startXArray[branches - 1];
                     setPower(drawLine(cx, y, cx, y + 10, 2, nodeId, col), baseCond);
                     setPower(drawLine(firstX, y + 10, lastX, y + 10, 2, nodeId, col), baseCond);
                     let maxBottomY = y + 10; let outConds = []; let branchResults = [];
                     inEdges.forEach((edge, idx) => {
-                        let bx = startXArray[idx]; let bw = getTreeW(edge.sourceId);
+                        let bx = startXArray[idx]; let bw = getTreeW(edge.sourceId, childInv(edge));
                         setPower(drawLine(bx, y + 10, bx, y + 20, 2, edge.sourceId, getNodeColor(edge.sourceId)), baseCond);
                         let res = drawTree(edge.sourceId, bx, y + 20, bw, childInv(edge), basePathNum, baseCond, edge);
                         branchResults.push({ x: bx, bottomY: res.bottomY, cond: res.cond });
@@ -24962,22 +24967,27 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return { bottomY: maxBottomY + 20, cond: totalCond };
                 }
             }
-            function calcPinW(edge) {
-                if (edge && isInlineGate(edge.sourceId)) return getTreeW(edge.sourceId);
+            function calcPinW(edge, inv = false) {
+                if (edge && isInlineGate(edge.sourceId)) return getTreeW(edge.sourceId, (!!edge.inverted) !== !!inv);
                 return 90;
             }
             // Berechnet die benötigte Vertikalhöhe eines Baums im Wirtschaftlich-Modus (60px/Blatt)
-            function getTreeH(nodeId) {
+            function getTreeH(nodeId, inv = false) {
                 let node = graph.nodes.get(nodeId);
                 if (!node || node.type !== 'GATE') return 60;
                 let ie = graph.edges.filter(e => e.targetId === nodeId);
                 if (ie.length === 0) return 60;
-                if (node.label === '&') return ie.reduce((sum, e) => sum + getTreeH(e.sourceId), 0);
-                else return Math.max(60, ...ie.map(e => getTreeH(e.sourceId)));
+                const ci = e => (!!e.inverted) !== !!inv;
+                const und = (node.label === '&') !== !!inv;
+                if (und) return ie.reduce((sum, e) => sum + getTreeH(e.sourceId, ci(e)), 0);
+                // ODER: Abzweig (20) und Zusammenführung (20) wie in drawTree; ohne inv
+                // bleibt die bisherige (knappere) Rechnung, damit Pläne nicht springen.
+                return Math.max(60, ...ie.map(e => getTreeH(e.sourceId, ci(e)))) + (inv ? 40 : 0);
             }
             // Gibt die benötigte Pin-Höhe zurück (im Econ-Modus bei GATE-Quellen getTreeH+30, sonst Standardwert)
-            function calcPinH(edge, defaultH = 140) {
-                if (edge && isInlineGate(edge.sourceId)) return getTreeH(edge.sourceId) + 30;
+            // inv: Pin wird negiert gezeichnet (Rücksetzen eines Speichers, forceInvertNC)
+            function calcPinH(edge, defaultH = 140, inv = false) {
+                if (edge && isInlineGate(edge.sourceId)) return getTreeH(edge.sourceId, (!!edge.inverted) !== !!inv) + 30;
                 return defaultH;
             }
             function drawInputPin(edge, cx, yStart, yEnd, pNum, baseCond = "true", forceInvertNC = false) {
@@ -24998,7 +25008,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let sourceNode = graph.nodes.get(edge.sourceId);
                 let col = getNodeColor(edge.sourceId);
                 if (sourceNode && isInlineGate(edge.sourceId)) {
-                    let totalW = getTreeW(edge.sourceId);
+                    let totalW = getTreeW(edge.sourceId, (!!edge.inverted) !== (!!forceInvertNC));
                     setPower(drawLine(cx, yStart, cx, yStart + 15, 2, edge.sourceId, col), baseCond);
                     // forceInvertNC bei FF-Reset → De Morgan auf den GATE-Subtree
                     // anwenden. Das XOR mit edge.inverted sorgt dafür, dass eine
@@ -25059,11 +25069,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (n.type === 'SR') {
                         let ie = graph.edges.filter(e => e.targetId === n.id);
                         let sE = ie.find(e => e.targetPin === 'S'), rE = ie.find(e => e.targetPin === 'R');
-                        let sh = (sE && isInlineGate(sE.sourceId)) ? getTreeH(sE.sourceId) + 30 : 140;
-                        let rh = (rE && isInlineGate(rE.sourceId)) ? getTreeH(rE.sourceId) + 30 : 200;
+                        // wie im Zeichenzweig: Rücksetzen wird negiert gezeichnet (De Morgan)
+                        let sh = calcPinH(sE, 140);
+                        let rh = calcPinH(rE, 200, true);
                         let jY = Math.max(230, 90 + sh);
                         let rEndY = Math.max(430, jY + rh);
                         extraY = Math.max(extraY, rEndY - 430);
+                    } else if (n.type === 'RS') {
+                        let ie = graph.edges.filter(e => e.targetId === n.id);
+                        let sE = ie.find(e => e.targetPin === 'S'), rE = ie.find(e => e.targetPin === 'R');
+                        let rEndY = Math.max(380, 90 + Math.max(calcPinH(rE, 150, true) + 90, calcPinH(sE, 290)));
+                        extraY = Math.max(extraY, rEndY + 80 - 500);
                     }
                 });
             }
@@ -25288,7 +25304,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 else if (node.type === 'SR' || node.type === 'RS') { 
                     let p1 = pathCounter++; let p2 = pathCounter++;
                     let sEdge = inEdges.find(e => e.targetPin === 'S'); let rEdge = inEdges.find(e => e.targetPin === 'R');
-                    let w1 = calcPinW(sEdge); let w2 = calcPinW(rEdge);
+                    let w1 = calcPinW(sEdge); let w2 = calcPinW(rEdge, true);
                     let startX = currX + (w1 > 90 ? (w1-90)/2 : 0);
                     let gap = Math.max(90, w1/2 + w2/2 + 20);
                     let parX = startX + gap;
@@ -25299,12 +25315,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (node.type === 'SR') {
                         // Dynamische Trennlinie zwischen S- und R-Eingang (verhindert Überlappung bei tiefen Bäumen)
                         let sPinH = calcPinH(sEdge, 140);
-                        let rPinH = calcPinH(rEdge, 200);
+                        let rPinH = calcPinH(rEdge, 200, true);
                         let joinY  = Math.max(230, 90 + sPinH);
                         let rEndY  = Math.max(coilApproachY, joinY + rPinH);
                         let rsCoilY = rEndY + 20;
-                        _srSetzOhne = (sEdge && rEdge && isInlineGate(sEdge.sourceId) && !sEdge.inverted && rEdge.sourceId && graph.nodes.get(rEdge.sourceId)?.type !== 'GATE')
-                            ? { gate: sEdge.sourceId, src: rEdge.sourceId, inv: !rEdge.inverted } : null;
+                        // ¬R als UND von Literalen: R = X → ¬X; R = X || ¬Y (ODER aus
+                        // Literalen) → ¬X && Y. Diese Kontakte stehen schon in Reihe.
+                        let _rLit = null;
+                        if (sEdge && rEdge && isInlineGate(sEdge.sourceId) && !sEdge.inverted && rEdge.sourceId) {
+                            const rn = graph.nodes.get(rEdge.sourceId);
+                            if (!rn || rn.type !== 'GATE') _rLit = [{ src: rEdge.sourceId, inv: !rEdge.inverted }];
+                            else if (isInlineGate(rn.id) && rn.label === '≥1' && !rEdge.inverted) {
+                                const re = graph.edges.filter(e => e.targetId === rn.id);
+                                if (re.length && re.every(e => graph.nodes.get(e.sourceId)?.type !== 'GATE')) _rLit = re.map(e => ({ src: e.sourceId, inv: !e.inverted }));
+                            }
+                        }
+                        _srSetzOhne = _rLit ? { gate: sEdge.sourceId, lit: _rLit } : null;
                         let sCond;
                         try { sCond = drawInputPin(sEdge, startX, 90, joinY, p1, "true", false); } finally { _srSetzOhne = null; }
                         setPower(drawLine(parX, 90, parX, 135, 2, node.id, col), "true");
@@ -25341,7 +25367,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     } else { // RS
                         // RS: R-Pin auf startX (165 → rEndY), S-Pin auf parX (90 → rEndY) — verschiedene X, kein Überlapp
-                        let rPinH = calcPinH(rEdge, 150);
+                        let rPinH = calcPinH(rEdge, 150, true);
                         let sPinH = calcPinH(sEdge, 290);
                         let rEndY = Math.max(380, 90 + Math.max(rPinH + 90, sPinH));
                         setPower(drawLine(startX, 90, startX, 135, 2, node.id, col), "true");
@@ -66872,6 +66898,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (coil.type !== 'relais') return;
                     if (!usedAsAux.has(coilVar)) return;
                     const e = _exprForCoil(coil);
+                    // Koppelrelais eines Öffner-Tasters im freien Aufbau: K_X := ¬X
+                    const _neg = e && e.trim().match(/^¬\s*([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)$/);
+                    if (window._cedNoProxy && _neg && coilVar === 'K_' + _neg[1]) { proxyMap[coilVar] = '(¬' + _neg[1] + ')'; return; }
                     if (e && SIMPLE_VAR_RE.test(e.trim())) {
                         if (window._cedNoProxy && coilVar !== 'K_' + e.trim()) return;
                         // Nur Koppelrelais eines Sensors fallen weg (K_BG1, K_<SENSOR>).
@@ -66889,7 +66918,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (!expr) return expr;
                     let prev = expr;
                     for (let iter = 0; iter < 10; iter++) {
-                        const cur = prev.replace(/\b([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)\b/g, (m) => proxyMap[m] || m);
+                        const cur = prev.replace(/\b([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)\b/g, (m) => proxyMap[m] || m)
+                            // ¬(¬X) aus einem negierten Koppelrelais → X
+                            .replace(/¬\s*\(¬([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)\)/g, '$1')
+                            .replace(/\(¬([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*)\)/g, '¬$1');
                         if (cur === prev) return cur;
                         prev = cur;
                     }
@@ -66937,7 +66969,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                     }
                     // Relais ohne Hilfskontakt → tote Logik, kein Code, Warnung
-                    if (isRelais && !isUsedAsAux) {
+                    // Im freien Aufbau ist das Relais ein echtes Bauteil: auch ohne
+                    // eigenen Kontakt (Signal an Roboter/SPS) bleibt seine Zeile.
+                    if (isRelais && !isUsedAsAux && !window._cedNoProxy) {
                         codeOps.push({ kind:'warn', msg:`// ⚠ Relais ${coilVar}: kein Hilfskontakt referenziert — Logik wird ignoriert` });
                         return;
                     }
@@ -69001,6 +69035,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const svgContactNames = new Set();
                 const coilCtype = new Map();   // varName → 'ton'|'tof'|'tp'|'ctu'|'relais'|...
                 const kontaktSaetze = new Map(); // varName → Anzahl Kontaktsätze im Plan
+                const kontaktPol = new Map();    // varName → { no, nc } Schließer/Öffner im Plan
                 const iecLabels = {};               // default: erstes Label
                 const iecLabelsByRole = { 'sensor-box': {}, 'coil': {}, 'contact': {} };
                 try {
@@ -69020,6 +69055,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 svgContactNames.add(v);
                                 // Kontaktsätze je Variable (ein Wechsler-Paar zählt einmal)
                                 if (elem.getAttribute('data-wechsler-weg') !== '1') kontaktSaetze.set(v, (kontaktSaetze.get(v) || 0) + 1);
+                                // Schließer/Öffner je Variable (wie _buildCableList: Koppel-
+                                // kontakt hinter einem Öffner-Bauteil zählt umgekehrt)
+                                const mv = elem.querySelector('.circ-moving-contact');
+                                let nc = !!(mv && mv.classList.contains('is-nc'));
+                                const ct0 = (typeof componentTypes !== 'undefined') ? componentTypes[v] : null;
+                                if (elem.getAttribute('data-ctype') === 'relais' && Array.isArray(globalInputs) && globalInputs.includes(v)
+                                    && window._isNCContact(ct0)) nc = !nc;
+                                const kp = kontaktPol.get(v) || { no: 0, nc: 0 };
+                                kp[nc ? 'nc' : 'no']++; kontaktPol.set(v, kp);
                             }
                             // Erstes <text>-Element ist die IEC-Bezeichnung
                             // (-SJ1, -KF1, -BG1, …). Pro Rolle getrennt
@@ -69120,13 +69164,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Plan mehr Kontakte einer Variable, kommt ein zweites Relais mit
                 // parallel geschalteter Spule dazu (sonst teilten sich zwei
                 // Stränge die Wurzel 11 desselben Wechslers).
+                // Taster/Schalter haben am Panel genau einen Schließer (13/14) und
+                // einen Öffner (21/22). Braucht der Plan von einer Art mehr, schaltet
+                // der Taster ein Koppelrelais, dessen Wechsler die Kontakte liefern
+                // (wie bei den Sensoren). Sonst teilten sich Strompfade einen Kontakt.
+                const koppelEingaenge = [...schalterVars, ...tasterVars].filter(v => {
+                    const kp = kontaktPol.get(v);
+                    return kp && (kp.no > 1 || kp.nc > 1);
+                });
                 const kontaktErweiterung = {};
                 let _extraRelais = 0;
-                [...relaisVars, ...sensorVars].forEach(v => {
+                [...relaisVars, ...sensorVars, ...koppelEingaenge].forEach(v => {
                     const n = Math.ceil((kontaktSaetze.get(v) || 0) / 4) - 1;
                     if (n > 0) { kontaktErweiterung[v] = n; _extraRelais += n; }
                 });
-                const rCount = Math.max(2, Math.ceil((relaisVars.length + sensorVars.length + _extraRelais) / RELAIS.slots));
+                const rCount = Math.max(2, Math.ceil((relaisVars.length + sensorVars.length + koppelEingaenge.length + _extraRelais) / RELAIS.slots));
                 // lCount muss auch die Hörmelder unterbringen: pro LED-Panel
                 // gibt es genau EINEN Hörmelder-Sockel, also bestimmt sich
                 // die Panel-Zahl als Maximum von LED-Bedarf und Hörmelder-Bedarf.
@@ -69198,7 +69250,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // gemeinsam in eine Liste, dann nach IEC-Coil-Nummer sortiert
                 // allokieren — so landet -KF1 in R1_S1, -KF2 in R1_S2 etc.,
                 // egal ob das ein normaler Relais oder ein Sensor-Implicit ist.
-                const coilOrder = sortByIec([...relaisVars, ...sensorVars], 'coil');
+                const coilOrder = sortByIec([...relaisVars, ...sensorVars], 'coil').concat(koppelEingaenge);
                 coilOrder.forEach((v, idx) => {
                     const panel = Math.floor(idx / RELAIS.slots) + 1;
                     if (panel > rCount) return;
@@ -69361,7 +69413,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 return { tCount, rCount, lCount, sCount, mCount, zCount: _zCountActual, cCount, assignments, varToSlot,
                          schalterVars, tasterVars, relaisVars, ledVars, sensorVars, magnetVars, magnetUnits,
                          hornVars, zeitrelaisVars, zaehlerVars, zaehlerHilfsrelais, coilCtype, blockedVars,
-                         iecLabels, iecLabelsByRole, dualCircuit, loadVars, kontaktErweiterung };
+                         iecLabels, iecLabelsByRole, dualCircuit, loadVars, kontaktErweiterung, koppelEingaenge };
             }
             // ============ Warn-Modal für 230V-Darstellung ============
             // Wird einmal pro Session beim Aktivieren des Dual-Stromkreis-
@@ -70772,6 +70824,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const sensoren = new Set(data.sensorVars || []);
                 // Ebenso das Hilfsrelais hinter einem Vorwahlzähler
                 Object.keys(A).forEach(k => { if (/^C\d+_S\d+$/.test(k) && A[k]) sensoren.add(vName(A[k])); });
+                // und das Koppelrelais eines mehrfach genutzten Tasters
+                (data.koppelEingaenge || []).forEach(v => sensoren.add(vName(v)));
                 for (let i = 1; i <= (data.rCount || 0); i++) {
                     const b = brett('relais', i);
                     for (let s = 1; s <= RELAIS.slots; s++) {
@@ -71285,6 +71339,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _fbPanelRO = new ResizeObserver(() => { if (window.festoFreeBuildMode) _fbPositionPanel(); });
                 _fbPanelRO.observe(tb);
             }
+            // Zeitrelais vor einem Ausgang heißen im Plan TOF_<Ausgang> (TON_/TP_).
+            // Steht es nur in „<Ausgang> := TOF_<Ausgang>“, wird daraus wieder
+            // „<Ausgang> := TOF(…)“ wie im Ausgangscode.
+            function _fbTimerAlias(code) {
+                const zeilen = code.split('\n');
+                zeilen.forEach((z, i) => {
+                    const m = z.match(/^\s*((TON|TOF|TP)_([A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß0-9_]*))\s*:=\s*(\2\(.*\))\s*$/);
+                    if (!m) return;
+                    const t = m[1], aus = m[3];
+                    const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß0-9_])' + t + '([^A-Za-zÄÖÜäöüß0-9_]|$)');
+                    const nutzer = zeilen.map((y, j) => j !== i && re.test(y.replace(/\/\/.*/, '')) ? j : -1).filter(j => j >= 0);
+                    if (nutzer.length !== 1) return;
+                    const j = nutzer[0];
+                    if (!new RegExp('^\\s*' + aus + '\\s*:=\\s*' + t + '\\s*$').test(zeilen[j])) return;
+                    zeilen[j] = aus + ' := ' + m[4];
+                    zeilen[i] = null;
+                });
+                return zeilen.filter(z => z !== null).join('\n').replace(/\n{3,}/g, '\n\n');
+            }
             window._fbGenerate = function() {
                 if (!window.cedGenerateCode || !window._cedState) { FB.status = 'Compiler nicht verfügbar.'; _fbUpdateStatusUI(); return; }
                 const net = _fbToCedNetlist();
@@ -71309,6 +71382,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 finally { ST.components = prev.components; ST.wires = prev.wires; window._cedNoProxy = false; }
                 code = _fbApplyTimers(code);
                 code = _fbApplyZaehler(code);
+                code = _fbTimerAlias(code);
                 if (pidZeilen.length) code = '// Analog: PID-Reglerkarte\n' + pidZeilen.join('\n') + '\n\n' + code;
                 // Freier Aufbau bildet UND/ODER als Reihen-/Parallel-Kontakte ab —
                 // das entspricht nur dem Direkt-Modus. „Klassisch" erfände je Gatter
@@ -71327,7 +71401,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (!v) return;
                     const da = n => new RegExp('(^|[^A-Za-z0-9_])' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^A-Za-z0-9_]|$)').test(code);
                     // Koppelrelais K_<Quelle> stehen nicht im Code, ihre Quelle schon
-                    if (da(v) || (/^K_./.test(v) && da(v.slice(2)))) verified.add(v.toUpperCase());
+                    // Zeitrelais TOF_<Ausgang> ebenso über den Ausgang (_fbTimerAlias)
+                    const tA = v.match(/^(?:TON|TOF|TP)_(.+)$/);
+                    if (da(v) || (/^K_./.test(v) && da(v.slice(2))) || (tA && da(tA[1]))) verified.add(v.toUpperCase());
                 }));
                 FB.verifiedVars = verified;
                 const totalVars = _fbAllVars().size;
@@ -72518,6 +72594,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _anaLive = [];
                 _anaKompKontakte = {}; _anaVersorgung = []; _anaSkala = {};
                 window._anaKompKontakte = _anaKompKontakte; window._anaVersorgung = _anaVersorgung;
+                // Ohne Analog-Reihe dürfen keine Kabel der vorigen Schaltung stehen bleiben
+                _anaKabelListe.length = 0;
                 let d;
                 try { d = _anaSammeln(); } catch (e) { return { w: 0, h: 0, n: 0 }; }
                 _anaSkala = d.skala || {};
@@ -74090,7 +74168,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // entspricht sein Schließer dem Öffner des Bauteils und umgekehrt.
                     const _ct = (typeof componentTypes !== 'undefined') ? componentTypes[varName] : null;
                     if (elem.getAttribute('data-ctype') === 'relais' && Array.isArray(globalInputs) && globalInputs.includes(varName)
-                        && window._isNCContact(_ct) && !window._variableIsNCInverted(_ct)) isNC = !isNC;
+                        && window._isNCContact(_ct)) isNC = !isNC;
                     allContacts.push({ varName, elem, isNC, yOff: _ancestorYOffset(elem), ...c });
                 });
                 // ─── Horizontals als Brücken zwischen Spalten ───
@@ -74454,6 +74532,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         cables.push({ fromKey: `${haupt}_A1`, toKey: `${z}_A1`, color: 'blue', strand: str });
                         cables.push({ fromKey: `${z}_A2`, toKey: get0V(v), color: 'blue', strand: str });
                     });
+                });
+                // ─── Koppelrelais eines mehrfach genutzten Tasters/Schalters
+                // (buildAssignment.koppelEingaenge): +24 V → 13, 14 → A1, A2 → 0 V.
+                // Die Kontakte im Plan liegen dann auf den Wechslern des Relais.
+                const tasterSlot = {};
+                Object.entries(assignments).forEach(([k, v]) => { if (/^T\d+_S\d+$/.test(k)) tasterSlot[v] = k; });
+                Object.keys(tasterSlot).forEach(v => {
+                    const rs = varToSlot[v];
+                    if (!rs || !rs.startsWith('R')) return;
+                    const ts = tasterSlot[v];
+                    cables.push({ fromKey: '__BUS_24V__', toKey: `${ts}_13`, color: 'red', strand: v + '__KOPPEL' });
+                    cables.push({ fromKey: `${ts}_14`, toKey: `${rs}_A1`, color: 'blue', strand: v + '__KOPPEL' });
+                    cables.push({ fromKey: `${rs}_A2`, toKey: '__BUS_0V__', color: 'blue', strand: v + '__KOPPEL' });
+                    const iec = iecMap[v];
+                    kompStr.push({ id: v + '__KOPPEL', label: `${iec ? iec + ' ' : ''}(${v}) · Taster → Koppelrelais` });
                 });
                 // ─── Versorgung der Analogkarten (+24 V / 0 V)
                 const vers = window._anaVersorgung || [];

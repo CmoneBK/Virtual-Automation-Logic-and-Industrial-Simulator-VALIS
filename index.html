@@ -3784,6 +3784,7 @@
                             <button type="button" onclick="window._fbAddModule('magnet')" title="FESTO 567199 · 5/2-Wege-Magnetventil" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔧 Magnetventil 5/2</button>
                             <button type="button" onclick="window._fbAddModule('zeitrelais')" title="FESTO 162243 · Zeitrelais 2-fach (Slot 1 = TON einschaltverzögert, Slot 2 = TOF ausschaltverzögert, TP Impuls auf Wunsch: bei der Zeit „TP 2“ eingeben – die TP-Funktion gibt es am Original so nicht)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zeitrelais (TON/TOF/TP)</button>
                             <button type="button" onclick="window._fbAddModule('zaehler')" title="FESTO 162355 · Vorwahlzähler (Hengstler-Zählwerk): Zählspule A1/A2 (+1 je Impuls), Rücksetzen R1/R2, ein Wechsler 1/2/4 (bei erreichter Vorwahl 1–4 zu, 1–2 offen). Vorwahl mit den drei Tasten am Zählwerk, weiße Taste setzt von Hand zurück. Im Code: CTU(Zählen, Rücksetzen, Vorwahl)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">🔢 Vorwahlzähler (CTU)</button>
+                            <button type="button" onclick="window._fbAddModule('count_fg')" title="FESTO 544315 · Count: Zähler, Stoppuhr und Funktionsgenerator in einem. Wahlschalter Pulse, t0–t3, Pulse/s, Frequency out, Pulse width out; Tasten START/UP, STOP, RESET/DOWN; Eingänge S1–S3 (24 V gegen 0 V), Ausgang OUT (+24 V)" style="flex:1 1 100%; background:#37474f; color:#fff; border:1px solid #455a64; border-radius:3px; padding:4px 6px; font-size:10px; cursor:pointer;">⏱ Zähler/Funktionsgenerator</button>
                         </div>
                         <div class="ced-pal-cat" style="color:#90a4ae; font-size:9px; font-weight:bold; text-transform:uppercase; letter-spacing:0.5px; padding:4px 2px 3px;">Analogtechnik</div>
                         <div style="display:flex; flex-wrap:wrap; gap:4px; margin:4px 0;">
@@ -23225,7 +23226,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (window._elVorLogik) { try { window._elVorLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
                 // Geforcte Eingänge (Sim-Panel) überschreiben das Prozessabbild wie an der echten SPS
                 if (window._forciert) { for (const k in window._forciert) if (k in spsState) spsState[k] = window._forciert[k]; }
+                // Count 544315 (freier Aufbau): OUT vor der Logik, Eingänge danach
+                if (window._fgVor) { try { window._fgVor(spsState, deltaMs); } catch (e) { console.warn('Count', e); } }
                 simulationFunction(spsState, deltaMs, window.simTimers);
+                if (window._fgNach) { try { window._fgNach(spsState); } catch (e) { console.warn('Count', e); } }
                 // … und auf Spulen, Leuchten und Ventile, die die Logik einschaltet
                 if (window._elNachLogik) { try { window._elNachLogik(spsState); } catch (e) { console.warn('Elektrik', e); } }
                 // 🎬 Recording: Snapshot alle ~50ms (≈20fps)
@@ -68546,6 +68550,193 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 weiss.addEventListener('click', ev => { ev.stopPropagation(); if (assigned) window._zaehlerHandReset(assigned); });
                 return g;
             }
+            // ============ Zähler / Funktionsgenerator / Stoppuhr (FESTO 544315 · Count) ============
+            // „4 in 1“: LCD, Wahlschalter Pulse · t0–t3 · Frequency out · Pulse width
+            // out · Pulse/s, Tasten START/UP, STOP, RESET/DOWN, Eingänge S1–S3 (unter
+            // den Tasten), Ausgang OUT. Nur im freien Aufbau: die Eingänge sind Lasten
+            // gegen 0 V (Variable FGn_S1_UP …), OUT ist ein Kontakt von +24 V (FGn_OUT).
+            const FG = { w: 300, h: 440 };
+            const FG_MODI = [
+                { k: 'pulse', n: 'Pulse', titel: 'Impulse zählen' },
+                { k: 't0', n: 't0', titel: 'Stoppuhr t0 (Tasten)' },
+                { k: 't1', n: 't1', titel: 'Stoppuhr t1 (S1)' },
+                { k: 't2', n: 't2', titel: 'Stoppuhr t2 (S2)' },
+                { k: 't3', n: 't3', titel: 'Stoppuhr t3 (S3)' },
+                { k: 'fout', n: 'Frequency out', titel: 'Frequenz ausgeben' },
+                { k: 'pwout', n: 'Pulse width out', titel: 'Impuls ausgeben' },
+                { k: 'pps', n: 'Pulse/s', titel: 'Impulse je Sekunde' },
+            ];
+            const FG_EIN = [['S1', 'UP'], ['S1', 'STOP'], ['S1', 'DOWN'], ['S2', 'UP'], ['S2', 'STOP'], ['S3', 'UP'], ['S3', 'STOP']];
+            const FG_F = [0.2, 0.5, 1, 2, 5, 10];
+            const FG_TP = [0.1, 0.2, 0.5, 1, 2, 5, 10];
+            window._fgZustand = window._fgZustand || {};
+            function _fgSt(P, cfg) {
+                const z = window._fgZustand;
+                if (!z[P]) z[P] = { n: 0, halt: false, last: {}, t: [0, 0, 0, 0], lauf: [false, false, false, false], ppsN: 0, ppsT: 0, pps: 0, gen: false, phase: 0, puls: 0, out: false };
+                const s = z[P];
+                s.cfg = cfg || s.cfg || {};
+                if (!s.cfg.modus) s.cfg.modus = 'pulse';
+                if (!s.cfg.f) s.cfg.f = 1;
+                if (!s.cfg.tp) s.cfg.tp = 1;
+                return s;
+            }
+            const _fgZahl = (x, n) => (Math.round(x * Math.pow(10, n)) / Math.pow(10, n)).toFixed(n).replace('.', ',');
+            function _fgAnzeige(s) {
+                const m = s.cfg.modus, mo = FG_MODI.find(x => x.k === m) || FG_MODI[0];
+                let z2 = '';
+                if (m === 'pulse') z2 = String(s.n) + (s.halt ? '  STOP' : '');
+                else if (/^t\d$/.test(m)) { const i = +m[1]; z2 = _fgZahl(s.t[i] / 1000, 3) + ' s' + (s.lauf[i] ? '  ▶' : ''); }
+                else if (m === 'pps') z2 = _fgZahl(s.pps, 1) + ' /s';
+                else if (m === 'fout') z2 = 'f = ' + _fgZahl(s.cfg.f, s.cfg.f < 1 ? 1 : 0) + ' Hz  ' + (s.gen ? 'EIN' : 'AUS');
+                else if (m === 'pwout') z2 = 'tp = ' + _fgZahl(s.cfg.tp, s.cfg.tp < 1 ? 1 : 0) + ' s' + (s.puls > 0 ? '  ▶' : '');
+                return [mo.n, z2];
+            }
+            // Ereignis an Taste oder Eingang: art UP | STOP | DOWN, reihe 'T' (Taste) oder S1–S3
+            function _fgEreignis(s, art, reihe) {
+                const m = s.cfg.modus, taste = reihe === 'T';
+                if (art === 'UP' && !taste) s.ppsN++;
+                if (m === 'pulse') {
+                    const halt = s.halt || s.haltEin;
+                    if (art === 'UP') { if (!halt) s.n++; }
+                    else if (art === 'DOWN') { if (taste) s.n = 0; else if (!halt) s.n--; }
+                    else if (art === 'STOP' && taste) s.halt = !s.halt;
+                } else if (/^t\d$/.test(m) || m === 'pps') {
+                    // Die vier Stoppuhren laufen nebeneinander; t0 hört auf die Tasten,
+                    // t1–t3 auf START/STOP an S1–S3. Die Anzeige wählt, welche man sieht.
+                    const i = taste ? 0 : +reihe[1];
+                    if (art === 'UP' && m !== 'pps') s.lauf[i] = true;
+                    else if (art === 'STOP') s.lauf[i] = false;
+                    else if (art === 'DOWN' && (taste || reihe === 'S1')) { s.t = [0, 0, 0, 0]; s.lauf = [false, false, false, false]; s.ppsN = 0; s.pps = 0; }
+                } else if (m === 'fout') {
+                    if (art === 'UP') { if (!s.gen) { s.gen = true; s.phase = 0; } else if (taste) s.cfg.f = FG_F[Math.min(FG_F.length - 1, FG_F.indexOf(s.cfg.f) + 1)] || 1; }
+                    else if (art === 'DOWN') s.cfg.f = FG_F[Math.max(0, FG_F.indexOf(s.cfg.f) - 1)] || 1;
+                    else if (art === 'STOP') s.gen = false;
+                } else if (m === 'pwout') {
+                    if (art === 'UP') { s.puls = s.cfg.tp * 1000; s.out = true; }
+                    else if (art === 'STOP') { s.puls = 0; s.out = false; }
+                    else if (art === 'DOWN' && taste) s.cfg.tp = FG_TP[(FG_TP.indexOf(s.cfg.tp) + 1) % FG_TP.length] || 1;
+                }
+            }
+            function _fgTakt(s, dt) {
+                const m = s.cfg.modus;
+                for (let i = 0; i < 4; i++) if (s.lauf[i]) s.t[i] += dt;
+                s.ppsT += dt; if (s.ppsT >= 1000) { s.pps = s.ppsN * 1000 / s.ppsT; s.ppsN = 0; s.ppsT = 0; }
+                if (m === 'fout') { if (s.gen) s.phase = (s.phase + dt * s.cfg.f / 1000) % 1; s.out = s.gen && s.phase < 0.5; }
+                else if (m === 'pwout') { if (s.puls > 0) s.puls = Math.max(0, s.puls - dt); s.out = s.puls > 0; }
+                else s.out = false;
+            }
+            function drawFgPanel(parent, x, y, panelIdx, b) {
+                const W = FG.w, H = FG.h, P = `FG${panelIdx}`;
+                const s = _fgSt(P, b ? (b.fgCfg = b.fgCfg || {}) : null);
+                const g = el('g', { transform: `translate(${x},${y})`, 'data-festo-panel-type': 'count_fg', 'data-festo-panel-idx': panelIdx }, parent);
+                const T = (tx, ty, txt, o) => { const t = el('text', Object.assign({ x: tx, y: ty, 'font-size': 8, fill: PALETTE.labelText, 'font-family': 'Segoe UI, sans-serif' }, o || {}), g); t.textContent = txt; return t; };
+                el('rect', { x: 0, y: 0, width: W, height: H, rx: 8, fill: PALETTE.bodyFill, stroke: PALETTE.bodyStroke, 'stroke-width': 1.5 }, g);
+                drawScrews(g, 0, 0, W, H);
+                T(W / 2, 13, `Zähler/Funktionsgenerator ${panelIdx}`, { 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 'bold', fill: PALETTE.titleText });
+                T(W / 2, 23, 'FESTO 544315 · Count (Zähler, Stoppuhr, Generator)', { 'text-anchor': 'middle', 'font-size': 7 });
+                // +24 V oben links und rechts, verbunden
+                el('polyline', { points: '27,62 50,46 250,46 273,62', fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                drawSocket(g, 27, 62, PALETTE.socketRed, `${P}_24V_1`, P);
+                drawSocket(g, 273, 62, PALETTE.socketRed, `${P}_24V_2`, P);
+                T(14, 44, '+24V', { 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketRed });
+                T(W - 14, 44, '+24V', { 'text-anchor': 'end', 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketRed });
+                // LCD
+                el('rect', { x: 118, y: 80, width: 166, height: 66, rx: 3, fill: '#262729', stroke: '#111', 'stroke-width': 1 }, g);
+                el('rect', { x: 128, y: 90, width: 146, height: 46, rx: 2, fill: '#2b3fb8', stroke: '#1a237e', 'stroke-width': 0.8 }, g);
+                const [a1, a2] = _fgAnzeige(s);
+                const z1 = T(134, 108, a1, { 'font-size': 10, fill: '#e3f2fd', 'font-family': 'Consolas, monospace' });
+                const z2 = T(134, 127, a2, { 'font-size': 12, 'font-weight': 'bold', fill: '#ffffff', 'font-family': 'Consolas, monospace' });
+                z1.setAttribute('data-fg-zeile', '1'); z2.setAttribute('data-fg-zeile', '2');
+                z1.setAttribute('data-fg-panel', P); z2.setAttribute('data-fg-panel', P);
+                // Wahlschalter mit Beschriftung rundum (wie auf der Platte)
+                const kx = 62, ky = 112;
+                const pos = { pulse: [0, -22, 'middle'], t0: [24, -14, 'start'], t1: [27, -4, 'start'], t2: [27, 6, 'start'], t3: [24, 16, 'start'], fout: [6, 30, 'middle'], pwout: [-30, 24, 'middle'], pps: [-24, 0, 'end'] };
+                FG_MODI.forEach(mo => {
+                    const [dx, dy, an] = pos[mo.k];
+                    const istAn = s.cfg.modus === mo.k;
+                    const zeilen = mo.k === 'fout' ? ['Frequency', 'out'] : mo.k === 'pwout' ? ['Pulse width', 'out'] : [mo.n];
+                    zeilen.forEach((z, j) => T(kx + dx, ky + dy + 3 + j * 8, z, { 'text-anchor': an, 'font-size': 7, 'font-weight': istAn ? 'bold' : 'normal', fill: istAn ? PALETTE.slotLabel : PALETTE.labelText }));
+                });
+                const knopf = el('circle', { cx: kx, cy: ky, r: 10, fill: '#202020', stroke: '#000', 'stroke-width': 1, style: 'cursor:pointer' }, g);
+                knopf.setAttribute('data-fg-wahl', P);
+                const wi = { pulse: -90, t0: -50, t1: -15, t2: 15, t3: 45, fout: 80, pwout: 130, pps: 180 }[s.cfg.modus] * Math.PI / 180;
+                el('line', { x1: kx, y1: ky, x2: kx + 9 * Math.cos(wi), y2: ky + 9 * Math.sin(wi), stroke: '#fafafa', 'stroke-width': 2, 'pointer-events': 'none' }, g);
+                el('title', {}, knopf).textContent = 'Betriebsart wählen (Klick: weiter, Umschalt: zurück)';
+                knopf.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    const i = FG_MODI.findIndex(m => m.k === s.cfg.modus);
+                    window._fgModus(P, FG_MODI[(i + (ev.shiftKey ? FG_MODI.length - 1 : 1)) % FG_MODI.length].k);
+                });
+                // Tasten und darunter je eine Buchsenspalte
+                const sx = { UP: 70, STOP: 160, DOWN: 248 }, tn = { UP: 'START/UP', STOP: 'STOP', DOWN: 'RESET/DOWN' };
+                Object.keys(sx).forEach(art => {
+                    T(sx[art], 180, tn[art], { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                    const t = el('circle', { cx: sx[art], cy: 200, r: 10, fill: '#111', stroke: '#555', 'stroke-width': 1.5, style: 'cursor:pointer' }, g);
+                    el('circle', { cx: sx[art] - 3, cy: 196, r: 3, fill: '#666', 'pointer-events': 'none' }, g);
+                    t.setAttribute('data-fg-taste', art); t.setAttribute('data-fg-panel', P);
+                    el('title', {}, t).textContent = tn[art];
+                    t.addEventListener('click', ev => { ev.stopPropagation(); window._fgTaste(P, art); });
+                });
+                const sy = { S1: 240, S2: 296, S3: 352 };
+                FG_EIN.forEach(([r, art]) => drawSocket(g, sx[art], sy[r], PALETTE.socketBlack, `${P}_${r}_${art}`, P));
+                Object.keys(sy).forEach(r => T(40, sy[r] + 3, r, { 'text-anchor': 'middle', 'font-size': 9, 'font-weight': 'bold' }));
+                T(sx.DOWN, 300, 'OUT', { 'text-anchor': 'middle', 'font-size': 8, 'font-weight': 'bold' });
+                drawSocket(g, sx.DOWN, 318, PALETTE.socketBlack, `${P}_OUT`, P);
+                const lampe = el('circle', { cx: sx.DOWN + 20, cy: 318, r: 3, fill: s.out ? '#ffeb3b' : '#9e9e9e' }, g);
+                lampe.setAttribute('data-fg-out', P);
+                // 0 V unten links und zwei rechts, verbunden
+                el('polyline', { points: '30,386 46,410 200,410 218,388 262,388', fill: 'none', stroke: PALETTE.trace, 'stroke-width': 0.9 }, g);
+                drawSocket(g, 30, 386, PALETTE.socketBlue, `${P}_0V_1`, P);
+                drawSocket(g, 218, 388, PALETTE.socketBlue, `${P}_0V_2`, P);
+                drawSocket(g, 262, 388, PALETTE.socketBlue, `${P}_0V_3`, P);
+                T(14, 404, '0V', { 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketBlue });
+                T(W - 14, 410, '0V', { 'text-anchor': 'end', 'font-size': 7, 'font-weight': 'bold', fill: PALETTE.socketBlue });
+                el('title', {}, g).textContent = 'FESTO 544315 · Count: Zähler, Stoppuhr und Funktionsgenerator. Pulse zählt Impulse (START/UP +1, RESET/DOWN −1, Taste RESET/DOWN setzt 0, STOP hält an). t0 misst mit den Tasten, t1–t3 von START bis STOP an S1–S3. Pulse/s zeigt die Impulse je Sekunde. Frequency out gibt an OUT einen Takt aus (UP/DOWN ändern f), Pulse width out einen Impuls der Länge tp (RESET/DOWN wählt tp). Eingänge 24 V gegen 0 V.';
+                return g;
+            }
+            // Anzeige ohne Neuzeichnen nachführen
+            function _fgAnzeigeLive() {
+                const doc = (typeof _festoDoc === 'function' ? _festoDoc() : document);
+                Object.keys(window._fgZustand).forEach(P => {
+                    const s = window._fgZustand[P], [a1, a2] = _fgAnzeige(s);
+                    doc.querySelectorAll(`[data-fg-panel="${P}"][data-fg-zeile]`).forEach(t => { t.textContent = t.getAttribute('data-fg-zeile') === '1' ? a1 : a2; });
+                    doc.querySelectorAll(`[data-fg-out="${P}"]`).forEach(c => c.setAttribute('fill', s.out ? '#ffeb3b' : '#9e9e9e'));
+                });
+            }
+            window._fgTaste = function(P, art) {
+                const s = window._fgZustand[P]; if (!s) return;
+                _fgEreignis(s, art, 'T');
+                _fgAnzeigeLive();
+                try { window._fbSaveFg && window._fbSaveFg(); } catch (_) {}
+            };
+            window._fgModus = function(P, k) {
+                const s = window._fgZustand[P]; if (!s || !FG_MODI.some(m => m.k === k)) return false;
+                s.cfg.modus = k; s.out = false; s.gen = false; s.puls = 0;
+                try { window._fbSaveFg && window._fbSaveFg(true); } catch (_) {}
+                return true;
+            };
+            // Simulationstakt: vor der Logik OUT setzen, danach die Eingänge lesen
+            window._fgVor = function(st, dt) {
+                const z = window._fgZustand, ks = Object.keys(z); if (!ks.length) return;
+                if (!window.festoFreeBuildMode) return;
+                ks.forEach(P => { const s = z[P]; if (!s.aktiv) return; _fgTakt(s, dt || 0); st[P + '_OUT'] = !!s.out; });
+            };
+            window._fgNach = function(st) {
+                const z = window._fgZustand, ks = Object.keys(z); if (!ks.length || !window.festoFreeBuildMode) return;
+                let neu = false;
+                ks.forEach(P => {
+                    const s = z[P]; if (!s.aktiv) return;
+                    // STOP-Eingänge halten den Zähler an, solange 24 V anliegen
+                    s.haltEin = FG_EIN.some(([r, art]) => art === 'STOP' && !!st[P + '_' + r + '_' + art]);
+                    FG_EIN.forEach(([r, art]) => {
+                        const v = P + '_' + r + '_' + art, an = !!st[v];
+                        if (an && !s.last[v]) { _fgEreignis(s, art, r); neu = true; }
+                        s.last[v] = an;
+                    });
+                });
+                _fgAnzeigeLive();
+            };
+            window._fgModi = FG_MODI;
             // ============ Pair-Detektor: gepaarte Magnetventile aus Pneumatik ============
             // Liefert eine Map<varName, { partnerVar, side: 1|2, isTriple, valveId }>
             // für alle Magnetventil-Variablen die zu einem isDouble/isTriple-Ventil
@@ -69769,16 +69960,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             })();
             try { if (localStorage.getItem('valisFbLiveSync') === '1') FB.liveSync = true; } catch(_) {}
             try { if (localStorage.getItem('valisFbMarkIncomplete') === '0') FB.markIncomplete = false; } catch(_) {}
+            // Count 544315: Wahlschalter/Frequenz/Impulslänge gehören zum Brett
+            window._fbSaveFg = function(neuZeichnen) { _fbSave(); if (neuZeichnen) _fbRerender(); };
             function _fbSave() { window._elVersion = (window._elVersion || 0) + 1; try { localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ boards: FB.boards, cables: FB.cables, idc: FB.idc, tc: FB.tc })); } catch(_) {} }
             // Board-Registry: NUR echte FESTO-Module (dieselben Drawer wie im
             // Standard-Steckaufbau). Maße aus den Board-Konstanten.
             // Analogkarten (Maße wie ANA_GEBER/ANA_KOMP/ANA_PID weiter unten; der
             // Analoggeber im freien Aufbau hat zwei Kanäle)
-            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h}, zaehler:{w:ZAEHLER.w,h:ZAEHLER.h},
+            const FB_DIM   = { taster:{w:TASTER.w,h:TASTER.h}, relais:{w:RELAIS.w,h:RELAIS.h}, led:{w:LED.w,h:LED.h}, sensor:{w:SENSOR.w,h:SENSOR.h}, magnet:{w:MAGNET.w,h:MAGNET.h}, zeitrelais:{w:ZEITRELAIS.w,h:ZEITRELAIS.h}, zaehler:{w:ZAEHLER.w,h:ZAEHLER.h}, count_fg:{w:FG.w,h:FG.h},
                                 ana_geber:{w:300,h:214}, ana_komp:{w:440,h:450}, ana_pid:{w:600,h:450} };
-            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF/TP)', zaehler:'Vorwahlzähler',
+            const FB_LABEL = { taster:'Signaleingabe (Taster/Schalter)', relais:'Relais-Panel', led:'Meldeeinrichtung (LED/Hupe)', sensor:'Sensor', magnet:'Magnetventil 5/2', zeitrelais:'Zeitrelais (TON/TOF/TP)', zaehler:'Vorwahlzähler', count_fg:'Zähler/Funktionsgenerator (Count 544315)',
                                ana_geber:'Analoggeber', ana_komp:'Komparatorkarte', ana_pid:'PID-Reglerkarte' };
-            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z', zaehler:'C', ana_geber:'AG', ana_komp:'KK', ana_pid:'PK' };
+            const FB_PFX   = { taster:'T', relais:'R', led:'L', sensor:'N', magnet:'M', zeitrelais:'Z', zaehler:'C', count_fg:'FG', ana_geber:'AG', ana_komp:'KK', ana_pid:'PK' };
             const FB_KOMP_NAMEN = ['A1', 'A2', 'B1', 'B2'];
             const _fbBoardById = (id) => FB.boards.find(b => b.id === id);
             // Sockel-Key → Schiene? (Panel-Bus „{P}_24V_{n}"/„{P}_0V_{n}").
@@ -69854,6 +70047,15 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     elems.push({ id:'s1r', cedType:'valve', varKey:vk, varSuffix:'_R', varName: cv ? cv + '_R' : '', counter:{ reset:true }, terms:{ [`${P}_S1_R1`]:'in', [`${P}_S1_R2`]:'out' } });
                     elems.push({ id:'s1no', cedType:'relay_no', varKey:vk, varName:cv, terms:{ [`${P}_S1_4`]:'in', [`${P}_S1_1`]:'out' } });
                     elems.push({ id:'s1nc', cedType:'relay_nc', varKey:vk, varName:cv, terms:{ [`${P}_S1_2`]:'in', [`${P}_S1_1`]:'out' } });
+                } else if (b.type === 'count_fg') {
+                    // FESTO 544315: Eingänge S1–S3 sind Lasten gegen das interne 0 V
+                    // (Variable FGn_S1_UP …), OUT ist ein Kontakt vom internen +24 V,
+                    // den das Gerät selbst schaltet (Variable FGn_OUT).
+                    FG_EIN.forEach(([r, art]) => {
+                        const k = `${r}_${art}`;
+                        elems.push({ id:'in_' + k, cedType:'valve', varKey:k, varName:`${P}_${k}`, terms:{ [`${P}_${k}`]:'in', [`${P}_${k}_M`]:'out' } });
+                    });
+                    elems.push({ id:'out', cedType:'schalter', varKey:'OUT', varName:`${P}_OUT`, terms:{ [`${P}_OUT_P`]:'in', [`${P}_OUT`]:'out' } });
                 }
                 return { elems };
             }
@@ -69896,7 +70098,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             window._fbAddModule = function(type, sensorType) {
                 if (!FB_DIM[type]) return;
                 const idx = (FB.tc[type] = (FB.tc[type] || 0) + 1);
-                FB.boards.push({ id:'b'+(FB.idc++), type, idx, prefix: FB_PFX[type] + idx, sensorType: sensorType || 'inductive', x:0, y:0, slotVars:{} });
+                const nb = { id:'b'+(FB.idc++), type, idx, prefix: FB_PFX[type] + idx, sensorType: sensorType || 'inductive', x:0, y:0, slotVars:{} };
+                // Count 544315: feste Namen der Ein- und Ausgänge (FG1_S1_UP …, FG1_OUT)
+                if (type === 'count_fg') { FG_EIN.forEach(([r, art]) => { nb.slotVars[`${r}_${art}`] = `${nb.prefix}_${r}_${art}`; }); nb.slotVars.OUT = nb.prefix + '_OUT'; nb.fgCfg = { modus: 'pulse', f: 1, tp: 1 }; }
+                FB.boards.push(nb);
                 FB.status = (FB_LABEL[type] || type) + ' hinzugefügt.'; FB.verifiedVars = null; _fbSave(); _fbRerender();
             };
             function _fbRemoveBoard(id) {
@@ -69995,6 +70200,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     svg.onclick = _fbOnSvgClick; return;
                 }
                 _anaLive = [];
+                Object.values(window._fgZustand || {}).forEach(s => { s.aktiv = false; });
                 // 1) Boards über die vorhandenen Drawer zeichnen (empty assignments → „frei")
                 FB.boards.forEach(b => {
                     const asg = {}; Object.keys(b.slotVars || {}).forEach(k => { if (/^S\d+$/.test(k) && b.slotVars[k]) asg[`${b.prefix}_${k}`] = b.slotVars[k]; });
@@ -70013,6 +70219,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             Object.entries(b.zaehlerCfg || {}).forEach(([k, c]) => { const v = (b.slotVars || {})[k]; if (v) window._festoZaehlerVorwahl[v] = c.pv; });
                             drawZaehlerPanel(svg, b.x, b.y, b.idx, asg, v => (window._festoZaehlerVorwahl || {})[v] || 0);
                         }
+                        else if (b.type === 'count_fg') { drawFgPanel(svg, b.x, b.y, b.idx, b); const s = (window._fgZustand || {})[b.prefix]; if (s) s.aktiv = true; }
                         else if (/^ana_/.test(b.type)) _fbDrawAnalog(svg, b);
                     } catch(e) { console.warn('FB board draw', b.type, e); }
                 });
@@ -70330,8 +70537,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // sie sind board-intern schon 0V. Wir ergänzen das als impliziten
             // Draht, sonst „findet" der Compiler keinen 0V-Rückweg.
             function _fbInternalGround(key) {
-                return /^L\d+_S\d+_X2$/.test(key) || /^M\d+_S1_X2$/.test(key);
+                return /^L\d+_S\d+_X2$/.test(key) || /^M\d+_S1_X2$/.test(key) || /^FG\d+_S\d_[A-Z]+_M$/.test(key);
             }
+            // Intern an +24 V liegende Anschlüsse (Count 544315: Kontakt vor OUT)
+            function _fbInternalPlus(key) { return /^FG\d+_OUT_P$/.test(key); }
             function _fbToCedNetlist() {
                 const components = [], wires = [];
                 const wired = new Set(); FB.cables.forEach(c => { wired.add(c.a); wired.add(c.b); });
@@ -70356,6 +70565,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const cid = b.id + '_' + e.id; if (!emitted.has(cid)) return;
                         Object.keys(e.terms).forEach(k => {
                             if (_fbInternalGround(k)) wires.push({ id:'g_'+cid+'_'+k, from:{ compId:cid, pin:e.terms[k] }, to:{ rail:'minus' } });
+                            if (_fbInternalPlus(k)) wires.push({ id:'p_'+cid+'_'+k, from:{ compId:cid, pin:e.terms[k] }, to:{ rail:'plus' } });
                         });
                     });
                 });
@@ -70392,7 +70602,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const wired = new Set();
                 FB.cables.forEach(c => { wired.add(c.a); wired.add(c.b); uni(rn(c.a), rn(c.b)); });
                 // Intern auf 0V geerdete (blaue) Terminals wie __M__ behandeln.
-                FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalGround(k)) uni(k, '__M__'); })));
+                FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalGround(k)) uni(k, '__M__'); if (_fbInternalPlus(k)) uni(k, '__P__'); })));
                 const issues = [];
                 FB.boards.forEach(b => {
                     _fbBoardModel(b).elems.forEach(e => {
@@ -70443,6 +70653,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }));
                 const grounds = [];
                 FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalGround(k)) grounds.push(k); })));
+                const plusse = []; FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalPlus(k)) plusse.push(k); })));
                 const isShort = (skipCableId) => {
                     const par = {};
                     const find = (x) => { if (par[x] === undefined) par[x] = x; while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
@@ -70450,6 +70661,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     FB.cables.forEach(c => { if (c.id === skipCableId) return; uni(c.a, c.b); });
                     bridges.forEach(p => uni(p[0], p[1]));
                     grounds.forEach(k => uni(k, '__M__'));
+                    plusse.forEach(k => uni(k, '__P__'));
                     return find('__P__') === find('__M__');
                 };
                 const shorted = isShort(null);
@@ -70489,6 +70701,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }));
                 const grounds = [];
                 FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalGround(k)) grounds.push(k); })));
+                const plusse = []; FB.boards.forEach(b => _fbBoardModel(b).elems.forEach(e => Object.keys(e.terms).forEach(k => { if (_fbInternalPlus(k)) plusse.push(k); })));
                 const buildFind = (skipCableId) => {
                     const par = {};
                     const find = (x) => { if (par[x] === undefined) par[x] = x; while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
@@ -70496,6 +70709,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     FB.cables.forEach(c => { if (c.id === skipCableId) return; uni(c.a, c.b); });
                     bridges.forEach(p => uni(p[0], p[1]));
                     grounds.forEach(k => uni(k, '__M__'));
+                    plusse.forEach(k => uni(k, '__P__'));
                     return find;
                 };
                 const flowing = new Set();

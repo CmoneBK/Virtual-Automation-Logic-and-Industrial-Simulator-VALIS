@@ -152,7 +152,9 @@ async function bedienen(page, schritte, vorlage) {
     // Start aus dem Katalog: Aufgabe aktiv, SPS-Modus, Vorlage im Editor
     const st = await page.evaluate(async () => {
       openHub(); hubLaunch('uebungsanlagen'); await new Promise(r => setTimeout(r, 300));
-      document.querySelector('#hub-panel-uebungsanlagen [data-ua="start"][data-i="1"]').click();
+      // Katalog ist seit #180 nach Schwierigkeit sortiert: Karte über den Namen suchen
+      const karte = Array.from(document.querySelectorAll('#hub-panel-uebungsanlagen .ua-karte')).find(k => /Sortieranlage/.test(k.querySelector('.ua-name').textContent));
+      karte.querySelector('[data-ua="start"][data-i="1"]').click();
       await new Promise(r => setTimeout(r, 1200));
       const t = (0, eval)('activeTask');
       return { id: t && t.id, sps: !!window.spsMode || document.body.classList.contains('sps-mode') || (0, eval)('typeof spsMode !== "undefined" && spsMode'), code: document.getElementById('code').value };

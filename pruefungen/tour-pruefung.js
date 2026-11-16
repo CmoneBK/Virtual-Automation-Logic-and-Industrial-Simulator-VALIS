@@ -55,6 +55,7 @@ const OHNE_ZIEL = /Willkommen|Analogwerte und Regler|Geschafft|Kapitel \d+ von \
     ok(fluid >= (fassung === 'kurz' ? 1 : 3), `${fassung}: Fluidplan-Schritte ${fluid}`);
     ok(titel.some(t => /Elektroplan/.test(t)), `${fassung}: Schritt „Elektroplan“ fehlt`);
     if (fassung === 'lang') ok(titel.some(t => /forcen/.test(t)), 'lang: Schritt „Sensoren forcen“ fehlt');
+    if (fassung === 'lang') ok(titel.some(t => /So sehen die Ventile aus/.test(t)), 'lang: Schritt zum Darstellungs-Knopf der 2D-Anlage fehlt');
     // Kapitelkarten (Christoph 16.11.2026): in der ausführlichen Tour vor jedem der zehn Kapitel, in der kurzen keine.
     const karten = titel.filter(t => /Kapitel \d+ von \d+:/.test(t));
     ok(karten.length === (fassung === 'lang' ? 10 : 0), `${fassung}: ${karten.length} Kapitelkarten`);

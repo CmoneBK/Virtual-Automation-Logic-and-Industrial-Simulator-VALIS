@@ -56507,6 +56507,22 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const hub = (bereich) => { try { window.openHub(bereich); } catch (_) {} };
             // Fluidplan öffnen (koppelt automatisch an die 2D-Anlage, siehe fluidplan.js).
             const fluidAuf = () => { try { if (window.Fluidplan) window.Fluidplan.oeffnen(); } catch (_) {} };
+            // Erstes Wegeventil der 2D-Anlage in die Mitte der Ansicht scrollen.
+            const ventilInsBild = () => {
+                try {
+                    // Pneumatikteile sind heute pneu_fp (Fluidplan-Teile), ältere Anlagen valve_pneu.
+                    const vs = (typeof factoryObjects !== 'undefined' ? factoryObjects : []).filter(o => o.type === 'pneu_fp' || o.type === 'valve_pneu');
+                    const area = document.getElementById('factory-canvas-area');
+                    const inhalt = document.getElementById('factory-content');
+                    if (!vs.length || !area || !inhalt) return;
+                    const m = /scale\(([\d.]+)\)/.exec(inhalt.style.transform || ''); const sk = m ? parseFloat(m[1]) : 1;
+                    const x0 = Math.min(...vs.map(o => o.x)), x1 = Math.max(...vs.map(o => o.x + (o.width || 0)));
+                    const y0 = Math.min(...vs.map(o => o.y)), y1 = Math.max(...vs.map(o => o.y + (o.height || o.width || 0)));
+                    area.scrollLeft = Math.max(0, (x0 + x1) / 2 * sk - area.clientWidth / 2);
+                    area.scrollTop  = Math.max(0, (y0 + y1) / 2 * sk - area.clientHeight / 2);
+                    area.dispatchEvent(new Event('scroll'));
+                } catch (_) {}
+            };
             const hubZu = () => { try { window.closeHub(); } catch (_) {} };
             const proAn = () => { try { if (typeof window._isProMode === 'function' && !window._isProMode()) window._toggleProMode(); } catch (_) {} };
             const legExt = (key, an) => {
@@ -56837,11 +56853,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   text: 'Kompressor, Wartungseinheit, Wegeventile und Drosseln bilden ein echtes Druckluftnetz, mit Leckage und Druckabfall. Die Hydraulik hat Aggregat, Ventile, Druckschalter, Manometer und Speicher. Der <b>Inspektor</b> zeigt Drücke und Ströme an jeder Leitung.<br><br>Die Menüs Pneumatik und Hydraulik schaltest du in der Seitenleiste rechts (▶) an, die Tour hat Pneumatik dafür eingeschaltet.',
                   before: () => { try { window.togglePneumaticMenu(true); } catch (_) {} facMenueAuf('tb-dropdown-pneu'); }, after: facMenueZu, wait: 150,
                   target: '[data-tour-ziel]', pos: 'bottom' },
+                { k: 'anlage', title: '🖼 So sehen die Ventile aus',
+                  text: 'Der Knopf mit dem Ventilbild neben ℹ️ schaltet, wie alle Pneumatik- und Hydraulikteile der Anlage aussehen: als <b>Gehäuse</b> (anschaulich), als <b>Normsymbol</b> wie im Fluidplan, <b>echt aufgeschnitten</b> oder <b>echt geschlossen</b>. Jeder Klick nimmt die nächste Darstellung. Ein einzelnes Teil stellst du per Rechtsklick → Darstellung um.<br><br>Die Tour hat die Ventile gerade aufgeschnitten: So siehst du in der Simulation, wie der Schieber die Wege freigibt.',
+                  before: () => {
+                      panels(['factory-wrapper']); sim(true);
+                      try { window._fpAlleVentile('schnitt'); } catch (_) {}
+                      setTimeout(ventilInsBild, 150); setTimeout(ventilInsBild, 500);
+                  },
+                  after: () => { try { window._fpAlleVentile('gehaeuse'); } catch (_) {} }, wait: 650,
+                  target: ['#btn-pneubild', '#factory-canvas-area'], pos: 'left' },
                 { k: 'anlage', title: '🎛 Analogwerte und Regler',
                   text: 'Neben Ein und Aus kann VALIS auch Analogwerte: Messumformer, Sollwertsteller, Regelstrecken und Proportionalventile. Mit <code>ZWEIPUNKT</code> und <code>PID</code> regelst du z. B. eine Öltemperatur. Ein Doppelklick auf den PID im Logikplan öffnet das <b>Reglerfenster</b>.<br><br>Das Beispiel „Ölkühlung mit Regler" im Lernzentrum zeigt das komplett.',
                   target: null },
                 { k: 'anlage', title: 'ℹ️ Hilfe in jedem Fenster',
-                  text: 'Jedes Fenster hat einen <b>ℹ️</b>-Knopf mit Hilfe genau zu diesem Bereich. In der Anlage erklärt er Werkzeuge, Bauteile und die Steuerung der Kamera. Daneben: <b>Seiten- oder Draufsicht</b>, Raster und Minimap.',
+                  text: 'Jedes Fenster hat einen <b>ℹ️</b>-Knopf mit Hilfe genau zu diesem Bereich. In der Anlage erklärt er Werkzeuge, Bauteile und die Steuerung der Kamera. Daneben das <b>Ventilbild</b> aus dem vorigen Schritt und der Knopf für <b>Seiten- oder Draufsicht</b>; unten rechts Zoom und Minimap.',
                   target: ['#factory-wrapper .panel-info-btn', '#btn-viewmode'], pos: 'bottom' },
 
                 // 8 · Lernzentrum und Aufgaben

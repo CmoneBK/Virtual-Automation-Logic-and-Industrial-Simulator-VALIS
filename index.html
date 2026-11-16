@@ -1242,6 +1242,11 @@
         /* Öffner (NC): Geschlossen = 15deg (schräg nach rechts am Haken), Offen = noch weiter rechts weggeklappt! */
         .circ-moving-contact.is-nc { transform: rotate(15deg); }
         .circ-moving-contact.is-nc.open { transform: rotate(55deg); }
+        /* Wechsler (Schließer + Öffner zusammengefasst): Messer hängt am
+           gemeinsamen Anschluss 11 oben, Ruhe = senkrecht auf den eigenen
+           Anschluss, „open“ = schwenkt zum Nachbaranschluss rechts. */
+        svg .circ-moving-contact.circ-wblade, svg .circ-moving-contact.circ-wblade.is-nc { transform: none; }
+        svg .circ-moving-contact.circ-wblade.open, svg .circ-moving-contact.circ-wblade.is-nc.open { transform: rotate(-45deg); }
         .circ-static { transition: stroke 0.3s, fill 0.3s, filter 0.3s !important; }
         .circ-wire { transition: stroke 0.3s, filter 0.3s !important; }
         /* Circuit Drag-and-Drop Palette */
@@ -3457,6 +3462,7 @@
 						<button id="btn-toggle-econ" class="btn-export" title="Schaltplan-Darstellungs-Modus durchschalten:&#10;• Relais (Klassisch) — jedes Logik-Gatter wird als Hilfsrelais mit Spule + Kontakt gezeichnet (Industrie-Standard)&#10;• Direkt (Wirtschaftlich) — Kontakte sitzen direkt im Lastpfad, kein zusätzliches Hilfsrelais (spart Bauteile)&#10;• Pneumatik — Druckluft-Symbolik&#10;• Elektronisch — Halbleiter-Logik" style="background-color: #555; border: 1px solid #333;" onclick="toggleEconMode()" data-i18n="iec_mode_relay">💼 Modus: Relais (Klassisch)</button>
                         <button id="btn-toggle-colors" class="btn-export" title="Bunte Pfade — jeder Logik-Strang bekommt im Schaltplan eine stabile Farbe (synchron zu „Bunte Linien" im Logikplan). Erleichtert das visuelle Trennen paralleler Stränge. Die Steckaufbau-Kabel übernehmen diese Farben automatisch, wenn dort „Bunte Kabel" aktiv ist." style="background-color: #555; border: 1px solid #333;" onclick="toggleCircuitColors()" data-i18n="iec_colors_off">🌈 Bunte Pfade: AUS</button>
                         <button id="btn-toggle-wech" class="btn-export" title="Wechslernummerierung an Kontakten — nummeriert Kontakte wie Wechsler (Öffner 11/12, Schließer 11/14 statt 13/14; verzögerte Zeitrelais-Kontakte 15/16 bzw. 15/18). NUR RELAIS: nur Relaiskontakte, Taster und Sensoren bleiben 11/12 bzw. 13/14. Hilft beim 1:1-Übertragen vom Schaltplan auf die FESTO-Hardware. Die Einstellung bleibt nach dem Neuladen erhalten." style="background-color: #555; border: 1px solid #333;" onclick="toggleWechsler()" data-i18n="iec_wech_off">🔀 Wechslernummerierung: AUS</button>
+                        <button id="btn-toggle-wzus" class="btn-export" title="Wechsler zusammenfassen — beginnen ein Schließer und ein Öffner desselben Relais am selben Knoten, werden sie als EIN Wechsler (11/12/14) gezeichnet: im Auto-Schaltplan, bei „Aus Code“ im Elektroplan und im Steckaufbau (belegt nur einen Wechsler am Relais). Am Code ändert sich nichts. AUS = jeder Kontakt einzeln wie bisher. Die Einstellung bleibt nach dem Neuladen erhalten." style="background-color: #555; border: 1px solid #333;" onclick="toggleWechslerZusammen()" data-i18n="iec_wzus_off">⑂ Wechsler: AUS</button>
                         <button id="btn-toggle-seq" class="btn-export" title="Fortlaufende Kontaktnummern — zählt die Kontaktsätze je Bauteil durch: erster Kontakt 13/14 (Öffner 11/12), zweiter 23/24 (Öffner 21/22), dritter 33/34 … Verzögerte Zeitrelais-Kontakte entsprechend 17/18 (Öffner 15/16), 27/28 … AUS: jeder Kontakt trägt 13/14 bzw. 11/12 (verzögert 17/18 bzw. 15/16). Die Einstellung bleibt nach dem Neuladen erhalten." style="background-color: #555; border: 1px solid #333;" onclick="toggleSeqNum()" data-i18n="iec_seq_off">🔢 Fortlaufende Nrn: AUS</button>
                         <button id="btn-toggle-dual" class="btn-export" title="Getrennte Stromkreise — trennt Steuer- (24V DC) von Lastkreis (230V AC) visuell durch eigene Sammelschienen. Industrie-typische Darstellung. Achtung: 230V ist NUR didaktisch — am realen FESTO-Lehrkasten arbeitet niemand mit 230V (rote Warnung wird eingeblendet)." style="background-color: #555; border: 1px solid #333;" onclick="toggleDualCircuit()" data-i18n="iec_dual_off">⚡ Getrennte Stromkreise: AUS</button>
                         <button id="btn-toggle-details" class="btn-export" title="Detail-Stufe der Bauteil-Beschriftung durchschalten: ALLE (Variablen + IEC-Norm-Label wie -SJ1, -KF1) → REDUZIERT (nur IEC-Label) → AUS (nackte Symbole). Für Einsteiger ALLE, für professionelle Pläne REDUZIERT/AUS." style="background-color: #911eb4; border: 1px solid #333;" onclick="toggleDetails()" data-i18n="iec_det_all">🏷️ Details: ALLE</button>
@@ -3620,6 +3626,7 @@
                         <div class="ced-pal-cat">Hilfskontakte</div>
                         <div class="ced-pal-item" draggable="true" data-ctype="relay_no">    <span class="ced-pal-mini" data-mini="relay_no"></span><span>Hilfs-NO</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="relay_nc">    <span class="ced-pal-mini" data-mini="relay_nc"></span><span>Hilfs-NC</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="wechsler" title="Wechsler: Öffner 11–12 und Schließer 11–14 mit gemeinsamem Anschluss 11. Im Code wie ein Öffner und ein Schließer desselben Relais.">    <span class="ced-pal-mini" data-mini="wechsler"></span><span>Wechsler</span></div>
                         <div class="ced-pal-cat">Spulen / Ausgänge</div>
                         <div class="ced-pal-item" draggable="true" data-ctype="relais">     <span class="ced-pal-mini" data-mini="relais"></span><span>Relais (-KF)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="valve">      <span class="ced-pal-mini" data-mini="valve"></span><span>Ventil (-Y)</span></div>
@@ -6531,6 +6538,8 @@ const aktiv = resolveLinked(obj, spsState);
                 "iec_colors_off": "🌈 Bunte Pfade: AUS",
                 "iec_colors_on": "🌈 Bunte Pfade: AN",
                 "iec_wech_off": "🔀 Wechslernummerierung: AUS",
+                "iec_wzus_off": "⑂ Wechsler: AUS",
+                "iec_wzus_on": "⑂ Wechsler: AN",
                 "iec_wech_relays": "🔀 Wechslernummerierung: NUR RELAIS",
                 "iec_wech_on": "🔀 Wechslernummerierung: AN",
                 "iec_seq_off": "🔢 Fortlaufende Nrn: AUS",
@@ -6955,6 +6964,8 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "iec_colors_off": "🌈 Colored Paths: OFF",
                 "iec_colors_on": "🌈 Colored Paths: ON",
                 "iec_wech_off": "🔀 CO Contact Num: OFF",
+                "iec_wzus_off": "⑂ Changeover: OFF",
+                "iec_wzus_on": "⑂ Changeover: ON",
                 "iec_wech_relays": "🔀 CO Contact Num: RELAYS ONLY",
                 "iec_wech_on": "🔀 CO Contact Num: ON",
                 "iec_seq_off": "🔢 Sequential Num: OFF",
@@ -22166,6 +22177,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (_w === 'relays' || _w === 'on') window.configWechsler = _w;
             window.configSeqNum = localStorage.getItem('valisConfigSeqNum') === '1';
         } catch(_) {}
+        // Wechsler zusammenfassen (Schließer + Öffner desselben Relais am selben
+        // Knoten = ein Wechsler 11/12/14). Standard AUS; wirkt im Auto-Schaltplan,
+        // bei „Aus Code“ im Elektroplan und im Steckaufbau. Code bleibt unberührt.
+        window.configWechslerZusammen = false;
+        try { window.configWechslerZusammen = localStorage.getItem('valisWechslerZusammen') === '1'; } catch(_) {}
+        window.toggleWechslerZusammen = function(an) {
+            window.configWechslerZusammen = (typeof an === 'boolean') ? an : !window.configWechslerZusammen;
+            try { localStorage.setItem('valisWechslerZusammen', window.configWechslerZusammen ? '1' : '0'); } catch(_) {}
+            window._syncSchematicNumberingButtons();
+            if (typeof currentGraph !== 'undefined' && currentGraph) { drawCircuitPlan(currentGraph, globalInputs, globalOutputs, true); runSimulationTick(); }
+            try { if (typeof window._renderFestoPanel === 'function') window._renderFestoPanel(); } catch(_) {}
+        };
         window._syncSchematicNumberingButtons = function() {
             const doc = getCircDoc();
             const wb = doc.getElementById('btn-toggle-wech');
@@ -22176,6 +22199,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 wb.style.backgroundColor = colorMap[m] || '#555';
                 wb.setAttribute('data-i18n', keyMap[m] || 'iec_wech_off');
                 if (typeof t === 'function') wb.textContent = t(keyMap[m] || 'iec_wech_off');
+            }
+            const zb = doc.getElementById('btn-toggle-wzus');
+            if (zb) {
+                const k = window.configWechslerZusammen ? 'iec_wzus_on' : 'iec_wzus_off';
+                zb.style.backgroundColor = window.configWechslerZusammen ? '#911eb4' : '#555';
+                zb.setAttribute('data-i18n', k);
+                if (typeof t === 'function') zb.textContent = t(k);
             }
             const sb = doc.getElementById('btn-toggle-seq');
             if (sb) {
@@ -24095,6 +24125,118 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             });
             return { graph: Object.assign({}, g, { nodes, edges }), alias };
         }
+
+        // ==========================================
+        // ⑂ WECHSLER IM AUTO-SCHALTPLAN
+        // ==========================================
+        // Nachbearbeitung der fertig gezeichneten Strompfade: Ein Schließer und
+        // ein Öffner desselben Relais auf gleicher Höhe, die über reine Leitungen
+        // an derselben waagerechten Leitung (Schiene oder ODER-Bus) hängen und
+        // in benachbarten Strompfaden stehen, werden zu einem Wechsler: der
+        // linke Kontakt trägt das Symbol (11 oben, eigener Anschluss senkrecht
+        // darunter), der rechte Strompfad wird vom zweiten Anschluss über eine
+        // kurze Querleitung versorgt. Logik, Code und Simulation bleiben gleich.
+        window._wechslerAutoPlan = function(root) {
+            const NS = 'http://www.w3.org/2000/svg';
+            const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+            const RELAIS = ['relais', 'ton', 'tof', 'tp', 'ctu'];
+            const num = (e, a) => parseFloat(e.getAttribute(a));
+            const kontakte = Array.from(root.querySelectorAll('g.circ-contact-group[data-iec-role="contact"]')).map(g => {
+                const r = g.querySelector('rect'), b = g.querySelector('.circ-moving-contact');
+                if (!r || !b) return null;
+                return { g, v: g.getAttribute('data-iec-id'), typ: g.getAttribute('data-ctype') || 'relais', x: num(r, 'x') + 20, y: num(r, 'y') + 20, nc: b.classList.contains('is-nc'), par: g.parentNode };
+            }).filter(k => k && k.v && RELAIS.includes(k.typ));
+            const linienCache = new Map();
+            const linien = par => {
+                if (!linienCache.has(par)) linienCache.set(par, Array.from(par.children).filter(e => e.tagName === 'line').map(l => ({ l, x1: num(l, 'x1'), y1: num(l, 'y1'), x2: num(l, 'x2'), y2: num(l, 'y2') })));
+                return linienCache.get(par);
+            };
+            const gl = (a, b) => Math.abs(a - b) < 0.6;
+            const senkrecht = L => gl(L.x1, L.x2);
+            // Leitungskette senkrecht nach oben bis zur waagerechten Leitung
+            const kette = (par, x, yTop) => {
+                const segs = []; let cur = yTop, n = 0;
+                for (;;) {
+                    const L = linien(par).find(L => senkrecht(L) && gl(L.x1, x) && gl(Math.max(L.y1, L.y2), cur) && Math.min(L.y1, L.y2) < cur - 0.5);
+                    if (!L || ++n > 20) break;
+                    segs.push(L); cur = Math.min(L.y1, L.y2);
+                }
+                return { segs, y0: cur };
+            };
+            const vergeben = new Set(), paare = [];
+            const kandidaten = [];
+            kontakte.forEach(a => kontakte.forEach(b => {
+                if (a === b || !a.nc || b.nc || a.v !== b.v || a.par !== b.par || !gl(a.y, b.y)) return;
+                const dx = Math.abs(a.x - b.x); if (dx < 20 || dx > 150) return;
+                const f1 = a.g._checkPower, f2 = b.g._checkPower;
+                if (!f1 || !f2 || (f1 !== f2 && String(f1) !== String(f2))) return;
+                kandidaten.push({ a, b, dx });
+            }));
+            kandidaten.sort((p, q) => p.dx - q.dx);
+            for (const { a, b } of kandidaten) {
+                if (vergeben.has(a) || vergeben.has(b)) continue;
+                const host = a.x < b.x ? a : b, other = host === a ? b : a;
+                const x0 = host.x, x1 = other.x, y = host.y, par = host.par;
+                // Nichts dazwischen: kein anderer Kontakt, keine senkrechte Leitung auf Höhe der Querleitung
+                if (kontakte.some(k => k !== a && k !== b && k.par === par && k.x > x0 + 1 && k.x < x1 - 1 && Math.abs(k.y - y) < 45)) continue;
+                if (linien(par).some(L => senkrecht(L) && L.x1 > x0 + 1 && L.x1 < x1 - 1 && Math.min(L.y1, L.y2) <= y + 10 && Math.max(L.y1, L.y2) >= y + 10)) continue;
+                // Gleicher Knoten: beide Ketten enden an derselben waagerechten Leitung
+                const kh = kette(par, x0, y - 15), ko = kette(par, x1, y - 15);
+                if (!kh.segs.length || !ko.segs.length || !gl(kh.y0, ko.y0)) continue;
+                const quer = linien(par).find(L => gl(L.y1, L.y2) && gl(L.y1, kh.y0) && Math.min(L.x1, L.x2) <= x0 + 0.6 && Math.max(L.x1, L.x2) >= x1 - 0.6);
+                if (!quer) continue;
+                vergeben.add(a); vergeben.add(b);
+                paare.push({ host, other, ko });
+            }
+            paare.forEach(({ host, other, ko }) => {
+                const g = host.g, x = host.x, y = host.y, par = host.par;
+                const verz = ['ton', 'tof', 'tp'].includes(host.typ);
+                // Kontaktsatz-Nummer aus der bisherigen oberen Klemme (13 → 1, 21 → 2 …)
+                const texte = Array.from(g.querySelectorAll('text')).filter(t => /^\d+$/.test(t.textContent.trim()));
+                const oben = texte.find(t => num(t, 'y') < y), unten = texte.find(t => num(t, 'y') > y);
+                const pre = oben ? oben.textContent.trim().slice(0, -1) : '1';
+                const nr = { c: pre + (verz ? '5' : '1'), nc: pre + (verz ? '6' : '2'), no: pre + (verz ? '8' : '4') };
+                // Alte Kontaktgrafik des linken Kontakts weg (Messer, Sitz, oberer Stummel)
+                Array.from(g.children).forEach(e => {
+                    if (e.classList && e.classList.contains('circ-moving-contact')) e.remove();
+                    else if (e.tagName === 'line' && e.classList.contains('circ-static') && (gl(num(e, 'y1'), y - 15) || (gl(num(e, 'y1'), y - 5) && gl(num(e, 'y2'), y - 5)))) e.remove();
+                });
+                g.classList.add('circ-wechsler');
+                g.setAttribute('data-wechsler', '1');
+                // Messer am gemeinsamen Anschluss
+                mk('line', { x1: x, y1: y - 15, x2: x, y2: y - 7, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }, g);
+                const blade = mk('g', { class: 'circ-moving-contact circ-wblade ' + (host.nc ? 'is-nc' : 'is-no'), stroke: '#000' }, g);
+                blade.style.transformOrigin = `${x}px ${y - 7}px`;
+                if (!host.nc) blade.classList.add('open');
+                mk('line', { x1: x, y1: y - 7, x2: x, y2: y + 6, 'stroke-width': 2 }, blade);
+                // Zweiter Anschluss rechts, Sitz beim Öffner
+                const xb = x + 10;
+                mk('line', { x1: xb, y1: y + 3, x2: xb, y2: y + 10, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }, g);
+                if (other.nc) mk('line', { x1: xb, y1: y + 3, x2: xb - 4, y2: y + 3, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }, g);
+                else if (host.nc) mk('line', { x1: x, y1: y + 5, x2: x + 4, y2: y + 5, stroke: '#000', 'stroke-width': 2, class: 'circ-static' }, g);
+                // Klemmen beschriften: 11 oben, eigener Anschluss links unten, zweiter rechts
+                if (oben) oben.textContent = nr.c;
+                if (unten) { unten.textContent = host.nc ? nr.nc : nr.no; unten.setAttribute('x', x - 4); unten.setAttribute('text-anchor', 'end'); }
+                const t2 = mk('text', { x: xb + 3, y: y + 21, 'font-size': '9px', fill: '#666', 'font-family': 'monospace', 'text-anchor': 'start' }, g);
+                t2.textContent = other.nc ? nr.nc : nr.no;
+                const tt = mk('title', {}, g); tt.textContent = `Wechsler ${nr.c}/${nr.nc}/${nr.no} von ${host.v}`;
+                // Rechter Strompfad: alte Zuleitung und Kontakt weg, Querleitung vom zweiten Anschluss
+                ko.segs.forEach(L => { L.l.style.display = 'none'; L.l.setAttribute('data-wechsler-weg', '1'); });
+                other.g.style.display = 'none'; other.g.setAttribute('data-wechsler-weg', '1');
+                host.g._wPartnerG = other.g; other.g._wPartnerG = host.g;
+                const weiter = linien(par).find(L => senkrecht(L) && gl(L.x1, other.x) && gl(Math.min(L.y1, L.y2), y + 15));
+                const cls = 'circ-wire circ-var-' + host.v.replace(/\s+/g, '_') + (other.nc ? ' is-nc-wire' : '');
+                const farbe = other.g.style.getPropertyValue('--logic-color');
+                [[xb, y + 10, other.x, y + 10], [other.x, y + 10, other.x, y + 15]].forEach(([a1, b1, a2, b2]) => {
+                    const l = mk('line', { x1: a1, y1: b1, x2: a2, y2: b2, stroke: '#000', 'stroke-width': 2, class: cls, 'data-wechsler-quer': '1' });
+                    if (farbe) l.style.setProperty('--logic-color', farbe);
+                    if (weiter && weiter.l._checkPower) l._checkPower = weiter.l._checkPower;
+                    par.insertBefore(l, g);
+                });
+                mk('circle', { cx: other.x, cy: y + 15, r: 2.5, fill: '#000', class: 'circ-static' }, par);
+            });
+            return paare.length;
+        };
         function drawCircuitPlan(graph, inputsList, outputsList, keepView = false) {
             window._elVersion = (window._elVersion || 0) + 1;   // elektro-messen.js: Modell neu aufbauen
             graph = _circuitCleanGraph(graph);
@@ -26609,6 +26751,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             }, 15);
+            // Wechsler zusammenfassen (Schalter „Wechsler“): Schließer + Öffner
+            // desselben Relais am selben Knoten als EIN Wechsler zeichnen.
+            try { if (window.configWechslerZusammen && window._wechslerAutoPlan) window._wechslerAutoPlan(circuitContent); } catch (e) { console.warn('Wechsler im Auto-Schaltplan', e); }
             // Fokus-Filter nach jedem Schaltplan-Render neu anwenden — der
             // innerHTML-Reset oben hat die .iec-faded/.iec-focused-Klassen
             // gelöscht.
@@ -62031,6 +62176,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // Hilfskontakte (referenzieren eine Spule)
                 relay_no:      { kind:'aux',     nc:false, w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NO' },
                 relay_nc:      { kind:'aux',     nc:true,  w:50, h:30, cx:25, cy:15, prefix:'',    label:'Hilfs-NC' },
+                // Wechsler (nur Palette/Vorschau): wird beim Ablegen als PAAR aus
+                // relay_no (Master, 11–14) und relay_nc (11–12) angelegt, beide mit
+                // wPartner verknüpft und über einen unsichtbaren Steg (wBruecke) an 11
+                // verbunden. Für Code, Roundtrip und Steckaufbau bleibt es Schließer + Öffner.
+                wechsler:      { kind:'pal',     nc:false, w:100, h:30, cx:50, cy:15, prefix:'',   label:'Wechsler' },
                 // Spulen
                 relais:        { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'K',  label:'Relais (-KF)' },
                 valve:         { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'Y',  label:'Ventil (-Y)' },
@@ -64034,6 +64184,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (_ct2 && _ct2.komp && c.varName && _kompForAssign[c.varName]) Object.assign(c, _kompForAssign[c.varName]);
                 });
+                // Schalter „Wechsler“: Schließer + Öffner desselben Relais am selben Knoten zusammenfassen
+                if (window.configWechslerZusammen) { try { _wechslerZusammenfassen(); } catch (e) { console.warn('Wechsler bei Aus Code', e); } }
 
                 cedRender();
                 // Automatisch beim Öffnen: Plan nur speichern, den Code nicht zurückschreiben
@@ -64068,6 +64220,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // kann, sobald sich die Pin-Konvention (NC=11/12 / NO=11/14 vs. 13/14) ändert.
             window.cedRender = cedRender;
             function cedRender() {
+                try { _wechslerAbgleich(); } catch (e) {}
                 // Dynamische Norm-Labels (Klammer-Inhalt für Hilfsrelais aus dem
                 // Strang-Ausdruck) VOR dem eigentlichen Rendern aktualisieren.
                 if (typeof _refreshDynamicLabels === 'function') {
@@ -64153,6 +64306,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Strang einer Schrittkette: hellgrün hinterlegt, gesperrt
                     _bg.setAttribute('style', 'fill:rgba(46,125,50,0.10)');
                     el('title', {}, grp).textContent = 'Schrittkette ' + comp.skKette + ' (gesperrt: im Code oder im Schrittketten-Panel ändern)';
+                }
+                const _wp = _wPartner(comp);
+                if (_wp) {
+                    const pinR = 4, dx = _wp.x - comp.x;
+                    const xa = t.cx, xb = dx + t.cx, xm = (xa + xb) / 2;
+                    if (!t.nc) {
+                        _bg.setAttribute('x', Math.min(xa, xb) - t.cx - 4); _bg.setAttribute('width', Math.abs(dx) + t.w + 8);
+                        _wechslerSymbol(grp, xa, xb, t.h, _wechslerLabels(comp));
+                        _drawCompLabel(grp, Math.max(xa, xb) + 18, t.cy, comp, 'start');
+                        el('circle', { cx:xm, cy:0, r:pinR, class:'ced-pin', 'data-pin':'in' }, grp);
+                        el('title', {}, grp).textContent = 'Wechsler ' + (comp.varName || '') + ': 11–14 Schließer, 11–12 Öffner. Löschen einer Hälfte macht daraus einen einzelnen Kontakt.';
+                    } else {
+                        _bg.setAttribute('style', 'fill:transparent');
+                    }
+                    el('circle', { cx:t.cx, cy:t.h, r:pinR, class:'ced-pin', 'data-pin':'out' }, grp);
+                    grp.addEventListener('mousedown', _onCompMouseDown);
+                    grp.addEventListener('dblclick', _onCompDblClick);
+                    grp.addEventListener('contextmenu', _onCompContextMenu);
+                    return;
                 }
                 _renderIecSymbol(grp, comp);
                 const pinR = 4;
@@ -64319,9 +64491,94 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
 
+            // ===== Wechsler (Paar aus Schließer-Master und Öffner) =====
+            function _wPartner(comp) {
+                if (!comp || !comp.wPartner) return null;
+                const p = ST.components.find(c => c.id === comp.wPartner);
+                return (p && p.wPartner === comp.id) ? p : null;
+            }
+            // Master = Schließer (relay_no); er zeichnet das ganze Symbol.
+            function _wMaster(comp) { const p = _wPartner(comp); return p ? (CTYPES[comp.type].nc ? p : comp) : null; }
+            window._cedWechslerPaar = (id) => { const c = ST.components.find(x => x.id === id); const p = _wPartner(c); return p ? [c, p] : null; };
+            // Zeichnet das Wechsler-Symbol: xa = Schließer-Anschluss, xb = Öffner-Anschluss,
+            // gemeinsamer Anschluss 11 oben in der Mitte. Ruhestellung: Messer am Öffner.
+            function _wechslerSymbol(grp, xa0, xb0, h, labels) {
+                const xm = (xa0 + xb0) / 2, sg = Math.sign(xm - xb0) || 1;
+                const ln = (x1, y1, x2, y2, w, cls) => el('line', {x1, y1, x2, y2, stroke:'#000', 'stroke-width': w || 2, class: cls || 'circ-static'}, grp);
+                // Weit auseinander (z. B. nach „Aus Code“ in Nachbarsträngen): Symbol
+                // kompakt in der Mitte, Anschlüsse über kurze Querleitungen nach außen.
+                const xa = Math.abs(xa0 - xm) > 25 ? xm + Math.sign(xa0 - xm) * 25 : xa0;
+                const xb = Math.abs(xb0 - xm) > 25 ? xm + Math.sign(xb0 - xm) * 25 : xb0;
+                el('circle', {cx:xm, cy:0, r:2.5, fill:'#000', class:'circ-static'}, grp);
+                el('circle', {cx:xa0, cy:h, r:2.5, fill:'#000', class:'circ-static'}, grp);
+                el('circle', {cx:xb0, cy:h, r:2.5, fill:'#000', class:'circ-static'}, grp);
+                ln(xm, 0, xm, 9);
+                if (xa !== xa0) { ln(xa, h - 11, xa, h - 4); ln(xa, h - 4, xa0, h - 4); ln(xa0, h - 4, xa0, h); } else ln(xa, h, xa, h - 11);
+                if (xb !== xb0) { ln(xb, h - 11, xb, h - 4); ln(xb, h - 4, xb0, h - 4); ln(xb0, h - 4, xb0, h); } else ln(xb, h, xb, h - 11);
+                ln(xb, h - 11, xb + sg * 7, h - 11);                       // Anschlag des Öffners
+                ln(xm, 9, xb + sg * 7, h - 10, 2, 'circ-static ced-wblade'); // Messer in Ruhe am Öffner
+                if (labels) {
+                    _drawPinLabel(grp, xm - 4, 8, labels.c, 'end');
+                    _drawPinLabel(grp, xb0 - 4, h - 1, labels.nc, 'end');
+                    _drawPinLabel(grp, xa0 - 4, h - 1, labels.no, 'end');
+                }
+            }
+            // Nach „Aus Code“ (Schalter „Wechsler“ an): Hilfs-Schließer und -Öffner
+            // desselben Relais auf gleicher Höhe, beide nur von der +24-V-Schiene
+            // versorgt und ohne Bauteil dazwischen, werden ein Wechsler-Paar. Der
+            // Code bleibt gleich: beide 11-Anschlüsse hängen weiter an +24 V.
+            function _wechslerZusammenfassen() {
+                const t = CTYPES.relay_no, frei = ST.components.filter(c => (c.type === 'relay_no' || c.type === 'relay_nc') && !c.wPartner && c.varName);
+                const einspeisung = c => {
+                    const ws = ST.wires.filter(w => (w.from.compId === c.id && w.from.pin === 'in') || (w.to.compId === c.id && w.to.pin === 'in'));
+                    if (ws.length !== 1) return null;
+                    const w = ws[0], r = w.from.compId === c.id ? w.to : w.from;
+                    return r.rail === 'plus' ? w : null;
+                };
+                const kand = [];
+                frei.filter(c => c.type === 'relay_no').forEach(no => frei.filter(c => c.type === 'relay_nc').forEach(nc => {
+                    if (no.varName !== nc.varName || no.y !== nc.y) return;
+                    const dx = Math.abs(no.x - nc.x); if (dx < 40 || dx > 150) return;
+                    kand.push({ no, nc, dx });
+                }));
+                kand.sort((a, b) => a.dx - b.dx);
+                const weg = new Set();
+                kand.forEach(({ no, nc }) => {
+                    if (weg.has(no) || weg.has(nc)) return;
+                    const lo = Math.min(no.x, nc.x), hi = Math.max(no.x, nc.x);
+                    if (ST.components.some(c => c !== no && c !== nc && CTYPES[c.type] && c.x > lo - 1 && c.x < hi + 1 && c.y < no.y + t.h && c.y + CTYPES[c.type].h > no.y)) return;
+                    const wNo = einspeisung(no), wNc = einspeisung(nc);
+                    if (!wNo || !wNc) return;
+                    weg.add(no); weg.add(nc);
+                    no.wPartner = nc.id; nc.wPartner = no.id;
+                    const xm = (no.x + nc.x) / 2 + t.cx;
+                    (wNo.from.rail ? wNo.from : wNo.to).x = xm;
+                    ST.wires.splice(ST.wires.indexOf(wNc), 1);
+                    ST.wires.push({ id: nextId('w'), from: { compId: no.id, pin: 'in' }, to: { compId: nc.id, pin: 'in' }, wBruecke: true });
+                });
+                _wechslerAbgleich();
+                return weg.size / 2;
+            }
+            function _wechslerLabels(comp) {
+                const istZeit = comp && comp.varName && ST.components.some(c => c.varName === comp.varName && CTYPES[c.type] && CTYPES[c.type].timer);
+                return istZeit ? { c:'15', nc:'16', no:'18' } : { c:'11', nc:'12', no:'14' };
+            }
+            // Partner gleichziehen (Name, Bezug, gleiche Höhe) und Steg an 11 sicherstellen
+            function _wechslerAbgleich() {
+                ST.components.forEach(c => {
+                    if (!c.wPartner) return;
+                    const p = _wPartner(c);
+                    if (!p) { delete c.wPartner; return; }
+                    if (CTYPES[c.type].nc) return;         // vom Master aus
+                    p.varName = c.varName; p.refNormPrefix = c.refNormPrefix;
+                    if (c.normPrefix && !p.normPrefix) p.normPrefix = c.normPrefix;
+                    p.y = c.y;
+                });
+            }
             function _renderIecSymbol(grp, comp) {
                 const t = CTYPES[comp.type];
                 if (!t) return;
+                if (t.kind === 'pal') { _wechslerSymbol(grp, 75, 25, t.h, { c:'11', nc:'12', no:'14' }); return; }
                 const x = t.cx, y = t.cy; // Symbol-Mittelpunkt im lokalen Koordinatensystem
                 const labelText = comp.varName || '?';
                 if (t.kind === 'block') {
@@ -64542,6 +64799,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!g) return;
                 clear(g);
                 ST.wires.forEach(w => {
+                    if (w.wBruecke) return;     // Steg an 11 eines Wechslers: unsichtbar
                     const pa = _pinPos(w.from), pb = _pinPos(w.to);
                     if (!pa || !pb) return;
                     const d = _wirePath(pa, pb);
@@ -64786,6 +65044,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!c) return null;
                 const t = CTYPES[c.type];
                 if (!t) return null;
+                if (ref.pin === 'in' && c.wPartner) {
+                    const p = _wPartner(c);
+                    if (p) return { x: (c.x + p.x) / 2 + t.cx, y: c.y, dir:'u' };
+                }
                 if (ref.pin === 'in')     return { x: c.x + t.cx, y: c.y,        dir:'u' };
                 if (ref.pin === 'out')    return { x: c.x + t.cx, y: c.y + t.h,  dir:'d' };
                 if (ref.pin === 'signal') return { x: c.x + t.w,  y: c.y + t.cy, dir:'r' };
@@ -65044,6 +65306,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ST.dragPreviewType = null;
                     const type = e.dataTransfer.getData('text/x-ced-type');
                     if (!type || !CTYPES[type]) return;
+                    if (type === 'wechsler') {
+                        const _p = _clientToSvg(e.clientX, e.clientY);
+                        const tN = CTYPES.relay_nc;
+                        const xNc = snap(_p.x) - 25 - tN.cx, yW = _clampCompY(snap(_p.y) - tN.cy, 'relay_nc');
+                        const nc = { id: nextId('c'), type: 'relay_nc', x: xNc, y: yW };
+                        const no = { id: nextId('c'), type: 'relay_no', x: xNc + 50, y: yW };
+                        nc.wPartner = no.id; no.wPartner = nc.id;
+                        ST.components.push(no, nc);
+                        ST.wires.push({ id: nextId('w'), from: { compId: no.id, pin: 'in' }, to: { compId: nc.id, pin: 'in' }, wBruecke: true });
+                        _ensureNormPrefix(no); nc.normPrefix = no.normPrefix;
+                        const refs = ST.components.filter(c => c.id !== no.id && c.id !== nc.id &&
+                            (c.type === 'relais' || (CTYPES[c.type] && (CTYPES[c.type].timer || CTYPES[c.type].counter || CTYPES[c.type].kind === 'sensor'))) && c.normPrefix);
+                        if (refs.length === 1) { no.refNormPrefix = refs[0].normPrefix; no.varName = refs[0].varName || ''; }
+                        _wechslerAbgleich(); _computeNormLabel(no); _computeNormLabel(nc);
+                        cedRender();
+                        _showNamePopup(no);
+                        return;
+                    }
                     const svg = _d().getElementById('ced-svg');
                     const rect = svg.getBoundingClientRect();
                     // Pin-Snap: cursor.x → snap → das wird die Pin-x; comp.x = pinX - cx
@@ -65280,10 +65560,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (pinTarget && ST.tool !== 'delete') {
                     const pin = e.target.getAttribute('data-pin');
                     // Hat dieser Pin schon einen Wire? Dann lösen + freier Drag vom anderen Ende
-                    const existing = ST.wires.find(w =>
+                    const existing = ST.wires.find(w => !w.wBruecke && (
                         (w.from.compId === id && w.from.pin === pin) ||
                         (w.to.compId   === id && w.to.pin   === pin)
-                    );
+                    ));
                     if (existing) {
                         const otherEnd = (existing.from.compId === id && existing.from.pin === pin) ? existing.to : existing.from;
                         ST.wires = ST.wires.filter(w => w.id !== existing.id);
@@ -65309,6 +65589,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
                 const comp = ST.components.find(c => c.id === id);
                 if (!comp) { cedRender(); return; }
+                { const _p = _wPartner(comp); if (_p && isSelected(id)) ST.selectedIds.add(_p.id); }
                 const svg = _d().getElementById('ced-svg');
                 const rect = svg.getBoundingClientRect();
                 // Snapshot der Start-Positionen aller selektierten Komponenten für gemeinsamen Drag
@@ -65657,6 +65938,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             function _deleteComp(id) {
                 const comp = ST.components.find(c => c.id === id);
                 if (_skGesperrt(comp)) return;
+                if (comp && comp.wPartner) {
+                    const p = _wPartner(comp);
+                    ST.wires = ST.wires.filter(w => !(w.wBruecke && (w.from.compId === id || w.to.compId === id)));
+                    if (p) delete p.wPartner;
+                    delete comp.wPartner;
+                }
                 // Baustein einer Schrittkette: ihre gezeichneten Stränge gehen mit
                 if (comp && comp.type === 'baustein' && comp.skName) {
                     const weg = new Set(ST.components.filter(c => c.skKette === comp.skName || c.id === id).map(c => c.id));
@@ -72358,6 +72645,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!cc) return cables;
                 // ─── Wechsler-Counter pro Hilfsrelais ───
                 const relayUsage = {};
+                const wechslerK = new Map();   // Wechsler-Paar → gemeinsamer Kontaktsatz
                 // Bus-Pins NICHT direkt belegen — stattdessen Platzhalter
                 // setzen, die der Renderer zur Zeichenzeit auf den geo-
                 // metrisch nächsten freien Pin auflöst.
@@ -72405,6 +72693,18 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             sock = contact.isNC
                                 ? { inputKey: `${slot}_21`, outputKey: `${slot}_22` }
                                 : { inputKey: `${slot}_13`, outputKey: `${slot}_14` };
+                        } else if (slot.startsWith('R') && contact.elem && contact.elem._wPartnerG && window.configWechslerZusammen) {
+                            // Wechsler (Schalter „Wechsler“): Schließer und Öffner des Paares
+                            // teilen sich EINEN Wechsler am Relais, gespeist über 11.
+                            const paarKey = contact.elem.hasAttribute('data-wechsler') ? contact.elem : contact.elem._wPartnerG;
+                            let k = wechslerK.get(paarKey);
+                            if (!k) {
+                                const cnt = relayUsage[contact.varName] || 0;
+                                relayUsage[contact.varName] = cnt + 1;
+                                k = (cnt % 4) + 1;
+                                wechslerK.set(paarKey, k);
+                            }
+                            sock = { inputKey: `${slot}_${k}1`, outputKey: `${slot}_${k}${contact.isNC ? 2 : 4}` };
                         } else if (slot.startsWith('R')) {
                             const cnt = relayUsage[contact.varName] || 0;
                             relayUsage[contact.varName] = cnt + 1;
@@ -72558,6 +72858,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // würden Stränge übergreifend verbinden.
                 const horizontals = [];
                 cc.querySelectorAll('line.circ-wire').forEach(line => {
+                    // Querleitung eines zusammengefassten Wechslers: zeichnerisch,
+                    // der Strang bleibt elektrisch derselbe wie ohne Wechsler.
+                    if (line.hasAttribute('data-wechsler-quer')) return;
                     const yOff = _ancestorYOffset(line);
                     const x1 = parseFloat(line.getAttribute('x1'));
                     const y1 = parseFloat(line.getAttribute('y1')) + yOff;

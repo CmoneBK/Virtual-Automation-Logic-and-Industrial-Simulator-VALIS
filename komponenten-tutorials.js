@@ -80,7 +80,7 @@
     // ------------------------------------------------------------------
     const PNEU = ['pneumatic_zone', 'compressor', 'manifold', 'valve_pneu', 'throttle', 'pressure_sensor_pneu', 'valve_prop', 'flow_sensor_pneu'];
     const HYD = ['hydraulic_zone', 'hydraulic_unit', 'pump_fluid', 'oil_tank', 'hydraulic_manifold', 'valve_hyd', 'throttle_hyd', 'oil_cooler_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'];
-    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen'];
+    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen', 'wartung'];
     function schliessen() {
         try { window.closeCompTutorial(); } catch (e) {}
         try { if (window.closeHub) window.closeHub(); } catch (e) {}
@@ -120,17 +120,18 @@
         { num: 1, title: 'Überblick', content: kap('💨 Pneumatik-System', 'Vom Kompressor bis zum Zylinder: die Druckluft hinter der Anlage',
             p('Ohne Pneumatik fährt ein Zylinder in VALIS „elektrisch“ mit fester Geschwindigkeit. Mit Pneumatik rechnet VALIS mit echter Druckluft: Druckaufbau, Kolbenflächen, Drosseln, Abluft und Lasten bestimmen, wie schnell und mit welcher Kraft der Zylinder fährt.') +
             h3('Die Kette') +
-            formel('Kompressor → Wartungseinheit → Wegeventil → Drosselrückschlagventil → Zylinder') +
+            formel('Kompressor → Wartungseinheit → Verteilerleiste → Wegeventil → Drosselrückschlagventil → Zylinder') +
             tabelle(['Bauteil', 'Aufgabe', 'Kennzeichen'], [
                 ['⚙️ Kompressor', 'erzeugt Druckluft (Netzdruck, Liefermenge)', 'GQA'],
                 ['🔧 Wartungseinheit', 'filtert und regelt die Luft, Druckanzeige', 'GQ'],
+                ['▬ Verteilerleiste', 'verteilt die aufbereitete Luft auf die Ventile', ''],
                 ['🔀 Wegeventil', 'schaltet die Luft nach dem SPS-Signal oder von Hand', 'QM'],
                 ['🔩 Drosselrückschlagventil', 'begrenzt den Durchfluss in eine Richtung → Geschwindigkeit', 'RN'],
                 ['🦾 Zylinder', 'wandelt Druck in Bewegung und Kraft', 'MM']
             ]) +
             h3('Zwei Wege zum Aufbau') +
             schritte([
-                '<strong>Schnell:</strong> Rechtsklick auf einen Zylinder → <strong>„💨 Pneumatik-Anschluss generieren“</strong>. VALIS legt Kompressor, Wartungseinheit, Ventil und Drosseln an und verschlaucht sie.',
+                '<strong>Schnell:</strong> Rechtsklick auf einen Zylinder → <strong>„💨 Pneumatik-Anschluss generieren“</strong>. VALIS legt Kompressor, Wartungseinheit, Verteilerleiste, Ventil und Drosseln an und verschlaucht sie.',
                 '<strong>Selbst bauen:</strong> Pneumatik-Menü einschalten, Bauteile einsetzen und die Anschlüsse von Hand verbinden, oder den Plan im <strong>Fluidplan</strong> zeichnen.'
             ]) +
             info('🔗 2D-Anlage, Fluidplan und Auto-Schaltplan zeigen <strong>dieselbe</strong> Pneumatik. Was du an einer Stelle änderst (Drossel, Ventiltyp, Schlauch), gilt überall.') +
@@ -149,7 +150,8 @@
         { num: 3, title: 'Die Bauteile', content: kap('Die Bauteile einstellen', 'Alles per Rechtsklick auf das Bauteil',
             teile([
                 ['⚙️', 'Kompressor', 'Netzdruck (bar) und Fördervolumen (l/min). Unter <strong>🫙 Druckluftnetz</strong>: „Druckluftnetz simulieren“ mit Netzvolumen, Schaltdifferenz des Druckschalters, Leckage und <strong>Kompressor aus (Druckabfallprüfung)</strong>.', 'compressor'],
-                ['🔧', 'Wartungseinheit', 'Aufbereitung zwischen Kompressor und Ventilen. Im Plan als ausführliches Symbol oder als Kurzform.', 'manifold'],
+                ['🔧', 'Wartungseinheit', 'Filter mit Wasserabscheider und Druckregler mit Manometer: Eingang 1 vom Kompressor, Ausgang 2 zur Verteilerleiste. <strong>⚙ Druck</strong> per Rechtsklick. Wie die anderen Fluidplan-Teile als Gehäuse, Normsymbol oder echt darstellbar, im Plan auch als Kurzform.', 'wartung'],
+                ['▬', 'Verteilerleiste', 'Sitzt am Ausgang 2 der Wartungseinheit und verteilt die aufbereitete Luft auf die Wegeventile (Anschluss 1).', 'manifold'],
                 ['🔀', 'Wegeventil', '<strong>⚙ Ventiltyp wechseln</strong>: 3/2 monostabil, 5/2 bistabil, 5/3 Sperrmittelstellung. Betätigung (Magnet, Taster, Hebel, Rolle, Steuerdruck) und Abluftanschlüsse ebenfalls per Rechtsklick.', 'valve_pneu'],
                 ['🔩', 'Drosselrückschlagventil', '<strong>⚙️ Öffnungsgrad (%)</strong>: Anteil am Nenndurchfluss der Drossel (200 l/min bei 6 bar). Drosselt in eine Richtung, die andere geht frei über das Rückschlagventil.', 'throttle']
             ]) +
@@ -168,7 +170,8 @@
             ]) +
             schritte([
                 'Kompressor 1 → Wartungseinheit 1',
-                'Wartungseinheit → Wegeventil 1',
+                'Wartungseinheit 2 → Verteilerleiste',
+                'Verteilerleiste → Wegeventil 1',
                 'Wegeventil 2 und 4 → je ein Drosselrückschlagventil',
                 'Drosseln → Zylinderanschlüsse (Kolbenseite und Stangenseite)'
             ]) +

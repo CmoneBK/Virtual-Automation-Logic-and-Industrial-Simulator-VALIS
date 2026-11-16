@@ -26,7 +26,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -40,7 +40,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -52,7 +52,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -65,7 +65,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -76,7 +76,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -89,7 +89,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -106,7 +106,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -121,7 +121,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -139,7 +139,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -158,7 +158,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -175,7 +175,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneumatic_zone'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -190,7 +190,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     F.ausAnlage(); await warte(600);
     const z = F.plan().teile.find(t => t.typ === 'zyl_dw'), v = F.plan().teile.find(t => t.typ === 'ventil');
     const nachAenderung = async () => { const q = F.plan().teile.find(t => t.typ === 'quelle' || t.typ === 'aggregat' || t.typ === 'tank'); if (q) F.aendern(q.id, { p: (q.o.p || 6) + 1 }); await warte(700); };
@@ -203,7 +203,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     const RE = /^(zylinder|valve_hyd|throttle_hyd|check_valve_hyd|valve_pneu|throttle$|pneu_fp)/;
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 700; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');
@@ -245,7 +245,7 @@ const FAELLE = {
     R.push(['Ausgangslage: Quelle, Wartung, Aggregat, Tank', !!(T('quelle') && T('wartung') && T('aggregat') && T('tank')) && hat('compressor') && hat('manifold') && hat('hydraulic_unit') && hat('oil_tank'), typen()]);
     // Plan → 2D
     F._entfernen(T('wartung').id); await warte(700);
-    R.push(['Plan: Wartungseinheit gelöscht → 2D-Verteiler weg', !hat('manifold'), factoryObjects.map(o => o.type).filter(t => /manifold|compressor/.test(t))]);
+    R.push(['Plan: Wartungseinheit gelöscht → 2D-Wartungseinheit und Verteilerleiste weg', !hat('manifold') && !factoryObjects.some(o => o.type === 'pneu_fp' && o.pneu.fp.typ === 'wartung'), factoryObjects.map(o => o.type).filter(t => /manifold|compressor/.test(t))]);
     F._entfernen(T('tank').id); await warte(700);
     R.push(['Plan: Tank gelöscht → 2D-Öltank weg', !hat('oil_tank'), hat('oil_tank')]);
     F._rueckgaengig(); await warte(1000); F._rueckgaengig(); await warte(1200);
@@ -312,7 +312,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan; window._findHydTankForCylinder = () => null;
     const typen = () => F.plan().teile.map(t => t.typ).sort().join(',');
-    const zwei = re => factoryObjects.filter(o => re.test(o.type)).map(o => o.type).sort().join(',');
+    const zwei = re => factoryObjects.filter(o => re.test(o.type) && !(o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.typ === 'wartung')).map(o => o.type).sort().join(',');   // die Wartungseinheit gehört zur Versorgung
     const RE = /^(zylinder|valve_hyd|throttle_hyd|check_valve_hyd|valve_pneu|throttle$|pneu_fp)/;
     const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 700; c.linkedVarExt = 'Y1'; c.linkedVarRet = 'Y2';
     const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('double');

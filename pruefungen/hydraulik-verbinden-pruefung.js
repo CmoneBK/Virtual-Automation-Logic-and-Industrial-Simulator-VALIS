@@ -211,7 +211,7 @@ const FAELLE = {
     const warte = ms => new Promise(r => setTimeout(r, ms));
     const F = Fluidplan;
     window._findHydTankForCylinder = () => null;
-    factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold'].includes(o.type)).forEach(o => deleteObjRecursive(o));
+    factoryObjects.filter(o => o.hasPneumatics || ['valve_pneu', 'throttle', 'compressor', 'manifold', 'pneu_fp'].includes(o.type)).forEach(o => deleteObjRecursive(o));
     F._leeren(); F.verbinden2D(true);
     const sd = window.showValisChoiceDialog;
     let gefragt = 0;
@@ -253,7 +253,7 @@ const FAELLE = {
     R.push(['Hydraulik im Plan: Aggregat, Tank, Zylinder, Ventil, Manometer', T('aggregat').length === 1 && T('tank').length === 1 && p.teile.some(t => t.typ === 'zyl_dw' && t.o.hyd && t.o.anlage === c.id) && p.teile.some(t => t.typ === 'ventil' && t.o.hyd) && T('manometer').some(t => t.o.hyd), p.teile.map(t => t.typ)]);
     const pn = p.teile.filter(t => !t.o.hyd), hy = p.teile.filter(t => t.o.hyd);
     R.push(['Hydraulik steht rechts neben der Pneumatik', Math.min(...hy.map(t => t.x)) > Math.max(...pn.map(t => t.x)), [Math.max(...pn.map(t => t.x)), Math.min(...hy.map(t => t.x))]]);
-    R.push(['2D-Anlage bleibt wie sie war', factoryObjects.map(o => o.type).sort().join(',') === vorher, factoryObjects.map(o => o.type).sort().join(',')]);
+    R.push(['2D-Anlage bleibt wie sie war', factoryObjects.map(o => o.type).sort().join(',') === vorher, [vorher, factoryObjects.map(o => o.type).sort().join(',')]]);
   }
   ,
   'Hydraulikteile in den vier Darstellungen': async (R) => {

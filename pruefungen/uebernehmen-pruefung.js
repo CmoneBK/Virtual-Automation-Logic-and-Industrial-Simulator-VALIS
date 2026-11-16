@@ -155,7 +155,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Zeitrelais TON 2 s', v.zr.slotVars && v.zr.slotVars.S1 === 'VERZ' && v.zr.timerCfg.S1.type === 'ton' && v.zr.timerCfg.S1.time === 2, JSON.stringify(v.zr.timerCfg));
   ok('Induktiver Sensor, Koppelrelais K_S_METALL', v.se.sensorType === 'inductive' && v.se.slotVars.S1 === 'S_METALL' && v.rel.includes('K_S_METALL'), JSON.stringify(v.se) + ' ' + v.rel);
   const g2 = await page.evaluate(() => { const r = window._fbAusSicht.code(); return { r, src: document.getElementById('code').value }; });
-  ok('Code aus Aufbau: CTU, TON und Sensor wie vorher', g2.r.ok && /VOLL := CTU\(ZAEHL, VOLL_R, 3\)/.test(g2.src) && /VOLL_R := RESET/.test(g2.src) && /VERZ := TON\(START, 2\)/.test(g2.src) && /K_S_METALL := S_METALL/.test(g2.src) && /H1 := K_VOLL/.test(g2.src) && !/Selbst-Referenz/.test(g2.src), g2.r.text.replace(/\n/g, ' ') + ' || ' + g2.src.replace(/\n+/g, ' | '));
+  ok('Code aus Aufbau: CTU, TON und Sensor wie vorher, ohne Koppelrelais', g2.r.ok && /VOLL := CTU\(ZAEHL, VOLL_R, 3\)/.test(g2.src) && /VOLL_R := RESET/.test(g2.src) && /VERZ := TON\(START, 2\)/.test(g2.src) && /H3 := S_METALL/.test(g2.src) && /H1 := VOLL/.test(g2.src) && !/\bK_\w+ :=/.test(g2.src) && !/Selbst-Referenz/.test(g2.src), g2.r.text.replace(/\n/g, ' ') + ' || ' + g2.src.replace(/\n+/g, ' | '));
   await sim(true); await w(300);
   for (let i = 0; i < 3; i++) await tippen('ZAEHL');
   z = await page.evaluate(() => ({ h1: !!spsState.H1 }));
@@ -187,10 +187,11 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const g = window._fbAusSicht.code();
     return { r, kabel, rel: fb.boards.filter(x => x.type === 'relais').map(x => Object.values(x.slotVars).join(',')).join(' | '), g, src: document.getElementById('code').value };
   });
-  ok('Fünfter Kontakt von SR_1 auf zweitem Relais (Spule parallel)', (sr.rel.match(/\bSR_1\b/g) || []).length === 2, sr.rel);
+  ok('Fünfter Kontakt von Q1 auf zweitem Relais (Spule parallel)', (sr.rel.match(/\bQ1\b/g) || []).length === 2, sr.rel);
   ok('STOP-Öffner nur einmal gesteckt, nicht kurzgeschlossen', !sr.kabel.some(k => /^(T\d_S\d)_2[12]>\1_2[12]$/.test(k)), sr.kabel.join(' '));
   const srSrc = sr.src.replace(/\n+/g, ' | ');
-  ok('Code aus Aufbau: Selbsthaltung erkannt, ZYL_EIN ohne Dauer-Wahr', sr.g.ok && !/Selbst-Referenz/.test(sr.src) && /ZYL_EIN := (K_S_ZYL_VORN \|\| ¬SR_1|¬SR_1 \|\| K_S_ZYL_VORN)/.test(sr.src) && /S1 := START\b/.test(sr.src) && /R1 := STOP\b/.test(sr.src), srSrc);
+  const soll = ['S1 := START', 'R1 := STOP', 'LED_BETRIEB := Q1', 'BAND := Q1', 'ZYL_AUS := (S_METALL && Q1|Q1 && S_METALL)', 'ZYL_EIN := (S_ZYL_VORN \\|\\| ¬Q1|¬Q1 \\|\\| S_ZYL_VORN)'];
+  ok('Code aus Aufbau gleich dem Ausgangscode (ohne Hilfsrelais, Q1 statt SR_1)', sr.g.ok && soll.every(z => new RegExp('^' + z + '$', 'm').test(sr.src)) && !/\bK_|\bSR_1\b|Selbst-Referenz/.test(sr.src), srSrc);
   await sim(true); await w(300);
   let zs = await page.evaluate(() => ({ band: !!spsState.BAND, ein: !!spsState.ZYL_EIN }));
   ok('Ruhe: BAND aus, ZYL_EIN an', !zs.band && zs.ein, JSON.stringify(zs));

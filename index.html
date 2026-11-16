@@ -41435,7 +41435,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             if (obj.type && (obj.type.startsWith('zylinder') || obj.type === 'gate_pneu')) {
                 let associatedValve = factoryObjects.find(o => (o.type === 'valve_pneu' || o.type === 'valve_hyd') && o.targetCylinderId === obj.id);
-                if (!associatedValve) {
+                // Zylinder an freien Schläuchen (Ventile als Fluidplan-Teile, pneu_fp) ist
+                // pneumatisch, auch ohne valve_pneu: das Menü darf ihn nicht „entpneumatisieren“.
+                const _anFreienSchlaeuchen = obj.hasPneumatics && (window.pneuConnections || []).some(c => !c._broken && (c.aObjId === obj.id || c.bObjId === obj.id));
+                if (!associatedValve && !_anFreienSchlaeuchen) {
                     obj.hasPneumatics = false; obj.hasHydraulics = false;
                     let sepSpd = document.createElement('div'); sepSpd.style.borderTop = '1px solid #555'; sepSpd.style.margin = '5px 0'; ctxMenu.appendChild(sepSpd);
                     let spdWrapper = document.createElement('div'); spdWrapper.style.padding = '5px 15px';

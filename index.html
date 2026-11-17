@@ -39408,6 +39408,274 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ComponentRegistry['rolltor']._apply(obj);
             }
         },
+        // =========================================================
+        // 🚪 DREHFLÜGEL (ein Flügel eines Drehflügeltors, Draufsicht)
+        // Zwei Flügel nebeneinander (Band links / Band rechts) ergeben ein
+        // zweiflügeliges Tor. Gelenkarmantrieb mit AUF/ZU, Endlagen,
+        // Kontaktleiste an der Hauptschließkante (1 = frei). Im Simulations-
+        // modus stellt ein Klick auf den Flügel ein Hindernis (Prüfkörper
+        // des Schließkraft-Messgeräts) in den Schwenkbereich; der Flügel
+        // misst dann die Kraft an der Schließkante (Spitzenkraft, nach
+        // 0,75 s, Restkraft nach 5 s). Der Flügel ohne Schlagleiste bleibt
+        // an der Schlagleiste des anderen hängen, wenn dieser zuerst zu ist.
+        // Protokoll für Aufgaben: obj._dtLog [{e, t}] (Simulationszeit s).
+        // =========================================================
+        'drehfluegel': {
+            directSpawn: false, hasHeight: true, noRodAttach: true,
+            role: 'output', color: '#546e7a',
+            i18n: {
+                de: { name: 'Drehflügel (Tor)', desc: 'Ein Flügel eines Drehflügeltors in der Draufsicht mit Gelenkarmantrieb: Ausgänge AUF und ZU, Endlagen, Kontaktleiste an der Hauptschließkante (1 = frei). Zwei Flügel (Band links und Band rechts) ergeben ein zweiflügeliges Tor. In der Simulation den Flügel anklicken: Prüfkörper in den Schwenkbereich stellen, die Kraft an der Schließkante wird gemessen.' },
+                en: { name: 'Swing Gate Leaf', desc: 'One leaf of a swing gate (top view) with articulated arm drive: OPEN and CLOSE outputs, limit switches, safety edge on the main closing edge (1 = clear). Two leaves (hinge left and hinge right) form a double gate. In simulation click the leaf to place a test body in its path; the closing force is measured.' }
+            },
+            meta: { icon: '🚪' },
+            modalConfig: { t: '🚪 Drehflügel anlegen:', l1: 'Flügel AUF (z.B. MOTOR1_AUF)', l2: 'Flügel ZU (z.B. MOTOR1_ZU)', out: true },
+            menuTarget: '#menu-aktoren',
+            insertBefore: '#menu-act-sep',
+            menuHtml: `<div onclick="addFactoryDevice('drehfluegel')">🚪 <span data-i18n="plug_drehfluegel_name">Drehflügel (Tor)</span></div>`,
+            getVar2ForRestore: function(o) { return o.linkedVarRet; },
+            clickSimulate: function(obj) {
+                const R = ComponentRegistry['drehfluegel'];
+                if (obj._hindernis) { obj._hindernis = false; obj._kontakt = false; obj._kraft = 0; R._log(obj, 'hindernis-weg'); }
+                else if ((obj.torPos || 0) < 20) { R._hinweis(obj, 'Erst öffnen, dann den Prüfkörper in die Durchfahrt stellen'); }
+                else { obj._hindernis = true; obj._fmax = 0; obj._kurve = []; R._log(obj, 'hindernis'); }
+                R._apply(obj);
+            },
+            css: `
+                .f2d-drehfluegel { position:absolute; box-sizing:border-box; background:transparent; overflow:visible; }
+                .f2d-drehfluegel svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+                .f2d-drehfluegel .f2d-dt-info { position:absolute; left:0; right:0; bottom:-16px; font:10px/12px sans-serif; color:#cfd8dc; text-align:center; white-space:nowrap; pointer-events:none; }
+                .f2d-drehfluegel .f2d-dt-info.zu-hoch { color:#ff8a80; font-weight:bold; }
+                .f2d-drehfluegel .f2d-resize-handle-xy { position:absolute; bottom:0; right:0; width:10px; height:10px; cursor:se-resize; background:rgba(255,255,255,0.2); z-index:10; }
+            `,
+            build: function(obj, el, var1, var2) {
+                obj.linkedVarExt = var1 || null;
+                obj.linkedVarRet = var2 || null;
+                obj.linkedVarSensorAuf = null;
+                obj.linkedVarSensorZu = null;
+                obj.linkedVar3 = null;
+                obj.flapAnchor = 'links';
+                obj.hasPart = false;
+                obj.torSpeed = 15;
+                obj.width = 200; obj.height = 170;
+                obj.torPos = 0;
+                obj.useGravity = false;
+                obj.useCollision = false;
+                el.className = 'f2d-obj f2d-drehfluegel';
+                el.style.width = obj.width + 'px'; el.style.height = obj.height + 'px';
+                ComponentRegistry['drehfluegel']._aufbauen(obj, el);
+                let label = document.createElement('div');
+                label.className = 'f2d-label';
+                label.textContent = var1 ? `🚪 ${var1}` : '🚪 Drehflügel';
+                el.appendChild(label);
+                let resizer = document.createElement('div');
+                resizer.className = 'f2d-resize-handle-xy';
+                obj.resizerEl = resizer;
+                el.appendChild(resizer);
+                let rotator = document.createElement('div'); rotator.className = 'f2d-rotate-handle'; el.appendChild(rotator);
+            },
+            _ns: 'http://www.w3.org/2000/svg',
+            _el: function(tag, attrs, parent) {
+                const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+                for (const k in attrs) e.setAttribute(k, attrs[k]);
+                if (parent) parent.appendChild(e);
+                return e;
+            },
+            _aufbauen: function(obj, el) {
+                const R = ComponentRegistry['drehfluegel'], E = R._el;
+                let alt = el.querySelector('svg'); if (alt) alt.remove();
+                let info = el.querySelector('.f2d-dt-info'); if (info) info.remove();
+                const svg = E('svg', { viewBox: `0 0 ${obj.width} ${obj.height}`, preserveAspectRatio: 'none' });
+                el.insertBefore(svg, el.firstChild);
+                const g = R._geo(obj);
+                // Schwenkbereich (gestrichelter Viertelkreis)
+                const a0x = g.hx + g.s * g.L, a0y = g.hy, a1x = g.hx, a1y = g.hy + g.L;
+                E('path', { d: `M ${g.hx} ${g.hy} L ${a0x} ${a0y} A ${g.L} ${g.L} 0 0 ${g.s > 0 ? 1 : 0} ${a1x} ${a1y} Z`, fill: 'rgba(144,164,174,0.08)', stroke: '#78909c', 'stroke-dasharray': '4 4', 'stroke-width': 1 }, svg);
+                // Torlinie / Straßengrenze
+                E('line', { x1: 0, y1: g.hy, x2: obj.width, y2: g.hy, stroke: '#90a4ae', 'stroke-width': 1, 'stroke-dasharray': '2 3' }, svg);
+                // Pfosten QR 120 und Antrieb am Pfosten
+                E('rect', { x: g.hx - 9, y: g.hy - 9, width: 18, height: 18, fill: '#455a64', stroke: '#cfd8dc', 'stroke-width': 1 }, svg);
+                E('rect', { x: g.mx - 7, y: g.my - 5, width: 14, height: 10, rx: 2, fill: '#607d8b', stroke: '#cfd8dc', 'stroke-width': 0.8 }, svg);
+                obj._svgArm = E('polyline', { points: '', fill: 'none', stroke: '#b0bec5', 'stroke-width': 3, 'stroke-linejoin': 'round' }, svg);
+                // Hindernis (Prüfkörper / Person)
+                obj._svgHind = E('g', { visibility: 'hidden' }, svg);
+                E('circle', { cx: 0, cy: 0, r: 9, fill: '#ffb300', stroke: '#5d4037', 'stroke-width': 1.5 }, obj._svgHind);
+                E('rect', { x: -4, y: -4, width: 8, height: 8, fill: '#5d4037' }, obj._svgHind);
+                // Flügel: Rahmen, Füllstäbe, Kontaktleiste, ggf. Schlagleiste
+                obj._svgFl = E('g', {}, svg);
+                E('rect', { x: 0, y: -4, width: g.L, height: 8, fill: '#90a4ae', stroke: '#eceff1', 'stroke-width': 1 }, obj._svgFl);
+                for (let i = 1; i < 8; i++) E('line', { x1: g.L * i / 8, y1: -3, x2: g.L * i / 8, y2: 3, stroke: '#546e7a', 'stroke-width': 1 }, obj._svgFl);
+                obj._svgKL = E('rect', { x: g.L - 3, y: -5, width: 6, height: 10, rx: 2, fill: '#212121' }, obj._svgFl);
+                if (obj.hasPart) E('rect', { x: g.L - 2, y: -8, width: 10, height: 4, fill: '#cfd8dc', stroke: '#455a64', 'stroke-width': 0.6 }, obj._svgFl);
+                // Bandseite wird in der Gruppe gespiegelt
+                obj._svgFl.dataset.s = g.s;
+                info = document.createElement('div'); info.className = 'f2d-dt-info'; el.appendChild(info);
+                obj._infoEl = info;
+                R._apply(obj);
+            },
+            _geo: function(obj) {
+                const W = obj.width || 200, H = obj.height || 170, pad = 12;
+                const s = obj.flapAnchor === 'rechts' ? -1 : 1;
+                const hx = s > 0 ? pad : W - pad, hy = pad;
+                const L = Math.max(30, Math.min(W - 2 * pad, H - 2 * pad));
+                const mx = hx + s * 4, my = hy + 26;
+                return { W, H, pad, s, hx, hy, L, mx, my };
+            },
+            _winkel: function(obj) { return Math.max(0, Math.min(100, obj.torPos || 0)) * 0.9; },
+            _apply: function(obj) {
+                const R = ComponentRegistry['drehfluegel'];
+                if (!obj._svgFl) return;
+                const g = R._geo(obj), a = R._winkel(obj), rad = a * Math.PI / 180;
+                obj._svgFl.setAttribute('transform', `translate(${g.hx} ${g.hy}) scale(${g.s} 1) rotate(${a})`);
+                // Gelenkarm: Antrieb am Pfosten -> Ellbogen -> Flügel bei 0,4 L
+                const qx = g.hx + g.s * Math.cos(rad) * g.L * 0.4, qy = g.hy + Math.sin(rad) * g.L * 0.4;
+                const l1 = g.L * 0.28, l2 = g.L * 0.28, dx = qx - g.mx, dy = qy - g.my, d = Math.hypot(dx, dy);
+                let pts;
+                if (d < l1 + l2 && d > 1e-3) {
+                    const aa = (l1 * l1 - l2 * l2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, l1 * l1 - aa * aa));
+                    const px = g.mx + aa * dx / d, py = g.my + aa * dy / d;
+                    const ex = px + g.s * hh * dy / d, ey = py - g.s * hh * dx / d;
+                    pts = `${g.mx},${g.my} ${ex},${ey} ${qx},${qy}`;
+                } else pts = `${g.mx},${g.my} ${qx},${qy}`;
+                obj._svgArm.setAttribute('points', pts);
+                // Hindernis in der Durchfahrt, kurz vor der Torlinie
+                const ah = R.HIND_WINKEL * Math.PI / 180, rh = g.L * 0.78;
+                obj._svgHind.setAttribute('transform', `translate(${g.hx + g.s * Math.cos(ah) * rh} ${g.hy + Math.sin(ah) * rh + 4})`);
+                obj._svgHind.setAttribute('visibility', obj._hindernis ? 'visible' : 'hidden');
+                if (obj._svgKL) obj._svgKL.setAttribute('fill', obj._kontakt ? '#ff1744' : '#212121');
+                if (obj._infoEl) {
+                    let t = '';
+                    if (obj._hinweisBis && Date.now() < obj._hinweisBis) t = obj._hinweisText;
+                    else if (obj._schlagleiste) t = '⚠ steht an der Schlagleiste an';
+                    else if (obj._hindernis) t = `F max ${Math.round(obj._fmax || 0)} N · ${Math.round(obj._kraft || 0)} N`;
+                    else if (a >= 89.5) t = 'Endlage AUF';
+                    else if (a <= 0.5) t = 'Endlage ZU';
+                    obj._infoEl.textContent = t;
+                    obj._infoEl.classList.toggle('zu-hoch', !!(obj._hindernis && (obj._fmax || 0) > 400));
+                }
+            },
+            HIND_WINKEL: 9,       // Prüfkörper liegt so weit vor der Torlinie
+            KONTAKT_WINKEL: 15,   // hier berührt die Kontaktleiste den Prüfkörper
+            SCHLAG_WINKEL: 5,     // hier steht der Flügel an der Schlagleiste des anderen an
+            _zeit: function() {
+                try { if (typeof analyzerSimTimeMs !== 'undefined') return analyzerSimTimeMs / 1000; } catch (e) {}
+                return performance.now() / 1000;
+            },
+            _log: function(obj, e) {
+                const L = obj._dtLog || (obj._dtLog = []);
+                // Zustand der Ein- und Ausgänge in diesem Augenblick (nur Wahrheitswerte)
+                const s = {};
+                try { const st = (typeof spsState !== 'undefined') ? spsState : {}; for (const k in st) if (typeof st[k] === 'boolean') s[k] = st[k]; } catch (x) {}
+                L.push({ e: e, t: ComponentRegistry['drehfluegel']._zeit(), s: s });
+                if (L.length > 400) L.shift();
+            },
+            _hinweis: function(obj, text) { obj._hinweisText = text; obj._hinweisBis = Date.now() + 2500; },
+            _partner: function(obj) {
+                let best = null, bd = Infinity;
+                factoryObjects.forEach(o => {
+                    if (o === obj || o.type !== 'drehfluegel') return;
+                    const d = Math.hypot((o.x + o.width / 2) - (obj.x + obj.width / 2), (o.y + o.height / 2) - (obj.y + obj.height / 2));
+                    if (d < bd) { bd = d; best = o; }
+                });
+                return best;
+            },
+            animate: function(obj, spsState) {
+                const R = ComponentRegistry['drehfluegel'];
+                const auf = obj.linkedVarExt ? !!spsState[obj.linkedVarExt] : false;
+                const zu = obj.linkedVarRet ? !!spsState[obj.linkedVarRet] : false;
+                const dt = window.simSpeed * timeScale / 60;
+                const v = (obj.torSpeed != null ? obj.torSpeed : 15) / 0.9;   // °/s -> %/s
+                const prev = obj.torPos || 0;
+                let pos = prev;
+                // Fahrbefehl merken (für Aufgaben: Reihenfolge, Flügelversatz)
+                const bef = auf && !zu ? 'auf' : (zu && !auf ? 'zu' : (auf && zu ? 'beide' : ''));
+                if (bef !== (obj._bef || '')) { obj._bef = bef; R._log(obj, bef ? 'start-' + bef : 'halt'); }
+                if (auf && !zu) pos = Math.min(100, prev + v * dt);
+                else if (zu && !auf) pos = Math.max(0, prev - v * dt);
+                // Schlagleiste: Flügel ohne Leiste kommt nicht zu, wenn der andere schon zu ist
+                let anSchlag = false;
+                if (!obj.hasPart && pos < R.SCHLAG_WINKEL / 0.9 && prev >= R.SCHLAG_WINKEL / 0.9 - 1e-6) {   // nur wer von oben kommt, stößt an
+                    const p = R._partner(obj);
+                    if (p && p.hasPart && (p.torPos || 0) < R.SCHLAG_WINKEL / 0.9 && pos < prev + 1e-9) { pos = Math.max(pos, R.SCHLAG_WINKEL / 0.9); anSchlag = zu && !auf; }
+                }
+                if (anSchlag !== !!obj._schlagleiste) { obj._schlagleiste = anSchlag; if (anSchlag) R._log(obj, 'schlagleiste'); }
+                // Prüfkörper in der Durchfahrt: Kontakt, Kraft an der Schließkante
+                let kontakt = false;
+                const kPos = R.KONTAKT_WINKEL / 0.9;
+                if (obj._hindernis && pos <= kPos && prev >= kPos - 0.01) { pos = Math.max(pos, kPos); kontakt = (pos <= kPos + 0.01); }
+                else if (obj._hindernis && prev < kPos) { obj._hindernis = false; }
+                if (kontakt !== !!obj._kontakt) {
+                    obj._kontakt = kontakt;
+                    R._log(obj, kontakt ? 'kontakt' : 'frei');
+                    if (kontakt) { obj._kontaktT = R._zeit(); obj._fmax = 0; obj._kurve = []; obj._f075 = null; obj._f5 = null; }
+                }
+                let F = obj._kraft || 0;
+                if (kontakt && zu && !auf) F = Math.min(1200, F + 2400 * dt);           // Antrieb drückt weiter
+                else if (kontakt) F = Math.max(0, F - 1600 * dt);                       // Antrieb aus: Kraft baut ab
+                else F = 0;
+                obj._kraft = F;
+                if (kontakt) {
+                    const t = R._zeit() - (obj._kontaktT || 0);
+                    obj._fmax = Math.max(obj._fmax || 0, F);
+                    if (t >= 0.75 && obj._f075 == null) obj._f075 = F;
+                    if (t >= 5 && obj._f5 == null) { obj._f5 = F; R._log(obj, 'f5'); }
+                    const K = obj._kurve || (obj._kurve = []);
+                    if (!K.length || t - K[K.length - 1][0] >= 0.05) { K.push([+t.toFixed(2), Math.round(F)]); if (K.length > 200) K.shift(); }
+                }
+                // Endlagen
+                if (prev < 99.5 && pos >= 99.5) R._log(obj, 'ende-auf');
+                if (prev > 0.5 && pos <= 0.5) R._log(obj, 'ende-zu');
+                obj.torPos = pos;
+                R._apply(obj);
+                if (obj.linkedVarSensorAuf) spsState[obj.linkedVarSensorAuf] = pos >= 99.5;
+                if (obj.linkedVarSensorZu) spsState[obj.linkedVarSensorZu] = pos <= 0.5;
+                if (obj.linkedVar3) spsState[obj.linkedVar3] = !kontakt;              // Kontaktleiste: 1 = frei
+            },
+            // Für Aufgaben: Messwerte der letzten Berührung
+            messung: function(obj) {
+                return { fmax: Math.round(obj._fmax || 0), f075: obj._f075 == null ? null : Math.round(obj._f075), f5: obj._f5 == null ? null : Math.round(obj._f5), kurve: (obj._kurve || []).slice() };
+            },
+            contextMenuVarSection: function(obj, ctxMenu, helpers) {
+                helpers.addVarSelect('🔓 Flügel AUF (Ausgang)', obj.linkedVarExt, 'out', 'linkedVarExt');
+                helpers.addVarSelect('🔒 Flügel ZU (Ausgang)', obj.linkedVarRet, 'out', 'linkedVarRet');
+                helpers.addVarSelect('🟢 Endlage AUF (Eingang)', obj.linkedVarSensorAuf, 'in', 'linkedVarSensorAuf');
+                helpers.addVarSelect('🔴 Endlage ZU (Eingang)', obj.linkedVarSensorZu, 'in', 'linkedVarSensorZu');
+                helpers.addVarSelect('⬛ Kontaktleiste (Eingang, 1 = frei)', obj.linkedVar3, 'in', 'linkedVar3');
+            },
+            contextMenu: function(obj, ctxMenu, saveCallback) {
+                const R = ComponentRegistry['drehfluegel'];
+                const sep = document.createElement('div'); sep.style.cssText = 'border-top:1px solid #555;margin:5px 0;'; ctxMenu.appendChild(sep);
+                const feld = (titel) => { const w = document.createElement('div'); w.style.padding = '5px 15px'; w.onclick = e => e.stopPropagation(); w.innerHTML = `<div style="color:#aaa;font-size:10px;margin-bottom:3px;">${titel}</div>`; ctxMenu.appendChild(w); return w; };
+                const stil = 'width:100%;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;box-sizing:border-box;';
+                const wB = feld('⚓ Band (Drehpunkt)');
+                const sB = document.createElement('select'); sB.style.cssText = stil;
+                [['links', 'Band links (Flügel schwenkt nach rechts unten)'], ['rechts', 'Band rechts (Flügel schwenkt nach links unten)']].forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if ((obj.flapAnchor || 'links') === v) o.selected = true; sB.appendChild(o); });
+                sB.onchange = e => { obj.flapAnchor = e.target.value; R._aufbauen(obj, obj.el); saveCallback(); };
+                wB.appendChild(sB);
+                const wS = feld('⚡ Geschwindigkeit (°/s, 90° = ganz auf)');
+                const iS = document.createElement('input'); iS.type = 'number'; iS.min = '3'; iS.max = '90'; iS.step = '1'; iS.value = obj.torSpeed != null ? obj.torSpeed : 15; iS.style.cssText = stil;
+                iS.onchange = e => { obj.torSpeed = Math.max(3, Math.min(90, parseFloat(e.target.value) || 15)); saveCallback(); };
+                wS.appendChild(iS);
+                const wL = document.createElement('div'); wL.style.padding = '4px 15px 6px'; wL.onclick = e => e.stopPropagation();
+                const lb = document.createElement('label'); lb.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;color:#ccc;user-select:none;';
+                const ch = document.createElement('input'); ch.type = 'checkbox'; ch.checked = !!obj.hasPart;
+                ch.onchange = () => { obj.hasPart = ch.checked; R._aufbauen(obj, obj.el); saveCallback(); };
+                lb.appendChild(ch); lb.appendChild(document.createTextNode('Schlagleiste an diesem Flügel (schließt zuletzt)'));
+                wL.appendChild(lb); ctxMenu.appendChild(wL);
+            },
+            onLoadState: function(obj, o) {
+                obj.flapAnchor = o.flapAnchor === 'rechts' ? 'rechts' : 'links';
+                obj.hasPart = !!o.hasPart;
+                obj.torSpeed = o.torSpeed != null ? o.torSpeed : 15;
+                obj.linkedVarSensorAuf = o.linkedVarSensorAuf || null;
+                obj.linkedVarSensorZu = o.linkedVarSensorZu || null;
+                obj.linkedVar3 = o.linkedVar3 || null;
+                obj.torPos = 0; obj._hindernis = false; obj._kontakt = false; obj._kraft = 0; obj._dtLog = [];
+                if (obj.el) ComponentRegistry['drehfluegel']._aufbauen(obj, obj.el);
+            },
+            onResize: function(obj) {
+                if (obj.el) ComponentRegistry['drehfluegel']._aufbauen(obj, obj.el);
+            }
+        },
         // ====================================================
         'gate_pneu': {
             directSpawn: false, hasHeight: true, noRodAttach: true,

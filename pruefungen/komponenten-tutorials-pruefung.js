@@ -29,7 +29,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   page.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
   page.on('dialog', d => d.accept());
-  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisEpneuMode', '1'); } catch (e) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); localStorage.setItem('valisEpneuMode', '1'); } catch (e) {} });
   await page.goto(url); await page.waitForTimeout(3500);
   const w = ms => page.waitForTimeout(ms);
   await page.evaluate(() => { try { closeHub(); } catch (e) {} });
@@ -176,7 +176,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     if (gegriffen && s.ROBO_FERTIG && s.LED_ABGELEGT) fertig = true;
     if (gegriffen && !a.grab) abgelegt = true;
   }
-  ok('Beispiel Roboterarm lädt in der Draufsicht und wartet in Grundstellung', r0.ansicht === 'top' && r0.status.includes('Warte'), JSON.stringify(r0));
+  ok('Beispiel Roboterarm lädt in der Draufsicht und wartet in Grundstellung', r0.ansicht === 'top' && /Warte|Waiting/.test(r0.status), JSON.stringify(r0));
   ok('Handshake: Roboter greift nach FREIGABE, legt ab und meldet ROBO_FERTIG', gegriffen && abgelegt && fertig, JSON.stringify({ gegriffen, abgelegt, fertig }));
   // Zykluszähler im Einpfad-Modus, Wegpunkt-Aktion schreibt in einen SPS-Eingang
   await page.evaluate(() => { const r = factoryObjects.find(o => o.type === 'robot_arm_2d'); r.cycleCountVar = 'ZYKLEN'; r._cycleCount = 0; r.pathSpeed = 8; });

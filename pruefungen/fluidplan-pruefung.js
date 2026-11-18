@@ -1158,7 +1158,7 @@ const NACH = {
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   const fehler = [];
   page.on('pageerror', e => fehler.push(String(e)));
-  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisFluidplan', '1'); localStorage.removeItem('logikFactoryState'); } catch (e) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); localStorage.setItem('valisFluidplan', '1'); localStorage.removeItem('logikFactoryState'); } catch (e) {} });
   await page.goto(`http://localhost:${srv.address().port}/index.html`);
   await page.waitForFunction(() => window.Fluidplan, null, { timeout: 30000 });
   await page.waitForTimeout(800);

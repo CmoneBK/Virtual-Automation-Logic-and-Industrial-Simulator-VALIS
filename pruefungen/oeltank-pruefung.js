@@ -25,7 +25,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const fehler = [];
   page.on('pageerror', e => fehler.push(String(e).slice(0, 200)));
   page.on('dialog', d => d.accept());
-  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); } catch (e) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
   await page.goto(`http://localhost:${srv.address().port}/index.html`); await page.waitForTimeout(3000);
   const r = await page.evaluate(async () => {
     const warte = ms => new Promise(r => setTimeout(r, ms));

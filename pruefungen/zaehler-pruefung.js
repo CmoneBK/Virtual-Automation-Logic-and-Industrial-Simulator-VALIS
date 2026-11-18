@@ -30,7 +30,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   page.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
   page.on('dialog', d => d.accept());
-  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); } catch (e) {} });
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
   await page.goto(url); await page.waitForTimeout(3500);
   const w = ms => page.waitForTimeout(ms);
   await page.evaluate(async () => { try { closeHub(); } catch (e) {} if (!window.epneuMode) toggleEpneuMode(); });
@@ -122,7 +122,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const p2 = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   p2.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
   await p2.addInitScript(() => { try {
-    localStorage.setItem('valisTourSeen', '1');
+    localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de');
     if (!sessionStorage.getItem('altGesetzt')) {
       sessionStorage.setItem('altGesetzt', '1');
       localStorage.setItem('valisFestoFreeBuildData2', JSON.stringify({ idc: 3, tc: {}, boards: [

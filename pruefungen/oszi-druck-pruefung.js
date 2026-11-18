@@ -53,7 +53,7 @@ const LAUF = async (hyd) => {
     const fehler = [];
     page.on('pageerror', e => fehler.push(String(e).slice(0, 200)));
     page.on('dialog', d => d.accept());
-    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); } catch (e) {} });
+    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
     await page.goto(`http://localhost:${srv.address().port}/index.html`); await page.waitForTimeout(3000);
     if (process.env.OSZ_BILD) await page.evaluate(() => { window._oszBild = true; });
     const r = await page.evaluate(`(${LAUF.toString()})(${hyd})`);

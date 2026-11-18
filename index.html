@@ -35,6 +35,8 @@
     <script src="vendor/svg-pan-zoom.min.js"></script>
     <script src="vendor/qrcode.min.js"></script>
     <script src="vendor/lz-string.min.js"></script>
+    <script src="sprache/sprache-en.js?v=20261118a"></script>
+    <script src="sprache/erklaer-en.js?v=20261118a"></script>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -7264,6 +7266,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             window.currentLang = lang;
             localStorage.setItem('valisLang', lang);
             window.applyLanguage();
+            if (window.VALIS_EN) window.VALIS_EN.sprache(lang);
             const simBtn = document.getElementById('btn-toggle-sim');
             if (simBtn && typeof isSimulationActive !== 'undefined') {
                 simBtn.textContent = isSimulationActive ? window.t('btn_sim_stop') : window.t('btn_sim_start');
@@ -17372,6 +17375,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     let exData = EXAMPLES[type];
                     // FIX: Unterscheidung zwischen alten Strings (reiner Code) und neuen Objekten (volle Anlage)
                     let newCode = typeof exData === 'string' ? exData : exData.code;
+                    if (window.VALIS_EN) newCode = window.VALIS_EN.code(newCode);
                     let newTypes = typeof exData === 'string' ? EXAMPLES.types : exData.types;
                     let newFactory = typeof exData === 'string' ? EXAMPLES.factory : exData.factory;
                     let newKeys = typeof exData === 'string' ? {} : (exData.keyBindings || {}); // 🌟 NEU: KeyBindings auslesen
@@ -19639,7 +19643,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ci.innerHTML = '';
                 return;
             }
-            const sentence = window._explainLine(line, { text: text, lineIdx: lineIdx });
+            let sentence = window._explainLine(line, { text: text, lineIdx: lineIdx });
+            if (sentence && window.VALIS_EN && window.VALIS_EN.satz) sentence = window.VALIS_EN.satz(sentence);
             // Konstrukte für Chip-Reihe
             const codePart = line.indexOf('//') >= 0 ? line.substring(0, line.indexOf('//')) : line;
             const seen = new Set();
@@ -21875,7 +21880,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ? window._fctFindMismatchedAssignmentsForVar(name) : [];
                 const _mmInLabels = _mmIn.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
                 const _mmInTitle = _mmIn.length > 0
-                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmInLabels.join('&#10;• ')}`
+                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen“ gewählt):&#10;• ${_mmInLabels.join('&#10;• ')}`
                     : '';
                 const _mmInHTML = `<span class="sim-var-mismatch" data-var="${name}" style="${_mmIn.length > 0 ? '' : 'display:none;'}" title="${_mmInTitle}">⚠️</span>`;
                 // .sim-var-name: clickable Variablen-Span (Click=Code-Sprung, Dblclick=Rename).
@@ -21934,7 +21939,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     ? window._fctFindMismatchedAssignmentsForVar(name) : [];
                 const _mmOutLabels = _mmOut.map(m => (typeof _getObjectTypeLabel === 'function' ? _getObjectTypeLabel(m.obj.type) : m.obj.type));
                 const _mmOutTitle = _mmOut.length > 0
-                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen" gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
+                    ? `Diese Variable wurde mindestens einem Bauteil zugewiesen, dessen Typ nicht zum Komponenten-Typ passt (aus „Andere Variablen“ gewählt):&#10;• ${_mmOutLabels.join('&#10;• ')}`
                     : '';
                 // Reglerbaustein auf dieser Variablen: Knopf öffnet das Reglerfenster
                 const _rgGraph = graph || currentGraph;
@@ -51861,7 +51866,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             _fbsDoc().getElementById('custom-svg').style.cursor = 'grab'; // Fadenkreuz entfernen
         };
         // Das "Abbrechen" Button im Modal kugelsicher patchen (Sucht einfach nach dem Wort "Abbrechen")
-        let cancelBtn = Array.from(_fbsDoc().querySelectorAll('#fbs-add-modal button')).find(b => b.textContent.includes('Abbrechen'));
+        let cancelBtn = Array.from(_fbsDoc().querySelectorAll('#fbs-add-modal button')).find(b => /Abbrechen|Cancel/.test(b.textContent));
         if(cancelBtn) cancelBtn.onclick = closeFbsModal;
         const originalConfirmFbsAdd = window.confirmFbsAdd;
         window.confirmFbsAdd = function() {
@@ -57960,6 +57965,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             window._valisSetPanels = _setLessonPanels;
             const _setEditorCode = (code) => {
+                if (window.VALIS_EN) code = window.VALIS_EN.code(code);
                 // Delegieren an den globalen Undo-fähigen Helper. Dispatcht
                 // bereits das input-Event; updateEditor anschließend zur
                 // sicheren Panels-Synchronisation.
@@ -60155,11 +60161,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!e) return '';
                 return '<div class="lex-card">'
                     + '<div class="lex-card-head"><span class="lex-term">' + _esc(e.t) + '</span>'
-                    + (e.a && e.a.length ? '<span class="lex-alias">' + e.a.map(_esc).join(' · ') + '</span>' : '')
+                    + (e.a && e.a.length ? '<span class="lex-alias">' + _lexAlias(e).map(_esc).join(' · ') + '</span>' : '')
                     + '<span class="lex-cat">' + _esc(e.c) + '</span></div>'
                     + '<div class="lex-def">' + e.d + '</div></div>';
             };
-            function _match(e, q) { return !q || (e.t + ' ' + (e.a || []).join(' ') + ' ' + e.d).toLowerCase().indexOf(q) !== -1; }
+            // Im englischen Modus Synonyme einzeln übersetzen (doppelte fallen weg)
+            function _lexAlias(e) {
+                const EN = window.VALIS_EN;
+                if (!EN || !EN.an()) return e.a || [];
+                const t = EN.t(e.t), aus = [];
+                (e.a || []).forEach(function (a) { const x = EN.t(a); if (x !== t && aus.indexOf(x) < 0) aus.push(x); });
+                return aus;
+            }
+            function _match(e, q) {
+                if (!q) return true;
+                let s = e.t + ' ' + (e.a || []).join(' ') + ' ' + e.d;
+                const EN = window.VALIS_EN;
+                if (EN && EN.an()) s += ' ' + EN.t(e.t) + ' ' + _lexAlias(e).join(' ') + ' ' + EN.t(e.d);
+                return s.toLowerCase().indexOf(q) !== -1;
+            }
             window._lexRender = function () {
                 const host = document.getElementById('lex-list'); if (!host) return;
                 const q = ((document.getElementById('lex-search') || {}).value || '').trim().toLowerCase();
@@ -60709,7 +60729,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     + 'Gelöst wird die Klemmung, [L:sobald|COND] der Lösetaster gedrückt wird, [L:jedoch nicht bei Not-Halt|ANDNOT]. '
                     + 'Damit ein Teil nicht ewig eingespannt bleibt, öffnet die Klemmung [L:außerdem|OR] [L:spätestens nach 5 Sekunden|TON] von selbst. '
                     + 'Wird der Not-Halt betätigt, ist [L:sofort alles aus|ANDNOT] — die Station läuft danach [N:nicht] von selbst wieder an.';
-                SZENARIEN.push({
+                SZENARIEN.push(_szSegEN({
                     id: 'maxi-klemmstation', title: 'Klemmstation am Prüfplatz', category: 'Spann- & Prüftechnik', level: 5, size: 'maxi', tier: 'fortgeschritten',
                     intro: 'Vollwertiges Szenario in Alltagssprache: Selbsthaltung, Not-Halt-Verriegelung und ein Zeitglied. Nicht jede Formulierung ist Logik!',
                     seg: _szParseMarkup(mk),
@@ -60744,7 +60764,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         { icon: '∑', t: 'Rücksetzen sammelt mehrere Sätze', d: 'Der Speicher wird aus <b>drei verschiedenen Sätzen</b> zurückgesetzt: Lösetaster, Not-Halt und Zeitablauf. Zwischen ihnen steht im Text kein „oder" — trotzdem gehört alles in <b>eine</b> Rücksetz-Bedingung: <code>R1 := RT || NH || KLEMM_ZEIT</code>.' },
                         { icon: '🛑', t: 'Not-Halt wirkt überall', d: '„Bei Not-Halt sofort alles aus" steht nur in <b>einem</b> Satz, betrifft aber <b>jeden</b> Ausgang. Deshalb bekommt auch <code>PZ_KLEMMEN</code> ein <code>&amp;&amp; ¬NH</code>, obwohl das dort nicht noch einmal erwähnt wird.' }
                     ]
-                });
+                }, mk));
             })();
             // ── 10 weitere Mini-Szenarien (Basics: nur UND/ODER/NICHT) ──────────
             // Kompakt als Markup autoriert und via _szParseMarkup zu seg geparst.
@@ -60752,13 +60772,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Minis 3× je Level). Operator-Indikatoren bewusst nicht wiederverwendet.
             (function () {
                 const _mk = function (id, title, cat, level, intro, text, vars, sol, hints, implicit) {
-                    return {
+                    return _szSegEN({
                         id: id, title: title, category: cat, level: level, tier: 'basics', size: 'mini',
                         intro: intro, seg: _szParseMarkup(text),
                         vars: vars.map(function (v) { const p = v.split('|'); return { name: p[0], kind: p[1], desc: p[2] || '' }; }),
                         solution: sol.map(function (s) { const m = s.match(/^([A-Za-z_ÄÖÜäöüß][\w]*)\s*:?=\s*(.+)$/); return { lhs: m[1], rhs: m[2].trim() }; }),
                         logic: sol.join('\n'), hints: hints || [], implicit: implicit || []
-                    };
+                    }, text);
                 };
                 [
                     _mk('mini-kuehlung', 'Kühlung', 'Heizung & Klima', 1,
@@ -60830,13 +60850,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // ── 10 „Fortgeschritten"-Mini-Szenarien (SR/RS in jedem, plus TON/TOF/TP/CTU) ──
             (function () {
                 const _mkF = function (id, title, cat, level, intro, text, vars, sol, hints, implicit) {
-                    return {
+                    return _szSegEN({
                         id: id, title: title, category: cat, level: level, tier: 'fortgeschritten', size: 'mini',
                         intro: intro, seg: _szParseMarkup(text),
                         vars: vars.map(function (v) { const p = v.split('|'); return { name: p[0], kind: p[1], desc: p[2] || '' }; }),
                         solution: sol.map(function (s) { const m = s.match(/^([A-Za-z_ÄÖÜäöüß][\w]*)\s*:?=\s*(.+)$/); return { lhs: m[1], rhs: m[2].trim() }; }),
                         logic: sol.join('\n'), hints: hints || [], implicit: implicit || []
-                    };
+                    }, text);
                 };
                 [
                     _mkF('fort-bandmotor', 'Bandmotor', 'Antrieb & Freigabe', 1,
@@ -61714,6 +61734,19 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     .replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE').replace(/ß/g, 'ss')
                     .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'VAR';
             }
+            // Englisch: seg aus dem übersetzten Markup (sprache/sprache-en.js), sonst deutsch
+            function _szSegEN(o, mk) {
+                const de = o.seg; let enMk = null, enSeg = null;
+                Object.defineProperty(o, 'seg', { configurable: true, enumerable: true, get: function () {
+                    const EN = window.VALIS_EN;
+                    if (!EN || !EN.an()) return de;
+                    const t = EN.mehrzeilig(mk);
+                    if (!t || t === mk) return de;
+                    if (t !== enMk) { enMk = t; enSeg = _szParseMarkup(t); }
+                    return enSeg;
+                } });
+                return o;
+            }
             // Markup → seg[]  ([E:disp|var] [A:disp|var] [L:disp|op] [N:disp])
             function _szParseMarkup(text) {
                 const seg = [];
@@ -62459,7 +62492,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const n = (p.scenarioIds || []).length;
                     const card = document.createElement('div'); card.className = 'task-mgr-pack-card';
                     card.innerHTML = '<div class="task-mgr-card-name">📦 ' + _szEsc(p.name || 'Paket') + '</div>'
-                        + '<div class="task-mgr-card-meta">' + n + ' Szenario' + (n !== 1 ? 'e' : '') + '</div>'
+                        + '<div class="task-mgr-card-meta">' + n + (n !== 1 ? ' Szenarien' : ' Szenario') + '</div>'
                         + '<div><button class="task-mgr-btn primary" data-pa="export">📤 Export</button>'
                         + '<button class="task-mgr-btn" data-pa="edit">✏️ Bearbeiten</button>'
                         + '<button class="task-mgr-btn danger" data-pa="delete">🗑</button></div>';
@@ -64809,13 +64842,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 ST._lastGenFp = JSON.stringify({ c: ST.components, w: ST.wires });
 
                 // Status-Hinweis
-                let msg = `${assigns.length} Strompfad${assigns.length===1?'':'e'} generiert.`;
+                let msg = `${assigns.length} ${assigns.length===1?'Strompfad':'Strompfade'} generiert.`;
                 if (skipped.length > 0) {
                     msg += '\n\nNicht automatisch erzeugt:\n' + skipped.map(s => `  • ${s.lhs}: ${s.reason}`).join('\n');
                 }
                 if (skipped.length > 0 && !ST._autoAusCode) alert(msg);
                 const stat = _d().getElementById('ced-status');
-                if (stat) { stat.textContent = '🪄 ' + assigns.length + ' Stränge generiert' + (bausteine.length ? ', ' + bausteine.length + ' Programmbaustein' + (bausteine.length === 1 ? '' : 'e') : ''); setTimeout(() => { if (stat.textContent.startsWith('🪄')) stat.textContent = ''; }, 3000); }
+                if (stat) { stat.textContent = '🪄 ' + assigns.length + ' Stränge generiert' + (bausteine.length ? ', ' + bausteine.length + (bausteine.length === 1 ? ' Programmbaustein' : ' Programmbausteine') : ''); setTimeout(() => { if (stat.textContent.startsWith('🪄')) stat.textContent = ''; }, 3000); }
             };
 
             // ---------- Render ----------

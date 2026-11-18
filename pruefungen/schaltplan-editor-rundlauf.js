@@ -107,7 +107,7 @@ function vergleiche(a, b) {
 }
 (async () => {
   const srv = await server();
-  const b = await chromium.launch(); const p = await b.newPage({viewport:{width:1600,height:1000}});
+  const b = await chromium.launch(); const p = await b.newPage({locale:'de-DE',viewport:{width:1600,height:1000}});
   const errs = []; p.on('pageerror', e => errs.push(String(e).slice(0,200)));
   p.on('dialog', d => d.accept());
   await p.goto('http://localhost:' + srv.address().port + '/index.html'); await p.waitForTimeout(3500);

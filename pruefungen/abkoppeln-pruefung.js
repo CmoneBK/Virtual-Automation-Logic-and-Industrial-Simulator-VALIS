@@ -20,7 +20,7 @@ function server() {
 (async () => {
   const srv = await server();
   const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
+  const ctx = await b.newContext({ locale: 'de-DE', viewport: { width: 1400, height: 900 } });
   const pg = await ctx.newPage();
   const fehler = []; pg.on('pageerror', e => fehler.push(e.message));
   let gut = 0, schlecht = 0;

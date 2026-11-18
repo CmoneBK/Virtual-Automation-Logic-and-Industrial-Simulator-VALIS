@@ -29,7 +29,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const fehler = [];
   // ---------- Standard-Steckaufbau (E-Pneu) ----------
   {
-    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+    const page = await browser.newPage({ locale: 'de-DE', viewport: { width: 1600, height: 1000 } });
     page.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
     page.on('dialog', d => d.accept());
     await page.goto(url); await page.waitForTimeout(3500);
@@ -157,7 +157,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   }
   // ---------- SPS-Modus, Anschluss-Sicht ----------
   {
-    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+    const page = await browser.newPage({ locale: 'de-DE', viewport: { width: 1600, height: 1000 } });
     page.on('pageerror', e => fehler.push('SPS: ' + String(e).slice(0, 300)));
     page.on('dialog', d => d.accept());
     await page.goto(url); await page.waitForTimeout(3500);
@@ -196,7 +196,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   }
   // ---------- Freier Aufbau ----------
   {
-    const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+    const ctx = await browser.newContext({ locale: 'de-DE', viewport: { width: 1600, height: 1000 } });
     await ctx.addInitScript(() => {
       try {
         localStorage.setItem('valisFestoFreeBuild', '1');

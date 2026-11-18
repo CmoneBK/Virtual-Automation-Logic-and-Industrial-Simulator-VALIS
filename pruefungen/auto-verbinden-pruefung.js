@@ -23,7 +23,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     page.on('pageerror', e => fehler.push(String(e).slice(0, 200)));
     page.on('dialog', d => { fehler.push('Dialog: ' + d.message().slice(0, 80)); d.accept(); });
-    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisFluidplan', '1'); } catch (e) {} });
+    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); localStorage.setItem('valisFluidplan', '1'); } catch (e) {} });
     await page.goto(`http://localhost:${srv.address().port}/index.html?fluidplan=1`); await page.waitForTimeout(3000);
     await page.evaluate(() => { try { closeHub(); } catch (e) {} });
     return page;

@@ -23,7 +23,7 @@ function server() {
   const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1600, height: 1000 } });
   const errs = []; p.on('pageerror', e => errs.push(String(e).slice(0, 200)));
   p.on('dialog', d => d.accept());
-  await p.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); } catch (e) {} });
+  await p.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
   await p.goto('http://localhost:' + srv.address().port + '/index.html'); await p.waitForTimeout(3500);
   await p.evaluate(() => { try { closeHub(); } catch (e) {} });
   const nur = process.argv.slice(2);

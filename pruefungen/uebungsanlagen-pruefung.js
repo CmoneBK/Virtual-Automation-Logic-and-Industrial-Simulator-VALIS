@@ -116,7 +116,7 @@ async function bedienen(page, schritte, vorlage) {
   const url = 'http://localhost:' + srv.address().port + '/index.html';
   const fehler = [];
   const neueSeite = async () => {
-    const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+    const page = await browser.newPage({ locale: 'de-DE', viewport: { width: 1600, height: 1000 } });
     page.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
     page.on('dialog', d => d.accept());
     await page.goto(url); await page.waitForTimeout(3500);

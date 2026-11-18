@@ -400,7 +400,7 @@ const FAELLE = {
     const fehler = [];
     page.on('pageerror', e => fehler.push(String(e).slice(0, 200)));
     page.on('dialog', d => d.accept());
-    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); } catch (e) {} });
+    await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
     await page.goto(url); await page.waitForTimeout(3000);
     let R;
     try {

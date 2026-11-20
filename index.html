@@ -7292,6 +7292,87 @@ You must output exactly this JSON format. The logic code goes as a single string
         };
         window.applyLanguage();
         // ==========================================
+        // ==========================================
+        // SICHERHEIT: fremder Code aus Links, Importen und Freigaben
+        // ==========================================
+        // Stände reisen über Teilen-Links (#state=), Dateien, Klassen und die
+        // Bibliothek. Alles darin, was VALIS als JavaScript ausführt, braucht
+        // entweder eine strenge Form oder die ausdrückliche Zustimmung des
+        // Nutzers. Prüfung: pruefungen/fremdcode-pruefung.js
+        const _vEn = () => window.currentLang === 'en';
+        window._formelErlaubt = function (f) {
+            return typeof f === 'string' && /^[A-Za-z0-9_\s()!&|^¬]*$/.test(f);
+        };
+        (function () {
+            // Bedingungen der Übungsanlagen (uebungsanlagen.js) haben diese feste Form.
+            const SICHER = /^window\.Uebungsanlagen&&window\.Uebungsanlagen\.ok\("[A-Za-z0-9_\-]+",\d+\)$/;
+            const KEY = 'valisJsVertraut';
+            let vertraut;
+            try { vertraut = new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (e) { vertraut = new Set(); }
+            const cache = new Map();
+            window._jsBedingungVertraut = function (expr) {
+                expr = String(expr || '');
+                return SICHER.test(expr) || vertraut.has(expr);
+            };
+            window._jsBedingungVertrauen = function (liste) {
+                (liste || []).forEach(e => { if (e) vertraut.add(String(e)); });
+                try { localStorage.setItem(KEY, JSON.stringify([...vertraut])); } catch (e) {}
+            };
+            // Liefert die übersetzte Bedingung oder null (nicht freigegeben/fehlerhaft).
+            window._jsBedingung = function (expr) {
+                expr = String(expr || '');
+                if (!window._jsBedingungVertraut(expr)) return null;
+                if (!cache.has(expr)) {
+                    let fn = null;
+                    try { fn = new Function('spsState', 'factoryObjects', 'globalInputs', 'globalOutputs', 'taskSimSeconds', 'return ' + expr); } catch (e) {}
+                    cache.set(expr, fn);
+                }
+                return cache.get(expr);
+            };
+            window._jsBedingungenSammeln = function (obj) {
+                const out = new Set();
+                (function lauf(o, tiefe) {
+                    if (!o || typeof o !== 'object' || tiefe > 10) return;
+                    if (Array.isArray(o)) { o.forEach(x => lauf(x, tiefe + 1)); return; }
+                    if (o.type === 'custom_js' && typeof o.expression === 'string' && o.expression.trim()) out.add(o.expression);
+                    Object.keys(o).forEach(k => lauf(o[k], tiefe + 1));
+                })(obj, 0);
+                return [...out];
+            };
+            // Vor dem Start einer Aufgabe: nicht freigegebene JS-Bedingungen zeigen
+            // und nur auf ausdrückliche Zustimmung zulassen.
+            window._jsBedingungenPruefen = function (taskObj) {
+                const offen = window._jsBedingungenSammeln(taskObj).filter(e => !window._jsBedingungVertraut(e));
+                if (!offen.length) return true;
+                const liste = offen.map(e => '  ' + (e.length > 160 ? e.slice(0, 157) + '…' : e)).join('\n');
+                const text = _vEn()
+                    ? 'This task contains ' + offen.length + ' custom JavaScript condition(s):\n\n' + liste +
+                      '\n\nJavaScript runs with full rights inside VALIS. Allow it only if you trust the source of this task.\n\nAllow?'
+                    : 'Diese Aufgabe enthält ' + offen.length + ' eigene JavaScript-Bedingung(en):\n\n' + liste +
+                      '\n\nJavaScript läuft mit vollen Rechten in VALIS. Nur zulassen, wenn du der Quelle der Aufgabe vertraust. Ohne Zustimmung gelten diese Bedingungen als nicht erfüllt.\n\nZulassen?';
+                let ja = false;
+                try { ja = window.confirm(text); } catch (e) {}
+                if (ja) window._jsBedingungVertrauen(offen);
+                return ja;
+            };
+            // Nutzer-Plugins aus einem fremden Stand (Link, Datei, Freigabe) nur nach
+            // Zustimmung übernehmen. Liefert die zugelassenen Plugins.
+            window._fremdePluginsPruefen = function (plugins, vorhanden) {
+                if (!plugins || typeof plugins !== 'object') return {};
+                const neu = Object.keys(plugins).filter(k => !vorhanden[k] && typeof plugins[k] === 'string');
+                if (!neu.length) return {};
+                const text = _vEn()
+                    ? 'This state brings ' + neu.length + ' user plugin(s): ' + neu.join(', ') +
+                      '\n\nPlugins are program code and run with full rights inside VALIS, also on every later start. Install them only if you trust the source.\n\nInstall plugins?'
+                    : 'Dieser Stand bringt ' + neu.length + ' eigene(s) Plugin(s) mit: ' + neu.join(', ') +
+                      '\n\nPlugins sind Programmcode und laufen mit vollen Rechten in VALIS, auch bei jedem späteren Start. Nur übernehmen, wenn du der Quelle vertraust.\n\nPlugins übernehmen?';
+                let ja = false;
+                try { ja = window.confirm(text); } catch (e) {}
+                const out = {};
+                if (ja) neu.forEach(k => { out[k] = plugins[k]; });
+                return out;
+            };
+        })();
         let panZoomInstance = null;
         let spsState = {};
         // Wertet linkedFormula eines Objekts gegen spsState aus; fallback auf linkedVar
@@ -7299,7 +7380,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (obj.linkedFormula) {
                 if (!obj._compiledFormula) {
                     try {
-                        let expr = obj.linkedFormula
+                        // Sicherheit: Formeln reisen mit Teilen-Links und Klassenfreigaben.
+                        // Nur Variablennamen, AND/OR/XOR/NOT, ¬ ! & | ^ und Klammern sind
+                        // erlaubt; alles andere könnte als JavaScript ausgeführt werden.
+                        if (!window._formelErlaubt(obj.linkedFormula)) throw new Error('Formel mit unzulässigen Zeichen');
+                        let expr = String(obj.linkedFormula).replace(/¬/g, '!')
                             .replace(/\bAND\b/gi, '&&').replace(/\bOR\b/gi, '||')
                             .replace(/\bXOR\b/gi, '!==').replace(/\bNOT\b/gi, '!')
                             .replace(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g, (m) =>
@@ -10058,6 +10143,12 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!cleanLine || !cleanLine.includes(':=')) return;
                 const parts = cleanLine.split(':=');
                 const outputStr = parts[0].trim();
+                // Sicherheit: Der Ausgangsname landet im übersetzten JavaScript
+                // (state['NAME']). Nur Bezeichner zulassen, sonst könnte Code aus
+                // einem fremden Stand ausbrechen.
+                if (!/^[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*$/.test(outputStr)) {
+                    throw new Error('Ungültiger Ausgangsname: ' + JSON.stringify(outputStr));
+                }
                 let expressionStr = parts[1].trim();
                 expressionStr = expressionStr
                     // `!(?!=)` statt nur `!` — sonst würde `!=` (Ungleich-Vergleich)
@@ -24835,7 +24926,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const key = condStr || 'true';
                 let fn = _checkPowerCache.get(key);
                 if (!fn) {
-                    fn = new Function('state', `return !!(${key});`);
+                    // Sicherheit: nur state['NAME'], true/false, Klammern und Logik.
+                    const _rest = key.replace(/state\['[A-Za-z0-9_ÄÖÜäöüß.\-#:]*'\]/g, '').replace(/\b(true|false)\b/g, '');
+                    if (/[^\s()&|!]/.test(_rest)) { console.warn('VALIS: Stromlauf-Bedingung verworfen', key); fn = () => false; }
+                    else fn = new Function('state', `return !!(${key});`);
                     _checkPowerCache.set(key, fn);
                 }
                 el._checkPower = fn;
@@ -27711,6 +27805,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         };
 
         window._startTask = function(taskObj) {
+            // Sicherheit: eigene JS-Bedingungen fremder Aufgaben nur nach Zustimmung.
+            try { if (taskObj) window._jsBedingungenPruefen(taskObj); } catch (e) {}
             window._rsSrMigrate(taskObj);   // Aufgabe von vor der RS/SR-Umstellung
             // Mitgelieferte Beispielaufgaben, die früher ohne Modus gespeichert wurden:
             // den Modus (SPS/E-Pneu) aus der aktuellen Vorlage übernehmen. Sonst liest
@@ -29028,7 +29124,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         break;
                     case 'custom_js':
                         try {
-                            const ok = !!new Function('spsState','factoryObjects','globalInputs','globalOutputs','taskSimSeconds','return '+cond.expression)(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
+                            const ok = !!(window._jsBedingung(cond.expression) || (() => false))(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
                             if (!ok) runtimeMissing = 1;
                         } catch(e) { runtimeMissing = 1; }
                         break;
@@ -29237,7 +29333,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'analog_band':     return _taskAnalogBand(cond);
                     case 'regler_parameter': return _taskReglerParameter(cond);
                     case 'despawner_count': return taskDespawnCount >= cond.count;
-                    case 'custom_js':       return !!new Function('spsState','factoryObjects','globalInputs','globalOutputs','taskSimSeconds','return '+cond.expression)(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
+                    case 'custom_js':       return !!(window._jsBedingung(cond.expression) || (() => false))(spsState,factoryObjects,globalInputs,globalOutputs,taskSimSeconds);
                     default: return false;
                 }
             } catch(e) { return false; }
@@ -29893,7 +29989,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         });
                         break;
                     case 'custom_js':
-                        cond.expression = (row.querySelector('.cond-expr')||{value:''}).value; break;
+                        cond.expression = (row.querySelector('.cond-expr')||{value:''}).value;
+                        // Selbst im Editor eingetragen = freigegeben.
+                        window._jsBedingungVertrauen([cond.expression]); break;
                 }
                 conds.push(cond);
             });
@@ -48123,7 +48221,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 localStorage.setItem('logikComponentTypes', JSON.stringify(componentTypes));
                 // 🌟 NEU: Plugin-Konfiguration laden und Menüs updaten
                 if (data.userPlugins) {
-                    Object.entries(data.userPlugins).forEach(([k, code]) => {
+                    // Sicherheit: fremde Plugins nur nach Zustimmung (Programmcode!)
+                    Object.entries(window._fremdePluginsPruefen(data.userPlugins, userPlugins)).forEach(([k, code]) => {
                         if (!userPlugins[k]) { // Nur neue, nicht bereits vorhandene
                             userPlugins[k] = code;
                             registerUserPlugin(k, code);
@@ -48259,7 +48358,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     _syncEpneuButton();
                     // 🌟 NEU: Plugin-Konfiguration aus dem Link laden
                     if (data.userPlugins) {
-                        Object.entries(data.userPlugins).forEach(([k, code]) => {
+                        // Sicherheit: Plugins aus einem Link nur nach Zustimmung (Programmcode!)
+                        Object.entries(window._fremdePluginsPruefen(data.userPlugins, userPlugins)).forEach(([k, code]) => {
                             if (!userPlugins[k]) { userPlugins[k] = code; registerUserPlugin(k, code); }
                         });
                         localStorage.setItem('valisUserPlugins', JSON.stringify(userPlugins));
@@ -61665,6 +61765,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const rJs = _szExprToJs(refRhs, vars);
                 // Whitelist: nach der Transformation nur erlaubte Zeichen.
                 if (!/^[\sVA-Za-z0-9_ÄÖÜäöüß'\[\]()&|!^]*$/.test(uJs)) return { ok: false, reason: 'ungültige Zeichen im Ausdruck' };
+                // Sicherheit: Referenzen eigener/importierter Szenarien ebenso prüfen.
+                if (!/^[\sVA-Za-z0-9_ÄÖÜäöüß'\[\]()&|!^]*$/.test(rJs)) return { ok: false, reason: 'ungültige Zeichen in der Referenz' };
                 let uFn, rFn;
                 try { uFn = new Function('V', 'return (' + uJs + ');'); } catch (e) { return { ok: false, reason: 'Syntaxfehler' }; }
                 try { rFn = new Function('V', 'return (' + rJs + ');'); } catch (e) { return { ok: false, reason: 'Referenzfehler' }; }
@@ -63074,6 +63176,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   const vars = [...new Set((a + ' ' + b).match(new RegExp(ID, 'g')).filter(v => !/^(TRUE|FALSE)$/.test(v)))];
                   if (vars.length > 14) return a.replace(/\s/g, '') === b.replace(/\s/g, '');
                   const js = x => x.replace(/¬/g, '!').replace(new RegExp(ID, 'g'), v => v === 'TRUE' ? 'true' : v === 'FALSE' ? 'false' : 'w[' + JSON.stringify(v) + ']');
+                  // Sicherheit: nach der Übersetzung nur Bezeichner, w["…"], Klammern und Logik.
+                  const _jsOk = x => /^[\sA-Za-z0-9_ÄÖÜäöüß"\[\]()&|!^]*$/.test(x);
+                  if (!_jsOk(js(a)) || !_jsOk(js(b))) return a.replace(/\s/g, '') === b.replace(/\s/g, '');
                   const fa = new Function('w', 'return !!(' + js(a) + ')'), fb = new Function('w', 'return !!(' + js(b) + ')');
                   for (let n = 0; n < (1 << vars.length); n++) {
                     const w = {}; vars.forEach((v, i) => w[v] = !!(n >> i & 1));

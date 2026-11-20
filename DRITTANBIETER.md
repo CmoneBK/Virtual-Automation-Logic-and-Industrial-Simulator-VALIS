@@ -9,9 +9,14 @@ Diese Dateien sind nicht vom Rechteinhaber von VALIS geschrieben. Für sie gilt 
 | `splash/` | Splash, WebGPU-Flüssigkeitssimulation (MLS-MPM) von matsuoka-601, für VALIS angepasst | MIT, Text in `splash/LICENSE` |
 | `vendor/svg-pan-zoom.min.js` | svg-pan-zoom v3.6.1 | BSD-2-Clause, Text unten |
 | `vendor/qrcode.min.js` | QRCode.js von davidshimjs | MIT, Text unten |
-| `vendor/lz-string.min.js` | lz-string von pieroxy | MIT, Text unten |
+| `vendor/lz-string.min.js` | lz-string v1.5.0 von pieroxy | MIT, Text unten |
+| `splash/dist/splash.iife.js` (eingebaut) | lil-gui v0.20.0 von George Michael Brower | MIT, Text unten |
+| `splash/dist/splash.iife.js` (eingebaut) | wgpu-matrix v3.3.0 von Gregg Tavares | MIT, Text unten |
+| `splash/dist/cubemap/`, `splash/public/cubemap/` | Umgebungsbilder des Splash, aus der Vorlage übernommen | Herkunft offen, wird geprüft |
 
 Die Änderungen von Christoph Mones an `splash/` stehen unter `LICENSE.md`, soweit die MIT-Lizenz der Vorlage das zulässt.
+
+Maschinenlesbar stehen alle Fremdbestandteile mit Version in `sbom.cdx.json` (CycloneDX). *A machine-readable list with versions is in `sbom.cdx.json` (CycloneDX).*
 
 FESTO und Festo Didactic sind Marken der Festo SE & Co. KG. VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.
 
@@ -70,6 +75,50 @@ SOFTWARE.
 ## lz-string (MIT)
 
 Copyright (c) 2013 pieroxy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## lil-gui (MIT)
+
+Copyright (c) 2019 George Michael Brower
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## wgpu-matrix (MIT)
+
+Copyright (c) 2022 Gregg Tavares
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

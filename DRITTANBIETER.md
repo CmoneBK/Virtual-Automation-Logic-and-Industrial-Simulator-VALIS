@@ -15,6 +15,10 @@ Die Änderungen von Christoph Mones an `splash/` stehen unter `LICENSE.md`, sowe
 
 FESTO und Festo Didactic sind Marken der Festo SE & Co. KG. VALIS ist kein Produkt von Festo und steht in keiner Verbindung zu Festo.
 
+**Festo-Frontplatten (Steckaufbau).** Festo Didactic hat am 20.11.2026 Datenblätter und Frontplatten-Drucke der Elektro-Einheiten 162241, 162242, 162243, 162244 und 544315 zur Verfügung gestellt. Die Oberflächengrafiken dürfen **ausschließlich für die Steckaufbau-Ansicht (Patchboard) in VALIS** genutzt werden, nicht in anderen Teilen von VALIS, nicht in Unterrichtsmaterial, 3D-Räumen oder auf der Webseite, und nicht unterlizenziert werden. Das Repository enthält keine dieser Dateien: Die Platten im Steckaufbau sind eigene SVG-Zeichnungen, die Unterlagen dienten nur dazu, Buchsen, Beschriftung und Funktion abzugleichen.
+
+*Festo front panels (patch board). Festo Didactic provided data sheets and front panel prints of units 162241, 162242, 162243, 162244 and 544315 on 20 Nov 2026. The surface graphics may be used **only for the patch board view in VALIS**, nowhere else, and may not be sublicensed. This repository contains none of these files: the panels are VALIS's own SVG drawings; the documents were only used to check sockets, labels and function.*
+
 ---
 
 ## svg-pan-zoom (BSD-2-Clause)

@@ -37,7 +37,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const klick = sel => page.evaluate(s => { const t = _festoDoc().querySelector(s); t.dispatchEvent(new MouseEvent('click', { bubbles: true })); }, sel);
   const lcd = () => page.evaluate(() => [...(_festoDoc().querySelectorAll('[data-fg-panel="FG1"][data-fg-zeile]'))].map(t => t.textContent).join(' | '));
 
-  console.log('Freier Aufbau: Taster → S1 START/UP, OUT → LED');
+  console.log('Freier Aufbau: Taster → S1 START/UP, S1 STOP, S2 (Zähleingang), OUT → LED');
   const f = await page.evaluate(() => {
     window._toggleFestoFreeBuild(true);
     const A = window._fbAusSicht;
@@ -46,7 +46,8 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const st = (a, b) => A.stecken(a, b).ok;
     const r = [st(T + '_24V_1', T + '_S2_13'), st(T + '_S2_14', G + '_S1_UP'),
       st(T + '_24V_2', T + '_S3_13'), st(T + '_S3_14', G + '_S1_STOP'),
-      st(G + '_OUT', L + '_S1_24V_a')];
+      st(G + '_OUT', L + '_S1_24V_a'),
+      st(T + '_24V_3', T + '_S4_13'), st(T + '_S4_14', G + '_S2_UP')];
     const c = A.code();
     return { G, r, c, src: document.getElementById('code').value, typen: A.typen().map(t => t.art) };
   });
@@ -67,14 +68,20 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('LCD zeigt Pulse 0', /^Pulse \| 0/.test(await lcd()), await lcd());
 
   const sj = (f.src.match(/FG1_S1_UP := (TASTER_\d+)/) || [])[1], sjStop = (f.src.match(/FG1_S1_STOP := (TASTER_\d+)/) || [])[1];
+  const sz = (f.src.match(/FG1_S2_UP := (TASTER_\d+)/) || [])[1];
   const tippen = async n => { await page.evaluate(v => setTaster(v, true), n); await w(150); await page.evaluate(v => setTaster(v, false), n); await w(150); };
   await page.evaluate(() => { if (!isSimulationActive) toggleSimulation(); }); await w(300);
-  for (let i = 0; i < 3; i++) await tippen(sj);
-  ok('Pulse: drei Impulse an S1 START/UP → 3', /^Pulse \| 3/.test(await lcd()), await lcd());
-  await page.evaluate(v => setTaster(v, true), sjStop); await w(150);
+  for (let i = 0; i < 3; i++) await tippen(sz);
+  ok('Pulse: drei Impulse an S2 → 3', /^Pulse \| 3/.test(await lcd()), await lcd());
   await tippen(sj);
-  await page.evaluate(v => setTaster(v, false), sjStop); await w(150);
-  ok('STOP an S1 hält den Zähler an', /^Pulse \| 3/.test(await lcd()), await lcd());
+  ok('S1 START/UP zählt nicht (startet nur)', /^Pulse \| 3/.test(await lcd()), await lcd());
+  await tippen(sjStop);
+  await tippen(sz);
+  ok('STOP an S1 hält den Zähler an', /^Pulse \| 3  STOP/.test(await lcd()), await lcd());
+  await tippen(sj); await tippen(sz);
+  ok('START an S1 zählt weiter', /^Pulse \| 4$/.test(await lcd()), await lcd());
+  await klick('[data-fg-taste="UP"][data-fg-panel="FG1"]'); await w(150);
+  ok('Taste START/UP zählt nicht', /^Pulse \| 4$/.test(await lcd()), await lcd());
   await klick('[data-fg-taste="DOWN"][data-fg-panel="FG1"]'); await w(150);
   ok('Taste RESET/DOWN setzt auf 0', /^Pulse \| 0/.test(await lcd()), await lcd());
 
@@ -86,26 +93,48 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   const t1 = await lcd(), sek = parseFloat((t1.match(/\| ([\d,]+) s/) || [, '0'])[1].replace(',', '.'));
   ok('Stoppuhr t1 misst START → STOP an S1 (≈ 1,15 s)', sek > 0.8 && sek < 1.8 && !/▶/.test(t1), t1);
 
-  // Frequency out: OUT taktet die LED
+  // Frequency out: OUT taktet die LED dauernd, ohne Start
   await page.evaluate(() => window._fgModus('FG1', 'fout')); await w(400);
-  await klick('[data-fg-taste="UP"][data-fg-panel="FG1"]'); await w(100);
   const led = (f.src.match(/(LAMPE_\d+) := FG1_OUT/) || [])[1];
   const proben = [];
   for (let i = 0; i < 12; i++) { proben.push(await page.evaluate(l => !!spsState[l], led)); await w(150); }
   ok('Frequency out 1 Hz: LED an OUT blinkt', proben.some(Boolean) && proben.some(x => !x), proben.map(x => x ? 1 : 0).join(''));
-  await klick('[data-fg-taste="STOP"][data-fg-panel="FG1"]'); await w(300);
-  ok('STOP schaltet den Generator ab', !(await page.evaluate(l => !!spsState[l], led)) && /AUS/.test(await lcd()), await lcd());
+  await klick('[data-fg-taste="UP"][data-fg-panel="FG1"]'); await w(100);
+  ok('START/UP erhöht die Frequenz auf 2 Hz', /f = 2 Hz/.test(await lcd()), await lcd());
+  for (let i = 0; i < 20; i++) await klick('[data-fg-taste="UP"][data-fg-panel="FG1"]');
+  await w(100);
+  ok('Frequenz endet bei 200 Hz', /f = 200 Hz/.test(await lcd()), await lcd());
+  for (let i = 0; i < 20; i++) await klick('[data-fg-taste="DOWN"][data-fg-panel="FG1"]');
+  await w(100);
+  ok('Frequenz beginnt bei 0,01 Hz', /f = 0,01 Hz/.test(await lcd()), await lcd());
 
-  // Pulse width out: ein Impuls tp = 1 s
+  // Pulse width out: Spannung 0 … 24 V
   await page.evaluate(() => window._fgModus('FG1', 'pwout')); await w(400);
+  ok('Pulse width out zeigt U = 24,0 V, OUT gilt als 1', /U = 24,0 V/.test(await lcd()) && await page.evaluate(l => !!spsState[l] && spsState.FG1_OUT_U === 24, led), await lcd());
+  for (let i = 0; i < 6; i++) await klick('[data-fg-taste="DOWN"][data-fg-panel="FG1"]');
+  await w(300);
+  ok('9,6 V: zwischen den Schwellen bleibt OUT an', /U = 9,6 V/.test(await lcd()) && await page.evaluate(l => !!spsState[l], led), await lcd());
+  for (let i = 0; i < 3; i++) await klick('[data-fg-taste="DOWN"][data-fg-panel="FG1"]');
+  await w(300);
+  ok('2,4 V: OUT gilt als 0', /U = 2,4 V/.test(await lcd()) && !(await page.evaluate(l => !!spsState[l], led)), await lcd());
   await tippen(sj);
-  const an = await page.evaluate(l => !!spsState[l], led);
-  await w(1300);
-  const aus = await page.evaluate(l => !!spsState[l], led);
-  ok('Pulse width out: S1 START/UP gibt einen Impuls von 1 s an OUT', an && !aus, `${an} → ${aus}`);
+  ok('S1-Eingänge ändern die Spannung nicht', /U = 2,4 V/.test(await lcd()), await lcd());
   await klick('[data-fg-wahl="FG1"]'); await w(300);
   ok('Wahlschalter weiter: Pulse/s', /^Pulse\/s/.test(await lcd()), await lcd());
-  await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); window._toggleFestoFreeBuild(false); });
+  await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); });
+
+  // Relais 162241: je zwei Buchsen +24 V und 0 V wie auf der Frontplatte
+  const rel = await page.evaluate(async () => {
+    const A = window._fbAusSicht, R = A.modul('relais');
+    await new Promise(r => setTimeout(r, 600));
+    const g = [..._festoDoc().querySelectorAll('[data-festo-panel-type="relais"]')].pop();
+    const bu = g ? [...g.querySelectorAll('[data-festo-socket]')].map(e => e.getAttribute('data-festo-socket')).filter(k => /_(24V|0V)_\d+$/.test(k)) : [];
+    const st = A.stecken(R + '_24V_1', R + '_S1_A1').ok && A.stecken(R + '_S1_A2', R + '_0V_2').ok;
+    return { R, bu, st };
+  });
+  ok('Relais 162241: +24 V und 0 V je zweimal', ['_24V_1', '_24V_2', '_0V_1', '_0V_2'].every(x => rel.bu.includes(rel.R + x)) && rel.bu.length === 4, rel.bu.join(' '));
+  ok('Relais-Spule direkt an die eigenen Sammelschienen steckbar', rel.st);
+  await page.evaluate(() => window._toggleFestoFreeBuild(false));
 
   ok('Keine Skriptfehler', fehler.length === 0, fehler.slice(0, 3).join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);

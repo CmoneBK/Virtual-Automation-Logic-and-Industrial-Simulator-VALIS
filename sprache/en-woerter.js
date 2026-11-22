@@ -9283,7 +9283,11 @@ VALIS_EN.dazu({
 "Großer Plan auf mehrere Blätter statt verkleinert": "Large plan on several sheets instead of scaled down",
 "Betriebsmittel- und Stückliste als eigenes Blatt": "Equipment and parts list as a separate sheet",
 "Im Druckdialog „Als PDF speichern“ wählen. Das Schriftfeld gilt für alle Pläne der Anlage.": "Choose “Save as PDF” in the print dialog. The title block applies to all plans of the system.",
-"Plan als PDF mit Schriftfeld (A4 oder A3 quer), groß auf Wunsch über mehrere Blätter, mit Betriebsmittel- und Stückliste als eigenem Blatt": "Plan as PDF with title block (A4 or A3 landscape), large plans optionally over several sheets, with equipment and parts list as a separate sheet"
+"Plan als PDF mit Schriftfeld (A4 oder A3 quer), groß auf Wunsch über mehrere Blätter, mit Betriebsmittel- und Stückliste als eigenem Blatt": "Plan as PDF with title block (A4 or A3 landscape), large plans optionally over several sheets, with equipment and parts list as a separate sheet",
+"Blatt.Spalte — zeigt, wie der Plan beim Drucken auf Blätter fällt (A4 quer 8, A3 quer 10 Spalten): gestrichelte Blattgrenzen, Spaltennummern, im Kontaktspiegel die Adresse jedes Kontakts (z. B. 2.4) und an jedem Kontakt der Verweis zur Spule. Im Druck ist das immer dabei.": "Sheet.Column — shows how the plan falls onto sheets when printed (A4 landscape 8, A3 landscape 10 columns): dashed sheet borders, column numbers, the address of every contact in the contact mirror (e.g. 2.4) and at every contact the reference to its coil. Always included in print.",
+"Stromlaufplan auf Blättern drucken (A4 oder A3 quer, Schriftfeld, Spalten, Kontaktspiegel und Querverweise). Im Druckdialog „Als PDF speichern“ wählen.": "Print the circuit diagram on sheets (A4 or A3 landscape, title block, columns, contact mirrors and cross-references). Choose “Save as PDF” in the print dialog.",
+"🖨 Schaltplan auf Blättern – Schriftfeld": "🖨 Circuit diagram on sheets – title block",
+"Der Schaltplan hat noch keine Strompfade.": "The circuit diagram has no current paths yet."
 });
 VALIS_EN.vorlagen({
 "\"⟦0⟧\" deklariert": "\"⟦0⟧\" declared",

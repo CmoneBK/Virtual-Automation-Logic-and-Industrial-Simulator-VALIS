@@ -3995,7 +3995,7 @@
                             </div>
                             <div class="tb-menu-cat">Pneumatik-Sensoren (analog)</div>
                             <div onclick="addFactoryDevice('pressure_sensor_pneu')" title="Drucksensor mit Anzeige: 0 … 10 bar, Analogausgang 0 … 10 V an einen Analogeingang (EW64 …), dazu ein PNP-Schaltausgang mit Schaltpunkt und Hysterese.">🧭 Drucksensor mit Anzeige</div>
-                            <div onclick="addFactoryDevice('valve_prop')" title="Proportionalventil (Stetigventil): fährt einen Zylinder stetig, 0 … 100 % = 0 … 10 V, 50 % = Mitte. Für die Lageregelung.">🎚 Proportionalventil (Zylinder)</div>
+                            <div onclick="window.Fluidplan &amp;&amp; Fluidplan._neu2D('ventil_prop')" title="5/3-Proportional-Wegeventil (Stetigventil): Sollwert 0 … 10 V, 5 V = Mitte. Mit Schläuchen an Druckluft und Zylinder anschließen. Für die Lageregelung.">🎚 Proportional-Wegeventil</div>
                             <div onclick="addFactoryDevice('flow_sensor_pneu')" title="Durchflusssensor: Luftverbrauch 0 … 50 l/min, Analogausgang 0 … 10 V, Schaltausgang und Impulsausgang (ein Impuls je Liter, z. B. für CTU).">🌬 Durchflusssensor</div>
                         </div>
                     </div>
@@ -33226,7 +33226,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             },
             // Regelstrecke (Modell), Ölkühler, Proportionalventil — Rechnen in
-            // window._streckenStep / _oelKuehler / _propVentil (REGELSTRECKEN).
+            // window._streckenStep / _oelKuehler (REGELSTRECKEN).
             'regelstrecke': {
                 noRodAttach: true, hideFromPluginManager: true,
                 modalConfig: { t: 'Regelstrecke: Stellgröße y zuweisen:', l1: 'SPS-Ausgangsvariable y (0 … 100 %)', out: true },
@@ -44173,11 +44173,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                                 if (cLbl && obj.originalLabelText) cLbl.innerHTML = obj.originalLabelText;
                             }
                         }
-                        // Proportionalventil (Stetigventil) hat Vorrang: fährt den Zylinder
-                        // stetig nach der Stellgröße, siehe window._propVentil (REGELSTRECKEN).
-                        // Zylinder, der einem Zylinder im freien Fluidplan folgt (fluidplan.js)
-                        const _pv = (typeof window._fpZylinder === 'function' ? window._fpZylinder(obj) : null)
-                            || (typeof window._propVentil === 'function' ? window._propVentil(obj) : null);
+                        // Zylinder, der einem Zylinder im freien Fluidplan folgt (fluidplan.js).
+                        // Das Proportionalventil ist ein Fluidplan-Teil und fährt den Zylinder
+                        // über den Rechenkern (kein eigener Weg mehr an der Luft vorbei).
+                        const _pv = (typeof window._fpZylinder === 'function' ? window._fpZylinder(obj) : null);
                         if (_pv) {
                             forceExt = _pv.dir > 0; forceRet = _pv.dir < 0;
                             if (obj.hasHydraulics) obj._hydraulicActive = forceExt || forceRet;
@@ -46528,6 +46527,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (window.pneuConnections)      window.pneuConnections      = window.pneuConnections.filter(_alive);
                 if (window.fluidPipeConnections) window.fluidPipeConnections = window.fluidPipeConnections.filter(_alive);
             } catch(e) { console.error(e); } finally { isLoadingFactory = false; }
+            // Altes Proportionalventil (valve_prop) → Proportional-Wegeventil im Fluidplan
+            if (factoryObjects.some(o => o.type === 'valve_prop')) {
+                const _umzug = (rest) => { if (window.Fluidplan && window._propVentilUmziehen) { try { window._propVentilUmziehen(); } catch (e) { console.warn(e); } } else if (rest > 0) setTimeout(() => _umzug(rest - 1), 300); };
+                setTimeout(() => _umzug(20), 0);
+            }
             try { if (typeof window._valis3dZone === 'function') window._valis3dZone(); } catch (_) {}
             // Schaltplan nach dem Laden synchronisieren — sonst zeigt der Pneumatik-/
             // Hydraulik-Bereich beim ersten Seitenaufruf nichts an, weil drawCircuitPlan
@@ -56391,18 +56395,67 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             }
             window._streckeAnzeigen = anzeigen;
 
-            // ---- Proportionalventil: Richtung und Geschwindigkeit für die Zylinder-Mechanik ----
-            window._propVentil = function(zyl) {
-                const v = factoryObjects.find(o => o.type === 'valve_prop' && o.targetCylinderId === zyl.id);
-                if (!v) return null;
-                const a = cfg(v);
-                const yRoh = v.linkedVar ? spsState[v.linkedVar] : 50;
-                const y = typeof yRoh === 'number' ? Math.max(0, Math.min(100, yRoh)) : (yRoh ? 100 : 50);
-                const mitte = num(a.mitte, 50), tot = Math.max(0, num(a.totzone, 1));
-                const d = y - mitte;
-                if (Math.abs(d) <= tot) return { dir: 0, v: 0 };
-                const span = d > 0 ? (100 - mitte) : mitte;
-                return { dir: d > 0 ? 1 : -1, v: Math.max(0, num(a.vmax, 100)) * Math.min(1, (Math.abs(d) - tot) / Math.max(1, span - tot)) };
+            // ---- Altes Proportionalventil (valve_prop) zieht in den Fluidplan um ----
+            // Früher fuhr es den Zylinder an der Luft vorbei mit fester Höchstgeschwindigkeit.
+            // Beim Laden wird daraus ein 5/3-Proportional-Wegeventil (Fluidplan-Teil) mit
+            // Schläuchen, bei einem Hydraulikzylinder ein 4/3-Proportional-Wegeventil.
+            window._propVentilUmziehen = function() {
+                const F = window.Fluidplan;
+                if (!F || !F._ventilUmbauen || typeof factoryObjects === 'undefined') return 0;
+                const alte = factoryObjects.filter(o => o.type === 'valve_prop');
+                if (!alte.length) return 0;
+                const umgezogen = [], offen = [];
+                alte.forEach(pv => {
+                    const a = cfg(pv), name = pv.linkedVar || '?';
+                    const zyl = factoryObjects.find(o => o.id === pv.targetCylinderId && o.type === 'zylinder_double');
+                    let ok = false;
+                    try {
+                        if (zyl) {
+                            const A = Math.PI * Math.pow((zyl.pistonD || 20) / 2, 2), vmax = Math.max(1, num(a.vmax, 100));
+                            const basis = { varS: pv.linkedVar || '', nullS: Math.max(1, Math.min(99, num(a.mitte, 50))), ueber: Math.min(40, Math.round(Math.max(0, num(a.totzone, 1)) * 2)), verlauf: 'linear', tau: 20, hyst: 2, elektronik: 'eingebaut' };
+                            if (zyl.hasHydraulics) {
+                                const v = factoryObjects.find(q => q.type === 'valve_hyd' && q.targetCylinderId === zyl.id);
+                                if (v) {
+                                    // Nenndurchfluss so, dass die alte Höchstgeschwindigkeit etwa bleibt
+                                    const qn = Math.max(1, Math.min(200, Math.round(vmax * A * 60 / 1e6 * 2)));
+                                    if (!v.isTriple && F._hydVentilUmstellen) F._hydVentilUmstellen(v, 'triple');
+                                    (v.hyd || (v.hyd = {})).ventil = Object.assign({ wege: '4/3', mitte: 'gesperrt', links: 'prop', rechts: 'prop', qn }, basis);
+                                    ok = true;
+                                }
+                            } else {
+                                const finde = () => factoryObjects.find(q => q.type === 'valve_pneu' && q.targetCylinderId === zyl.id);
+                                let v = finde();
+                                if (!v && !zyl.hasPneumatics && typeof window.generatePneumaticSetup === 'function') { window.generatePneumaticSetup(zyl, 'triple', { drosseln: { ext: false, ret: false } }); v = finde(); }
+                                if (v) {
+                                    // Normliter: Kolbenfläche · Geschwindigkeit · 7 bar absolut, mit Reserve
+                                    const qn = Math.max(10, Math.min(3000, Math.round(vmax * A * 7 * 60 / 1e6 * 3 / 10) * 10));
+                                    ok = !!F._ventilUmbauen(v, { typ: 'ventil', o: Object.assign({ wege: '5/3', mitte: 'gesperrt', links: 'prop', rechts: 'prop', qn, frei: true }, basis), rot: 0, ab: {} });
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('Proportionalventil umziehen:', e); }
+                    (ok ? umgezogen : offen).push(name);
+                    const alt = window._recycleSuppress; window._recycleSuppress = true;
+                    try { deleteObjRecursive(pv); } catch (e) {} finally { window._recycleSuppress = alt; }
+                });
+                try { if (typeof _applyPneuManualConnections === 'function') _applyPneuManualConnections(); if (typeof window.drawPneumaticHoses === 'function') window.drawPneumaticHoses(); } catch (e) {}
+                try { if (typeof window._fpHydAlle === 'function') window._fpHydAlle(); } catch (e) {}
+                try { saveFactoryState(); } catch (e) {}
+                let txt = '';
+                if (umgezogen.length) txt += 'Das Proportionalventil (' + umgezogen.join(', ') + ') ist jetzt ein Proportional-Wegeventil mit Schläuchen: Der Zylinder fährt mit Druckluft oder Öl statt mit fester Geschwindigkeit. Bitte die Regelung neu einstellen. Kennwerte per Rechtsklick auf das Ventil.';
+                if (offen.length) txt += (txt ? ' ' : '') + 'Das alte Proportionalventil (' + offen.join(', ') + ') gibt es nicht mehr. Bitte im Menü Pneumatik ein Proportional-Wegeventil setzen und mit Schläuchen anschließen.';
+                window._propUmzugHinweis(txt);
+                return alte.length;
+            };
+            window._propUmzugHinweis = function(txt) {
+                let b = document.getElementById('prop-umzug-hinweis'); if (b) b.remove();
+                if (!txt) return;
+                b = document.createElement('div'); b.id = 'prop-umzug-hinweis';
+                b.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:99990;max-width:560px;background:#fff8e1;color:#3e2723;border:1px solid #ffb300;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.35);padding:10px 14px;font:13px/1.45 sans-serif;display:flex;gap:12px;align-items:flex-start;';
+                const t = document.createElement('div'); t.textContent = '🎚 ' + txt; b.appendChild(t);
+                const k = document.createElement('button'); k.textContent = 'Verstanden'; k.style.cssText = 'flex:none;background:#ffb300;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-weight:bold;color:#3e2723;';
+                k.onclick = () => b.remove(); b.appendChild(k);
+                document.body.appendChild(b);
             };
 
             // ---- Kontextmenüs ----
@@ -56464,15 +56517,6 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         zeile(menu, 'Umgebung am Aggregat (°C), Sommer/Winter', inp);
                     } else hinweis(menu, '⚠ Kein Hydraulikaggregat in der Anlage.');
                     hinweis(menu, 'Stellgröße 0 … 100 % (Analogausgang, z. B. aus PID) oder ein Bit (aus/voll, Thermostat). Öltemperatur mit einem Messumformer „Öltemperatur“ messen.');
-                } else if (o.type === 'valve_prop') {
-                    titel(menu, '🎚 Proportionalventil');
-                    const zyl = factoryObjects.filter(x => x.type && x.type.startsWith('zylinder'));
-                    if (zyl.length) wahl(menu, o, 'Fährt den Zylinder', 'zylinder', zyl.map(c => [c.id, (c.normLabel || c.linkedVarExt || c.linkedVar || c.id) + ' (Hub ' + num(c.stroke, 100) + ' mm)']), o.targetCylinderId || zyl[0].id, () => { o.targetCylinderId = cfg(o).zylinder; saveFactoryState(); });
-                    else hinweis(menu, '⚠ Noch kein Zylinder in der Anlage.');
-                    zahl(menu, o, 'Höchstgeschwindigkeit (mm/s)', 'vmax', 100);
-                    zahl(menu, o, 'Mittelstellung (%)', 'mitte', 50);
-                    zahl(menu, o, 'Totzone um die Mitte (%)', 'totzone', 1);
-                    hinweis(menu, 'Stellgröße 0 … 100 % entspricht 0 … 10 V: 50 % (5 V) = Mitte, Zylinder steht. Darüber fährt er aus, darunter ein, umso schneller, je weiter weg von der Mitte. Lageregelung: Weg mit einem Messumformer „Weg“ messen, z. B. <code>Y := 50 + 2 * (SOLL - POS)</code>.');
                 }
             };
         })();
@@ -81891,10 +81935,10 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 <script src="schaltplan-blatt.js?v=20261122a"></script>
 <script src="elektroplan-blatt.js?v=20261122a"></script>
 <script src="plansatz.js?v=20261122a"></script>
-<script src="fluidplan.js?v=20261122e"></script>
+<script src="fluidplan.js?v=20261122f"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>
-<script src="komponenten-tutorials.js?v=20261116c"></script>
+<script src="komponenten-tutorials.js?v=20261122a"></script>
 </body>
 </html>

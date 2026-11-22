@@ -414,6 +414,142 @@ const FAELLE = {
     svg.remove();
     return R;
   },
+  '2D-Anlage: Proportional-Wegeventil in vier Darstellungen, Schieber stetig, Abgleich': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren(); window._fpKeinAutoVerbinden = false;
+    const q = F.setzen('quelle', 0, 400);
+    const v = F.setzen('ventil', 0, 200, { wege: '5/3', links: 'prop', rechts: 'prop', varS: 'YP', qn: 200 });
+    const z = F.setzen('zyl_dw', 0, 0, {});
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden2D(true); await warte(1200);
+    const o2 = () => factoryObjects.find(x => x.id === F.plan().teile.find(t => t.id === v).o.anlage);
+    let o = o2();
+    R.push(['Planventil steht in der 2D-Anlage als Proportional-Wegeventil', !!o && o.type === 'pneu_fp' && o.pneu.fp.o.links === 'prop' && o.pneu.fp.o.varS === 'YP', o ? JSON.stringify(o.pneu.fp.o).slice(0, 120) : 'fehlt']);
+    const zy = factoryObjects.find(x => x.type === 'zylinder_double');
+    const ta = document.getElementById('code'); ta.value = 'YP := 62'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(500);
+    if (!isSimulationActive) toggleSimulation();
+    await warte(900);
+    const s = F.zustand().teile[v].s;
+    R.push(['Simulation: Schieber steht stetig bei 24 %', Math.abs(s - 0.24) < 0.04, s.toFixed(3)]);
+    const weg = () => {
+      const e = o2().el, b = e.querySelector('.fp-block'), sg = e.querySelector('.fp-r-schieber');
+      if (sg) { const m = /translateX\(([-\d.]+)px\)/.exec(sg.style.transform || ''); return m ? +m[1] : null; }
+      if (!b) return null;
+      const m = /translateX\(([-\d.]+)px\)/.exec(b.style.transform || '') || /translate\(([-\d.]+)/.exec(b.getAttribute('transform') || '');
+      return m ? +m[1] : null;
+    };
+    for (const [bild, name] of [['gehaeuse', 'Gehäuse'], ['symbol', 'Normsymbol'], ['schnitt', 'aufgeschnitten'], ['aussen', 'geschlossen']]) {
+      window._fpAlleVentile(bild); await warte(350);
+      const e = o2().el, w = weg();
+      if (bild === 'aussen') R.push([`Darstellung „${name}“: Bild mit Proportionalmagneten`, !!e.querySelector('svg.fp-echt') && /Proportionalventil/.test(e.textContent), e.textContent.slice(0, 60)]);
+      else if (bild === 'schnitt') R.push([`Darstellung „${name}“: Kolbenschieber steht zwischen den Stellungen`, w != null && Math.abs(w) > 1 && e.querySelectorAll('.fp-r-anker').length === 2, String(w)]);
+      else R.push([`Darstellung „${name}“: Kastenblock um einen Teil verschoben`, w != null && w > 4 && w < 20, String(w)]);
+    }
+    window._fpAlleVentile('gehaeuse');
+    const x1 = zy.extension; await warte(600);
+    R.push(['Zylinder der 2D-Anlage fährt aus', zy.extension > x1 + 0.5 || zy.extension > 99, `${x1.toFixed(1)} → ${zy.extension.toFixed(1)}`]);
+    ta.value = 'YP := 50'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(700);
+    const x2 = zy.extension; await warte(600);
+    R.push(['5 V: Zylinder steht', Math.abs(zy.extension - x2) < 1.5, `${x2.toFixed(1)} → ${zy.extension.toFixed(1)}`]);
+    toggleSimulation(); await warte(300);
+    // Abgleich Plan → 2D und 2D → Plan
+    F.aendern(v, { ueber: 4 }); await warte(900);
+    R.push(['Änderung im Plan (Überdeckung) kommt in der 2D-Anlage an', o2().pneu.fp.o.ueber === 4, String(o2().pneu.fp.o.ueber)]);
+    o = o2(); o.pneu.fp.o.qn = 320; o.pneu.fp.o.elektronik = 'karte'; window._fp2d.refreshLabel(o); F._geaendert2D(o); await warte(1200);
+    const pt = F.plan().teile.find(t => t.id === v);
+    R.push(['Änderung in der 2D-Anlage (Qn, Verstärkerkarte) kommt im Plan an', pt.o.qn === 320 && pt.o.elektronik === 'karte', JSON.stringify([pt.o.qn, pt.o.elektronik])]);
+    // Rechtsklickmenü der 2D-Anlage
+    const ctx = document.createElement('div'); document.body.appendChild(ctx);
+    window._fp2d.contextMenu(o2(), ctx, () => {});
+    const mt = ctx.textContent;
+    R.push(['Rechtsklickmenü zeigt Sollwert, Nenndurchfluss, Überdeckung, Elektronik', /Sollwert/.test(mt) && /Nenndurchfluss/.test(mt) && /Überdeckung/.test(mt) && /Elektronik/.test(mt) && !/Betätigung rechts/.test(mt), mt.slice(0, 80)]);
+    ctx.remove();
+    // Auto-Schaltplan zeigt dasselbe Symbol
+    const svgS = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), gS = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    svgS.appendChild(gS); document.body.appendChild(svgS);
+    try { F._schaltbild(gS, {}); } catch (e) {}
+    const html = gS.innerHTML; svgS.remove();
+    R.push(['Auto-Schaltplan: Symbol mit Proportionalmagneten', /fp-bet-prop/.test(String(html)), String(html).length + ' Zeichen']);
+    F.verbinden2D(false); clearFactory(true); F._leeren(); window._fpKeinAutoVerbinden = true;
+    return R;
+  },
+  'Altes Proportionalventil der 2D-Anlage zieht beim Laden um': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren();
+    const ta = document.getElementById('code'); ta.value = 'YALT := 85'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(400);
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 200; c.pistonD = 20; c.rodD = 8; c.stroke = 100; updateObjTransform(c);
+    const pv = createFactoryObject('valve_prop', 'YALT'); pv.x = 300; pv.y = 300; pv.targetCylinderId = c.id; pv.ana = { vmax: 100, mitte: 50, totzone: 2, zylinder: c.id };
+    saveFactoryState();
+    // wie beim Öffnen einer alten Datei: Stand laden
+    loadFactoryState(); await warte(1500);
+    const alt = factoryObjects.filter(o => o.type === 'valve_prop').length;
+    const neu = factoryObjects.find(o => o.type === 'pneu_fp' && o.pneu && o.pneu.fp && o.pneu.fp.o && o.pneu.fp.o.links === 'prop');
+    R.push(['Kein altes Proportionalventil mehr in der Anlage', alt === 0, String(alt)]);
+    R.push(['Dafür ein 5/3-Proportional-Wegeventil mit demselben Sollwert', !!neu && neu.pneu.fp.o.wege === '5/3' && neu.pneu.fp.o.varS === 'YALT' && neu.pneu.fp.o.ueber === 4, neu ? JSON.stringify(neu.pneu.fp.o).slice(0, 160) : 'fehlt']);
+    const schl = (window.pneuConnections || []).filter(k => neu && (k.aObjId === neu.id || k.bObjId === neu.id)).length;
+    R.push(['Kompressor und Schläuche zum Zylinder sind gebaut', factoryObjects.some(o => o.type === 'compressor') && schl >= 3, schl + ' Schläuche']);
+    const hin = document.getElementById('prop-umzug-hinweis');
+    R.push(['Hinweis beim Laden nennt das Ventil', !!hin && /YALT/.test(hin.textContent) && /neu einstellen/.test(hin.textContent), hin ? hin.textContent.slice(0, 70) : 'fehlt']);
+    if (hin) hin.querySelector('button').click();
+    R.push(['Hinweis lässt sich schließen', !document.getElementById('prop-umzug-hinweis'), '']);
+    const zy = factoryObjects.find(o => o.type === 'zylinder_double');
+    if (!isSimulationActive) toggleSimulation();
+    await warte(2500);
+    R.push(['Zylinder fährt jetzt mit Druckluft aus (8,5 V)', zy.extension > 30, zy.extension.toFixed(1) + ' %']);
+    toggleSimulation(); await warte(200);
+    R.push(['Menü Pneumatik setzt ein Proportional-Wegeventil', (() => { const n = F._neuProp2D(); return !!n && n.type === 'pneu_fp' && n.pneu.fp.o.links === 'prop' && n.pneu.fp.o.qn === 700; })(), '']);
+    clearFactory(true); F._leeren();
+    return R;
+  },
+  'Hydraulik in der 2D-Anlage: 4/3-Proportional-Wegeventil': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren();
+    const alt = window._findHydTankForCylinder; window._findHydTankForCylinder = () => null;
+    const ta = document.getElementById('code'); ta.value = 'YH := 50'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(400);
+    const c = createFactoryObject('zylinder_double', ''); c.x = 300; c.y = 300; c.pistonD = 40; c.rodD = 20; c.stroke = 200;
+    const sd = window.showValisChoiceDialog; window.showValisChoiceDialog = (a, b, x, cb) => cb('triple');
+    try { generateHydraulicSetup(c); } finally { window.showValisChoiceDialog = sd; }
+    c.extension = 0;
+    const hv = factoryObjects.find(x => x.type === 'valve_hyd');
+    // Rechtsklickmenü: Betätigung auf Proportionalmagnete
+    const ctx = document.createElement('div'); document.body.appendChild(ctx);
+    window._fpHydVentilMenue(hv, ctx, () => {});
+    const sel = ctx.querySelector('select.fp-hv-bet');
+    R.push(['Rechtsklickmenü bietet „Proportionalmagnete (stetig)“', !!sel, '']);
+    if (sel) { sel.value = 'prop'; sel.dispatchEvent(new Event('change')); }
+    await warte(200);
+    const soll = ctx.querySelector('select.fp-hv-soll');
+    if (soll) { if (![...soll.options].some(op => op.value === 'YH')) { const op = document.createElement('option'); op.value = 'YH'; op.textContent = 'YH'; soll.appendChild(op); } soll.value = 'YH'; soll.dispatchEvent(new Event('change')); }
+    await warte(300);
+    const k = hv.hyd && hv.hyd.ventil;
+    R.push(['2D-Ventil ist jetzt 4/3 proportional mit Sollwert und 40 l/min', !!k && k.links === 'prop' && k.rechts === 'prop' && k.wege === '4/3' && k.varS === 'YH' && k.qn === 40, JSON.stringify(k)]);
+    R.push(['Menü zeigt Kennwerte statt Spulen', /Nenndurchfluss/.test(ctx.textContent) && !/Spule Ausfahren/.test(ctx.textContent), '']);
+    ctx.remove();
+    toggleSimulation(); await warte(800);
+    const x0 = c.extension; await warte(800);
+    R.push(['5 V: Zylinder steht', Math.abs(c.extension - x0) < 1, `${x0.toFixed(1)} → ${c.extension.toFixed(1)}`]);
+    ta.value = 'YH := 75'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(1500);
+    const xa = c.extension, va = c.hydV;
+    R.push(['7,5 V: Zylinder fährt aus', xa > x0 + 3, `${x0.toFixed(1)} → ${xa.toFixed(1)} %, v ${va != null ? (+va).toFixed(0) : '?'} mm/s`]);
+    for (const bild of ['symbol', 'schnitt', 'aussen', 'gehaeuse']) {
+      window._fpAlleVentile(bild); await warte(400);
+      if (bild === 'symbol') { const b = hv.el.querySelector('svg.f2d-hyd-bild .fp-block'), m = b && /translate\(([-\d.]+)/.exec(b.getAttribute('transform') || ''); R.push(['Normsymbol: Kastenblock stetig verschoben', !!m && +m[1] > 2 && +m[1] < 38, m ? m[1] : 'kein Block']); }
+      if (bild === 'schnitt') { const sg = hv.el.querySelector('.fp-r-schieber'), m = sg && /translateX\(([-\d.]+)px\)/.exec(sg.style.transform || ''); R.push(['aufgeschnitten: Kolbenschieber zwischen den Stellungen', !!m && hv.el.querySelectorAll('.fp-r-anker').length === 2, m ? m[1] : 'kein Schieber']); }
+      if (bild === 'aussen') R.push(['geschlossen: Bild ohne Fehler', !!hv.el.querySelector('svg.f2d-hyd-bild'), '']);
+      if (bild === 'gehaeuse') { await warte(300); R.push(['gewohntes 2D-Bild zeigt die offene Seite', hv.el.classList.contains('active-ext') || hv.el.classList.contains('active-ret'), hv.el.className.slice(0, 80)]); }
+    }
+    ta.value = 'YH := 30'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(1500);
+    R.push(['3 V: Zylinder fährt ein', c.extension < xa + 12 && (c.hydV == null || c.hydV < 0 || c.extension < xa), `${xa.toFixed(1)} → ${c.extension.toFixed(1)} %`]);
+    toggleSimulation(); await warte(200);
+    window._findHydTankForCylinder = alt;
+    clearFactory(true); F._leeren();
+    return R;
+  },
   'Fehler, Symbol, Umstellen, Listen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));
@@ -463,6 +599,7 @@ const FAELLE = {
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   const fehler = [];
   page.on('pageerror', e => fehler.push(String(e)));
+  await page.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); } catch (e) {} });
   await page.goto(`http://localhost:${srv.address().port}/index.html`);
   await page.waitForFunction(() => !!window.Fluidplan, null, { timeout: 60000 });
   await page.waitForTimeout(1500);

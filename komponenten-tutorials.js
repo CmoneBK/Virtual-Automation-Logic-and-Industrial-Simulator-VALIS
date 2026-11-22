@@ -78,9 +78,9 @@
     // ------------------------------------------------------------------
     // Aktionen aus den Tutorials heraus
     // ------------------------------------------------------------------
-    const PNEU = ['pneumatic_zone', 'compressor', 'manifold', 'valve_pneu', 'throttle', 'pressure_sensor_pneu', 'valve_prop', 'flow_sensor_pneu'];
+    const PNEU = ['pneumatic_zone', 'compressor', 'manifold', 'valve_pneu', 'throttle', 'pressure_sensor_pneu', 'flow_sensor_pneu'];
     const HYD = ['hydraulic_zone', 'hydraulic_unit', 'pump_fluid', 'oil_tank', 'hydraulic_manifold', 'valve_hyd', 'throttle_hyd', 'oil_cooler_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'];
-    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen', 'wartung'];
+    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen', 'wartung', 'ventil_prop'];
     function schliessen() {
         try { window.closeCompTutorial(); } catch (e) {}
         try { if (window.closeHub) window.closeHub(); } catch (e) {}
@@ -198,7 +198,7 @@
             teile([
                 ['🧭', 'Drucksensor mit Anzeige', '0 … 10 bar, Analogausgang 0 … 10 V und ein PNP-Schaltausgang mit Schaltpunkt und Hysterese. Rechtsklick: Messort, Bereich, Signalart, Öffner-Verhalten, Fehler „Drahtbruch“.', 'pressure_sensor_pneu'],
                 ['🌬', 'Durchflusssensor', 'Luftverbrauch 0 … 50 l/min, Analog- und Schaltausgang, dazu ein Impulsausgang (ein Impuls je Liter), z. B. für einen Zähler.', 'flow_sensor_pneu'],
-                ['🎚', 'Proportionalventil', 'fährt einen Zylinder stetig: 0 … 100 % = 0 … 10 V, 50 % = Mitte. Für die Lageregelung.', 'valve_prop']
+                ['🎚', 'Proportional-Wegeventil', '5/3-Stetigventil: Sollwert 0 … 10 V, 5 V = Mitte, darüber fährt der Zylinder aus, darunter ein, umso schneller, je weiter weg von der Mitte. Rechtsklick: Sollwert, Nenndurchfluss, Überdeckung, Verstärkerkarte. Für die Lageregelung.', 'ventil_prop']
             ]) +
             h3('Beispiel: Druck überwachen und Luft zählen') +
             code('kt_pneu_sens', '// Zylinder nur freigeben, wenn genug Druck da ist\nDRUCK_OK := S_DRUCK\nZYL_AUS := START && DRUCK_OK\n\n// Luftverbrauch zählen: 100 Impulse = 100 Liter\nLUFT_100L := CTU(S_LUFT_IMPULS, RESET, 100)\nWARTUNG := LUFT_100L') +
@@ -522,7 +522,7 @@
                 ['📟', 'Anzeige', 'Zeiger- oder Balkeninstrument für eine Zahl', 'analog_meter'],
                 ['📐', 'Regelstrecke (Modell)', 'P, PT1, PT2 oder I mit Totzeit, zum Üben ohne echte Anlage', 'regelstrecke'],
                 ['🧭', 'Drucksensor / 🌬 Durchflusssensor', 'Pneumatik als Analogsignal', 'pressure_sensor_pneu'],
-                ['🎚', 'Proportionalventil', 'Stellgröße 0 … 100 % für einen Zylinder', 'valve_prop']
+                ['🎚', 'Proportional-Wegeventil', 'Stellgröße 0 … 100 % (0 … 10 V) für einen Zylinder, mit Schläuchen angeschlossen', 'ventil_prop']
             ])) },
         { num: 2, title: 'Signalarten', content: kap('Wie der Wert in die SPS kommt', 'Normiert, Rohwert, Strom, Spannung',
             p('Rechtsklick auf einen Messumformer → <strong>Signal an der SPS</strong>:') +

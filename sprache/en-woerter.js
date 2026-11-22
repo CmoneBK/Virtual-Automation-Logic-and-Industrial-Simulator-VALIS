@@ -10041,3 +10041,34 @@ VALIS_EN.vorlagen({
 "Der Verstärker speist den Strom in den Proportionalmagneten ⟦0⟧.": "The amplifier feeds the current into proportional solenoid ⟦0⟧.",
 "Rückleiter des Magneten ⟦0⟧ zum Verstärker, erst damit fließt der Strom.": "Return conductor of solenoid ⟦0⟧ to the amplifier; only then does current flow."
 });
+// Proportionaltechnik Schritt 5: 2D-Anlage, Umzug des alten Proportionalventils
+VALIS_EN.dazu({
+"🎚 Proportional-Wegeventil": "🎚 Proportional directional valve",
+"Proportional-Wegeventil": "Proportional directional valve",
+"5/3-Proportional-Wegeventil (Stetigventil): Sollwert 0 … 10 V, 5 V = Mitte. Mit Schläuchen an Druckluft und Zylinder anschließen. Für die Lageregelung.": "5/3 proportional directional valve (continuous valve): setpoint 0 … 10 V, 5 V = centre. Connect with hoses to compressed air and cylinder. For position control.",
+"5/3-Proportional-Wegeventil": "5/3 proportional directional valve",
+"5/3-Proportionalventil": "5/3 proportional valve",
+"4/3-Proportionalventil": "4/3 proportional valve",
+"Betätigung": "Actuation",
+"Magnete (schaltend)": "Solenoids (switching)",
+"Proportionalmagnete (stetig)": "Proportional solenoids (continuous)",
+"Sollwert (0 … 10 V)": "Setpoint (0 … 10 V)",
+"Nullpunkt (Mitte) (%)": "Zero point (centre) (%)",
+"Nullpunkt (%)": "Zero point (%)",
+"Nenndurchfluss (l/min)": "Rated flow (l/min)",
+"Nenndurchfluss bei 35 bar (l/min)": "Rated flow at 35 bar (l/min)",
+"Überdeckung (%)": "Overlap (%)",
+"Zeitkonstante (ms)": "Time constant (ms)",
+"Hysterese (%)": "Hysteresis (%)",
+"Kennlinie": "Characteristic curve",
+"geknickt": "kinked",
+"eingebaut": "on-board",
+"Verstärkerkarte": "Amplifier card",
+"Verstanden": "Got it",
+"5/3-Stetigventil: Sollwert 0 … 10 V, 5 V = Mitte, darüber fährt der Zylinder aus, darunter ein, umso schneller, je weiter weg von der Mitte. Rechtsklick: Sollwert, Nenndurchfluss, Überdeckung, Verstärkerkarte. Für die Lageregelung.": "5/3 continuous valve: setpoint 0 … 10 V, 5 V = centre; above it the cylinder extends, below it retracts, the faster the further from the centre. Right-click: setpoint, rated flow, overlap, amplifier card. For position control.",
+"Stellgröße 0 … 100 % (0 … 10 V) für einen Zylinder, mit Schläuchen angeschlossen": "Manipulated variable 0 … 100 % (0 … 10 V) for a cylinder, connected with hoses"
+});
+VALIS_EN.vorlagen({
+"🎚 Das Proportionalventil (⟦0⟧) ist jetzt ein Proportional-Wegeventil mit Schläuchen: Der Zylinder fährt mit Druckluft oder Öl statt mit fester Geschwindigkeit. Bitte die Regelung neu einstellen. Kennwerte per Rechtsklick auf das Ventil.": "🎚 The proportional valve (⟦0⟧) is now a proportional directional valve with hoses: the cylinder runs on compressed air or oil instead of at a fixed speed. Please retune the control loop. Parameters via right-click on the valve.",
+"🎚 Das alte Proportionalventil (⟦0⟧) gibt es nicht mehr. Bitte im Menü Pneumatik ein Proportional-Wegeventil setzen und mit Schläuchen anschließen.": "🎚 The old proportional valve (⟦0⟧) no longer exists. Please place a proportional directional valve from the Pneumatics menu and connect it with hoses."
+});

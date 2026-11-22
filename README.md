@@ -98,6 +98,12 @@ Die Symbolleiste über dem IEC-Stromlaufplan bietet mehrere Schalter zur Anpassu
 * **Proportionaltechnik (stetige Wegeventile):** 5/3-Proportional-Wegeventil (Pneumatik) und 4/3-Proportional-Wegeventil (Hydraulik) in der Palette, oder ein Wegeventil in den Eigenschaften auf Betätigung „Proportionalmagnet“ stellen. Der Schieber hat keine festen Stellungen, sondern eine Lage von −1 bis +1: Sollwert 0 … 100 % (= 0 … 10 V, eingebaute Elektronik) aus einem VALIS-Ausgang, 50 % = Mitte. Einstellbar sind Nenndurchfluss (Voreinstellung 700 l/min pneumatisch bei 6 bar → 5 bar, 40 l/min hydraulisch bei 35 bar je Steuerkante), Überdeckung (positiv = Totzone, null, negativ = Mitte leicht offen), Verlauf der Kennlinie (linear oder geknickt), Zeitkonstante (20 ms) und Hysterese. Symbol nach DIN ISO 1219 mit Proportionalmagneten und Parallelstrichen. Prüfung `node pruefungen/proportional-pruefung.js`.
 * **Speichern:** Der Plan steckt im Anlagenzustand (`fluidplan`) und reist mit .valisave, Link und Rückgängig. API `window.Fluidplan`, Prüfung `node pruefungen/fluidplan-pruefung.js`.
 
+### 📐 Blattformate und Schriftfeld (alle Pläne)
+* **Ein Blatt für alle Pläne:** `blatt.js` (`window.Blatt`) kennt Format (A4 quer als Voreinstellung, A3 quer als Wahl), Rahmen mit Heftrand, oben die Spaltenleiste (A4 quer 8, A3 quer 10 feste Spalten), unten rechts das Schriftfeld und die Blattnummer. Jeder Strompfad hat damit die Adresse „Blatt.Spalte“, z. B. 2.4.
+* **Schriftfeld:** Erstellt, Geprüft, Datum, Klasse, Schule, Zeichnungsnummer, Blatt x/y, dazu „Änderung“ und „Anlage/Projekt“. Einmal ausfüllen, es gilt für alle Pläne der Anlage und reist im Anlagenzustand (`blatt`) mit .valisave, Link und Rückgängig. Name, Klasse und Schule merkt sich der Browser für die nächste Anlage.
+* **Fluidplan:** „🖨 PDF“ druckt auf das gewählte Format; ein großer Plan wahlweise auf mehrere Blätter (geschnitten in Lücken zwischen den Bauteilen, mit Fortsetzungsvermerk) statt verkleinert. Die Betriebsmittel- und Stückliste ist ein eigenes Blatt.
+* **Prüfung:** `node pruefungen/blatt-pruefung.js` (Maße je Format, Aufteilen, Schriftfeld, Blattzählung, Zustand).
+
 ### 📊 Logik-Analysator (Oszilloskop)
 * **Echtzeit-Signalverfolgung:** Öffnen Sie das Oszilloskop, um Signalflanken (High/Low) aller Ein- und Ausgänge wie bei einem EKG präzise über die Zeit aufzuzeichnen und auszuwerten.
 

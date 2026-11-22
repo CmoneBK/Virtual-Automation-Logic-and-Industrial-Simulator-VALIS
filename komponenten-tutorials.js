@@ -80,7 +80,7 @@
     // ------------------------------------------------------------------
     const PNEU = ['pneumatic_zone', 'compressor', 'manifold', 'valve_pneu', 'throttle', 'pressure_sensor_pneu', 'flow_sensor_pneu'];
     const HYD = ['hydraulic_zone', 'hydraulic_unit', 'pump_fluid', 'oil_tank', 'hydraulic_manifold', 'valve_hyd', 'throttle_hyd', 'oil_cooler_hyd', 'check_valve_hyd', 'pressure_switch_hyd', 'manometer_hyd', 'accumulator_hyd'];
-    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen', 'wartung'];
+    const FP2D = ['rueck', 'wechsel', 'zweidruck', 'schnell', 'drossel', 'druckregel', 'zeit', 'folge', 'dschalter', 'manometer', 'daempfer', 'stopfen', 'wartung', 'ventil_prop'];
     function schliessen() {
         try { window.closeCompTutorial(); } catch (e) {}
         try { if (window.closeHub) window.closeHub(); } catch (e) {}
@@ -94,7 +94,6 @@
         try {
             if (PNEU.includes(typ) && window.togglePneumaticMenu) window.togglePneumaticMenu(true);
             if (HYD.includes(typ) && window.toggleHydraulicMenu) window.toggleHydraulicMenu(true);
-            if (typ === 'ventil_prop') { if (window.Fluidplan && window.Fluidplan._neuProp2D) { if (window.togglePneumaticMenu) window.togglePneumaticMenu(true); window.Fluidplan._neuProp2D(); } return; }
             if (FP2D.includes(typ)) { if (window.Fluidplan && window.Fluidplan._neu2D) { if (window.togglePneumaticMenu) window.togglePneumaticMenu(true); window.Fluidplan._neu2D(typ); } return; }
             window.addFactoryDevice(typ);
         } catch (e) { console.error('Komponenten-Tutorial: Einsetzen', typ, e); }

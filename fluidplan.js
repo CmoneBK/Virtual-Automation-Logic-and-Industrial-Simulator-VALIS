@@ -8055,6 +8055,8 @@ function versorgungMerken(F) {
     if (!registrieren2D()) document.addEventListener('DOMContentLoaded', registrieren2D);
     // Neues Fluidplan-Teil aus dem Menü Pneumatik der 2D-Anlage
     function neu2D(typ, oo) {
+        // Proportional-Wegeventil aus dem Menü Pneumatik: 5/3, beide Seiten Proportionalmagnet
+        if (typ === 'ventil_prop') { typ = 'ventil'; oo = Object.assign({ wege: '5/3', links: 'prop', rechts: 'prop', mitte: 'gesperrt', qn: 700, elektronik: 'eingebaut' }, PROP_STD, oo || {}); }
         if (!TYP[typ] || typeof createFactoryObject !== 'function') return null;
         const o = createFactoryObject('pneu_fp', oo ? { typ, o: Object.assign({}, TYP[typ].optionen, oo) } : typ);
         try { if (typeof saveFactoryState === 'function') saveFactoryState(); } catch (e) {}
@@ -8147,7 +8149,7 @@ function versorgungMerken(F) {
         _sichtbar: () => { if (panelEl() || fenster) sichtbarGeworden(); },
         _abkoppeln: abkoppeln,
         _neu2D: neu2D, _ventilUmbauen: ventilUmbauen, _geaendert2D: geaendert2D, _hydVentilUmstellen: hydVentilUmstellen,
-        _neuProp2D: (oo) => neu2D('ventil', Object.assign({ wege: '5/3', links: 'prop', rechts: 'prop', mitte: 'gesperrt', qn: 700, elektronik: 'eingebaut' }, PROP_STD, oo || {})),
+        _neuProp2D: (oo) => neu2D('ventil_prop', oo),
         _schaltbild: schaltbild, _posProzent: posProzent, _portLage: (id, p) => { const t = teil(id); return t ? portLage(t, p) : null; }, _andockAblegen: id => aendern(() => andockAblegen(teil(id))),
         exportieren: planExport,
         importieren: planImport,

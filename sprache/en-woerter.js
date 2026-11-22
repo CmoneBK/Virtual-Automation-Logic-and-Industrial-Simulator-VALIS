@@ -9888,3 +9888,31 @@ VALIS_EN.vorlagen({
 "🪄 ⟦0⟧ Stränge generiert, ⟦1⟧ Programmbaustein": "🪄 ⟦0⟧ rungs generated, ⟦1⟧ program block",
 "🪄 ⟦0⟧ Stränge generiert, ⟦1⟧ Programmbausteine": "🪄 ⟦0⟧ rungs generated, ⟦1⟧ program blocks"
 });
+
+// Proportionaltechnik (Fluidplan), Schritt 1: stetige Wegeventile
+VALIS_EN.dazu({
+"Proportionalmagnet (stetig, Analogausgang)": "Proportional solenoid (continuous, analogue output)",
+"Proportionalmagnet": "Proportional solenoid",
+"5/3 Proportional-Wegeventil": "5/3 proportional directional valve",
+"4/3 Proportional-Wegeventil": "4/3 proportional directional valve",
+"5/3-Proportional-Wegeventil": "5/3 proportional directional valve",
+"4/3-Proportional-Wegeventil": "4/3 proportional directional valve",
+"4/3-Proportional-Wegeventil, hydraulisch": "4/3 proportional directional valve, hydraulic",
+"Betätigung": "Actuation",
+"Sollwert: VALIS-Ausgang (Analogwert)": "Setpoint: VALIS output (analogue value)",
+"Nullpunkt: Schieber in der Mitte bei (%)": "Zero point: spool centred at (%)",
+"Nenndurchfluss je Steuerkante bei 35 bar (l/min)": "Nominal flow per control edge at 35 bar (l/min)",
+"Nenndurchfluss (6 bar → 5 bar) (l/min)": "Nominal flow (6 bar → 5 bar) (l/min)",
+"Überdeckung (positiv = Totzone, negativ = Mitte offen) (% vom Schieberweg)": "Overlap (positive = dead zone, negative = centre open) (% of spool travel)",
+"Verlauf der Kennlinie": "Shape of the characteristic curve",
+"linear": "linear",
+"geknickt (feinfühlig um die Mitte)": "kinked (fine control around the centre)",
+"Zeitkonstante des Schiebers (ms)": "Time constant of the spool (ms)",
+"Hysterese (% vom Signalbereich)": "Hysteresis (% of signal range)",
+"Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet 1 → 4 und 2 → 3, darunter 1 → 2 und 4 → 5. Je weiter weg von der Mitte, desto größer der Durchfluss.": "Continuous valve with on-board electronics: the setpoint 0 … 100 % corresponds to 0 … 10 V. At the zero point (5 V) the spool is centred; above it 1 → 4 and 2 → 3 open, below it 1 → 2 and 4 → 5. The further from the centre, the larger the flow.",
+"Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet P → A und B → T, darunter P → B und A → T. Je weiter weg von der Mitte, desto größer der Durchfluss.": "Continuous valve with on-board electronics: the setpoint 0 … 100 % corresponds to 0 … 10 V. At the zero point (5 V) the spool is centred; above it P → A and B → T open, below it P → B and A → T. The further from the centre, the larger the flow.",
+"⟦0⟧: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).": "⟦0⟧: The proportional valve has no setpoint (VALIS output).",
+"Proportionalmagnete, federzentriert": "Proportional solenoids, spring-centred",
+"Überdeckung ⟦0⟧ %": "Overlap ⟦0⟧ %",
+"Sollwert ⟦0⟧ (0 … 10 V)": "Setpoint ⟦0⟧ (0 … 10 V)"
+});

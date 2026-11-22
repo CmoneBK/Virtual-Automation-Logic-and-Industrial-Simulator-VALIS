@@ -147,13 +147,62 @@
         rolle: 'Rollenhebel',
         rolle_leer: 'Rollenhebel mit Leerrücklauf',
         pneu: 'Pneumatisch (Steuerdruck)',
+        prop: 'Proportionalmagnet (stetig, Analogausgang)',
         feder: 'Feder'
     };
+    // ---------- Proportional-Wegeventil (stetig) ----------
+    // Ein Wegeventil mit Proportionalmagneten hat keine festen Stellungen, sondern eine
+    // Schieberlage s von −1 … +1 (0 = Mitte, federzentriert). s > 0 öffnet 1→4 und 2→3
+    // (Hydraulik P→A, B→T), s < 0 öffnet 1→2 und 4→5 (P→B, A→T). Wie weit eine Steuerkante
+    // öffnet, sagt die Kennlinie: Überdeckung (positiv = Totzone um die Mitte, negativ = alle
+    // Kanten in der Mitte leicht offen), Verlauf (linear oder geknickt für feine Bewegungen)
+    // und Nenndurchfluss. Der Schieber folgt dem Sollwert mit Zeitkonstante und Hysterese.
+    // Neutrale, typische Kennwerte (Christoph, 22.11.2026): Pneumatik 5/3 mit 700 l/min
+    // Nenndurchfluss (6 bar → 5 bar), Hydraulik NG 6 mit 40 l/min bei 35 bar je Steuerkante,
+    // Zeitkonstante 20 ms.
+    const istProp = t => !!t && t.typ === 'ventil' && !!t.o && t.o.links === 'prop';
+    const PROP_STD = { varS: '', nullS: 50, ueber: 10, verlauf: 'linear', tau: 20, hyst: 2 };
+    const PROP_DP_H = 35;   // bar je Steuerkante, auf die sich der Nenndurchfluss (Öl) bezieht
+    const propQn = o => Math.max(0, zahl(o.qn, o.hyd ? 40 : 700));
+    // Ein Ventil auf „proportional" umstellen bzw. zurück: beide Seiten, drei Stellungen, Mitte gesperrt
+    function propOrdnen(t) {
+        if (!t || t.typ !== 'ventil') return;
+        const o = t.o;
+        if (o.links === 'prop') {
+            o.rechts = 'prop'; o.wege = o.hyd ? '4/3' : '5/3'; o.mitte = 'gesperrt';
+            for (const k in PROP_STD) if (o[k] == null) o[k] = PROP_STD[k];
+            if (o.qn == null) o.qn = o.hyd ? 40 : 700;
+        } else if (o.rechts === 'prop') o.rechts = 'magnet';
+    }
+    // Kennlinie einer Steuerkante: Schieberweg u (0 … 1 hinter der Überdeckung) → Öffnung (0 … 1)
+    function propVerlauf(o, u) {
+        if (u <= 0) return 0;
+        if (u >= 1) return 1;
+        // geknickt: die ersten 40 % des Wegs bringen nur 10 % der Öffnung (Feinsteuerbereich)
+        if (o.verlauf === 'geknickt') return u < 0.4 ? u * 0.25 : 0.1 + (u - 0.4) * 1.5;
+        return u;
+    }
+    // Öffnung der beiden Kantenpaare bei Schieberlage s: [1→4 und 2→3, 1→2 und 4→5]
+    function propOeffnung(o, s) {
+        const ue = Math.max(-0.5, Math.min(0.5, zahl(o.ueber, 10) / 100));
+        return [propVerlauf(o, (s - ue) / (1 - ue)), propVerlauf(o, (-s - ue) / (1 - ue))];
+    }
+    // Leitwert einer voll geöffneten Steuerkante aus dem Nenndurchfluss
+    //   Luft: Nenndurchfluss bei 6 bar → 5 bar (Δp = 1 bar): g = Qn / 60 in Nl/(s·bar)
+    //   Öl:   Nenndurchfluss bei 35 bar je Kante: Q = g · 2·√Δp
+    const propLeitwert = o => o.hyd ? propQn(o) / 60 / (2 * Math.sqrt(PROP_DP_H)) : propQn(o) / 60;
+    // Sollwert des Schiebers (−1 … +1) aus der Stellgröße: 0 … 100 % = 0 … 10 V, Nullpunkt (50 %) = Mitte
+    function propSoll(t) {
+        const o = t.o, roh = o.varS ? sps()[o.varS] : null;
+        const nul = Math.max(1, Math.min(99, zahl(o.nullS, 50)));
+        const y = typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) : roh === true ? 100 : nul;
+        return y >= nul ? (y - nul) / (100 - nul) : (y - nul) / nul;
+    }
     const MANUELL = { taster: 1, pilz: 1, hebel: 1, pedal: 1 };
     const KASTEN = 40;
 
     // Breite des Betätigungssymbols
-    const betBreite = b => b === 'feder' ? 16 : b === 'pneu' ? 16 : b === 'magnet' ? 12 : b === 'rolle' || b === 'rolle_leer' ? 18 : 16;
+    const betBreite = b => b === 'prop' ? 28 : b === 'feder' ? 16 : b === 'pneu' ? 16 : b === 'magnet' ? 12 : b === 'rolle' || b === 'rolle_leer' ? 18 : 16;
 
     // Zeichnet ein Betätigungssymbol an x (Kastenkante), Seite s = −1 links / +1 rechts
     function betSymbol(g, b, x, s, aktiv) {
@@ -167,6 +216,19 @@
             const x0 = Math.min(x, x2);
             el('rect', { x: x0, y: cy - 8, width: w, height: 16, fill: aktiv ? 'var(--fp-aktiv)' : 'none', stroke: 'currentColor', 'stroke-width': lw, class: 'fp-bet-magnet' }, g);
             el('line', { x1: x0 + (s < 0 ? w : 0), y1: cy + 8, x2: x0 + (s < 0 ? 0 : w), y2: cy - 8, stroke: 'currentColor', 'stroke-width': lw }, g);
+        } else if (b === 'prop') {
+            // Feder (zentriert den Schieber) und Proportionalmagnet: Spule mit Pfeil für „verstellbar"
+            const pts = [];
+            for (let i = 0; i <= 6; i++) pts.push((x + s * (i * 14 / 6)) + ',' + (cy + (i === 0 || i === 6 ? 0 : (i % 2 ? -5 : 5))));
+            el('polyline', { points: pts.join(' '), fill: 'none', stroke: 'currentColor', 'stroke-width': 1.3 }, g);
+            const x0 = Math.min(x + s * 14, x2);
+            el('rect', { x: x0, y: cy - 8, width: 14, height: 16, fill: aktiv ? 'var(--fp-aktiv)' : 'none', stroke: 'currentColor', 'stroke-width': lw, class: 'fp-bet-prop' }, g);
+            el('line', { x1: x0, y1: cy - 8, x2: x0 + 14, y2: cy + 8, stroke: 'currentColor', 'stroke-width': lw }, g);
+            // Pfeil schräg durch die Spule
+            const ax = x0 + 1, ay = cy + 12, bx = x0 + 13, by = cy - 12;
+            const d = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / d, uy = (by - ay) / d;
+            el('line', { x1: ax, y1: ay, x2: bx - ux * 3, y2: by - uy * 3, stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+            el('path', { d: `M${bx},${by} L${bx - ux * 5 - uy * 2.2},${by - uy * 5 + ux * 2.2} L${bx - ux * 5 + uy * 2.2},${by - uy * 5 - ux * 2.2} Z`, fill: 'currentColor' }, g);
         } else if (b === 'pneu') {
             el('line', { x1: x, y1: cy, x2: x + s * 6, y2: cy, stroke: 'currentColor', 'stroke-width': lw }, g);
             el('rect', { x: Math.min(x + s * 6, x + s * 16), y: cy - 6, width: 10, height: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': lw }, g);
@@ -198,7 +260,7 @@
     // Betätiger in Bewegung zeigen (alle Darstellungen): Taster, Pilz und Rolle werden zum
     // Ventil hin eingedrückt, Hebel und Pedal kippen; farbe = Farbe der betätigten Seite.
     function betZeigen(g, b, s, an, farbe) {
-        if (!g || b === 'magnet' || b === 'feder') return;
+        if (!g || b === 'magnet' || b === 'feder' || b === 'prop') return;
         const k = an ? '1' : '0'; if (g.getAttribute('data-an') === k) return;
         g.setAttribute('data-an', k);
         const kippt = b === 'hebel' || b === 'pedal';
@@ -262,6 +324,8 @@
                     el('line', { x1: x - 5, y1: y + dy * 7, x2: x + 5, y2: y + dy * 7, stroke: 'currentColor', 'stroke-width': 1.4 }, block);
                 }
             });
+            // Stetigventil: zwei Parallelstriche längs über und unter den Kästen (beliebige Zwischenstellungen)
+            if (o.links === 'prop') for (const y of [-3.5, KASTEN + 3.5]) el('line', { x1: 0, y1: y, x2: geo.n * KASTEN, y2: y, stroke: 'currentColor', 'stroke-width': 1.2, class: 'fp-stetig' }, block);
             const bl = el('g', { class: 'fp-bet-l', 'data-seite': 'L' }, block);
             betSymbol(bl, o.links, 0, -1, false);
             const br = el('g', { class: 'fp-bet-r', 'data-seite': 'R' }, block);
@@ -823,6 +887,7 @@
             { name: '5/2 Magnet, Feder', typ: 'ventil', o: { wege: '5/2', links: 'magnet', rechts: 'feder' } },
             { name: '5/2 Impulsventil (Magnet)', typ: 'ventil', o: { wege: '5/2', links: 'magnet', rechts: 'magnet' } },
             { name: '5/3 Magnet, Mitte gesperrt', typ: 'ventil', o: { wege: '5/3', links: 'magnet', rechts: 'magnet', mitte: 'gesperrt' } },
+            { name: '5/3 Proportional-Wegeventil', typ: 'ventil', o: Object.assign({ wege: '5/3', links: 'prop', rechts: 'prop', mitte: 'gesperrt', qn: 700 }, PROP_STD) },
             { name: '4/2 Hebel (rastend)', typ: 'ventil', o: { wege: '4/2', links: 'hebel', rechts: 'feder' } },
             { name: '2/2 Taster', typ: 'ventil', o: { wege: '2/2', links: 'taster', rechts: 'feder' } }
         ] },
@@ -861,6 +926,7 @@
             { name: '4/3 Magnet, Umlauf', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf' }) },
             { name: '4/3 Magnet, Mitte gesperrt', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'gesperrt' }) },
             { name: '4/3 Magnet, Schwimmstellung', typ: 'ventil', o: HY({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'schwimm' }) },
+            { name: '4/3 Proportional-Wegeventil', typ: 'ventil', o: HY(Object.assign({ wege: '4/3', links: 'prop', rechts: 'prop', mitte: 'gesperrt', qn: 40 }, PROP_STD)) },
             { name: '4/2 Magnet, Feder', typ: 'ventil', o: HY({ wege: '4/2', links: 'magnet', rechts: 'feder' }) },
             { name: '4/2 Hebel (rastend)', typ: 'ventil', o: HY({ wege: '4/2', links: 'hebel', rechts: 'feder' }) }
         ] },
@@ -1023,6 +1089,7 @@
     // Wechselt ein Ventil seine Art (Taster → Magnet …), wechselt das automatische Kennzeichen mit
     function kennNachArt(t) {
         if (t.typ !== 'ventil') return;
+        propOrdnen(t);
         const m = String(t.bez || '').match(/^-([A-Z]+)\d+$/);
         if (m && ['QM', 'SJ', 'BG'].includes(m[1]) && m[1] !== kennCode(t.typ, t.o)) { t.bez = ''; t.bez = neueBezeichnung(t.typ, t.o); }
     }
@@ -1607,6 +1674,7 @@
                 const sp = v => bild && v && bild.spule && bild.spule(v) ? bild.spule(v) + ' ' + v : (v || '?');
                 if (t.o.links === 'magnet') vs.push(sp(t.o.varL));
                 if (t.o.rechts === 'magnet') vs.push(sp(t.o.varR));
+                if (istProp(t)) vs.push((t.o.varS || '?') + ' (0 … 10 V)');
                 // unter angedockten Schalldämpfern und Stopfen
                 let unten = bb[3];
                 for (const l of plan.leitungen) { const a = angedockt(l) && andockVon(l); if (a && a.wirt === t) unten = Math.max(unten, boxWelt(a.gast)[3]); }
@@ -2177,8 +2245,17 @@
             if (t.o.wege === '4/3') wahl('Mittelstellung', 'mitte', [['gesperrt', 'gesperrt (alle zu)'], ['umlauf', 'Umlauf (P → T, A und B zu)'], ['schwimm', 'Schwimmstellung (A und B → T)'], ['offen', 'offen (alle verbunden)']]);
             if (t.o.wege === '2/2' || t.o.wege === '3/2') wahl('Ruhestellung', 'ruhe', [['zu', 'gesperrt (Öffner: zu)'], ['offen', 'Durchfluss (offen)']]);
             if (t.o.wege === '5/3') wahl('Mittelstellung', 'mitte', [['gesperrt', 'gesperrt'], ['entlueftet', 'entlüftet (2, 4 → Abluft)'], ['belueftet', 'belüftet (1 → 2 und 4)']]);
-            const bets = Object.keys(BETAETIGUNG).filter(b => b !== 'feder').map(b => [b, BETAETIGUNG[b]]);
-            wahl('Betätigung links', 'links', bets);
+            const bets = Object.keys(BETAETIGUNG).filter(b => b !== 'feder' && (b !== 'prop' || /^[45]/.test(t.o.wege || ''))).map(b => [b, BETAETIGUNG[b]]);
+            wahl(istProp(t) ? 'Betätigung' : 'Betätigung links', 'links', bets);
+            if (istProp(t)) {
+                variable('Sollwert: VALIS-Ausgang (Analogwert)', 'varS', 'out');
+                num('Nullpunkt: Schieber in der Mitte bei', 'nullS', 1, 99, 1, '%');
+                num(istHyd(t) ? 'Nenndurchfluss je Steuerkante bei 35 bar' : 'Nenndurchfluss (6 bar → 5 bar)', 'qn', istHyd(t) ? 1 : 10, istHyd(t) ? 200 : 3000, istHyd(t) ? 1 : 10, 'l/min');
+                num('Überdeckung (positiv = Totzone, negativ = Mitte offen)', 'ueber', -30, 40, 1, '% vom Schieberweg');
+                wahl('Verlauf der Kennlinie', 'verlauf', [['linear', 'linear'], ['geknickt', 'geknickt (feinfühlig um die Mitte)']]);
+                num('Zeitkonstante des Schiebers', 'tau', 1, 500, 1, 'ms');
+                num('Hysterese', 'hyst', 0, 20, 0.5, '% vom Signalbereich');
+            }
             if (t.o.links === 'magnet') variable('Spule links: VALIS-Ausgang', 'varL', 'out');
             if (t.o.links === 'rolle' || t.o.links === 'rolle_leer') {
                 zylWahl('Rolle betätigt von Zylinder', 'zyl');
@@ -2186,7 +2263,7 @@
                 num('Schaltweg der Rolle', 'schaltweg', 0.5, 20, 0.5, 'mm');
                 if (t.o.links === 'rolle_leer') wahl('betätigt beim', 'richt', [['aus', 'Ausfahren'], ['ein', 'Einfahren']]);
             }
-            wahl('Betätigung rechts', 'rechts', [['feder', 'Feder (Rückstellung)']].concat(bets));
+            if (!istProp(t)) wahl('Betätigung rechts', 'rechts', [['feder', 'Feder (Rückstellung)']].concat(bets.filter(b => b[0] !== 'prop')));
             if (t.o.rechts === 'magnet') variable('Spule rechts: VALIS-Ausgang', 'varR', 'out');
             if (t.o.rechts === 'rolle' || t.o.rechts === 'rolle_leer') {
                 zylWahl('Rolle rechts betätigt von Zylinder', 'zylR');
@@ -2208,7 +2285,8 @@
                     i2.onchange = () => setze(() => { const d = teil(a.teil); if (d) d.o.offen = Math.max(1, Math.min(100, zahl(i2.value, 50))); });
                 }
             }
-            if (istHyd(t)) h('div', { class: 'fp-hinw', html: 'Hydraulik: P von der Pumpe, T zum Tank, A und B zum Zylinder. ' + (t.o.wege === '4/3' ? 'Ohne Betätigung steht das Ventil in der Mitte.' : '') }, box);
+            if (istProp(t)) h('div', { class: 'fp-hinw', html: 'Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet ' + (istHyd(t) ? 'P → A und B → T' : '1 → 4 und 2 → 3') + ', darunter ' + (istHyd(t) ? 'P → B und A → T' : '1 → 2 und 4 → 5') + '. Je weiter weg von der Mitte, desto größer der Durchfluss.' }, box);
+            else if (istHyd(t)) h('div', { class: 'fp-hinw', html: 'Hydraulik: P von der Pumpe, T zum Tank, A und B zum Zylinder. ' + (t.o.wege === '4/3' ? 'Ohne Betätigung steht das Ventil in der Mitte.' : '') }, box);
             else h('div', { class: 'fp-hinw', html: `Steueranschlüsse heißen nach ISO 5599-3 so, wie sie das Ventil schalten: links <b>${steuerNummer(st[0])}</b>, rechts <b>${steuerNummer(st[st.length - 1])}</b>. ` + (t.o.rechts !== 'feder' && t.o.wege !== '5/3' ? 'Ohne Feder bleibt das Ventil in der zuletzt geschalteten Stellung (Impulsventil).' : '') }, box);
         } else if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') {
             num('Kolbendurchmesser', 'd', 8, 200, 1, 'mm');
@@ -2308,6 +2386,7 @@
             if (t.typ === 'ventil') {
                 if (t.o.links === 'magnet' && !t.o.varL) meld.push(`${n}: Spule links hat keinen VALIS-Ausgang.`);
                 if (t.o.rechts === 'magnet' && !t.o.varR) meld.push(`${n}: Spule rechts hat keinen VALIS-Ausgang.`);
+                if (istProp(t) && !t.o.varS) meld.push(`${n}: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).`);
                 if ((t.o.links === 'rolle' || t.o.links === 'rolle_leer') && !teil(t.o.zyl)) meld.push(`${n}: Rollenhebel ist keinem Zylinder zugeordnet.`);
                 if ((t.o.rechts === 'rolle' || t.o.rechts === 'rolle_leer') && !teil(t.o.zylR)) meld.push(`${n}: Rollenhebel rechts ist keinem Zylinder zugeordnet.`);
             }
@@ -2361,12 +2440,12 @@
     // ------------------------------------------------------------
     // Betriebsmittel- und Stückliste aus dem Plan, Plan als PDF mit Schriftfeld
     // ------------------------------------------------------------
-    const BET_KURZ = { magnet: 'Magnet', taster: 'Taster', pilz: 'Pilztaster', hebel: 'Hebel rastend', pedal: 'Pedal', rolle: 'Rollenhebel', rolle_leer: 'Rollenhebel mit Leerrücklauf', pneu: 'pneumatisch', feder: 'Feder' };
+    const BET_KURZ = { magnet: 'Magnet', taster: 'Taster', pilz: 'Pilztaster', hebel: 'Hebel rastend', pedal: 'Pedal', rolle: 'Rollenhebel', rolle_leer: 'Rollenhebel mit Leerrücklauf', pneu: 'pneumatisch', prop: 'Proportionalmagnet', feder: 'Feder' };
     const MITTE_NAME = { gesperrt: 'gesperrt', umlauf: 'Umlauf', schwimm: 'Schwimm', offen: 'offen', entlueftet: 'entlüftet', belueftet: 'belüftet' };
     const zf = (v, n) => { const x = Number(v); return isFinite(x) ? x.toLocaleString('de-DE', { maximumFractionDigits: n == null ? 2 : n }) : String(v); };
     function teilBenennung(t) {
         const T = TYP[t.typ]; let n = T ? T.name : t.typ;
-        if (t.typ === 'ventil') n = (t.o.wege || '3/2') + '-Wegeventil';
+        if (t.typ === 'ventil') n = (t.o.wege || '3/2') + (istProp(t) ? '-Proportional-Wegeventil' : '-Wegeventil');
         if (t.typ === 'wartung' && t.o.kurz) n += ' (Kurzform)';
         if (istHyd(t) && /^(zyl_|ventil|rueck|drossel|drv)/.test(t.typ)) n += ', hydraulisch';
         return n;
@@ -2375,6 +2454,7 @@
         const o = t.o || {}, d = [];
         switch (t.typ) {
             case 'ventil': {
+                if (o.links === 'prop') { d.push('Proportionalmagnete, federzentriert', 'Qn = ' + zf(propQn(o)) + ' l/min', 'Überdeckung ' + zf(zahl(o.ueber, 10), 0) + ' %'); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); break; }
                 d.push('Betätigung ' + (BET_KURZ[o.links] || o.links) + ' / ' + (BET_KURZ[o.rechts] || o.rechts));
                 if (ventilStellungen(o).length === 3) d.push('Mittelstellung ' + (MITTE_NAME[o.mitte] || o.mitte));
                 else if (o.wege === '3/2' || o.wege === '2/2') d.push(o.ruhe === 'offen' ? 'Ruhestellung offen' : 'Ruhestellung gesperrt');
@@ -2807,6 +2887,7 @@
                 if (t.o.links === 'hebel') z.rasteL = false;
                 if (t.o.rechts === 'hebel') z.rasteR = false;
                 z.pulsL = 0; z.pulsR = 0; z.pulsLH = z.pulsRH = false; z.pulsLX = z.pulsRX = null;
+                if (istProp(t)) { z.s = 0; z.h = 0; z.soll = 0; z.q = 0; z.qSum = 0; z.auf = [0, 0]; }
             }
             if (t.typ === 'zeit') { z.pr = 0; z.an = false; }
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
@@ -2922,7 +3003,12 @@
         // --- Ventilstellungen (einmal je Bild) ---
         for (const t of plan.teile) {
             const z = S.zust[t.id];
-            if (t.typ === 'ventil') {
+            if (t.typ === 'ventil' && istProp(t)) {
+                // Stetigventil: Sollwert einmal je Bild lesen, der Schieber läuft in den Teilschritten nach
+                const fe = fehlerAktiv(t.id);
+                z.soll = fe === 'spule' ? 0 : propSoll(t);
+                z.qSum = 0;
+            } else if (t.typ === 'ventil') {
                 if (z.pulsL > 0) z.pulsL -= dtGesamt;
                 if (z.pulsR > 0) z.pulsR -= dtGesamt;
                 const st = ventilStellungen(t.o), n = st.length;
@@ -2959,6 +3045,13 @@
         // --- Teilschritte: Strömung und Kolben ---
         const n = Math.max(1, Math.min(60, Math.round(dtGesamt / DT)));
         for (let i = 0; i < n; i++) teilschritt();
+        // Stetigventile: Durchfluss zum Anschluss 4 (A) in l/min, Stellung für Anzeige und Abgleich
+        for (const t of plan.teile) if (istProp(t)) {
+            const z = S.zust[t.id];
+            z.q = z.qSum / (n * DT) * 60;
+            z.stellung = z.s > 0.02 ? 0 : z.s < -0.02 ? 2 : 1;
+            z.betL = z.s > 0.02; z.betR = z.s < -0.02;
+        }
         // --- Sensoren ---
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
@@ -3004,6 +3097,24 @@
             const z = S.zust[t.id];
             switch (t.typ) {
                 case 'ventil': {
+                    if (istProp(t)) {
+                        const o = t.o, fe = fehlerAktiv(t.id);
+                        // Hysterese als Umkehrspanne (der Schieber folgt erst, wenn das Spiel durchfahren ist), dann Verzögerung 1. Ordnung
+                        if (fe !== 'klemmt') {
+                            const hy = Math.max(0, zahl(o.hyst, 2)) / 100;   // halbe Spanne in s (Signalbereich = 2)
+                            if (z.soll > z.h + hy) z.h = z.soll - hy; else if (z.soll < z.h - hy) z.h = z.soll + hy;
+                            z.s += (z.h - z.s) * Math.min(1, DT / Math.max(0.001, zahl(o.tau, 20) / 1000));
+                        }
+                        const auf = propOeffnung(o, z.s), Gn = propLeitwert(o), hyd = istHyd(t);
+                        z.auf = auf;
+                        const ab = hyd ? '3' : '5';
+                        let q = 0;
+                        if (auf[0] > 0) { q += fluss(netz(t, '1'), netz(t, '4'), Gn * auf[0], 0); fluss(netz(t, '2'), netz(t, '3'), Gn * auf[0], 0); }
+                        if (auf[1] > 0) { fluss(netz(t, '1'), netz(t, '2'), Gn * auf[1], 0); q -= fluss(netz(t, '4'), netz(t, ab), Gn * auf[1], 0); }
+                        z.qSum += q;
+                        if (fe === 'leck') { if (hyd) { fluss(netz(t, '4'), netz(t, '3'), Gn * 0.05, 0); fluss(netz(t, '2'), netz(t, '3'), Gn * 0.05, 0); } else fluss(netz(t, '1'), 'ATM', G_VENTIL * 0.3, 1); }
+                        break;
+                    }
                     const st = ventilStellungen(t.o)[z.stellung], G = istHyd(t) ? G_HV : G_VENTIL;
                     for (const [a, b] of st.w) fluss(netz(t, a), netz(t, b), G, 0);
                     if (fehlerAktiv(t.id) === 'leck') { if (istHyd(t)) { fluss(netz(t, '4'), netz(t, '3'), G * 0.15, 0); fluss(netz(t, '2'), netz(t, '3'), G * 0.15, 0); } else fluss(netz(t, '1'), 'ATM', G * 0.3, 1); }
@@ -3191,8 +3302,16 @@
             const z = an ? sim.zust[t.id] : null;
             if (t.typ === 'ventil' && r.block) {
                 const n = r.geo.n, ruhe = n === 3 ? 1 : n - 1;
-                const k = z ? z.stellung : ruhe;
+                const k = z ? (istProp(t) ? 1 - Math.max(-1, Math.min(1, z.s || 0)) : z.stellung) : ruhe;
                 r.block.setAttribute('transform', `translate(${(ruhe - k) * KASTEN},0)`);
+                if (istProp(t)) {
+                    // Proportionalmagnete: je weiter der Schieber ausgelenkt ist, desto kräftiger die Farbe
+                    const s = z ? z.s || 0 : 0;
+                    r.g.querySelectorAll('.fp-bet-prop').forEach(m => {
+                        const a = m.closest('.fp-bet-l') ? Math.max(0, s) : Math.max(0, -s);
+                        m.setAttribute('fill', a > 0.02 ? 'var(--fp-aktiv)' : 'none'); m.setAttribute('fill-opacity', a > 0.02 ? (0.25 + 0.75 * a).toFixed(2) : 1);
+                    });
+                }
                 // Stich zum Steueranschluss nachziehen
                 r.g.querySelectorAll('.fp-steuerstich').forEach(s => {
                     const seite = s.getAttribute('data-seite');
@@ -7677,6 +7796,7 @@ function versorgungMerken(F) {
                 const r = { typ: t.typ, bez: t.bez };
                 if (z.x != null) { r.x = z.x; r.v = z.v; r.anteil = z.x / zylHub(t); }
                 if (z.stellung != null) r.stellung = z.stellung;
+                if (z.s != null) { r.s = z.s; r.soll = z.soll; r.q = z.q; r.auf = z.auf; }
                 if (z.an != null) r.an = z.an;
                 const ports = {};
                 for (const p of geo(t).ports) ports[p.id] = +pPort(t, p.id).toFixed(3);

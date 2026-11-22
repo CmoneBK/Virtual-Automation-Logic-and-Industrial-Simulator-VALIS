@@ -9315,7 +9315,9 @@ VALIS_EN.dazu({
 "GRAFCET / Funktionsplan": "GRAFCET / function chart",
 "Funktionsplan (FUP)": "Function block diagram (FBD)",
 "Blätter": "Sheets",
-"Merker und Hilfsrelais": "Flags and auxiliary relays"
+"Merker und Hilfsrelais": "Flags and auxiliary relays",
+"Blätter drucken": "Print sheets",
+"Blätter drucken: Stromlaufplan auf Blättern (A4 oder A3 quer, Schriftfeld, Spalten, Kontaktspiegel und Querverweise). Im Druckdialog „Als PDF speichern“ wählen.": "Print sheets: circuit diagram on sheets (A4 or A3 landscape, title block, columns, contact mirrors and cross-references). Choose “Save as PDF” in the print dialog."
 });
 VALIS_EN.vorlagen({
 "\"⟦0⟧\" deklariert": "\"⟦0⟧\" declared",

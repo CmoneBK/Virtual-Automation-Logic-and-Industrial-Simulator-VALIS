@@ -9916,3 +9916,21 @@ VALIS_EN.dazu({
 "Überdeckung ⟦0⟧ %": "Overlap ⟦0⟧ %",
 "Sollwert ⟦0⟧ (0 … 10 V)": "Setpoint ⟦0⟧ (0 … 10 V)"
 });
+
+// Proportionaltechnik, Schritt 2: stetige Druck- und Stromventile
+VALIS_EN.dazu({
+"Proportional-Druckregelventil": "Proportional pressure regulator",
+"Proportional-Druckbegrenzungsventil": "Proportional pressure relief valve",
+"Proportional-Stromregelventil": "Proportional flow control valve",
+"Proportionalmagnet (stetig über Analogausgang)": "Proportional solenoid (continuous via analogue output)",
+"Ausgangsdruck bei 0 V (bar)": "Outlet pressure at 0 V (bar)",
+"Ausgangsdruck bei 10 V (bar)": "Outlet pressure at 10 V (bar)",
+"Öffnungsdruck bei 0 V (bar)": "Opening pressure at 0 V (bar)",
+"Öffnungsdruck bei 10 V (bar)": "Opening pressure at 10 V (bar)",
+"Durchfluss bei 0 V (l/min)": "Flow at 0 V (l/min)",
+"Durchfluss bei 10 V (l/min)": "Flow at 10 V (l/min)",
+"Zeitkonstante (ms)": "Time constant (ms)",
+"Der Sollwert 0 … 10 V stellt den Ausgangsdruck stetig ein, zum Beispiel für eine Andrück- oder Spannkraft. Sinkt der Sollwert, entlüftet das Ventil den Ausgang.": "The setpoint 0 … 10 V sets the outlet pressure continuously, for example for a pressing or clamping force. When the setpoint drops, the valve vents the outlet.",
+"Der Sollwert 0 … 10 V stellt den Öffnungsdruck stetig ein. So fährt eine Presse ihre Kraft über den Systemdruck.": "The setpoint 0 … 10 V sets the opening pressure continuously. This is how a press controls its force via the system pressure.",
+"Der Sollwert 0 … 10 V stellt den Durchfluss von 1 nach 2 stetig ein, die Druckwaage hält ihn unabhängig von der Last. So fährt ein Vorschub mit Rampe an.": "The setpoint 0 … 10 V sets the flow from 1 to 2 continuously; the pressure compensator keeps it independent of the load. This is how a feed drive starts with a ramp."
+});

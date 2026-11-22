@@ -198,6 +198,48 @@
         const y = typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) : roh === true ? 100 : nul;
         return y >= nul ? (y - nul) / (100 - nul) : (y - nul) / nul;
     }
+    // ---------- Proportional-Druck- und -Stromventile ----------
+    // Druckregelventil (Luft), Druckbegrenzungsventil und Stromregelventil (Öl) mit o.prop:
+    // Ihr Sollwert kommt stetig aus der Stellgröße 0 … 100 % (0 … 10 V), linear zwischen
+    // Anfangswert (bei 0 V) und Endwert (bei 10 V), mit Hysterese und Zeitkonstante.
+    const PROP_W = {
+        druckregel: { von: 0, bis: 6, einheit: 'bar', schritt: 0.1, max: 10, was: 'Ausgangsdruck', hyst: 3, tau: 50 },
+        dbv: { von: 5, bis: 100, einheit: 'bar', schritt: 1, max: 315, was: 'Öffnungsdruck', hyst: 3, tau: 50 },
+        stromregel: { von: 0, bis: 20, einheit: 'l/min', schritt: 0.1, max: 100, was: 'Durchfluss', hyst: 3, tau: 50 }
+    };
+    const istPropW = t => !!t && !!PROP_W[t.typ] && !!t.o && !!t.o.prop;
+    const propWVon = t => zahl(t.o.von, PROP_W[t.typ].von), propWBis = t => zahl(t.o.bis, PROP_W[t.typ].bis);
+    const PROP_W_STD = typ => ({ prop: true, varS: '', von: PROP_W[typ].von, bis: PROP_W[typ].bis, hyst: PROP_W[typ].hyst, tau: PROP_W[typ].tau });
+    function propWOrdnen(t) {
+        if (!istPropW(t)) return;
+        const st = PROP_W_STD(t.typ);
+        for (const k in st) if (t.o[k] == null) t.o[k] = st[k];
+    }
+    // Stellgröße 0 … 1 (einmal je Bild)
+    function propWSignal(t) {
+        const roh = t.o.varS ? sps()[t.o.varS] : null;
+        return typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) / 100 : roh === true ? 1 : 0;
+    }
+    // Je Teilschritt: Hysterese (Umkehrspanne) und Verzögerung, liefert den wirksamen Sollwert (bar bzw. l/min)
+    function propWSchritt(t, z) {
+        if (fehlerAktiv(t.id) !== 'klemmt') {
+            const hy = Math.max(0, zahl(t.o.hyst, 3)) / 200;   // halbe Spanne, Signalbereich = 1
+            const soll = z.soll || 0;
+            if (soll > z.h + hy) z.h = soll - hy; else if (soll < z.h - hy) z.h = soll + hy;
+            z.u += (Math.max(0, Math.min(1, z.h)) - z.u) * Math.min(1, DT / Math.max(0.001, zahl(t.o.tau, 50) / 1000));
+        }
+        z.wert = propWVon(t) + z.u * (propWBis(t) - propWVon(t));
+        return z.wert;
+    }
+    // Proportionalmagnet an einem Druck- oder Stromventil (ersetzt die verstellbare Feder)
+    function propMagnetKlein(g, x, y) {
+        el('rect', { x, y: y - 7, width: 12, height: 14, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, class: 'fp-bet-propw' }, g);
+        el('line', { x1: x, y1: y - 7, x2: x + 12, y2: y + 7, stroke: 'currentColor', 'stroke-width': 1.2 }, g);
+        const ax = x + 1, ay = y + 11, bx = x + 11, by = y - 11, d = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / d, uy = (by - ay) / d;
+        el('line', { x1: ax, y1: ay, x2: bx - ux * 3, y2: by - uy * 3, stroke: 'currentColor', 'stroke-width': 1 }, g);
+        el('path', { d: `M${bx},${by} L${bx - ux * 5 - uy * 2.2},${by - uy * 5 + ux * 2.2} L${bx - ux * 5 + uy * 2.2},${by - uy * 5 - ux * 2.2} Z`, fill: 'currentColor' }, g);
+        el('text', { class: 'fp-wert fp-propw-wert', x: x + 16, y: y + 3, 'font-size': 8 }, g);
+    }
     const MANUELL = { taster: 1, pilz: 1, hebel: 1, pedal: 1 };
     const KASTEN = 40;
 
@@ -440,13 +482,14 @@
     TYP.druckregel = {
         name: 'Druckregelventil', buchstabe: 'V',
         optionen: { p: 4 },
-        geometrie() { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'v' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }], box: [-16, -32, 22, 32] }; },
+        geometrie(t) { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'v' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }], box: [-16, -32, t && t.o && t.o.prop ? 26 : 22, 32] }; },
         zeichne(t, g) {
             el('line', { x1: 0, y1: 20, x2: 0, y2: 30, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
             el('line', { x1: 0, y1: -20, x2: 0, y2: -30, stroke: 'currentColor', 'stroke-width': 1.6 }, g);
             el('rect', { x: -10, y: -20, width: 20, height: 40, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
             el('line', { x1: -3, y1: 16, x2: -3, y2: -14, stroke: 'currentColor', 'stroke-width': 1.3, 'marker-end': 'url(#fp-pfeil)' }, g);
             el('path', { d: 'M3,-20 v6 h-6', fill: 'none', stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '2 2' }, g);
+            if (t.o.prop) { propMagnetKlein(g, 10, 4); return; }
             el('polyline', { points: '10,4 13,0 17,8 20,0 22,4', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
             el('line', { x1: 13, y1: 10, x2: 21, y2: -2, stroke: 'currentColor', 'stroke-width': 1 }, g);
         }
@@ -793,7 +836,7 @@
     TYP.dbv = {
         name: 'Druckbegrenzungsventil', buchstabe: 'V',
         optionen: { hyd: true, p: 60 },
-        geometrie() { return { ports: [{ id: 'P', x: 0, y: -30, dir: [0, -1], art: 'v' }, { id: 'T', x: 0, y: 30, dir: [0, 1], art: 'r' }], box: [-20, -32, 26, 32] }; },
+        geometrie(t) { return { ports: [{ id: 'P', x: 0, y: -30, dir: [0, -1], art: 'v' }, { id: 'T', x: 0, y: 30, dir: [0, 1], art: 'r' }], box: [-20, -32, 26, 32] }; },
         zeichne(t, g) {
             L16(g, 0, -30, 0, -18); L16(g, 0, 18, 0, 30);
             el('rect', { x: -10, y: -18, width: 20, height: 36, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
@@ -802,13 +845,14 @@
             L16(k, 4, -14, 4, 10, 1.3); el('path', { d: 'M4,14 L1,7 L7,7 Z', fill: 'currentColor' }, k);
             // Steuerleitung vom Eingang auf den Kolben
             el('path', { d: 'M0,-24 H-16 V-12 H-10', fill: 'none', stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '3 2' }, g);
+            if (t.o.prop) propMagnetKlein(g, 10, 6); else
             federVerstellbar(g, 10, 6, 1);
         }
     };
     TYP.stromregel = {
         name: 'Stromregelventil', buchstabe: 'V',
         optionen: { hyd: true, q: 4 },
-        geometrie() { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }], box: [-18, -32, 18, 32] }; },
+        geometrie(t) { return { ports: [{ id: '1', x: 0, y: 30, dir: [0, 1], art: 'a' }, { id: '2', x: 0, y: -30, dir: [0, -1], art: 'a' }], box: [-18, -32, t && t.o && t.o.prop ? 28 : 18, 32] }; },
         zeichne(t, g) {
             L16(g, 0, 30, 0, -30);
             el('rect', { x: -14, y: -18, width: 28, height: 36, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
@@ -816,6 +860,7 @@
             L16(g, -9, 9, 9, -9, 1.1); el('path', { d: 'M10,-10 L5,-8 L8,-5 Z', fill: 'currentColor' }, g);
             // Druckwaage: Pfeil in Strömungsrichtung (hält den Durchfluss trotz Lastdruck konstant)
             L16(g, -10, 12, -10, -8, 1); el('path', { d: 'M-10,-12 L-12,-7 L-8,-7 Z', fill: 'currentColor' }, g);
+            if (t.o.prop) propMagnetKlein(g, 14, 0);
         }
     };
     TYP.speicher = {
@@ -861,6 +906,7 @@
             { name: 'Wartungseinheit', typ: 'wartung' },
             { name: 'Wartungseinheit (Kurzform)', typ: 'wartung', o: { kurz: true } },
             { name: 'Druckregelventil', typ: 'druckregel' },
+            { name: 'Proportional-Druckregelventil', typ: 'druckregel', o: PROP_W_STD('druckregel') },
             { name: 'Manometer', typ: 'manometer' },
             { name: 'Schalldämpfer', typ: 'daempfer' },
             { name: 'Blindstopfen', typ: 'stopfen' },
@@ -912,6 +958,7 @@
             { name: 'Hydraulikaggregat', typ: 'aggregat' },
             { name: 'Tank', typ: 'tank' },
             { name: 'Druckbegrenzungsventil', typ: 'dbv' },
+            { name: 'Proportional-Druckbegrenzungsventil', typ: 'dbv', o: PROP_W_STD('dbv') },
             { name: 'Hydrospeicher', typ: 'speicher' },
             { name: 'Filter', typ: 'filter' },
             { name: 'Manometer (bis 160 bar)', typ: 'manometer', o: HY() },
@@ -936,6 +983,7 @@
             { name: 'Drosselventil', typ: 'drossel', o: HY({ offen: 30 }) },
             { name: 'Drosselrückschlagventil', typ: 'drv', o: HY({ offen: 30 }) },
             { name: 'Stromregelventil', typ: 'stromregel' },
+            { name: 'Proportional-Stromregelventil', typ: 'stromregel', o: PROP_W_STD('stromregel') },
             { name: 'Druckschalter (elektrisch)', typ: 'dschalter', o: HY({ p: 40 }) }
         ] }
     ];
@@ -1088,6 +1136,7 @@
     function bezFuer(typ, o) { return neueBezeichnung(typ, o); }
     // Wechselt ein Ventil seine Art (Taster → Magnet …), wechselt das automatische Kennzeichen mit
     function kennNachArt(t) {
+        propWOrdnen(t);
         if (t.typ !== 'ventil') return;
         propOrdnen(t);
         const m = String(t.bez || '').match(/^-([A-Z]+)\d+$/);
@@ -1679,6 +1728,10 @@
                 let unten = bb[3];
                 for (const l of plan.leitungen) { const a = angedockt(l) && andockVon(l); if (a && a.wirt === t) unten = Math.max(unten, boxWelt(a.gast)[3]); }
                 if (vs.length) el('text', { class: 'fp-var', x: bb[0], y: unten + 12 }, ebTeile).textContent = vs.join(' · ');
+            }
+            if (istPropW(t)) {
+                const bb = boxWelt(t);
+                el('text', { class: 'fp-var', x: bb[0], y: bb[3] + 10 }, ebTeile).textContent = (t.o.varS || '?') + ' (0 … 10 V)';
             }
             if (t.typ === 'dschalter') {
                 const bb = boxWelt(t);
@@ -2314,8 +2367,20 @@
             variable('Sensor Ende: VALIS-Eingang', 'sensV', 'in');
         } else if (t.typ === 'quelle') {
             num('Druck', 'p', 1, 12, 0.5, 'bar');
+        } else if (istPropW(t)) {
+            const K = PROP_W[t.typ];
+            variable('Sollwert: VALIS-Ausgang (Analogwert)', 'varS', 'out');
+            num(K.was + ' bei 0 V', 'von', 0, K.max, K.schritt, K.einheit);
+            num(K.was + ' bei 10 V', 'bis', 0, K.max, K.schritt, K.einheit);
+            num('Hysterese', 'hyst', 0, 20, 0.5, '% vom Signalbereich');
+            num('Zeitkonstante', 'tau', 1, 2000, 1, 'ms');
+            const c = fld('Proportionalmagnet (stetig über Analogausgang)', h('input', { type: 'checkbox' })); c.checked = true; c.onchange = () => setze(() => { t.o.prop = c.checked; });
+            h('div', { class: 'fp-hinw', text: t.typ === 'druckregel' ? 'Der Sollwert 0 … 10 V stellt den Ausgangsdruck stetig ein, zum Beispiel für eine Andrück- oder Spannkraft. Sinkt der Sollwert, entlüftet das Ventil den Ausgang.'
+                : t.typ === 'dbv' ? 'Der Sollwert 0 … 10 V stellt den Öffnungsdruck stetig ein. So fährt eine Presse ihre Kraft über den Systemdruck.'
+                : 'Der Sollwert 0 … 10 V stellt den Durchfluss von 1 nach 2 stetig ein, die Druckwaage hält ihn unabhängig von der Last. So fährt ein Vorschub mit Rampe an.' }, box);
         } else if (t.typ === 'wartung' || t.typ === 'druckregel') {
             num('Ausgangsdruck', 'p', 0.5, 10, 0.5, 'bar');
+            if (t.typ === 'druckregel') { const c = fld('Proportionalmagnet (stetig über Analogausgang)', h('input', { type: 'checkbox' })); c.onchange = () => setze(() => { t.o.prop = c.checked; }); }
             if (t.typ === 'wartung') {
                 const c = fld('Darstellung', h('select', {}));
                 [['0', 'ausführlich (Filter, Regler, Manometer)'], ['1', 'Kurzform']].forEach(([v, n]) => h('option', { value: v, text: n }, c));
@@ -2344,9 +2409,11 @@
             h('div', { class: 'fp-hinw', text: 'Die Pumpe fördert immer. Steht der Zylinder oder ist das Wegeventil gesperrt, steigt der Druck bis zur Druckbegrenzung, das Öl fließt dann über das Ventil in den Tank (Wärme).' }, box);
         } else if (t.typ === 'dbv') {
             num('Öffnungsdruck', 'p', 5, 315, 5, 'bar');
+            { const c = fld('Proportionalmagnet (stetig über Analogausgang)', h('input', { type: 'checkbox' })); c.onchange = () => setze(() => { t.o.prop = c.checked; }); }
             h('div', { class: 'fp-hinw', text: 'Das Druckbegrenzungsventil öffnet, sobald der Druck an P den eingestellten Wert erreicht, und leitet das Öl in den Tank.' }, box);
         } else if (t.typ === 'stromregel') {
             num('Durchfluss', 'q', 0.1, 100, 0.1, 'l/min');
+            { const c = fld('Proportionalmagnet (stetig über Analogausgang)', h('input', { type: 'checkbox' })); c.onchange = () => setze(() => { t.o.prop = c.checked; }); }
             h('div', { class: 'fp-hinw', text: 'Von 1 nach 2 hält die Druckwaage den Durchfluss fest, auch wenn sich die Last ändert (anders als die Drossel). Von 2 nach 1 strömt das Öl ungeregelt zurück.' }, box);
         } else if (t.typ === 'speicher') {
             num('Gasvolumen', 'V0', 0.1, 50, 0.1, 'l');
@@ -2391,6 +2458,7 @@
                 if ((t.o.rechts === 'rolle' || t.o.rechts === 'rolle_leer') && !teil(t.o.zylR)) meld.push(`${n}: Rollenhebel rechts ist keinem Zylinder zugeordnet.`);
             }
             if (t.typ === 'dschalter' && !t.o.var) meld.push(`${n}: Druckschalter hat keinen VALIS-Eingang.`);
+            if (istPropW(t) && !t.o.varS) meld.push(`${n}: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).`);
         }
         const pneuTeile = plan.teile.filter(t => !istHyd(t) && t.typ !== 'knoten'), hydTeile = plan.teile.filter(istHyd);
         if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle')) meld.push('Es gibt keine Druckluftquelle.');
@@ -2447,11 +2515,13 @@
         const T = TYP[t.typ]; let n = T ? T.name : t.typ;
         if (t.typ === 'ventil') n = (t.o.wege || '3/2') + (istProp(t) ? '-Proportional-Wegeventil' : '-Wegeventil');
         if (t.typ === 'wartung' && t.o.kurz) n += ' (Kurzform)';
+        if (istPropW(t)) n = 'Proportional-' + n;
         if (istHyd(t) && /^(zyl_|ventil|rueck|drossel|drv)/.test(t.typ)) n += ', hydraulisch';
         return n;
     }
     function teilDaten(t) {
         const o = t.o || {}, d = [];
+        if (istPropW(t)) { const K = PROP_W[t.typ]; d.push((K.einheit === 'bar' ? 'p = ' : 'Q = ') + zf(propWVon(t)) + ' … ' + zf(propWBis(t)) + ' ' + K.einheit); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); return d.join(', '); }
         switch (t.typ) {
             case 'ventil': {
                 if (o.links === 'prop') { d.push('Proportionalmagnete, federzentriert', 'Qn = ' + zf(propQn(o)) + ' l/min', 'Überdeckung ' + zf(zahl(o.ueber, 10), 0) + ' %'); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); break; }
@@ -2893,6 +2963,7 @@
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
             if (t.typ === 'wechsel') z.seite = 'X';
             if (t.typ === 'speicher') z.voil = 0;
+            if (istPropW(t)) { z.soll = 0; z.h = 0; z.u = 0; z.wert = propWVon(t); }
             zust[t.id] = z;
         }
         sim = { netze, netzVon, zust, zeit: 0, schreib: {} };
@@ -3023,6 +3094,8 @@
                 if (t.o._stellung != null) neu = t.o._stellung;   // Schattenplan: Stellung aus der 2D-Anlage
                 if (fehlerAktiv(t.id) === 'klemmt') neu = n === 3 ? 1 : (t.o.links === 'feder' ? 0 : n - 1);
                 if (neu !== z.stellung) { z.stellung = neu; if (!schattenLauf) klick(); }
+            } else if (istPropW(t)) {
+                z.soll = fehlerAktiv(t.id) === 'spule' ? 0 : propWSignal(t);
             } else if (t.typ === 'zeit') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
                 const tau = Math.max(0.05, zahl(t.o.zeit, 3) / Math.LN2);
@@ -3123,7 +3196,8 @@
                 case 'dbv': {
                     const nP = netz(t, 'P'), nT = netz(t, 'T'), fe = fehlerAktiv(t.id);
                     if (fe === 'klemmt') break;
-                    const ps = fe === 'druck' ? zahl(t.o.p, 60) * 0.3 : zahl(t.o.p, 60);
+                    const p0 = istPropW(t) ? propWSchritt(t, z) : zahl(t.o.p, 60);
+                    const ps = fe === 'druck' ? p0 * 0.3 : p0;
                     const pP = nP != null ? druckVon(nP) : 0;
                     z.auf = pP > ps;
                     if (z.auf) fluss(nP, nT == null ? 'ATM' : nT, G_HV * 8, 1, 0, mengeBis(nP, ps) * 0.7 + 1e-7);
@@ -3131,7 +3205,7 @@
                 }
                 case 'stromregel': {
                     // 1 → 2 geregelt (Druckwaage hält q, solange genug Druckgefälle da ist), 2 → 1 frei wie eine Drossel
-                    const qm = Math.max(0, zahl(t.o.q, 4)) / 60 * DT * (fehlerAktiv(t.id) === 'zu' ? 0.01 : 1);
+                    const qm = Math.max(0, istPropW(t) ? propWSchritt(t, z) : zahl(t.o.q, 4)) / 60 * DT * (fehlerAktiv(t.id) === 'zu' ? 0.01 : 1);
                     fluss(netz(t, '1'), netz(t, '2'), G_HV * 2, 1, 0, qm);
                     fluss(netz(t, '2'), netz(t, '1'), G_HV, 1);
                     break;
@@ -3167,7 +3241,7 @@
                 case 'wartung': case 'druckregel': {
                     if (t.o.durch) break;
                     const fe = fehlerAktiv(t.id);
-                    const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = fe === 'druck' ? 2.5 : zahl(t.o.p, 6);
+                    const n1 = netz(t, '1'), n2 = netz(t, '2'), ps = fe === 'druck' ? 2.5 : istPropW(t) ? propWSchritt(t, z) : zahl(t.o.p, 6);
                     const p2 = n2 != null ? druckVon(n2) : 0;
                     const off = Math.max(0, Math.min(1, (ps - p2) / 0.4));
                     if (off > 0) fluss(n1, n2, G_VENTIL * 1.5 * off * (fe === 'zu' ? 0.001 : 1), 1);
@@ -3352,6 +3426,11 @@
                 const w = (-135 + Math.max(0, Math.min(voll, p)) / voll * 270) * Math.PI / 180;
                 r.nadel.setAttribute('x2', 9 * Math.sin(w)); r.nadel.setAttribute('y2', -9 * Math.cos(w));
                 if (r.wert) r.wert.textContent = an ? p.toFixed(istHyd(t) ? 0 : 1) + ' bar' : '';
+            }
+            if (istPropW(t)) {
+                const m = r.g.querySelector('.fp-bet-propw'), w = r.g.querySelector('.fp-propw-wert');
+                if (m) { m.setAttribute('fill', z && z.u > 0.01 ? 'var(--fp-aktiv)' : 'none'); m.setAttribute('fill-opacity', z ? (0.25 + 0.75 * z.u).toFixed(2) : 1); }
+                if (w) w.textContent = z ? zf(z.wert, t.typ === 'dbv' ? 0 : 1) + ' ' + PROP_W[t.typ].einheit : '';
             }
             if (t.typ === 'dbv') { const k = r.g.querySelector('.fp-dbv-pfeil'); if (k) k.setAttribute('transform', z && z.auf ? 'translate(-4,0)' : ''); }
             if (t.typ === 'speicher') { const k = r.g.querySelector('.fp-oelstand'); if (k) { const a = z ? Math.max(0, Math.min(1, z.voil / Math.max(0.05, zahl(t.o.V0, 0.7)))) : 0; k.setAttribute('height', 16 * a); k.setAttribute('y', 15 - 16 * a); } }
@@ -7797,6 +7876,8 @@ function versorgungMerken(F) {
                 if (z.x != null) { r.x = z.x; r.v = z.v; r.anteil = z.x / zylHub(t); }
                 if (z.stellung != null) r.stellung = z.stellung;
                 if (z.s != null) { r.s = z.s; r.soll = z.soll; r.q = z.q; r.auf = z.auf; }
+                if (z.wert != null) { r.wert = z.wert; r.soll = z.soll; r.u = z.u; }
+                if (z.auf === true || z.auf === false) r.offen = z.auf;
                 if (z.an != null) r.an = z.an;
                 const ports = {};
                 for (const p of geo(t).ports) ports[p.id] = +pPort(t, p.id).toFixed(3);

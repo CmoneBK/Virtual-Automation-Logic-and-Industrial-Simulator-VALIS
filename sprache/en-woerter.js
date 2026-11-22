@@ -10117,3 +10117,6 @@ VALIS_EN.dazu({
 VALIS_EN.vorlagen({
 "Wegmesssystem ⟦0⟧": "Position measuring system ⟦0⟧"
 });
+VALIS_EN.dazu({
+"Diagramm schließen (wieder öffnen mit dem Knopf „Diagramm“ oben)": "Close the diagram (reopen with the “Diagram” button above)"
+});

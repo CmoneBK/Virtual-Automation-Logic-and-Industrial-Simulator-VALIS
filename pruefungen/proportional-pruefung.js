@@ -257,6 +257,51 @@ const FAELLE = {
     F._leeren(); if (!offen) F.umschalten();
     return R;
   },
+  'Kennlinie: Soll-Kennlinie, Aufnahme mit Hysterese, Diagramm': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fluid-wrapper'), offen = !!fw && fw.offsetWidth > 100;
+    if (!offen) F.umschalten();
+    // Prüfstand: Pumpe mit 35 bar, A frei in den Tank
+    const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
+    const v = F.setzen('ventil', 0, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'Y', qn: 40, ueber: 10, hyst: 4, tau: 20 }, '-QMA1');
+    const tk = F.setzen('tank', 200, 300), st = F.setzen('stopfen', 100, -50, { hyd: true });
+    F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', tk, '1'); F.verbinden(v, '2', st, '1');
+    let k = F.kennlinie(v);
+    const bei = (l, u) => l.find(p => p[0] === u)[1];
+    R.push(['Soll-Kennlinie: 5 V = 0, 10 V = +40, 0 V = −40 l/min', bei(k.soll, 50) === 0 && Math.abs(bei(k.soll, 100) - 40) < 1e-6 && Math.abs(bei(k.soll, 0) + 40) < 1e-6, JSON.stringify([bei(k.soll, 0), bei(k.soll, 50), bei(k.soll, 100)])]);
+    R.push(['… Totzone durch Überdeckung: 5,5 V = 0', bei(k.soll, 55) === 0 && bei(k.soll, 60) > 0, bei(k.soll, 60).toFixed(2)]);
+    R.push(['noch nichts aufgenommen', !F.kennlinieAufgenommen() && k.mess.length === 0 && !k.fertig, '']);
+    // Aufnahme: 20 s Rampe 0 → 10 V → 0 V
+    spsState.Y = 50; F._neu(); F._schritt(0.5);
+    R.push(['Aufnahme startet', F.kennlinieAufnehmen(v, 20) === true && F.kennlinie(v).laeuft, '']);
+    F._schritt(10);
+    R.push(['in der Mitte der Rampe bei 10 V und vollem Durchfluss', Math.abs(F.zustand().teile[v].q - 40) < 3 && F.kennlinie(v).laeuft, F.zustand().teile[v].q.toFixed(1)]);
+    F._schritt(10.2);
+    k = F.kennlinie(v);
+    R.push(['nach 20 s fertig, über 500 Messpunkte', k.fertig && !k.laeuft && k.mess.length > 500, k.mess.length]);
+    R.push(['Bedingung „Kennlinie aufgenommen“ erfüllt (auch mit Kennzeichen)', F.kennlinieAufgenommen() && F.kennlinieAufgenommen('-QMA1') && !F.kennlinieAufgenommen('-QMA9'), '']);
+    // Hysterese: bei 7,5 V liegt der Rückweg über dem Hinweg
+    const halb = k.mess.length / 2, hin = k.mess.slice(0, halb).reduce((a, p) => Math.abs(p[0] - 75) < Math.abs(a[0] - 75) ? p : a), rueck = k.mess.slice(halb).reduce((a, p) => Math.abs(p[0] - 75) < Math.abs(a[0] - 75) ? p : a);
+    R.push(['Hysterese sichtbar: Rückweg bei 7,5 V über dem Hinweg', rueck[1] - hin[1] > 1.5 && rueck[1] - hin[1] < 6, `hin ${hin[1].toFixed(1)}, zurück ${rueck[1].toFixed(1)} l/min`]);
+    R.push(['Sättigung: nie über Nenndurchfluss', Math.max(...k.mess.map(p => p[1])) < 42, Math.max(...k.mess.map(p => p[1])).toFixed(1)]);
+    R.push(['nach der Aufnahme gilt wieder der SPS-Sollwert', (F._schritt(0.5), Math.abs(F.zustand().teile[v].s) < 0.05), F.zustand().teile[v].s.toFixed(3)]);
+    // Diagramm
+    F._kennZeigen(v); await warte(300);
+    const d = document.getElementById('fp-diag');
+    R.push(['Diagramm zeigt Soll-Kennlinie, aufgenommene Kurve und Arbeitspunkt', !!d && d.classList.contains('offen') && !!d.querySelector('.fp-kenn-soll') && !!d.querySelector('.fp-kenn-mess') && !!d.querySelector('.fp-kenn-punkt'), '']);
+    R.push(['Knopf „Kennlinie aufnehmen“ sichtbar', !!document.getElementById('fp-d-auf') && document.getElementById('fp-d-auf').style.display !== 'none', '']);
+    // Druckventil: Kennlinie p über U
+    const dr = F.setzen('druckregel', 500, 100, { prop: true, varS: 'Y', von: 0, bis: 6, hyst: 0, tau: 50 }, '-QN1');
+    const kd = F.kennlinie(dr);
+    R.push(['Druckregelventil: Soll-Kennlinie 0 … 6 bar', bei(kd.soll, 0) === 0 && bei(kd.soll, 50) === 3 && bei(kd.soll, 100) === 6 && kd.info.einheit === 'bar', '']);
+    // Oszilloskop-Kanäle
+    const m = window._fpPropMess && (() => { const alt = window.isSimulationActive; return window._fpPropMess(); })();
+    R.push(['Messwerte für das Oszilloskop (läuft nur in der Simulation)', m === null || (m && typeof m === 'object'), JSON.stringify(m)]);
+    d.classList.remove('offen');
+    F._leeren(); if (!offen) F.umschalten();
+    return R;
+  },
   'Fehler, Symbol, Umstellen, Listen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

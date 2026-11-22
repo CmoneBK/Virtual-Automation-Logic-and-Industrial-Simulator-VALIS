@@ -298,6 +298,15 @@ const FAELLE = {
     // Oszilloskop-Kanäle
     const m = window._fpPropMess && (() => { const alt = window.isSimulationActive; return window._fpPropMess(); })();
     R.push(['Messwerte für das Oszilloskop (läuft nur in der Simulation)', m === null || (m && typeof m === 'object'), JSON.stringify(m)]);
+    // Knopf wackelt nicht: der Text wird nur bei einem Wechsel neu geschrieben
+    F._kennZeigen(v); await warte(200);
+    let geschrieben = 0; const auf = document.getElementById('fp-d-auf');
+    const mo = new MutationObserver(ms => { geschrieben += ms.length; }); mo.observe(auf, { childList: true, characterData: true, subtree: true });
+    for (let i = 0; i < 20; i++) { F._diagZeichnen(); await new Promise(r => requestAnimationFrame(r)); }
+    await warte(100); mo.disconnect();
+    R.push(['Knopf „Kennlinie aufnehmen“ wird beim Zeichnen nicht neu geschrieben', geschrieben === 0, String(geschrieben)]);
+    const zu = document.getElementById('fp-d-zu'); if (zu) zu.click();
+    R.push(['Knopf „Schließen“ schließt das Diagramm', !!zu && !d.classList.contains('offen'), '']);
     d.classList.remove('offen');
     F._leeren(); if (!offen) F.umschalten();
     return R;

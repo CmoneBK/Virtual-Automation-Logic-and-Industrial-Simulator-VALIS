@@ -1621,8 +1621,8 @@
     .fp-diag{display:none;height:170px;flex:none;background:#fff;border-top:1px solid #3a3a3a;position:relative;overflow:hidden}
     .fp-diag.offen{display:block}
     .fp-diag > svg{width:100%;height:100%;display:block;font-family:'Segoe UI',sans-serif}
-    .fp-diag .fp-dkopf{position:absolute;right:6px;bottom:3px;display:flex;gap:4px;z-index:1}
-    .fp-diag .fp-dkopf button{all:unset;box-sizing:border-box;font:11px/1.5 'Segoe UI',sans-serif;padding:1px 8px;border:1px solid #b0bec5;background:#eceff1;border-radius:3px;cursor:pointer;color:#263238}
+    .fp-diag .fp-dkopf{position:absolute;right:6px;bottom:3px;display:flex;gap:4px;z-index:1;max-width:calc(100% - 12px);flex-wrap:wrap-reverse;justify-content:flex-end}
+    .fp-diag .fp-dkopf button{all:unset;box-sizing:border-box;font:11px/1.5 'Segoe UI',sans-serif;padding:1px 8px;border:1px solid #b0bec5;background:#eceff1;border-radius:3px;cursor:pointer;color:#263238;white-space:nowrap}
     .fp-diag .fp-dkopf button.an{background:#ff6f00;border-color:#ff6f00;color:#fff}
     .fp-fuss{padding:4px 10px;font-size:11px;color:#9e9e9e;background:#252526;border-top:1px solid #3a3a3a;min-height:22px;border-radius:0 0 8px 8px}
     .fp-fuss b{color:#ffb74d}
@@ -1747,6 +1747,7 @@
             kennAufnehmen(t.id); diagZeichnen(true);
         } }, dk);
         h('button', { text: '📸 SVG', title: 'Diagramm als SVG-Bild speichern', onclick: diagSvgSpeichern }, dk);
+        h('button', { text: '✕', id: 'fp-d-zu', title: 'Diagramm schließen (wieder öffnen mit dem Knopf „Diagramm“ oben)', onclick: () => { kennLauf = null; diagBox.classList.remove('offen'); const b = D().getElementById('fp-diagk'); if (b) b.classList.remove('an'); } }, dk);
         diagSvg = el('svg', {}, diagBox);
         h('div', { class: 'fp-fuss', id: 'fp-fuss' }, fenster);
         h('div', { class: 'fp-griffecke' }, fenster).addEventListener('pointerdown', groesseZiehen);
@@ -3707,7 +3708,7 @@
         if (!sofort && ++diagBild % 6) return;
         const sb = D().getElementById('fp-d-schritt'), zb = D().getElementById('fp-d-zeit'), kb = D().getElementById('fp-d-kenn'), ab = D().getElementById('fp-d-auf');
         if (sb) sb.classList.toggle('an', diagArt === 'schritt'); if (zb) zb.classList.toggle('an', diagArt === 'zeit'); if (kb) kb.classList.toggle('an', diagArt === 'kenn');
-        if (ab) { ab.style.display = diagArt === 'kenn' ? '' : 'none'; ab.textContent = kennLauf ? '⏹ Aufnahme abbrechen' : '⏺ Kennlinie aufnehmen'; }
+        if (ab) { ab.style.display = diagArt === 'kenn' ? '' : 'none'; const txt = kennLauf ? '⏹ Aufnahme abbrechen' : '⏺ Kennlinie aufnehmen'; if (ab._fpText !== txt) { ab._fpText = txt; ab.textContent = txt; } }   // nur bei Wechsel schreiben, sonst wackelt der Knopf (Icon wird jedes Mal neu gesetzt)
         const svgD = diagSvg; svgD.innerHTML = '';
         diagBox.style.height = diagArt === 'kenn' ? '250px' : Math.min(360, Math.max(170, 54 + antriebe().length * 36)) + 'px';
         const W = diagBox.clientWidth || 600, H = diagBox.clientHeight || 170;
@@ -8301,6 +8302,7 @@ function versorgungMerken(F) {
         propKarteLive: (id) => { const t = teil(id); if (!t || !mitKarte(t)) return null; const z = sim && simLaeuft() ? sim.zust[id] : null; const k = karteVon(t); return z ? { w1: (z.w || 0) * 10, iA: z.iA || 0, iB: z.iB || 0, s: z.s || 0, karte: k } : { w1: 0, iA: 0, iB: 0, s: 0, karte: k }; },
         kennlinieAufgenommen: (bez) => kennAufgenommen(bez),
         _kennZeigen: (id) => kennZeigen(id),
+        _diagZeichnen: () => diagZeichnen(true),
         beispiele: () => BEISPIELE.map(b => b.name),
         beispielLaden: (i, mitCode) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i, mitCode === true); } finally { window.confirm = c; } },
         beispielCode: (i) => (BEISPIELE[i] || {}).code || '',

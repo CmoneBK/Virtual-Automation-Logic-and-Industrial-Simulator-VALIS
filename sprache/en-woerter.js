@@ -2189,6 +2189,7 @@ VALIS_EN.dazu({
 "Drucksensor mit Anzeige: 0 … 10 bar, Analogausgang 0 … 10 V an einen Analogeingang (EW64 …), dazu ein PNP-Schaltausgang mit Schaltpunkt und Hysterese.": "Pressure sensor with display: 0 … 10 bar, analog output 0 … 10 V to an analog input (EW64 …), plus a PNP switching output with switching point and hysteresis.",
 "Drucktaster": "Push button",
 "Druckverläufe der Zylinderkammern A (Kolbenseite) und B (Stangenseite) in bar und den Kolbenweg in mm als Spuren zeigen": "Show the pressure curves of cylinder chambers A (piston side) and B (rod side) in bar and the piston stroke in mm as traces",
+"Druckverläufe der Zylinderkammern A (Kolbenseite) und B (Stangenseite) in bar und den Kolbenweg in mm als Spuren zeigen. Proportionalventile im Fluidplan zeigen dazu Sollwert (V), Schieberlage (%) und Durchfluss bzw. Druck.": "Show the pressure curves of cylinder chambers A (piston side) and B (rod side) in bar and the piston stroke in mm as traces. Proportional valves in the fluid plan also show setpoint (V), spool position (%) and flow or pressure.",
 "Druckwächter": "pressure monitor",
 "Drück im Sim-Panel oder an der Anlage den Taster": "Press the button in the sim panel or on the plant",
 "Drücke": "Press",
@@ -9911,10 +9912,7 @@ VALIS_EN.dazu({
 "Hysterese (% vom Signalbereich)": "Hysteresis (% of signal range)",
 "Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet 1 → 4 und 2 → 3, darunter 1 → 2 und 4 → 5. Je weiter weg von der Mitte, desto größer der Durchfluss.": "Continuous valve with on-board electronics: the setpoint 0 … 100 % corresponds to 0 … 10 V. At the zero point (5 V) the spool is centred; above it 1 → 4 and 2 → 3 open, below it 1 → 2 and 4 → 5. The further from the centre, the larger the flow.",
 "Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet P → A und B → T, darunter P → B und A → T. Je weiter weg von der Mitte, desto größer der Durchfluss.": "Continuous valve with on-board electronics: the setpoint 0 … 100 % corresponds to 0 … 10 V. At the zero point (5 V) the spool is centred; above it P → A and B → T open, below it P → B and A → T. The further from the centre, the larger the flow.",
-"⟦0⟧: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).": "⟦0⟧: The proportional valve has no setpoint (VALIS output).",
-"Proportionalmagnete, federzentriert": "Proportional solenoids, spring-centred",
-"Überdeckung ⟦0⟧ %": "Overlap ⟦0⟧ %",
-"Sollwert ⟦0⟧ (0 … 10 V)": "Setpoint ⟦0⟧ (0 … 10 V)"
+"Proportionalmagnete, federzentriert": "Proportional solenoids, spring-centred"
 });
 
 // Proportionaltechnik, Schritt 2: stetige Druck- und Stromventile
@@ -9933,4 +9931,39 @@ VALIS_EN.dazu({
 "Der Sollwert 0 … 10 V stellt den Ausgangsdruck stetig ein, zum Beispiel für eine Andrück- oder Spannkraft. Sinkt der Sollwert, entlüftet das Ventil den Ausgang.": "The setpoint 0 … 10 V sets the outlet pressure continuously, for example for a pressing or clamping force. When the setpoint drops, the valve vents the outlet.",
 "Der Sollwert 0 … 10 V stellt den Öffnungsdruck stetig ein. So fährt eine Presse ihre Kraft über den Systemdruck.": "The setpoint 0 … 10 V sets the opening pressure continuously. This is how a press controls its force via the system pressure.",
 "Der Sollwert 0 … 10 V stellt den Durchfluss von 1 nach 2 stetig ein, die Druckwaage hält ihn unabhängig von der Last. So fährt ein Vorschub mit Rampe an.": "The setpoint 0 … 10 V sets the flow from 1 to 2 continuously; the pressure compensator keeps it independent of the load. This is how a feed drive starts with a ramp."
+});
+
+// Proportionaltechnik, Schritt 3: Kennlinie
+VALIS_EN.dazu({
+"Kennlinie": "Characteristic curve",
+"⏺ Kennlinie aufnehmen": "⏺ Record characteristic curve",
+"⏹ Aufnahme abbrechen": "⏹ Cancel recording",
+"📈 Kennlinie zeigen": "📈 Show characteristic curve",
+"Kennlinie dieses Ventils im Diagramm unten zeigen und aufnehmen": "Show and record the characteristic curve of this valve in the diagram below",
+"Kennlinie des gewählten Proportionalventils: Durchfluss bzw. Druck über dem Sollwert 0 … 10 V, mit Arbeitspunkt": "Characteristic curve of the selected proportional valve: flow or pressure over the setpoint 0 … 10 V, with operating point",
+"Fährt den Sollwert langsam von 0 V auf 10 V und zurück und zeichnet die gemessene Kennlinie (mit Hysterese, Überdeckung und Sättigung). Die Simulation muss laufen.": "Slowly ramps the setpoint from 0 V to 10 V and back and plots the measured characteristic curve (with hysteresis, overlap and saturation). The simulation must be running.",
+"Kennlinie aufnehmen: zuerst die Simulation starten.": "Record characteristic curve: start the simulation first.",
+"Kein Proportionalventil im Plan. Ein Proportionalventil aus der Palette setzen oder ein Ventil auf „Proportionalmagnet“ stellen.": "No proportional valve in the plan. Place a proportional valve from the palette or set a valve to \"proportional solenoid\".",
+"Soll-Kennlinie": "Nominal curve",
+"Soll-Kennlinie (Nenndruck)": "Nominal curve (rated pressure)",
+"aufgenommen": "recorded",
+"aufgenommen ✓": "recorded ✓",
+"Aufnahme läuft …": "Recording …",
+"Arbeitspunkt": "Operating point",
+"Simulation starten,": "Start the simulation,",
+"dann „Kennlinie aufnehmen“.": "then \"Record characteristic curve\".",
+"Kennlinie aufnehmen": "Record characteristic curve",
+"Fluidplan: Kennlinie eines Proportionalventils aufgenommen": "Fluid plan: characteristic curve of a proportional valve recorded",
+"Erfüllt, sobald im Fluidplan die Kennlinie eines Proportionalventils vollständig aufgenommen ist (Diagramm „Kennlinie“, Knopf „Kennlinie aufnehmen“ bei laufender Simulation). Im JSON der Aufgabe kann \"ventil\" das Kennzeichen eines bestimmten Ventils nennen.": "Fulfilled as soon as the characteristic curve of a proportional valve has been fully recorded in the fluid plan (diagram \"Characteristic curve\", button \"Record characteristic curve\" while the simulation is running). In the task JSON, \"ventil\" can name the designation of a specific valve."
+});
+VALIS_EN.vorlagen({
+"⟦0⟧: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).": "⟦0⟧: The proportional valve has no setpoint (VALIS output).",
+"Überdeckung ⟦0⟧ %": "Overlap ⟦0⟧ %",
+"Sollwert ⟦0⟧ (0 … 10 V)": "Setpoint ⟦0⟧ (0 … 10 V)",
+"⟦0⟧ · Durchfluss zu A (l/min) über dem Sollwert": "⟦0⟧ · flow to A (l/min) over the setpoint",
+"⟦0⟧ · Durchfluss zu 4 (l/min) über dem Sollwert": "⟦0⟧ · flow to 4 (l/min) over the setpoint",
+"⟦0⟧ · Durchfluss 1 → 2 (l/min) über dem Sollwert": "⟦0⟧ · flow 1 → 2 (l/min) over the setpoint",
+"⟦0⟧ · Druck an P (bar) über dem Sollwert": "⟦0⟧ · pressure at P (bar) over the setpoint",
+"⟦0⟧ · Druck an 2 (bar) über dem Sollwert": "⟦0⟧ · pressure at 2 (bar) over the setpoint",
+"Fluidplan: Kennlinie von ⟦0⟧ aufgenommen": "Fluid plan: characteristic curve of ⟦0⟧ recorded"
 });

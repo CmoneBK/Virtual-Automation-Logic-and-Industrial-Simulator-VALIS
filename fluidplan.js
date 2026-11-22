@@ -193,7 +193,7 @@
     const propLeitwert = o => o.hyd ? propQn(o) / 60 / (2 * Math.sqrt(PROP_DP_H)) : propQn(o) / 60;
     // Sollwert des Schiebers (−1 … +1) aus der Stellgröße: 0 … 100 % = 0 … 10 V, Nullpunkt (50 %) = Mitte
     function propSoll(t) {
-        const o = t.o, roh = o.varS ? sps()[o.varS] : null;
+        const o = t.o, roh = kennLauf && kennLauf.id === t.id ? kennLauf.u : o.varS ? sps()[o.varS] : null;
         const nul = Math.max(1, Math.min(99, zahl(o.nullS, 50)));
         const y = typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) : roh === true ? 100 : nul;
         return y >= nul ? (y - nul) / (100 - nul) : (y - nul) / nul;
@@ -217,8 +217,114 @@
     }
     // Stellgröße 0 … 1 (einmal je Bild)
     function propWSignal(t) {
-        const roh = t.o.varS ? sps()[t.o.varS] : null;
+        const roh = kennLauf && kennLauf.id === t.id ? kennLauf.u : t.o.varS ? sps()[t.o.varS] : null;
         return typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) / 100 : roh === true ? 1 : 0;
+    }
+    // ---------- Kennlinie ----------
+    // Soll-Kennlinie (statisch, ohne Hysterese) und Messwert eines Proportionalventils.
+    // Wegeventil: Durchfluss zum Anschluss 4 (A) über dem Sollwert, bei Nenndruckgefälle.
+    // Druckventile: Druck über dem Sollwert, Stromventil: Durchfluss über dem Sollwert.
+    let kennLauf = null;              // laufende Aufnahme: { id, t, u, dauer }
+    const kennMess = new Map();       // Teil-Id → { punkte: [[U %, Wert]], fertig }
+    const istStetig = t => istProp(t) || istPropW(t);
+    function kennInfo(t) {
+        if (istProp(t)) return { einheit: 'l/min', name: 'Durchfluss zu ' + (istHyd(t) ? 'A' : '4'), kurz: 'Q' };
+        if (t.typ === 'stromregel') return { einheit: 'l/min', name: 'Durchfluss 1 → 2', kurz: 'Q' };
+        return { einheit: 'bar', name: t.typ === 'dbv' ? 'Druck an P' : 'Druck an 2', kurz: 'p' };
+    }
+    function kennSoll(t, u) {   // u = Sollwert in %
+        if (istProp(t)) {
+            const nul = Math.max(1, Math.min(99, zahl(t.o.nullS, 50)));
+            const sl = u >= nul ? (u - nul) / (100 - nul) : (u - nul) / nul, a = propOeffnung(t.o, sl);
+            return propQn(t.o) * (a[0] - a[1]);
+        }
+        return propWVon(t) + u / 100 * (propWBis(t) - propWVon(t));
+    }
+    function kennWert(t) {      // Messwert jetzt
+        if (!sim) return null;
+        const z = sim.zust[t.id]; if (!z) return null;
+        if (istProp(t) || t.typ === 'stromregel') return z.q || 0;
+        return pPort(t, t.typ === 'dbv' ? 'P' : '2');
+    }
+    function kennSignal(t) {    // Sollwert jetzt in %
+        if (kennLauf && kennLauf.id === t.id) return kennLauf.u;
+        const roh = t.o.varS ? sps()[t.o.varS] : null;
+        return typeof roh === 'number' ? Math.max(0, Math.min(100, roh)) : roh === true ? 100 : istProp(t) ? zahl(t.o.nullS, 50) : 0;
+    }
+    function kennAufnehmen(id, dauer) {
+        const t = teil(id); if (!t || !istStetig(t)) return false;
+        if (!sim) simInit();
+        kennMess.set(id, { punkte: [], fertig: false });
+        kennLauf = { id, t: 0, u: 0, dauer: Math.max(2, dauer || 20) };
+        return true;
+    }
+    // je Bild: Rampe 0 → 10 V → 0 V weiterstellen (vor dem Rechnen) …
+    function kennVor(dt) {
+        if (!kennLauf) return;
+        const t = teil(kennLauf.id); if (!t || !istStetig(t)) { kennLauf = null; return; }
+        kennLauf.t += dt;
+        const a = Math.min(1, kennLauf.t / kennLauf.dauer);
+        kennLauf.u = 100 * (a < 0.5 ? a * 2 : 2 - a * 2);
+    }
+    // … und den Messpunkt ablegen (nach dem Rechnen)
+    function kennNach() {
+        if (!kennLauf) return;
+        const t = teil(kennLauf.id), m = kennMess.get(kennLauf.id); if (!t || !m) { kennLauf = null; return; }
+        const w = kennWert(t); if (w != null) m.punkte.push([+kennLauf.u.toFixed(2), +w.toFixed(3)]);
+        if (kennLauf.t >= kennLauf.dauer) { m.fertig = true; kennLauf = null; if (offen) { diagZeichnen(true); eigenschaften(); } }
+    }
+    function kennAufgenommen(bez) {
+        for (const [id, m] of kennMess) { const t = teil(id); if (t && m.fertig && (!bez || t.bez === bez)) return true; }
+        return false;
+    }
+    function kennZeigen(id) {
+        kennId = id; diagArt = 'kenn';
+        if (diagBox) { diagBox.classList.add('offen'); const b = D().getElementById('fp-diagk'); if (b) b.classList.add('an'); diagZeichnen(true); }
+    }
+    let kennId = null;
+    function kennTeil() {
+        const gew = [...auswahl].map(teil).find(istStetig);
+        if (gew) { kennId = gew.id; return gew; }
+        const t = kennId && teil(kennId);
+        return t && istStetig(t) ? t : plan.teile.find(istStetig) || null;
+    }
+    function kennZeichnen(svgD, W, H) {
+        const T = (x, y, txt, a) => { const e = el('text', Object.assign({ x, y, 'font-size': 10.5, fill: '#37474f' }, a || {}), svgD); e.textContent = txt; return e; };
+        const t = kennTeil();
+        if (!t) { T(12, 24, 'Kein Proportionalventil im Plan. Ein Proportionalventil aus der Palette setzen oder ein Ventil auf „Proportionalmagnet“ stellen.'); return; }
+        const K = kennInfo(t), m = kennMess.get(t.id);
+        const soll = []; for (let u = 0; u <= 100; u += 0.5) soll.push([u, kennSoll(t, u)]);
+        let yMin = Math.min(0, ...soll.map(p => p[1])), yMax = Math.max(...soll.map(p => p[1]));
+        if (m) for (const p of m.punkte) { if (p[1] < yMin) yMin = p[1]; if (p[1] > yMax) yMax = p[1]; }
+        const jetztW = sim ? kennWert(t) : null, jetztU = kennSignal(t);
+        if (jetztW != null) { if (jetztW < yMin) yMin = jetztW; if (jetztW > yMax) yMax = jetztW; }
+        if (yMax - yMin < 1e-6) yMax = yMin + 1;
+        const rand = (yMax - yMin) * 0.06; yMax += rand; if (yMin < 0) yMin -= rand;
+        const L = 64, R = W - 190, O = 26, U = H - 52;
+        const X = u => L + u / 100 * (R - L), Y = v => U - (v - yMin) / (yMax - yMin) * (U - O);
+        // Gitter: 0 … 10 V
+        for (let v = 0; v <= 10; v++) {
+            el('line', { x1: X(v * 10), y1: O, x2: X(v * 10), y2: U, stroke: v === 5 && istProp(t) ? '#b0bec5' : '#eceff1', 'stroke-width': 1 }, svgD);
+            T(X(v * 10), U + 13, v + (v === 10 ? ' V' : ''), { 'text-anchor': 'middle', 'font-size': 9.5, fill: '#78909c' });
+        }
+        const schritt = (() => { const r = (yMax - yMin) / 5, e = Math.pow(10, Math.floor(Math.log10(r))); const f = r / e; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * e; })();
+        for (let v = Math.ceil(yMin / schritt) * schritt; v <= yMax + 1e-9; v += schritt) {
+            el('line', { x1: L, y1: Y(v), x2: R, y2: Y(v), stroke: Math.abs(v) < 1e-9 ? '#90a4ae' : '#eceff1', 'stroke-width': 1 }, svgD);
+            T(L - 6, Y(v) + 3.5, zf(+v.toFixed(6)), { 'text-anchor': 'end', 'font-size': 9.5, fill: '#78909c' });
+        }
+        el('rect', { x: L, y: O, width: R - L, height: U - O, fill: 'none', stroke: '#b0bec5', 'stroke-width': 1 }, svgD);
+        T(6, O - 10, (t.bez || '?') + ' · ' + K.name + ' (' + K.einheit + ') über dem Sollwert', { 'font-weight': 'bold', fill: '#263238' });
+        const pfad = pts => 'M' + pts.map(p => X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1)).join(' L');
+        el('path', { class: 'fp-kenn-soll', d: pfad(soll), fill: 'none', stroke: '#1565c0', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svgD);
+        if (m && m.punkte.length > 1) el('path', { class: 'fp-kenn-mess', d: pfad(m.punkte), fill: 'none', stroke: '#ef6c00', 'stroke-width': 1.8, 'stroke-linejoin': 'round' }, svgD);
+        if (jetztW != null) el('circle', { class: 'fp-kenn-punkt', cx: X(jetztU), cy: Y(jetztW), r: 4.5, fill: '#d81b60', stroke: '#fff', 'stroke-width': 1.2 }, svgD);
+        // Legende rechts
+        let ly = O + 8; const lx = R + 14;
+        const leg = (farbe, txt, punkt) => { if (punkt) el('circle', { cx: lx + 9, cy: ly - 3.5, r: 4, fill: farbe }, svgD); else el('line', { x1: lx, y1: ly - 3.5, x2: lx + 18, y2: ly - 3.5, stroke: farbe, 'stroke-width': 2.2 }, svgD); T(lx + 24, ly, txt, { 'font-size': 10 }); ly += 16; };
+        leg('#1565c0', 'Soll-Kennlinie' + (istProp(t) ? ' (Nenndruck)' : ''));
+        leg('#ef6c00', m && m.fertig ? 'aufgenommen ✓' : kennLauf && kennLauf.id === t.id ? 'Aufnahme läuft …' : 'aufgenommen');
+        if (jetztW != null) { leg('#d81b60', 'Arbeitspunkt', true); T(lx, ly + 2, zf(jetztU / 10, 2) + ' V · ' + zf(jetztW, 2) + ' ' + K.einheit, { 'font-size': 10.5, 'font-weight': 'bold', fill: '#263238' }); ly += 18; }
+        if (!sim || !simLaeuft()) T(lx, ly + 4, 'Simulation starten,', { fill: '#90a4ae', 'font-size': 10 }), T(lx, ly + 17, 'dann „Kennlinie aufnehmen“.', { fill: '#90a4ae', 'font-size': 10 });
     }
     // Je Teilschritt: Hysterese (Umkehrspanne) und Verzögerung, liefert den wirksamen Sollwert (bar bzw. l/min)
     function propWSchritt(t, z) {
@@ -1227,6 +1333,7 @@
         plan.teile = plan.teile.filter(t => TYP[t.typ]);
         kennzeichenAuffrischen(plan);   // alte Bezeichnungen 1A1/1V1 → -MM1/-QM1
         auswahl.clear(); geoCache.clear(); undoStapel = []; redoStapel = []; sim = null;
+        kennMess.clear(); kennLauf = null;   // aufgenommene Kennlinien gehören zum alten Stand
         // Spiegel gehören zum alten Plan (sonst hielte der Abgleich gleich benannte 2D-Teile für gelöscht)
         try { spiegel.clear(); spiegel2D.clear(); kennSpiegel.clear(); hydSpiegel.clear(); versSpiegel.clear(); gesehen2D = null; } catch (e) {}
         abgleichNachImport = !!plan.anlage;
@@ -1610,6 +1717,13 @@
         const dk = h('div', { class: 'fp-dkopf' }, diagBox);
         h('button', { text: 'Weg-Schritt', id: 'fp-d-schritt', class: 'an', title: 'Waagrecht die Schritte: ein neuer Schritt beginnt, sobald ein Zylinder eine Endlage erreicht', onclick: () => { diagArt = 'schritt'; diagZeichnen(true); } }, dk);
         h('button', { text: 'Weg-Zeit', id: 'fp-d-zeit', title: 'Waagrecht die Zeit in Sekunden', onclick: () => { diagArt = 'zeit'; diagZeichnen(true); } }, dk);
+        h('button', { text: 'Kennlinie', id: 'fp-d-kenn', title: 'Kennlinie des gewählten Proportionalventils: Durchfluss bzw. Druck über dem Sollwert 0 … 10 V, mit Arbeitspunkt', onclick: () => { diagArt = 'kenn'; diagZeichnen(true); } }, dk);
+        h('button', { text: '⏺ Kennlinie aufnehmen', id: 'fp-d-auf', style: 'display:none', title: 'Fährt den Sollwert langsam von 0 V auf 10 V und zurück und zeichnet die gemessene Kennlinie (mit Hysterese, Überdeckung und Sättigung). Die Simulation muss laufen.', onclick: () => {
+            if (kennLauf) { kennLauf = null; diagZeichnen(true); return; }
+            const t = kennTeil(); if (!t) return;
+            if (!simLaeuft()) { status('Kennlinie aufnehmen: zuerst die Simulation starten.'); return; }
+            kennAufnehmen(t.id); diagZeichnen(true);
+        } }, dk);
         h('button', { text: '📸 SVG', title: 'Diagramm als SVG-Bild speichern', onclick: diagSvgSpeichern }, dk);
         diagSvg = el('svg', {}, diagBox);
         h('div', { class: 'fp-fuss', id: 'fp-fuss' }, fenster);
@@ -2429,6 +2543,7 @@
             }
             variable('VALIS-Eingang', 'var', 'in');
         }
+        if (istStetig(t)) h('button', { class: 'fp-btn', id: 'fp-kennk', style: 'margin-top:8px', text: '📈 Kennlinie zeigen', title: 'Kennlinie dieses Ventils im Diagramm unten zeigen und aufnehmen', onclick: () => kennZeigen(t.id) }, box);
         fehlerFeld(box, t.id);
         if (simLaeuft()) box.querySelectorAll('input,select').forEach(i => { if (!(i.type === 'range')) i.disabled = true; });
     }
@@ -3071,6 +3186,7 @@
     function simSchritt(dtGesamt) {
         if (!sim) simInit();
         const S = sim;
+        if (!schattenLauf) kennVor(dtGesamt);
         // --- Ventilstellungen (einmal je Bild) ---
         for (const t of plan.teile) {
             const z = S.zust[t.id];
@@ -3096,6 +3212,7 @@
                 if (neu !== z.stellung) { z.stellung = neu; if (!schattenLauf) klick(); }
             } else if (istPropW(t)) {
                 z.soll = fehlerAktiv(t.id) === 'spule' ? 0 : propWSignal(t);
+                z.qSum = 0;
             } else if (t.typ === 'zeit') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
                 const tau = Math.max(0.05, zahl(t.o.zeit, 3) / Math.LN2);
@@ -3125,6 +3242,8 @@
             z.stellung = z.s > 0.02 ? 0 : z.s < -0.02 ? 2 : 1;
             z.betL = z.s > 0.02; z.betR = z.s < -0.02;
         }
+        for (const t of plan.teile) if (istPropW(t) && t.typ === 'stromregel') { const z = S.zust[t.id]; z.q = (z.qSum || 0) / (n * DT) * 60; }
+        if (!schattenLauf) kennNach();
         // --- Sensoren ---
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
@@ -3206,7 +3325,8 @@
                 case 'stromregel': {
                     // 1 → 2 geregelt (Druckwaage hält q, solange genug Druckgefälle da ist), 2 → 1 frei wie eine Drossel
                     const qm = Math.max(0, istPropW(t) ? propWSchritt(t, z) : zahl(t.o.q, 4)) / 60 * DT * (fehlerAktiv(t.id) === 'zu' ? 0.01 : 1);
-                    fluss(netz(t, '1'), netz(t, '2'), G_HV * 2, 1, 0, qm);
+                    const qd = fluss(netz(t, '1'), netz(t, '2'), G_HV * 2, 1, 0, qm);
+                    if (z.qSum != null) z.qSum += qd;
                     fluss(netz(t, '2'), netz(t, '1'), G_HV, 1);
                     break;
                 }
@@ -3503,12 +3623,14 @@
     function diagZeichnen(sofort) {
         if (!diagBox || !diagBox.classList.contains('offen')) return;
         if (!sofort && ++diagBild % 6) return;
-        const sb = D().getElementById('fp-d-schritt'), zb = D().getElementById('fp-d-zeit');
-        if (sb) sb.classList.toggle('an', diagArt === 'schritt'); if (zb) zb.classList.toggle('an', diagArt === 'zeit');
+        const sb = D().getElementById('fp-d-schritt'), zb = D().getElementById('fp-d-zeit'), kb = D().getElementById('fp-d-kenn'), ab = D().getElementById('fp-d-auf');
+        if (sb) sb.classList.toggle('an', diagArt === 'schritt'); if (zb) zb.classList.toggle('an', diagArt === 'zeit'); if (kb) kb.classList.toggle('an', diagArt === 'kenn');
+        if (ab) { ab.style.display = diagArt === 'kenn' ? '' : 'none'; ab.textContent = kennLauf ? '⏹ Aufnahme abbrechen' : '⏺ Kennlinie aufnehmen'; }
         const svgD = diagSvg; svgD.innerHTML = '';
-        diagBox.style.height = Math.min(360, Math.max(170, 54 + antriebe().length * 36)) + 'px';
+        diagBox.style.height = diagArt === 'kenn' ? '250px' : Math.min(360, Math.max(170, 54 + antriebe().length * 36)) + 'px';
         const W = diagBox.clientWidth || 600, H = diagBox.clientHeight || 170;
         svgD.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        if (diagArt === 'kenn') { kennZeichnen(svgD, W, H); return; }
         const zyl = antriebe();
         const T = (x, y, txt, a) => { const e = el('text', Object.assign({ x, y, 'font-size': 10.5, fill: '#37474f' }, a || {}), svgD); e.textContent = txt; return e; };
         if (!zyl.length) { T(12, 24, 'Keine Zylinder im Plan.'); return; }
@@ -5686,6 +5808,21 @@ function versorgungMerken(F) {
     // Oszilloskop: je 2D-Zylinder Druck in Kammer A (Kolbenseite, K) und B (Stangenseite, S) in bar,
     // Weg s in mm und Kolbenkraft F = pA·AK − pB·AS in N (1 bar = 0,1 N/mm²; Feder/Reibung nicht abgezogen).
     // Quelle: verbundener Plan, sonst Schattenplan (Pneumatik und Hydraulik).
+    // Oszilloskop: Sollwert (V), Schieberlage (%) und Durchfluss bzw. Druck der Proportionalventile im Plan
+    window._fpPropMess = function () {
+        if (!simLaeuft() || !sim) return null;
+        const m = {};
+        for (const t of plan.teile) {
+            if (!istStetig(t) || !t.bez) continue;
+            const z = sim.zust[t.id]; if (!z) continue;
+            const r = { U: kennSignal(t) / 10 };
+            if (istProp(t)) { r.s = (z.s || 0) * 100; r.Q = z.q || 0; }
+            else if (t.typ === 'stromregel') r.Q = z.q || 0;
+            else r.p = z.wert || 0;
+            m[t.bez] = r;
+        }
+        return m;
+    };
     window._fpZylMess = function () {
         if (!simLaeuft()) return null;
         const m = {};
@@ -7919,6 +8056,10 @@ function versorgungMerken(F) {
         verdacht: (key) => verdachtUmschalten(key),
         messen: (lt, x, y) => messKlick(lt, x, y, null),
         messwerte: () => messpunkte.map(m => { const l = plan.leitungen.find(q => q.id === m.l); const n = sim && l ? sim.netzVon[l.a.t + ':' + l.a.p] : null; return n != null ? +druckVon(n).toFixed(3) : null; }),
+        kennlinie: (id) => { const t = teil(id); if (!t || !istStetig(t)) return null; const m = kennMess.get(id), soll = []; for (let u = 0; u <= 100; u += 5) soll.push([u, +kennSoll(t, u).toFixed(4)]); return { soll, mess: m ? m.punkte.slice() : [], fertig: !!(m && m.fertig), laeuft: !!(kennLauf && kennLauf.id === id), info: kennInfo(t) }; },
+        kennlinieAufnehmen: (id, dauer) => kennAufnehmen(id, dauer),
+        kennlinieAufgenommen: (bez) => kennAufgenommen(bez),
+        _kennZeigen: (id) => kennZeigen(id),
         beispiele: () => BEISPIELE.map(b => b.name),
         beispielLaden: (i) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i); } finally { window.confirm = c; } },
         _leeren: () => { planImport(null); gedrueckt.clear(); },

@@ -340,7 +340,7 @@
   } catch (e) {}
 
   // Wörterbuch nur laden, wenn Englisch gebraucht wird (rund 0,5 MB)
-  const WOERTER_V = '20261122c';
+  const WOERTER_V = '20261122d';
   const pfad = (function () {
     const sc = document.currentScript && document.currentScript.src;
     return sc ? sc.replace(/sprache-en\.js.*$/, '') : 'sprache/';

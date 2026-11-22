@@ -9998,3 +9998,44 @@ VALIS_EN.vorlagen({
 "⟦0⟧ · Druck an 2 (bar) über dem Sollwert": "⟦0⟧ · pressure at 2 (bar) over the setpoint",
 "Fluidplan: Kennlinie von ⟦0⟧ aufgenommen": "Fluid plan: characteristic curve of ⟦0⟧ recorded"
 });
+// Proportionaltechnik Schritt 4: Verstärkerkarte, neue Fehler
+VALIS_EN.dazu({
+"Elektronik": "Electronics",
+"eingebaut (Sollwert 0 … 10 V direkt)": "on-board (setpoint 0 … 10 V directly)",
+"externe Verstärkerkarte (Magnetstrom)": "external amplifier card (solenoid current)",
+"externe Verstärkerkarte": "external amplifier card",
+"Karte: Grundstrom (mA)": "Card: base current (mA)",
+"Karte: Sprungstrom (mA)": "Card: jump current (mA)",
+"Karte: Maximalstrom (mA)": "Card: maximum current (mA)",
+"Karte: Rampe auf (0 → 10 V) (s)": "Card: ramp up (0 → 10 V) (s)",
+"Karte: Rampe ab (10 → 0 V) (s)": "Card: ramp down (10 → 0 V) (s)",
+"Karte: Dither (%)": "Card: dither (%)",
+"Die Verstärkerkarte steht im Steckaufbau (Reihe Analogtechnik) und lässt sich dort an den Drehknöpfen einstellen. Den Sprungstrom so wählen, dass der Schieber gerade die Überdeckung überspringt. Der Grundstrom fließt in beiden Magneten und zählt für den Schieberweg nicht mit: es wirkt der Unterschied der beiden Ströme, 800 mA = voller Schieberweg.": "The amplifier card sits in the patch panel (analog technology row) and is adjusted there with the rotary knobs. Choose the jump current so that the spool just skips the overlap. The base current flows in both solenoids and does not count towards the spool travel: the difference between the two currents acts, 800 mA = full spool travel.",
+"Stetigventil mit externer Verstärkerkarte: Der Sollwert 0 … 100 % wird um den Nullpunkt zu W1 = −10 … +10 V. Positiv bestromt die Karte Magnet A (P → A), negativ Magnet B (P → B).": "Continuous valve with external amplifier card: the setpoint 0 … 100 % becomes W1 = −10 … +10 V around the zero point. Positive: the card energises solenoid A (P → A), negative: solenoid B (P → B).",
+"Stetigventil mit externer Verstärkerkarte: Der Sollwert 0 … 100 % wird um den Nullpunkt zu W1 = −10 … +10 V. Positiv bestromt die Karte Magnet A (1 → 4), negativ Magnet B (1 → 2).": "Continuous valve with external amplifier card: the setpoint 0 … 100 % becomes W1 = −10 … +10 V around the zero point. Positive: the card energises solenoid A (1 → 4), negative: solenoid B (1 → 2).",
+"Proportionalmagnet defekt (Schieber bleibt in der Mitte)": "Proportional solenoid defective (spool stays centred)",
+"Proportionalmagnet defekt (kein Sollwert)": "Proportional solenoid defective (no setpoint)",
+"Sollwertleitung unterbrochen (0 V)": "Setpoint line broken (0 V)",
+"Schieber verschmutzt (große Hysterese)": "Spool contaminated (large hysteresis)",
+"Ventil verschmutzt (große Hysterese)": "Valve contaminated (large hysteresis)",
+"Nullpunkt verstellt (Zylinder kriecht)": "Zero point shifted (cylinder creeps)",
+"Schieber klemmt": "Spool stuck",
+"Maximalstrom": "Maximum current",
+"Sprungstrom": "Jump current",
+"Rampe auf": "Ramp up",
+"Rampe ab": "Ramp down",
+"Magnet A": "Solenoid A",
+"Magnet B": "Solenoid B"
+});
+VALIS_EN.vorlagen({
+"Betriebsart: 1 × zweikanalig (Proportional-Wegeventil ⟦0⟧)": "Operating mode: 1 × two-channel (proportional directional valve ⟦0⟧)",
+"Ventil im Fluidplan: ⟦0⟧ (Hydraulik)": "Valve in the fluid plan: ⟦0⟧ (hydraulics)",
+"Ventil im Fluidplan: ⟦0⟧ (Pneumatik)": "Valve in the fluid plan: ⟦0⟧ (pneumatics)",
+"Mitte ⟦0⟧ % (= 0 V) · Überdeckung ⟦1⟧ % · Nennstrom ⟦2⟧ mA": "Centre ⟦0⟧ % (= 0 V) · overlap ⟦1⟧ % · rated current ⟦2⟧ mA",
+"Schieber ⟦0⟧ %": "Spool ⟦0⟧ %",
+"Proportionalmagnete ⟦0⟧": "Proportional solenoids ⟦0⟧",
+"Proportionalverstärker ⟦0⟧ · Ausgang ⟦1⟧ (⟦2⟧)": "Proportional amplifier ⟦0⟧ · output ⟦1⟧ (⟦2⟧)",
+"Proportionalventil ⟦0⟧ · Magnet ⟦1⟧ (⟦2⟧)": "Proportional valve ⟦0⟧ · solenoid ⟦1⟧ (⟦2⟧)",
+"Der Verstärker speist den Strom in den Proportionalmagneten ⟦0⟧.": "The amplifier feeds the current into proportional solenoid ⟦0⟧.",
+"Rückleiter des Magneten ⟦0⟧ zum Verstärker, erst damit fließt der Strom.": "Return conductor of solenoid ⟦0⟧ to the amplifier; only then does current flow."
+});

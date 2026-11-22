@@ -163,6 +163,25 @@
     const istProp = t => !!t && t.typ === 'ventil' && !!t.o && t.o.links === 'prop';
     const PROP_STD = { varS: '', nullS: 50, ueber: 10, verlauf: 'linear', tau: 20, hyst: 2 };
     const PROP_DP_H = 35;   // bar je Steuerkante, auf die sich der Nenndurchfluss (Öl) bezieht
+    // Externe Verstärkerkarte (o.elektronik === 'karte'): Sollwert W1 (±10 V) → Rampe → Magnetstrom A/B.
+    // Grundstrom fließt immer durch beide Magnete (Vormagnetisierung), der Sprungstrom kommt dazu,
+    // sobald der Sollwert die Null verlässt (überspringt die Überdeckung), bei 10 V fließt der
+    // Maximalstrom. Der Schieber folgt dem Differenzstrom: Nennstrom 800 mA = voller Schieberweg.
+    // Dither (überlagerte Schwingung) hält den Schieber in Bewegung und verkleinert die Hysterese.
+    const PROP_I_NENN = 800;   // mA
+    // Lieferzustand neutral: die Karte verhält sich wie die eingebaute Elektronik, eingestellt wird im Unterricht
+    const KARTE_STD = { grund: 0, sprung: 0, max: 800, rampeAuf: 0, rampeAb: 0, dither: 100 };
+    const KARTE_GRENZE = { grund: [0, 300], sprung: [0, 300], max: [300, 1000], rampeAuf: [0, 5], rampeAb: [0, 5], dither: [0, 100] };
+    const mitKarte = t => istProp(t) && t.o.elektronik === 'karte';
+    const karteVon = t => Object.assign({}, KARTE_STD, (t.o && t.o.karte) || {});
+    // Ströme (mA) der beiden Magnete beim Sollwert w (−1 … +1, nach der Rampe)
+    function karteStrom(t, w) {
+        const k = karteVon(t), g = Math.max(0, k.grund);
+        const hub = a => a > 0.005 ? Math.max(0, k.sprung) + a * Math.max(0, k.max - k.grund - k.sprung) : 0;
+        return [g + hub(w), g + hub(-w)];
+    }
+    // Schieber-Sollwert hinter der Karte (ohne Rampe): Differenzstrom / Nennstrom
+    const karteSoll = (t, w) => { const i = karteStrom(t, w); return Math.max(-1, Math.min(1, (i[0] - i[1]) / PROP_I_NENN)); };
     const propQn = o => Math.max(0, zahl(o.qn, o.hyd ? 40 : 700));
     // Ein Ventil auf „proportional" umstellen bzw. zurück: beide Seiten, drei Stellungen, Mitte gesperrt
     function propOrdnen(t) {
@@ -235,7 +254,9 @@
     function kennSoll(t, u) {   // u = Sollwert in %
         if (istProp(t)) {
             const nul = Math.max(1, Math.min(99, zahl(t.o.nullS, 50)));
-            const sl = u >= nul ? (u - nul) / (100 - nul) : (u - nul) / nul, a = propOeffnung(t.o, sl);
+            let sl = u >= nul ? (u - nul) / (100 - nul) : (u - nul) / nul;
+            if (mitKarte(t)) sl = karteSoll(t, sl);
+            const a = propOeffnung(t.o, sl);
             return propQn(t.o) * (a[0] - a[1]);
         }
         return propWVon(t) + u / 100 * (propWBis(t) - propWVon(t));
@@ -329,7 +350,8 @@
     // Je Teilschritt: Hysterese (Umkehrspanne) und Verzögerung, liefert den wirksamen Sollwert (bar bzw. l/min)
     function propWSchritt(t, z) {
         if (fehlerAktiv(t.id) !== 'klemmt') {
-            const hy = Math.max(0, zahl(t.o.hyst, 3)) / 200;   // halbe Spanne, Signalbereich = 1
+            let hy = Math.max(0, zahl(t.o.hyst, 3)) / 200;   // halbe Spanne, Signalbereich = 1
+            if (fehlerAktiv(t.id) === 'schmutz') hy = Math.max(0.08, hy * 5);
             const soll = z.soll || 0;
             if (soll > z.h + hy) z.h = soll - hy; else if (soll < z.h - hy) z.h = soll + hy;
             z.u += (Math.max(0, Math.min(1, z.h)) - z.u) * Math.min(1, DT / Math.max(0.001, zahl(t.o.tau, 50) / 1000));
@@ -2422,6 +2444,17 @@
                 wahl('Verlauf der Kennlinie', 'verlauf', [['linear', 'linear'], ['geknickt', 'geknickt (feinfühlig um die Mitte)']]);
                 num('Zeitkonstante des Schiebers', 'tau', 1, 500, 1, 'ms');
                 num('Hysterese', 'hyst', 0, 20, 0.5, '% vom Signalbereich');
+                if (!t.o.elektronik) t.o.elektronik = 'eingebaut';
+                wahl('Elektronik', 'elektronik', [['eingebaut', 'eingebaut (Sollwert 0 … 10 V direkt)'], ['karte', 'externe Verstärkerkarte (Magnetstrom)']]);
+                if (mitKarte(t)) {
+                    const kn = (lbl, key, schritt, einheit) => {
+                        const G = KARTE_GRENZE[key], i = fld(lbl + ' (' + einheit + ')', h('input', { type: 'number', min: G[0], max: G[1], step: schritt, value: karteVon(t)[key] }));
+                        i.onchange = () => setze(() => { t.o.karte = Object.assign(karteVon(t), { [key]: Math.max(G[0], Math.min(G[1], zahl(i.value, KARTE_STD[key]))) }); });
+                    };
+                    kn('Karte: Grundstrom', 'grund', 10, 'mA'); kn('Karte: Sprungstrom', 'sprung', 10, 'mA'); kn('Karte: Maximalstrom', 'max', 10, 'mA');
+                    kn('Karte: Rampe auf (0 → 10 V)', 'rampeAuf', 0.1, 's'); kn('Karte: Rampe ab (10 → 0 V)', 'rampeAb', 0.1, 's'); kn('Karte: Dither', 'dither', 10, '%');
+                    h('div', { class: 'fp-hinw', text: 'Die Verstärkerkarte steht im Steckaufbau (Reihe Analogtechnik) und lässt sich dort an den Drehknöpfen einstellen. Den Sprungstrom so wählen, dass der Schieber gerade die Überdeckung überspringt. Der Grundstrom fließt in beiden Magneten und zählt für den Schieberweg nicht mit: es wirkt der Unterschied der beiden Ströme, 800 mA = voller Schieberweg.' }, box);
+                }
             }
             if (t.o.links === 'magnet') variable('Spule links: VALIS-Ausgang', 'varL', 'out');
             if (t.o.links === 'rolle' || t.o.links === 'rolle_leer') {
@@ -2452,7 +2485,8 @@
                     i2.onchange = () => setze(() => { const d = teil(a.teil); if (d) d.o.offen = Math.max(1, Math.min(100, zahl(i2.value, 50))); });
                 }
             }
-            if (istProp(t)) h('div', { class: 'fp-hinw', html: 'Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet ' + (istHyd(t) ? 'P → A und B → T' : '1 → 4 und 2 → 3') + ', darunter ' + (istHyd(t) ? 'P → B und A → T' : '1 → 2 und 4 → 5') + '. Je weiter weg von der Mitte, desto größer der Durchfluss.' }, box);
+            if (mitKarte(t)) h('div', { class: 'fp-hinw', html: 'Stetigventil mit externer Verstärkerkarte: Der Sollwert 0 … 100 % wird um den Nullpunkt zu W1 = −10 … +10 V. Positiv bestromt die Karte Magnet A (' + (istHyd(t) ? 'P → A' : '1 → 4') + '), negativ Magnet B (' + (istHyd(t) ? 'P → B' : '1 → 2') + ').' }, box);
+            else if (istProp(t)) h('div', { class: 'fp-hinw', html: 'Stetigventil mit eingebauter Elektronik: Der Sollwert 0 … 100 % entspricht 0 … 10 V. Am Nullpunkt (5 V) steht der Schieber in der Mitte, darüber öffnet ' + (istHyd(t) ? 'P → A und B → T' : '1 → 4 und 2 → 3') + ', darunter ' + (istHyd(t) ? 'P → B und A → T' : '1 → 2 und 4 → 5') + '. Je weiter weg von der Mitte, desto größer der Durchfluss.' }, box);
             else if (istHyd(t)) h('div', { class: 'fp-hinw', html: 'Hydraulik: P von der Pumpe, T zum Tank, A und B zum Zylinder. ' + (t.o.wege === '4/3' ? 'Ohne Betätigung steht das Ventil in der Mitte.' : '') }, box);
             else h('div', { class: 'fp-hinw', html: `Steueranschlüsse heißen nach ISO 5599-3 so, wie sie das Ventil schalten: links <b>${steuerNummer(st[0])}</b>, rechts <b>${steuerNummer(st[st.length - 1])}</b>. ` + (t.o.rechts !== 'feder' && t.o.wege !== '5/3' ? 'Ohne Feder bleibt das Ventil in der zuletzt geschalteten Stellung (Impulsventil).' : '') }, box);
         } else if (t.typ === 'zyl_dw' || t.typ === 'zyl_ew') {
@@ -2639,7 +2673,7 @@
         if (istPropW(t)) { const K = PROP_W[t.typ]; d.push((K.einheit === 'bar' ? 'p = ' : 'Q = ') + zf(propWVon(t)) + ' … ' + zf(propWBis(t)) + ' ' + K.einheit); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); return d.join(', '); }
         switch (t.typ) {
             case 'ventil': {
-                if (o.links === 'prop') { d.push('Proportionalmagnete, federzentriert', 'Qn = ' + zf(propQn(o)) + ' l/min', 'Überdeckung ' + zf(zahl(o.ueber, 10), 0) + ' %'); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); break; }
+                if (o.links === 'prop') { d.push('Proportionalmagnete, federzentriert', 'Qn = ' + zf(propQn(o)) + ' l/min', 'Überdeckung ' + zf(zahl(o.ueber, 10), 0) + ' %'); if (o.elektronik === 'karte') d.push('externe Verstärkerkarte'); if (o.varS) d.push('Sollwert ' + o.varS + ' (0 … 10 V)'); break; }
                 d.push('Betätigung ' + (BET_KURZ[o.links] || o.links) + ' / ' + (BET_KURZ[o.rechts] || o.rechts));
                 if (ventilStellungen(o).length === 3) d.push('Mittelstellung ' + (MITTE_NAME[o.mitte] || o.mitte));
                 else if (o.wege === '3/2' || o.wege === '2/2') d.push(o.ruhe === 'offen' ? 'Ruhestellung offen' : 'Ruhestellung gesperrt');
@@ -3072,7 +3106,7 @@
                 if (t.o.links === 'hebel') z.rasteL = false;
                 if (t.o.rechts === 'hebel') z.rasteR = false;
                 z.pulsL = 0; z.pulsR = 0; z.pulsLH = z.pulsRH = false; z.pulsLX = z.pulsRX = null;
-                if (istProp(t)) { z.s = 0; z.h = 0; z.soll = 0; z.q = 0; z.qSum = 0; z.auf = [0, 0]; }
+                if (istProp(t)) { z.s = 0; z.h = 0; z.soll = 0; z.q = 0; z.qSum = 0; z.auf = [0, 0]; z.w = 0; z.iA = 0; z.iB = 0; }
             }
             if (t.typ === 'zeit') { z.pr = 0; z.an = false; }
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
@@ -3192,8 +3226,22 @@
             const z = S.zust[t.id];
             if (t.typ === 'ventil' && istProp(t)) {
                 // Stetigventil: Sollwert einmal je Bild lesen, der Schieber läuft in den Teilschritten nach
-                const fe = fehlerAktiv(t.id);
-                z.soll = fe === 'spule' ? 0 : propSoll(t);
+                const fe = fehlerAktiv(t.id), karte = mitKarte(t);
+                // Sollwertleitung unterbrochen: eingebaute Elektronik sieht 0 V (Schieber ganz auf die B-Seite),
+                // die Karte sieht an W1 0 V (Mitte)
+                let w = fe === 'sollwert' && !(kennLauf && kennLauf.id === t.id) ? (karte ? 0 : -1) : propSoll(t);
+                if (karte) {
+                    // Rampe: Anstieg und Abfall des Sollwerts begrenzen (Zeit für 0 → 10 V)
+                    const k = karteVon(t), ziel = w, alt = z.w || 0;
+                    const steigt = Math.abs(ziel) > Math.abs(alt) && ziel * alt >= 0;
+                    const zeit = Math.max(0, steigt ? k.rampeAuf : k.rampeAb), dMax = zeit > 0 ? dtGesamt / zeit : Infinity;
+                    z.w = alt + Math.max(-dMax, Math.min(dMax, ziel - alt));
+                    const i = karteStrom(t, z.w); z.iA = i[0]; z.iB = i[1];
+                    w = Math.max(-1, Math.min(1, (z.iA - z.iB) / PROP_I_NENN));
+                } else { z.w = w; z.iA = z.iB = 0; }
+                if (fe === 'nullpunkt') w = Math.max(-1, Math.min(1, w + 0.15));
+                z.soll = fe === 'spule' ? 0 : w;
+                if (fe === 'spule') { z.iA = z.iB = 0; }
                 z.qSum = 0;
             } else if (t.typ === 'ventil') {
                 if (z.pulsL > 0) z.pulsL -= dtGesamt;
@@ -3211,7 +3259,7 @@
                 if (fehlerAktiv(t.id) === 'klemmt') neu = n === 3 ? 1 : (t.o.links === 'feder' ? 0 : n - 1);
                 if (neu !== z.stellung) { z.stellung = neu; if (!schattenLauf) klick(); }
             } else if (istPropW(t)) {
-                z.soll = fehlerAktiv(t.id) === 'spule' ? 0 : propWSignal(t);
+                z.soll = fehlerAktiv(t.id) === 'spule' || (fehlerAktiv(t.id) === 'sollwert' && !(kennLauf && kennLauf.id === t.id)) ? 0 : propWSignal(t);
                 z.qSum = 0;
             } else if (t.typ === 'zeit') {
                 const p12 = pPort(t, geo(t).ports.find(p => p.art === 's').id);
@@ -3293,7 +3341,9 @@
                         const o = t.o, fe = fehlerAktiv(t.id);
                         // Hysterese als Umkehrspanne (der Schieber folgt erst, wenn das Spiel durchfahren ist), dann Verzögerung 1. Ordnung
                         if (fe !== 'klemmt') {
-                            const hy = Math.max(0, zahl(o.hyst, 2)) / 100;   // halbe Spanne in s (Signalbereich = 2)
+                            let hy = Math.max(0, zahl(o.hyst, 2)) / 100;   // halbe Spanne in s (Signalbereich = 2)
+                            if (mitKarte(t)) hy *= 3 - 2 * Math.max(0, Math.min(100, karteVon(t).dither)) / 100;   // ohne Dither dreifache Hysterese
+                            if (fe === 'schmutz') hy = Math.max(0.12, hy * 5);
                             if (z.soll > z.h + hy) z.h = z.soll - hy; else if (z.soll < z.h - hy) z.h = z.soll + hy;
                             z.s += (z.h - z.s) * Math.min(1, DT / Math.max(0.001, zahl(o.tau, 20) / 1000));
                         }
@@ -3805,6 +3855,15 @@
     // ------------------------------------------------------------
     // plan.fehler = { '<teilId>' | 'L:<leitungId>': art }, plan.fehlersuche = true
     // blendet sie aus; plan.verdacht = Liste der Meldungen der Lernenden.
+    // Proportionalventile haben eigene Fehlerbilder
+    const FEHLER_PROP = [['spule', 'Proportionalmagnet defekt (Schieber bleibt in der Mitte)'], ['sollwert', 'Sollwertleitung unterbrochen (0 V)'], ['schmutz', 'Schieber verschmutzt (große Hysterese)'], ['nullpunkt', 'Nullpunkt verstellt (Zylinder kriecht)'], ['klemmt', 'Schieber klemmt'], ['leck', 'Ventil innen undicht']];
+    const FEHLER_PROPW = [['spule', 'Proportionalmagnet defekt (kein Sollwert)'], ['sollwert', 'Sollwertleitung unterbrochen (0 V)'], ['schmutz', 'Ventil verschmutzt (große Hysterese)']];
+    function fehlerListe(t) {
+        if (!t) return null;
+        if (istProp(t)) return FEHLER_PROP;
+        if (istPropW(t)) return FEHLER_PROPW;
+        return FEHLER[t.typ];
+    }
     const FEHLER = {
         leitung: [['leck', 'Leitung undicht (bläst ab)'], ['zu', 'Leitung geknickt (kein Durchgang)']],
         ventil: [['klemmt', 'Ventil klemmt in Ruhestellung'], ['spule', 'Magnetspule defekt'], ['rolle', 'Rolle/Betätigung verstellt'], ['leck', 'Ventil innen undicht']],
@@ -3832,7 +3891,7 @@
     function fehlerName(key) {
         const f = fehlerVon(key); if (!f) return '';
         const t = key.startsWith('L:') ? null : teil(key);
-        const liste = key.startsWith('L:') ? FEHLER.leitung : (t && FEHLER[t.typ]) || [];
+        const liste = key.startsWith('L:') ? FEHLER.leitung : fehlerListe(t) || [];
         const e = liste.find(x => x[0] === f);
         return e ? e[1] : f;
     }
@@ -3891,7 +3950,7 @@
     function fehlerFeld(box, key) {
         if (plan.fehlersuche) return;
         const t = key.startsWith('L:') ? null : teil(key);
-        const liste = key.startsWith('L:') ? FEHLER.leitung : (t && FEHLER[t.typ]);
+        const liste = key.startsWith('L:') ? FEHLER.leitung : fehlerListe(t);
         if (!liste) return;
         h('label', { text: 'Versteckter Fehler (Fehlersuche)' }, box);
         const sel = h('select', {}, box);
@@ -5816,7 +5875,7 @@ function versorgungMerken(F) {
             if (!istStetig(t) || !t.bez) continue;
             const z = sim.zust[t.id]; if (!z) continue;
             const r = { U: kennSignal(t) / 10 };
-            if (istProp(t)) { r.s = (z.s || 0) * 100; r.Q = z.q || 0; }
+            if (istProp(t)) { r.s = (z.s || 0) * 100; r.Q = z.q || 0; if (mitKarte(t)) r.I = (z.iA || 0) - (z.iB || 0); }
             else if (t.typ === 'stromregel') r.Q = z.q || 0;
             else r.p = z.wert || 0;
             m[t.bez] = r;
@@ -8012,7 +8071,7 @@ function versorgungMerken(F) {
                 const r = { typ: t.typ, bez: t.bez };
                 if (z.x != null) { r.x = z.x; r.v = z.v; r.anteil = z.x / zylHub(t); }
                 if (z.stellung != null) r.stellung = z.stellung;
-                if (z.s != null) { r.s = z.s; r.soll = z.soll; r.q = z.q; r.auf = z.auf; }
+                if (z.s != null) { r.s = z.s; r.soll = z.soll; r.q = z.q; r.auf = z.auf; r.w = z.w; r.iA = z.iA; r.iB = z.iB; }
                 if (z.wert != null) { r.wert = z.wert; r.soll = z.soll; r.u = z.u; }
                 if (z.auf === true || z.auf === false) r.offen = z.auf;
                 if (z.an != null) r.an = z.an;
@@ -8058,6 +8117,14 @@ function versorgungMerken(F) {
         messwerte: () => messpunkte.map(m => { const l = plan.leitungen.find(q => q.id === m.l); const n = sim && l ? sim.netzVon[l.a.t + ':' + l.a.p] : null; return n != null ? +druckVon(n).toFixed(3) : null; }),
         kennlinie: (id) => { const t = teil(id); if (!t || !istStetig(t)) return null; const m = kennMess.get(id), soll = []; for (let u = 0; u <= 100; u += 5) soll.push([u, +kennSoll(t, u).toFixed(4)]); return { soll, mess: m ? m.punkte.slice() : [], fertig: !!(m && m.fertig), laeuft: !!(kennLauf && kennLauf.id === id), info: kennInfo(t) }; },
         kennlinieAufnehmen: (id, dauer) => kennAufnehmen(id, dauer),
+        // Verstärkerkarten (Steckaufbau): Ventile mit externer Elektronik, Einstellen, Live-Werte
+        propKarten: () => plan.teile.filter(mitKarte).map(t => ({ id: t.id, bez: t.bez || '', varS: t.o.varS || '', nullS: zahl(t.o.nullS, 50), hyd: istHyd(t), ueber: zahl(t.o.ueber, 10), karte: karteVon(t), grenzen: KARTE_GRENZE, nenn: PROP_I_NENN })),
+        propKarteSetzen: (id, key, wert) => { const t = teil(id), G = KARTE_GRENZE[key]; if (!t || !mitKarte(t) || !G) return null; const v = Math.max(G[0], Math.min(G[1], +wert || 0));
+            // Einsteller der Karte wirken sofort: die laufende Simulation bleibt stehen, wo sie ist
+            undoStapel.push(JSON.stringify(plan)); if (undoStapel.length > 100) undoStapel.shift(); redoStapel = [];
+            t.o.karte = Object.assign(karteVon(t), { [key]: v }); speichern(); zeichnen(); return v; },
+        _fehlerListe: (id) => fehlerListe(teil(id)) || [],
+        propKarteLive: (id) => { const t = teil(id); if (!t || !mitKarte(t)) return null; const z = sim && simLaeuft() ? sim.zust[id] : null; const k = karteVon(t); return z ? { w1: (z.w || 0) * 10, iA: z.iA || 0, iB: z.iB || 0, s: z.s || 0, karte: k } : { w1: 0, iA: 0, iB: 0, s: 0, karte: k }; },
         kennlinieAufgenommen: (bez) => kennAufgenommen(bez),
         _kennZeigen: (id) => kennZeigen(id),
         beispiele: () => BEISPIELE.map(b => b.name),

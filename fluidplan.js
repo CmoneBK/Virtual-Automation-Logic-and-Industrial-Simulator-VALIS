@@ -512,7 +512,7 @@
     function kolbenX(s) { return 6 + s * (ZYL_L - 18); }
     TYP.zyl_dw = {
         name: 'Zylinder, doppeltwirkend', buchstabe: 'A', antrieb: true,
-        optionen: { d: 20, dStange: 8, hub: 100, last: 0, start: 'hinten', daempfung: false, sensH: '', sensV: '', anlage: '' },
+        optionen: { d: 20, dStange: 8, hub: 100, last: 0, start: 'hinten', daempfung: false, sensH: '', sensV: '', sensWeg: '', anlage: '' },
         geometrie() {
             return { ports: [{ id: 'K', x: 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }, { id: 'S', x: ZYL_L - 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }],
                 box: [-2, -16, ZYL_L * 2 - 10, ZYL_H + 12] };
@@ -521,7 +521,7 @@
     };
     TYP.zyl_ew = {
         name: 'Zylinder, einfachwirkend', buchstabe: 'A', antrieb: true,
-        optionen: { d: 20, dStange: 8, hub: 50, last: 0, start: 'hinten', sensH: '', sensV: '', anlage: '' },
+        optionen: { d: 20, dStange: 8, hub: 50, last: 0, start: 'hinten', sensH: '', sensV: '', sensWeg: '', anlage: '' },
         geometrie() {
             return { ports: [{ id: 'K', x: 10, y: ZYL_H + 10, dir: [0, 1], art: 'a', ohneNr: true }], box: [-2, -16, ZYL_L * 2 - 10, ZYL_H + 12] };
         },
@@ -1944,6 +1944,7 @@
         }
         if (z.o.sensH) m.push({ pos: 'hinten', name: z.o.sensH, el: true });
         if (z.o.sensV) m.push({ pos: 'vorne', name: z.o.sensV, el: true });
+        if (z.o.sensWeg) m.push({ pos: 50, name: z.o.sensWeg + ' (mm)', el: true });
         return m;
     }
     // Lage einer Rolle am Zylinder: 'hinten' (0 %), 'vorne' (100 %) oder eine Zahl in % vom Hub
@@ -2505,6 +2506,7 @@
             }
             variable('Sensor hintere Endlage: VALIS-Eingang', 'sensH', 'in');
             variable('Sensor vordere Endlage: VALIS-Eingang', 'sensV', 'in');
+            variable('Wegmesssystem: VALIS-Eingang (Weg in mm)', 'sensWeg', 'in');
             const anl = (() => { try { return factoryObjects.filter(o => o.type === 'zylinder_double' || o.type === 'zylinder_single' || o.type === 'gate_pneu'); } catch (e) { return []; } })();
             wahl('2D-Anlage: Zylinder fährt mit', 'anlage', [['', '– keiner –']].concat(anl.map(o => [o.id, (o.normLabel ? o.normLabel + ' ' : '') + (o.linkedVarExt || o.linkedVar || o.id)])));
             h('div', { class: 'fp-hinw', text: 'Sensoren schreiben den VALIS-Eingang wie ein Reed-Schalter an der Endlage. Ein Zylinder der 2D-Anlage, der hier mitfährt, folgt diesem Zylinder statt seinem eigenen Ventil.' }, box);
@@ -2681,7 +2683,7 @@
                 if (sp.length) d.push('Spule ' + sp.join(', '));
                 break;
             }
-            case 'zyl_dw': case 'zyl_ew': d.push('Ø ' + zf(o.d) + ' mm', 'Stange Ø ' + zf(o.dStange) + ' mm', 'Hub ' + zf(o.hub) + ' mm'); if (o.daempfung) d.push('Endlagendämpfung'); if (o.sensH || o.sensV) d.push('Sensoren ' + [o.sensH, o.sensV].filter(Boolean).join(', ')); break;
+            case 'zyl_dw': case 'zyl_ew': d.push('Ø ' + zf(o.d) + ' mm', 'Stange Ø ' + zf(o.dStange) + ' mm', 'Hub ' + zf(o.hub) + ' mm'); if (o.daempfung) d.push('Endlagendämpfung'); if (o.sensWeg) d.push('Wegmesssystem ' + o.sensWeg); if (o.sensH || o.sensV) d.push('Sensoren ' + [o.sensH, o.sensV].filter(Boolean).join(', ')); break;
             case 'schwenk': d.push('Schwenkwinkel ' + zf(o.winkel) + '°'); break;
             case 'quelle': case 'wartung': case 'druckregel': case 'folge': case 'dschalter': case 'dbv': if (o.p != null) d.push('p = ' + zf(o.p) + ' bar'); if (o.var) d.push('Ausgang ' + o.var); break;
             case 'aggregat': d.push('p = ' + zf(o.p) + ' bar', 'Q = ' + zf(o.q) + ' l/min'); break;
@@ -2925,7 +2927,27 @@
             const ag = T('aggregat', 60, 460, '0P1'), z = T('zyl_dw', 40, -260, '1M1', H({ d: 40, dStange: 20, hub: 200, last: -4000 })),
             v = T('ventil', 40, 160, '1Q1', H({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'schwimm', varL: 'Y1', varR: 'Y2' })),
             e = T('entsperr', 50, 0, '1R1');
-            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(v, '4', e, '1'); L(e, '2', z, 'K'); L(v, '2', z, 'S'); L(v, '2', e, 'X'); } }
+            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(v, '4', e, '1'); L(e, '2', z, 'K'); L(v, '2', z, 'S'); L(v, '2', e, 'X'); } },
+        // Proportionaltechnik: die Beispiele bringen ihr kleines Programm mit (code)
+        { name: 'Proportionaltechnik: Lageregelung pneumatisch', text: 'Das 5/3-Proportional-Wegeventil 1V1 bekommt den Sollwert Y (0 … 10 V, 5 V = Mitte), das Wegmesssystem am Zylinder 1A1 meldet POS in mm. Das Programm regelt: E := SOLLPOS - POS, Y := 50 + KP * E. Taster S1 schaltet den Sollwert von 60 mm auf 140 mm. KP = 0.5: weich, mit bleibender Abweichung (Überdeckung). KP = 2: schnell und genau. KP = 8: der Zylinder schwingt.',
+          code: 'SOLLPOS := 60 + 80 * S1   // Sollwert in mm\nKP := 1\nE := SOLLPOS - POS   // Regelabweichung\nY := 50 + KP * E   // 50 % = 5 V = Mitte',
+          bau(T, L) { const q = T('quelle', 40, 320, '0Z1'), z = T('zyl_dw', 20, -160, '1A1', { d: 32, dStange: 12, hub: 200, sensWeg: 'POS' }),
+            v = T('ventil', 20, 80, '1V1', Object.assign({ wege: '5/3', links: 'prop', rechts: 'prop', mitte: 'gesperrt', qn: 20, elektronik: 'eingebaut' }, PROP_STD, { varS: 'Y', ueber: 5, hyst: 1 }));
+            L(q, '1', v, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Proportionaltechnik: Presse, Presskraft über Proportional-Druckbegrenzungsventil', text: 'Hebel 1S1 fährt die Presse 1M1 aus. Am Anschlag steigt der Druck bis zum Proportional-Druckbegrenzungsventil 0F1: der Sollwert YP (0 … 10 V) stellt 10 … 110 bar und damit die Presskraft F = p · A. Im Programm YP ändern und den Druck am Manometer 0P2 ablesen. Die Kennlinie lässt sich im Diagramm „Kennlinie“ aufnehmen.',
+          code: 'YP := 40   // 4 V = 50 bar, Presskraft F = p · A',
+          bau(T, L) { const H = o => Object.assign({ hyd: true }, o || {});
+            const ag = T('aggregat', 40, 420, '0P1', { q: 10, p: 200 }), z = T('zyl_dw', 20, -160, '1M1', H({ d: 50, dStange: 25, hub: 100 })),
+            v = T('ventil', 20, 60, '1S1', H({ wege: '4/3', links: 'hebel', rechts: 'hebel', mitte: 'gesperrt' })), m = T('manometer', -100, 260, '0P2', H()),
+            d = T('dbv', 240, 350, '0F1', Object.assign(H(), PROP_W_STD('dbv'), { varS: 'YP', von: 10, bis: 110 })), tk = T('tank', 320, 390, '');
+            d.rot = 270; L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(m, '1', ag, 'P'); L(d, 'P', ag, 'P'); L(d, 'T', tk, '1'); L(v, '4', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Proportionaltechnik: Vorschub mit Rampe (Proportional-Stromregelventil)', text: '1M1 (Y1 := START) fährt aus. Das Proportional-Stromregelventil 1R1 bekommt den Sollwert YQ (0 … 10 V = 0 … 6 l/min). Das Programm lässt YQ in einer Rampe auf 60 % steigen: der Vorschub läuft sanft an und bleibt gleichmäßig, auch mit Last. 1M2 (Y2 := ZURUECK) fährt ein.',
+          code: 'Y1 := START\nY2 := ZURUECK\n// Rampe: je Programmzyklus 0.5 % mehr, bis 60 %\nYQ := MIN(60, YQ + 0.5) * START',
+          bau(T, L) { const H = o => Object.assign({ hyd: true }, o || {});
+            const ag = T('aggregat', 60, 460, '0P1'), z = T('zyl_dw', 40, -240, '1M1', H({ d: 40, dStange: 20, hub: 200, last: 3000 })),
+            v = T('ventil', 40, 160, '1Q1', H({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf', varL: 'Y1', varR: 'Y2' })),
+            sr = T('stromregel', 50, 0, '1R1', Object.assign(H(), PROP_W_STD('stromregel'), { varS: 'YQ', von: 0, bis: 6 })), m = T('manometer', -80, 300, '0P2', H());
+            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(m, '1', ag, 'P'); L(v, '4', sr, '1'); L(sr, '2', z, 'K'); L(v, '2', z, 'S'); } }
     ];
     function beispielBauen(b) {
         const neu = { v: 2, teile: [], leitungen: [] };
@@ -2935,12 +2957,19 @@
         return { neu, map: kennzeichenAuffrischen(neu) };
     }
     const beispielText = b => kennTextNeu(b.text, beispielBauen(b).map);
-    function beispielLaden(i) {
+    // mitCode: true = Programm des Beispiels übernehmen, false = nie, sonst fragen (leerer Editor: ohne Frage)
+    function beispielLaden(i, mitCode) {
         const b = BEISPIELE[i]; if (!b) return;
         if (plan.teile.length && !W().confirm('Der aktuelle Fluidplan wird durch das Beispiel ersetzt. Weiter?')) return;
         const { neu, map } = beispielBauen(b);
         aendern(() => { plan = neu; auswahl.clear(); geoCache.clear(); });
         sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + kennTextNeu(b.text, map));
+        if (b.code && mitCode !== false) {
+            const ta = document.getElementById('code');
+            if (ta && ta.value.trim() !== b.code.trim() && (mitCode === true || !ta.value.trim() || W().confirm('Das Beispiel bringt ein kleines Programm mit:\n\n' + b.code + '\n\nSoll es das Programm im Editor ersetzen?'))) {
+                ta.value = b.code; ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
     }
     function beispieleZeigen() {
         const box = D().getElementById('fp-eigen'); if (!box) return;
@@ -2951,6 +2980,7 @@
             const d = h('div', { style: 'margin:7px 0;padding:6px 7px;border:1px solid #444;border-radius:4px;cursor:pointer', title: beispielText(b), onclick: () => beispielLaden(i) }, box);
             h('div', { text: b.name, style: 'color:#ffb74d;font-weight:600' }, d);
             h('div', { text: beispielText(b), style: 'color:#9e9e9e;font-size:10.5px;margin-top:2px' }, d);
+            if (b.code) h('pre', { text: b.code, style: 'color:#80cbc4;font-size:10px;margin:4px 0 0;white-space:pre-wrap;font-family:Consolas,monospace' }, d);
         });
     }
     // ------------------------------------------------------------
@@ -3299,6 +3329,8 @@
             const tot = fehlerAktiv(t.id) === 'sensor';
             if (t.o.sensH) S.schreib[t.o.sensH] = !tot && z.x <= tol;
             if (t.o.sensV) S.schreib[t.o.sensV] = !tot && z.x >= hub - tol;
+            // Wegmesssystem: Kolbenweg in mm als Analogwert
+            if (t.o.sensWeg && t.typ !== 'schwenk') (S.schreibA || (S.schreibA = {}))[t.o.sensWeg] = tot ? 0 : Math.round(z.x * 100) / 100;
         }
         S.zeit += dtGesamt;
     }
@@ -3753,14 +3785,28 @@
             LW.set(t, { last: anschlag != null || z.v < -0.5 || z.x < ab - 0.01 ? 0 : Fl, anschlag });
         }
     }
+    // Analogwerte des Plans (Wegmesssystem) in die VALIS-Eingänge. Misst in der verbundenen
+    // 2D-Anlage ein Messumformer „Weg" dieselbe Variable, schreibt er (mit seiner Signalart).
+    function analogSchreiben(s) {
+        const A = sim && sim.schreibA; if (!A) return;
+        let mu = null;
+        for (const v in A) {
+            if (mu == null) { mu = new Set(); if (plan.anlage) for (const q of (fabrik() || [])) if (q.type === 'analog_sensor' && q.linkedVar) mu.add(q.linkedVar); }
+            if (mu.has(v)) continue;
+            if (!analogBekannt.has(v)) { analogBekannt.add(v); try { if (window._anaTypSichern) window._anaTypSichern(v, 'analog_in'); } catch (e) {} }
+            s[v] = A[v];
+        }
+    }
+    const analogBekannt = new Set();
     function planTakt(dt) {
         if (!sim) simInit();
         try { presseLasten(); } catch (e) {}
-        sim.schreib = {};
+        sim.schreib = {}; sim.schreibA = {};
         simSchritt(dt);
         // VALIS-Eingänge schreiben
         const s = sps(); let geaendert = false;
         for (const v in sim.schreib) { const w = !!sim.schreib[v]; if (s[v] !== w) { s[v] = w; geaendert = true; } }
+        analogSchreiben(s);
         if (geaendert && typeof runSimulationTick === 'function') { try { runSimulationTick(); } catch (e) {} }
     }
     // Aufruf aus der 2D-Anlage vor der Zylinder-Mechanik, dt in s (schon mit simSpeed)
@@ -4121,8 +4167,42 @@
         laufFehler.set(plan, m);
     }
     // Reed-Schalter eines 2D-Zylinders: H = hintere Endlage (links), V = vordere
+    const reedSig = R => JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '', W: R.W ? R.W.var : '' });
+    // Wegmesssystem des Plans = Messumformer „Weg" am 2D-Zylinder
+    // Eine Variable, die (noch) nicht im Programm steht, bleibt am 2D-Bauteil
+    // gebunden: Sie kommt wie eine „verwaiste" Variable in den Merk-Pool,
+    // sonst löst das Aufräumen die Bindung wieder.
+    function varHalten(name) {
+        try {
+            const W0 = window; if (!name || !W0._stickyVars || W0._stickyVars.has(name)) return;
+            const jetzt = Date.now();
+            W0._stickyVars.set(name, { role: 'in', compType: null, addedAt: jetzt, firstMissingAt: jetzt });
+            if (W0._committedOrphans) W0._committedOrphans.add(name);
+        } catch (e) {}
+    }
+    function wegNach2D(o, t, R) {
+        const soll = t.o.sensWeg || '', ist = R.W;
+        try {
+            if (soll) varHalten(soll);
+            if (soll && !ist && typeof createFactoryObject === 'function') {
+                const s = createFactoryObject('analog_sensor', soll);
+                s.ana = { groesse: 'weg', signal: 'wert', bezug: o.id };
+                s.x = Math.round(o.x + (o.width || 150) / 2 - 17); s.y = Math.round(o.y - 70);
+                try { updateObjTransform(s); if (window._anaAnzeigeEinzeln) window._anaAnzeigeEinzeln(s); } catch (e) {}
+            } else if (soll && ist && ist.var !== soll) {
+                ist.obj.linkedVar = soll; const lb = ist.obj.el && ist.obj.el.querySelector('.f2d-label'); if (lb) lb.textContent = soll;
+                try { if (window._anaTypSichern) window._anaTypSichern(soll, 'analog_in'); } catch (e) {}
+            } else if (!soll && ist) deleteObjRecursive(ist.obj);
+        } catch (e) {}
+    }
     function reeds2D(o, F) {
         const r = {};
+        // Messumformer „Weg", der an diesem Zylinder misst
+        for (const q of F) {
+            if (q.type !== 'analog_sensor' || !q.linkedVar || ((q.ana || {}).groesse) !== 'weg') continue;
+            const bz = (q.ana || {}).bezug || ((F.find(x => /^zylinder_|^gate_pneu$/.test(x.type || '')) || {}).id);
+            if (bz === o.id && !r.W) r.W = { obj: q, var: q.linkedVar };
+        }
         for (const q of F) {
             if (q.type !== 'sensor_reed' || q.parent !== o) continue;
             const w = (o.rotation || 0) * Math.PI / 180;
@@ -4226,8 +4306,8 @@ function versorgungMerken(F) {
             }
             const t = plan.teile.find(q => q.id === w.teil); if (!t) continue;
             if (w.reed != null) {
-                const R = reeds2D(o, F), jetzt = JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' });
-                if (jetzt !== w.reed) { w.reed = jetzt; neu.push(() => { t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; }); }
+                const R = reeds2D(o, F), jetzt = reedSig(R);
+                if (jetzt !== w.reed) { w.reed = jetzt; neu.push(() => { t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : ''; }); }
             }
             if (w.dr) {
                 const dw = t.typ === 'zyl_dw';
@@ -4448,8 +4528,9 @@ function versorgungMerken(F) {
                 else if (soll && ist && ist.var !== soll && typeof window.attachReed === 'function') { try { deleteObjRecursive(ist.obj); window.attachReed(o, soll, pos); } catch (e) {} }
                 else if (!soll && ist) { try { deleteObjRecursive(ist.obj); } catch (e) {} }
             }
+            wegNach2D(o, t, R);
             R = reeds2D(o, fabrik() || F);
-            const reed = JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' });
+            const reed = reedSig(R);
             spiegel.set(o.id, { teil: t.id, d: o.pistonD, ds: o.rodD, hub: o.stroke, vt: v ? v.id : null, linksExt, reed,
                 ext: dw ? o.linkedVarExt || '' : o.linkedVar || '', ret: dw ? o.linkedVarRet || '' : '',
                 dr: alt ? { ext: drExt != null, ret: drRet != null } : null, drT: { ext: drExtT, ret: drRetT } });
@@ -4919,7 +5000,7 @@ function versorgungMerken(F) {
                 const k = r.karte[o.id], t = k && r.teile.find(q => q.id === k.zyl);
                 if (!t) return;
                 const R = reeds2D(o, F);
-                t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
+                t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : '';
             });
             plan.teile = r.teile; plan.leitungen = r.leitungen; plan.erzeugt = []; plan.anlage = true;
             if (hz.length) {
@@ -4932,7 +5013,7 @@ function versorgungMerken(F) {
                     const k = h.karte[o.id], t = k && h.plan.teile.find(q => q.id === k.zyl);
                     if (!t) return;
                     const R = reeds2D(o, F);
-                    t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
+                    t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : '';
                 });
                 plan.teile = plan.teile.concat(h.plan.teile); plan.leitungen = plan.leitungen.concat(h.plan.leitungen);
                 F.filter(istMess2D).forEach(m => { if ((m.role || 'P') === 'P' || hz.some(o => o.id === m.targetCylinderId)) hydMessNeu(m); });
@@ -4953,7 +5034,7 @@ function versorgungMerken(F) {
                 const k = r.karte[o.id], t = k && r.plan.teile.find(q => q.id === k.zyl);
                 if (!t) return;
                 const R = reeds2D(o, F);
-                t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : '';
+                t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : '';
             });
             plan.teile = r.plan.teile; plan.leitungen = r.plan.leitungen; plan.erzeugt = []; plan.anlage = true;
             F.filter(istMess2D).forEach(m => { if ((m.role || 'P') === 'P' || zyl.some(o => o.id === m.targetCylinderId)) hydMessNeu(m); });
@@ -5588,10 +5669,11 @@ function versorgungMerken(F) {
                 else if (soll && ist && ist.var !== soll && typeof window.attachReed === 'function') { try { deleteObjRecursive(ist.obj); window.attachReed(o, soll, pos); } catch (e) {} }
                 else if (!soll && ist) { try { deleteObjRecursive(ist.obj); } catch (e) {} }
             }
+            wegNach2D(o, t, R);
             F = fabrik(); R = reeds2D(o, F);
             hydSpiegel.set(o.id, { teil: t.id, vt: v ? v.id : null, linksExt, d: o.pistonD, ds: o.rodD, hub: o.stroke,
                 ext: o.linkedVarExt || '', ret: o.linkedVarRet || '', wahl, dr, rv, vk: v && ventil ? JSON.stringify(ventilKonf(v.o)) : null, last: JSON.stringify([oh.last, oh.lastArt, oh.lastAb]),
-                reed: JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' }) });
+                reed: reedSig(R) });
         }
         // Aggregat: Druck (DBV) und Förderstrom
         const unit = F.find(q => q.type === 'hydraulic_unit');
@@ -5848,8 +5930,8 @@ function versorgungMerken(F) {
                     if (jetzt) hydRvEinsetzen(t, port, jetzt);
                 });
             }
-            const R = reeds2D(o, F), reed = JSON.stringify({ H: R.H ? R.H.var : '', V: R.V ? R.V.var : '' });
-            if (reed !== w.reed) { w.reed = reed; neu.push(() => { t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; }); }
+            const R = reeds2D(o, F), reed = reedSig(R);
+            if (reed !== w.reed) { w.reed = reed; neu.push(() => { t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : ''; }); }
         }
         return masse;
     }
@@ -8192,7 +8274,7 @@ function versorgungMerken(F) {
         _schriftfeld: (sf) => { if (sf) aendern(() => { plan.schriftfeld = Object.assign({}, plan.schriftfeld || {}, sf); }); return schriftfeld(); },
         _rueckgaengig: () => rueckgaengig(),
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },
-        _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; } },
+        _schritt: (sek) => { if (!sim) simInit(); const n = Math.round(sek / 0.016); for (let i = 0; i < n; i++) { sim.schreib = {}; sim.schreibA = {}; simSchritt(0.016); aufzeichnen(); const s = sps(); for (const v in sim.schreib) s[v] = !!sim.schreib[v]; analogSchreiben(s); } },
         _neu: () => { sim = null; simInit(); aufzNeu(); },
         abgleichen: anlageAbgleichen,
         _entfernen: (id) => aendern(() => teilEntfernen(id)),
@@ -8220,7 +8302,8 @@ function versorgungMerken(F) {
         kennlinieAufgenommen: (bez) => kennAufgenommen(bez),
         _kennZeigen: (id) => kennZeigen(id),
         beispiele: () => BEISPIELE.map(b => b.name),
-        beispielLaden: (i) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i); } finally { window.confirm = c; } },
+        beispielLaden: (i, mitCode) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i, mitCode === true); } finally { window.confirm = c; } },
+        beispielCode: (i) => (BEISPIELE[i] || {}).code || '',
         _leeren: () => { planImport(null); gedrueckt.clear(); },
         _wege: () => { const W = alleWege(); return { wege: Object.fromEntries(W.wege), netz: Object.fromEntries(W.netz), punkte: abzweigPunkte() }; },
         typen: () => Object.keys(TYP),

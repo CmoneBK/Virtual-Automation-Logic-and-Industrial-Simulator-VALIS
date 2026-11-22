@@ -10072,3 +10072,48 @@ VALIS_EN.vorlagen({
 "🎚 Das Proportionalventil (⟦0⟧) ist jetzt ein Proportional-Wegeventil mit Schläuchen: Der Zylinder fährt mit Druckluft oder Öl statt mit fester Geschwindigkeit. Bitte die Regelung neu einstellen. Kennwerte per Rechtsklick auf das Ventil.": "🎚 The proportional valve (⟦0⟧) is now a proportional directional valve with hoses: the cylinder runs on compressed air or oil instead of at a fixed speed. Please retune the control loop. Parameters via right-click on the valve.",
 "🎚 Das alte Proportionalventil (⟦0⟧) gibt es nicht mehr. Bitte im Menü Pneumatik ein Proportional-Wegeventil setzen und mit Schläuchen anschließen.": "🎚 The old proportional valve (⟦0⟧) no longer exists. Please place a proportional directional valve from the Pneumatics menu and connect it with hoses."
 });
+VALIS_EN.dazu({
+"Proportionaltechnik": "Proportional technology",
+"Ventil, dessen Schieber nicht nur Endstellungen kennt, sondern jede Zwischenstellung einnimmt. Je größer das Sollwertsignal, desto weiter öffnet es. So lassen sich Geschwindigkeit, Druck oder Kraft stufenlos vorgeben.": "Valve whose spool takes any intermediate position, not only the end positions. The larger the setpoint signal, the further it opens. Speed, pressure or force can thus be set steplessly.",
+"Stetigventil": "Continuous valve",
+"Magnet, dessen Kraft mit dem Spulenstrom wächst. Gegen eine Feder gehört so zu jedem Strom eine bestimmte Stellung des Schiebers.": "Solenoid whose force grows with the coil current. Working against a spring, every current corresponds to a certain spool position.",
+"Sollwertsignal": "Setpoint signal",
+"Analoges Signal, das dem Ventil sagt, wie weit es öffnen oder welchen Druck es halten soll, meist 0 … 10 V. In VALIS schreibt das Programm dafür 0 … 100 % in eine Variable.": "Analog signal telling the valve how far to open or which pressure to hold, usually 0 … 10 V. In VALIS the program writes 0 … 100 % into a variable for it.",
+"Sollwert 0 … 10 V": "Setpoint 0 … 10 V",
+"Überdeckung": "Overlap",
+"Bereich um die Mittelstellung, in dem der Schieber die Steuerkanten noch verschließt. Kleine Sollwerte bewirken dort keinen Durchfluss. Das dichtet gut ab, stört aber beim genauen Regeln.": "Range around the centre position in which the spool still closes the control edges. Small setpoints produce no flow there. This seals well but disturbs precise closed-loop control.",
+"positive Überdeckung": "positive overlap",
+"Totzone": "dead zone",
+"Hysterese": "Hysteresis",
+"Unterschied zwischen dem Hinweg und dem Rückweg einer Kennlinie: Bei gleichem Sollwert steht das Ventil etwas anders, je nachdem, aus welcher Richtung der Sollwert kommt. Ursache sind Reibung und Magnetisierung.": "Difference between the rising and the falling path of a characteristic curve: at the same setpoint the valve stands slightly differently depending on the direction the setpoint comes from. Friction and magnetisation cause it.",
+"Umkehrspanne": "reversal error",
+"Diagramm, das zeigt, welcher Durchfluss oder Druck zu welchem Sollwert gehört. An ihr liest man Überdeckung, Hysterese und Verlauf (linear oder progressiv) ab.": "Diagram showing which flow or pressure belongs to which setpoint. Overlap, hysteresis and shape (linear or progressive) can be read from it.",
+"Durchflusskennlinie": "flow characteristic",
+"Druckkennlinie": "pressure characteristic",
+"Elektronik, die aus dem Sollwertsignal den Strom für die Proportionalmagnete macht. An ihr werden Grundstrom, Sprungstrom, Maximalstrom, Rampen und Dither eingestellt. Sie sitzt im Ventil (eingebaute Elektronik) oder als Karte im Schaltschrank.": "Electronics turning the setpoint signal into the current for the proportional solenoids. Base current, step current, maximum current, ramps and dither are set on it. It sits in the valve (on-board electronics) or as a card in the control cabinet.",
+"Ventilelektronik": "valve electronics",
+"Der Sprungstrom lässt den Schieber beim kleinsten Sollwert sofort über die Überdeckung springen. Der Grundstrom fließt schon bei Sollwert 0, der Maximalstrom begrenzt die größte Öffnung.": "The step current makes the spool jump across the overlap at the smallest setpoint. The base current already flows at setpoint 0, the maximum current limits the largest opening.",
+"Sollwertrampe": "Setpoint ramp",
+"Der Sollwert springt nicht, sondern steigt oder fällt in einer eingestellten Zeit. Der Antrieb läuft dadurch sanft an und bremst ohne Schlag.": "The setpoint does not jump but rises or falls within a set time. The drive thus starts smoothly and brakes without a jolt.",
+"Rampenzeit": "ramp time",
+"Kleine, schnelle Schwingung, die dem Magnetstrom überlagert wird. Sie hält den Schieber in Bewegung, verringert die Haftreibung und damit die Hysterese.": "Small, fast oscillation superimposed on the solenoid current. It keeps the spool moving, reduces static friction and thus hysteresis.",
+"Lageregelung": "Position control",
+"Regelkreis, der einen Antrieb auf eine vorgegebene Position fährt: Ein Wegmesssystem meldet die Lage, der Regler vergleicht sie mit dem Sollwert und stellt das Proportionalventil nach.": "Control loop moving a drive to a given position: a position measuring system reports the position, the controller compares it with the setpoint and readjusts the proportional valve.",
+"Positionsregelung": "positioning control",
+"Wegmesssystem": "Position measuring system",
+"Sensor, der die Stellung der Kolbenstange laufend als Analogwert meldet, nicht nur die Endlagen.": "Sensor continuously reporting the piston rod position as an analog value, not only the end positions.",
+"Wegaufnehmer": "displacement transducer",
+"Wegsensor": "position sensor",
+"Wegmesssystem: VALIS-Eingang (Weg in mm)": "Position measuring system: VALIS input (travel in mm)",
+"Das Beispiel bringt ein kleines Programm mit:": "The example comes with a small program:",
+"Soll es das Programm im Editor ersetzen?": "Should it replace the program in the editor?",
+"Proportionaltechnik: Lageregelung pneumatisch": "Proportional technology: pneumatic position control",
+"Das 5/3-Proportional-Wegeventil 1V1 bekommt den Sollwert Y (0 … 10 V, 5 V = Mitte), das Wegmesssystem am Zylinder 1A1 meldet POS in mm. Das Programm regelt: E := SOLLPOS - POS, Y := 50 + KP * E. Taster S1 schaltet den Sollwert von 60 mm auf 140 mm. KP = 0.5: weich, mit bleibender Abweichung (Überdeckung). KP = 2: schnell und genau. KP = 8: der Zylinder schwingt.": "The 5/3 proportional directional valve 1V1 receives the setpoint Y (0 … 10 V, 5 V = centre), the position measuring system on cylinder 1A1 reports POS in mm. The program controls: E := SOLLPOS - POS, Y := 50 + KP * E. Push button S1 switches the setpoint from 60 mm to 140 mm. KP = 0.5: soft, with a remaining deviation (overlap). KP = 2: fast and accurate. KP = 8: the cylinder oscillates.",
+"Proportionaltechnik: Presse, Presskraft über Proportional-Druckbegrenzungsventil": "Proportional technology: press, pressing force via proportional pressure relief valve",
+"Hebel 1S1 fährt die Presse 1M1 aus. Am Anschlag steigt der Druck bis zum Proportional-Druckbegrenzungsventil 0F1: der Sollwert YP (0 … 10 V) stellt 10 … 110 bar und damit die Presskraft F = p · A. Im Programm YP ändern und den Druck am Manometer 0P2 ablesen. Die Kennlinie lässt sich im Diagramm „Kennlinie“ aufnehmen.": "Lever 1S1 extends the press 1M1. At the stop the pressure rises up to the proportional pressure relief valve 0F1: the setpoint YP (0 … 10 V) sets 10 … 110 bar and thus the pressing force F = p · A. Change YP in the program and read the pressure on gauge 0P2. The characteristic curve can be recorded in the “Characteristic curve” diagram.",
+"Proportionaltechnik: Vorschub mit Rampe (Proportional-Stromregelventil)": "Proportional technology: feed with ramp (proportional flow control valve)",
+"1M1 (Y1 := START) fährt aus. Das Proportional-Stromregelventil 1R1 bekommt den Sollwert YQ (0 … 10 V = 0 … 6 l/min). Das Programm lässt YQ in einer Rampe auf 60 % steigen: der Vorschub läuft sanft an und bleibt gleichmäßig, auch mit Last. 1M2 (Y2 := ZURUECK) fährt ein.": "1M1 (Y1 := START) extends. The proportional flow control valve 1R1 receives the setpoint YQ (0 … 10 V = 0 … 6 l/min). The program lets YQ rise in a ramp to 60 %: the feed starts smoothly and stays even, also under load. 1M2 (Y2 := ZURUECK) retracts."
+});
+VALIS_EN.vorlagen({
+"Wegmesssystem ⟦0⟧": "Position measuring system ⟦0⟧"
+});

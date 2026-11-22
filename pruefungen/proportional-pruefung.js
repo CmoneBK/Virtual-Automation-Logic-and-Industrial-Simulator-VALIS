@@ -550,6 +550,92 @@ const FAELLE = {
     clearFactory(true); F._leeren();
     return R;
   },
+  'Wegmesssystem am Zylinder: Analogwert in mm, Abgleich mit der 2D-Anlage': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren();
+    const q = F.setzen('quelle', 0, 400);
+    const v = F.setzen('ventil', 0, 200, { wege: '5/2', links: 'magnet', rechts: 'feder', varL: 'Y1' });
+    const z = F.setzen('zyl_dw', 0, 0, { hub: 100, sensWeg: 'WEG' });
+    F.verbinden(q, '1', v, '1'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    spsState.Y1 = false; F._neu(); F._schritt(0.5);
+    R.push(['eingefahren: 0 mm', Math.abs(spsState.WEG) < 1, String(spsState.WEG)]);
+    spsState.Y1 = true; F._schritt(3);
+    R.push(['ausgefahren: 100 mm', Math.abs(spsState.WEG - 100) < 1, String(spsState.WEG)]);
+    R.push(['Stückliste nennt das Wegmesssystem', /Wegmesssystem WEG/.test(JSON.stringify(F._listen())), '']);
+    // Plan → 2D: Messumformer „Weg“ am Zylinder
+    window._fpKeinAutoVerbinden = false; F.verbinden2D(true); await warte(1200);
+    const mu = () => factoryObjects.filter(o => o.type === 'analog_sensor' && o.ana && o.ana.groesse === 'weg');
+    R.push(['Plan → 2D: ein Messumformer „Weg“ mit derselben Variable', mu().length === 1 && mu()[0].linkedVar === 'WEG', mu().map(o => o.linkedVar).join()]);
+    // 2D → Plan: Variable am Messumformer ändern
+    window._stickyVars.set('WEG2', { role: 'in', compType: null, addedAt: Date.now() });
+    if (mu()[0]) { mu()[0].linkedVar = 'WEG2'; F._geaendert2D(mu()[0]); }
+    await warte(1200);
+    R.push(['2D → Plan: geänderte Variable kommt im Plan an', F.plan().teile.find(t => t.id === z).o.sensWeg === 'WEG2', F.plan().teile.find(t => t.id === z).o.sensWeg]);
+    await warte(600);
+    R.push(['… und es bleibt bei einem Messumformer', mu().length === 1, String(mu().length)]);
+    // Plan → 2D: Wegmesssystem entfernen
+    F.aendern(z, { sensWeg: '' }); await warte(1200);
+    R.push(['Plan ohne Wegmesssystem: Messumformer in 2D ist weg', mu().length === 0, String(mu().length)]);
+    F.verbinden2D(false); clearFactory(true); F._leeren(); window._fpKeinAutoVerbinden = true;
+    return R;
+  },
+  'Beispiele: Lageregelung, Presskraft, Vorschub mit Rampe': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren();
+    const ta = document.getElementById('code'), altCode = ta.value;
+    const namen = F.beispiele(), idx = re => namen.findIndex(n => re.test(n));
+    const iL = idx(/Lageregelung pneumatisch/), iP = idx(/Presskraft/), iV = idx(/Vorschub mit Rampe/);
+    R.push(['Drei Beispiele zur Proportionaltechnik', iL >= 0 && iP >= 0 && iV >= 0, [iL, iP, iV].join()]);
+    // ohne Zustimmung bleibt das Programm im Editor
+    F.beispielLaden(iL);
+    R.push(['Beispiel laden lässt das Programm im Editor stehen (nur mit Zustimmung)', ta.value === altCode, '']);
+    // Lageregelung
+    F.beispielLaden(iL, true); await warte(600);
+    R.push(['Lageregelung: Plan ohne Meldung, Programm im Editor', F.pruefen().length === 0 && /Y := 50 \+ KP \* E/.test(ta.value), JSON.stringify(F.pruefen())]);
+    const zL = F.plan().teile.find(t => t.typ === 'zyl_dw').id;
+    toggleSimulation(); await warte(1800);
+    const p1 = F.zustand().teile[zL].x;
+    R.push(['Zylinder regelt auf 60 mm', Math.abs(p1 - 60) < 6, p1.toFixed(1) + ' mm']);
+    setTaster('S1', true); await warte(1800);
+    const p2 = F.zustand().teile[zL].x;
+    R.push(['Sollwertsprung auf 140 mm', Math.abs(p2 - 140) < 6, p2.toFixed(1) + ' mm']);
+    await warte(500);
+    R.push(['… und steht dort ruhig', Math.abs(F.zustand().teile[zL].x - p2) < 1.5, (F.zustand().teile[zL].x - p2).toFixed(2)]);
+    setTaster('S1', false); toggleSimulation(); await warte(200);
+    // Presse
+    F.beispielLaden(iP, true); await warte(600);
+    R.push(['Presse: Plan ohne Meldung, Programm im Editor', F.pruefen().length === 0 && /YP := 40/.test(ta.value), JSON.stringify(F.pruefen())]);
+    const T = F.plan().teile, hebel = T.find(t => t.typ === 'ventil').id, zP = T.find(t => t.typ === 'zyl_dw').id;
+    toggleSimulation(); await warte(400);
+    F.druecken(hebel, 'L', true); await warte(4500);
+    const st = F.zustand().teile[zP];
+    R.push(['Presse am Anschlag, Druck = Sollwert des Proportional-DBV (4 V = 50 bar)', st.anteil > 0.97 && Math.abs(st.p.K - 50) < 5, `${(st.anteil * 100).toFixed(0)} %, ${st.p.K.toFixed(1)} bar`]);
+    ta.value = 'YP := 80'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(1500);
+    const p80 = F.zustand().teile[zP].p.K;
+    R.push(['8 V: 90 bar', Math.abs(p80 - 90) < 6, p80.toFixed(1) + ' bar']);
+    toggleSimulation(); await warte(200);
+    // Vorschub mit Rampe
+    F.beispielLaden(iV, true); await warte(4000);   // das Aufräumen der alten Variablen baut die Eingänge neu auf
+    R.push(['Vorschub: Plan ohne Meldung, Programm im Editor', F.pruefen().length === 0 && /YQ := MIN\(60, YQ \+ 0\.5\) \* START/.test(ta.value), JSON.stringify(F.pruefen())]);
+    const zV = F.plan().teile.find(t => t.typ === 'zyl_dw').id;
+    toggleSimulation(); await warte(400);
+    setTaster('START', true); await warte(350);
+    const v1 = F.zustand().teile[zV].v, y1 = spsState.YQ;
+    await warte(2600);
+    const v2 = F.zustand().teile[zV].v, y2 = spsState.YQ;
+    R.push(['Rampe: Sollwert steigt bis 60 %', y1 > 1 && y1 < 45 && y2 === 60, `${y1} → ${y2}`]);
+    R.push(['Vorschub läuft sanft an und dann gleichmäßig', v2 > v1 + 5 && v2 > 30 && v2 < 60, `${v1.toFixed(1)} → ${v2.toFixed(1)} mm/s`]);
+    setTaster('START', false); await warte(300);
+    R.push(['ohne START: Sollwert 0', spsState.YQ === 0, String(spsState.YQ)]);
+    setTaster('ZURUECK', true); await warte(1500);
+    R.push(['ZURUECK: Zylinder fährt ein', F.zustand().teile[zV].v < -1 || F.zustand().teile[zV].x < 1, `v ${F.zustand().teile[zV].v.toFixed(1)}, x ${F.zustand().teile[zV].x.toFixed(1)}`]);
+    setTaster('ZURUECK', false); toggleSimulation(); await warte(200);
+    ta.value = altCode; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    F._leeren();
+    return R;
+  },
   'Fehler, Symbol, Umstellen, Listen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

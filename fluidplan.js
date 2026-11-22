@@ -1459,7 +1459,7 @@
         k('✓ Prüfen', 'Plan prüfen: offene Anschlüsse, fehlende Variablen, Rollen ohne Zylinder', pruefen);
         k('📸 SVG', 'Plan als SVG-Bild speichern', svgSpeichern);
         k('📋 Listen', 'Betriebsmittelliste und Stückliste aus dem Plan (auch als CSV)', () => listenZeigen());
-        k('🖨 PDF', 'Plan als PDF mit Schriftfeld (A4 quer), auf Wunsch mit Betriebsmittel- und Stückliste als Blatt 2', () => pdfDialog());
+        k('🖨 PDF', 'Plan als PDF mit Schriftfeld (A4 oder A3 quer), groß auf Wunsch über mehrere Blätter, mit Betriebsmittel- und Stückliste als eigenem Blatt', () => pdfDialog());
         k('📂 Beispiele', 'Fertige Beispielschaltungen laden', () => { auswahl.clear(); zeichnen(); beispieleZeigen(); });
         knopfIkon(k('🩺 Messen', 'Manometer an Leitungen anstecken und den Druck ablesen (auch während der Simulation und in der Fehlersuche)', messUmschalten, 'fp-mess'), 'manometer', 'Messen', '🩺');
         k('🔍 Fehlersuche', 'Versteckte Fehler einbauen (Lehrkraft) oder suchen und melden (Lernende)', () => { auswahl.clear(); zeichnen(); fehlersucheZeigen(); }, 'fp-fs');
@@ -2341,7 +2341,9 @@
         c.querySelectorAll('.fp-port,.fp-treffer,.fp-hg,.fp-hand').forEach(n => n.remove());
         c.classList.remove('sim');
         let b = [Infinity, Infinity, -Infinity, -Infinity];
-        for (const t of plan.teile) { const q = boxWelt(t); b = [Math.min(b[0], q[0]), Math.min(b[1], q[1] - 30), Math.max(b[2], q[2] + 40), Math.max(b[3], q[3] + 16)]; }
+        const belegt = [];
+        for (const t of plan.teile) { const q = boxWelt(t); b = [Math.min(b[0], q[0]), Math.min(b[1], q[1] - 30), Math.max(b[2], q[2] + 40), Math.max(b[3], q[3] + 16)]; if (t.typ !== 'knoten') belegt.push([q[0] - 6, q[2] + 40]); }
+        if (!isFinite(b[0])) b = [0, 0, 200, 120];
         c.setAttribute('viewBox', `${b[0] - 20} ${b[1] - 20} ${b[2] - b[0] + 40} ${b[3] - b[1] + 40}`);
         c.setAttribute('width', b[2] - b[0] + 40); c.setAttribute('height', b[3] - b[1] + 40);
         c.setAttribute('xmlns', NS);
@@ -2351,7 +2353,9 @@
         c.insertBefore(st, c.firstChild);
         c.innerHTML = c.innerHTML.replace(/var\(--fp-papier\)/g, '#fff').replace(/var\(--fp-aktiv\)/g, '#ffb300');
         c.querySelectorAll('.fp-leitung.druck').forEach(n => n.classList.remove('druck'));
-        return { txt: new XMLSerializer().serializeToString(c), w: b[2] - b[0] + 40, h: b[3] - b[1] + 40 };
+        const txt = new XMLSerializer().serializeToString(c);
+        return { txt, w: b[2] - b[0] + 40, h: b[3] - b[1] + 40, x: b[0] - 20, y: b[1] - 20, belegt,
+            innen: txt.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '') };
     }
 
     // ------------------------------------------------------------
@@ -2433,39 +2437,83 @@
             }
         });
     }
-    // Schriftfeld (angelehnt an DIN EN ISO 7200): Angaben im Plan, Name und Schule auch für den nächsten Plan merken
-    const SF_FELDER = [['titel', 'Benennung (Titel)'], ['nummer', 'Zeichnungsnummer'], ['ersteller', 'Erstellt von'], ['geprueft', 'Geprüft von'], ['klasse', 'Klasse / Abteilung'], ['schule', 'Schule / Firma']];
+    // Schriftfeld (angelehnt an DIN EN ISO 7200) und Blattformat kommen aus blatt.js und gelten
+    // für alle Pläne der Anlage. Titel und Nummer gehören dem Fluidplan (plan.schriftfeld).
+    const SF_FELDER = (window.Blatt && window.Blatt.SF_FELDER) || [['titel', 'Benennung (Titel)'], ['nummer', 'Zeichnungsnummer'], ['ersteller', 'Erstellt von'], ['geprueft', 'Geprüft von'], ['klasse', 'Klasse / Abteilung'], ['schule', 'Schule / Firma']];
     function schriftfeld() {
-        let gemerkt = {}; try { gemerkt = JSON.parse(localStorage.getItem('valisSchriftfeld') || '{}'); } catch (e) {}
-        const sf = Object.assign({ titel: 'Fluidplan', nummer: '', ersteller: '', geprueft: '', klasse: '', schule: '' }, gemerkt, plan.schriftfeld || {});
-        if (!sf.titel) sf.titel = 'Fluidplan';
+        const B = window.Blatt;
+        const eigen = plan.schriftfeld || {};
+        const sf = B ? B.schriftfeld(eigen) : Object.assign({ titel: '', nummer: '', ersteller: '', geprueft: '', klasse: '', schule: '' }, eigen);
+        if (!sf.titel || (!eigen.titel && B)) sf.titel = eigen.titel || 'Fluidplan';
         return sf;
     }
     function pdfDialog() {
-        const fl = svg.parentNode;
+        const fl = svg.parentNode, B = window.Blatt;
         const alt = fl.querySelector('.fp-sf-dialog'); if (alt) alt.remove();
+        const extra = `<label class="fp-sf-zeile"><span><input type="checkbox" data-sf-mehrseitig${plan.blattMehrseitig ? ' checked' : ''}> Großer Plan auf mehrere Blätter statt verkleinert</span></label>`
+            + `<label class="fp-sf-zeile"><span><input type="checkbox" data-sf-listen checked> Betriebsmittel- und Stückliste als eigenes Blatt</span></label>`;
+        const los = (box) => {
+            const neu = {}; box.querySelectorAll('[data-sf]').forEach(i => { neu[i.getAttribute('data-sf')] = i.value.trim(); });
+            const mitListen = box.querySelector('[data-sf-listen]').checked, mehr = box.querySelector('[data-sf-mehrseitig]').checked;
+            aendern(() => { plan.schriftfeld = neu; if (mehr) plan.blattMehrseitig = true; else delete plan.blattMehrseitig; });
+            pdfDrucken(mitListen);
+        };
+        if (B) {
+            // Werte vor dem Schließen lesen: Blatt.dialog entfernt das Fenster erst nach los()
+            let box = null;
+            box = B.dialog({ doc: D(), parent: fl, klasse: 'fp-listen fp-sf-dialog', sf: schriftfeld(), extra, los: () => los(box) });
+            return;
+        }
         const sf = schriftfeld();
         const box = h('div', { class: 'fp-listen fp-sf-dialog', html: `<div class="fp-listen-kopf"><b>🖨 Plan als PDF – Schriftfeld</b><span><button type="button" data-a="zu">✕</button></span></div>`
-            + SF_FELDER.map(([k, n]) => `<label class="fp-sf-zeile">${n}<input data-sf="${k}" value="${esc(sf[k])}"></label>`).join('')
-            + `<label class="fp-sf-zeile"><span><input type="checkbox" data-sf-listen checked> Betriebsmittel- und Stückliste als Blatt 2</span></label>`
+            + SF_FELDER.map(([k, n]) => `<label class="fp-sf-zeile">${n}<input data-sf="${k}" value="${esc(sf[k])}"></label>`).join('') + extra
             + `<div style="margin-top:8px;text-align:right"><button type="button" data-a="los">🖨 PDF erstellen</button></div><div class="fp-sf-hinweis">Im Druckdialog „Als PDF speichern“ wählen.</div>` }, fl);
         box.addEventListener('click', e => {
             const a = e.target.closest('button') && e.target.closest('button').getAttribute('data-a'); if (!a) return;
             if (a === 'zu') { box.remove(); return; }
-            const neu = {}; box.querySelectorAll('[data-sf]').forEach(i => { neu[i.getAttribute('data-sf')] = i.value.trim(); });
-            const mitListen = box.querySelector('[data-sf-listen]').checked;
-            aendern(() => { plan.schriftfeld = neu; });
-            try { localStorage.setItem('valisSchriftfeld', JSON.stringify({ ersteller: neu.ersteller, klasse: neu.klasse, schule: neu.schule })); } catch (err) {}
-            box.remove();
-            pdfDrucken(mitListen);
+            los(box); box.remove();
         });
     }
-    function pdfHtml(mitListen) {
-        const sf = schriftfeld(), S = svgText(), blaetter = mitListen ? 2 : 1;
+    // Blattbeschreibungen des Fluidplans für blatt.js (auch für den Plansatz):
+    //   o.mehrseitig  großer Plan an Lücken zwischen den Bauteilen auf mehrere Blätter
+    //   o.mitListen   Betriebsmittel- und Stückliste als eigenes Blatt
+    //   o.erstes      Nummer des ersten Blatts im Plansatz (für „Fortsetzung Blatt …“)
+    function blaetter(o) {
+        o = o || {};
+        const B = window.Blatt, S = svgText(), f = o.format || B.format();
+        const mehr = o.mehrseitig != null ? !!o.mehrseitig : !!plan.blattMehrseitig;
+        const titel = (plan.schriftfeld && plan.schriftfeld.titel) || 'Fluidplan', erstes = o.erstes || 1;
+        const liste = [];
+        const M = B.masse(f);
+        // Lesbar bleibt der Plan bis etwa Maßstab 0,25 mm je Einheit (Schrift 11 px ≈ 2,7 mm)
+        const A = B.aufteilen({ format: f, x0: S.x, x1: S.x + S.w, hoehe: S.h, belegt: S.belegt, spalteSoll: mehr ? 130 : S.w / M.spalten, maxMassstab: 0.42 });
+        if (!mehr || A.blaetter.length < 2) {
+            liste.push({ titel, art: o.art, inhalt: S.txt.replace(/^<svg /, '<svg data-fp-druck="1" '), mitte: true });
+        } else {
+            A.blaetter.forEach((bl, i) => {
+                const hBlatt = A.S * M.zeichnung.h / M.zeichnung.b;   // Höhe der Zeichenfläche in Planeinheiten
+                const inhalt = B.svgAusschnitt(S.innen, bl.von, S.y - Math.max(0, (hBlatt - S.h) / 2), A.S, f, ' data-fp-druck="1" style="background:#fff"', bl.bis - bl.von);
+                const fort = (i ? `<div class="vb-unterbrechung" style="left:1mm">← Fortsetzung von Blatt ${erstes + i - 1}</div>` : '')
+                    + (i < A.blaetter.length - 1 ? `<div class="vb-unterbrechung" style="left:${Math.min(M.zeichnung.b - M.sfB - 40, (bl.bis - bl.von) / A.S * M.zeichnung.b - 38).toFixed(1)}mm">Fortsetzung auf Blatt ${erstes + i + 1} →</div>` : '');
+                liste.push({ titel, art: (o.art ? o.art + ', ' : '') + `Teil ${i + 1} von ${A.blaetter.length}`, inhalt: inhalt + fort });
+            });
+        }
+        if (o.mitListen) liste.push({ titel, art: 'Betriebsmittel- und Stückliste', inhalt: listenHtml(listen()), fluss: true, leiste: false });
+        return liste;
+    }
+    function pdfHtml(mitListen, o) {
+        o = o || {};
+        const sf = schriftfeld(), B = window.Blatt;
+        if (B) {
+            const f = o.format || B.format();
+            const liste = blaetter({ format: f, mitListen, mehrseitig: o.mehrseitig });
+            return B.dokument({ titel: sf.titel, format: f, blaetter: B.rendern(liste, { format: f, sf }) });
+        }
+        const S = svgText(), blaetterZahl = mitListen ? 2 : 1;
         const heute = new Date().toLocaleDateString('de-DE');
         const feld = (blatt) => `<table class="sf"><tr><td class="k">Erstellt</td><td>${esc(sf.ersteller)}</td><td class="k">Datum</td><td>${heute}</td><td rowspan="2" class="titel" colspan="2">${esc(sf.titel)}</td></tr>
             <tr><td class="k">Geprüft</td><td>${esc(sf.geprueft)}</td><td class="k">Klasse</td><td>${esc(sf.klasse)}</td></tr>
-            <tr><td class="k">Schule</td><td colspan="3">${esc(sf.schule)}</td><td class="k">Nr. ${esc(sf.nummer)}</td><td class="k">Blatt ${blatt}/${blaetter}</td></tr></table>`;
+            <tr><td class="k">Schule</td><td colspan="3">${esc(sf.schule)}</td><td class="k">Nr. ${esc(sf.nummer)}</td><td class="k">Blatt ${blatt}/${blaetterZahl}</td></tr></table>`;
         const css = `@page{size:A4 landscape;margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
             body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#000;background:#fff}
             .blatt{width:281mm;height:194mm;border:0.6mm solid #000;position:relative;page-break-after:always;overflow:hidden;padding:6mm 6mm 34mm}
@@ -7648,7 +7696,10 @@ function versorgungMerken(F) {
         _ablegen: (typ, x, y, o) => setzen({ typ, o }, x, y),
         _listen: () => listen(),
         _listenCsv: () => listenCsv(listen()),
-        _pdfHtml: (mitListen) => pdfHtml(mitListen !== false),
+        _pdfHtml: (mitListen, o) => pdfHtml(mitListen !== false, o),
+        _pdfDialog: () => { if (!svg) fensterBauen(); pdfDialog(); },
+        // Blätter für den Plansatz (blatt.js): [{titel, art, inhalt, fluss, leiste, mitte}]
+        blaetter: (o) => (plan.teile.length && window.Blatt) ? blaetter(o) : [],
         _schriftfeld: (sf) => { if (sf) aendern(() => { plan.schriftfeld = Object.assign({}, plan.schriftfeld || {}, sf); }); return schriftfeld(); },
         _rueckgaengig: () => rueckgaengig(),
         aendern: (id, o) => { const t = teil(id); if (t) aendern(() => { Object.assign(t.o, o); kennNachArt(t); }); },

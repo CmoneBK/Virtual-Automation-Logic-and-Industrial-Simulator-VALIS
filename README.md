@@ -97,6 +97,12 @@ Die Symbolleiste über dem IEC-Stromlaufplan bietet mehrere Schalter zur Anpassu
 * **Drossel-Öffnung:** In ganz VALIS (2D-Anlage, Hydraulik, Fluidplan) ist die Öffnung in % der Anteil am Nenndurchfluss der voll geöffneten Drossel, linear: pneumatisch 200 l/min bei 6 bar, hydraulisch 20 l/min. Kompressor oder Aggregat begrenzen nur, wenn sie weniger liefern. Ältere Stände (`drosselModell` fehlt, Fluidplan `v` 1) werden beim Laden so umgerechnet, dass der Zylinder gleich schnell fährt.
 * **Speichern:** Der Plan steckt im Anlagenzustand (`fluidplan`) und reist mit .valisave, Link und Rückgängig. API `window.Fluidplan`, Prüfung `node pruefungen/fluidplan-pruefung.js`.
 
+### 📐 Blattformate und Schriftfeld (alle Pläne)
+* **Ein Blatt für alle Pläne:** `blatt.js` (`window.Blatt`) kennt Format (A4 quer als Voreinstellung, A3 quer als Wahl), Rahmen mit Heftrand, oben die Spaltenleiste (A4 quer 8, A3 quer 10 feste Spalten), unten rechts das Schriftfeld und die Blattnummer. Jeder Strompfad hat damit die Adresse „Blatt.Spalte“, z. B. 2.4.
+* **Schriftfeld:** Erstellt, Geprüft, Datum, Klasse, Schule, Zeichnungsnummer, Blatt x/y, dazu „Änderung“ und „Anlage/Projekt“. Einmal ausfüllen, es gilt für alle Pläne der Anlage und reist im Anlagenzustand (`blatt`) mit .valisave, Link und Rückgängig. Name, Klasse und Schule merkt sich der Browser für die nächste Anlage.
+* **Fluidplan:** „🖨 PDF“ druckt auf das gewählte Format; ein großer Plan wahlweise auf mehrere Blätter (geschnitten in Lücken zwischen den Bauteilen, mit Fortsetzungsvermerk) statt verkleinert. Die Betriebsmittel- und Stückliste ist ein eigenes Blatt.
+* **Prüfung:** `node pruefungen/blatt-pruefung.js` (Maße je Format, Aufteilen, Schriftfeld, Blattzählung, Zustand).
+
 ### 📊 Logik-Analysator (Oszilloskop)
 * **Echtzeit-Signalverfolgung:** Öffnen Sie das Oszilloskop, um Signalflanken (High/Low) aller Ein- und Ausgänge wie bei einem EKG präzise über die Zeit aufzuzeichnen und auszuwerten.
 

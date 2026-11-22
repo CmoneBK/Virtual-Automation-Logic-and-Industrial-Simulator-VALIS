@@ -9274,7 +9274,16 @@ VALIS_EN.dazu({
 "🪶 Gravitation: AUS": "🪶 Gravity: OFF",
 "🫙 Druckluftnetz": "🫙 Compressed air network",
 "🫙 Öl platzieren": "🫙 Place oil",
-"🫧 Zylinderdrücke": "🫧 Cylinder pressures"
+"🫧 Zylinderdrücke": "🫧 Cylinder pressures",
+"Blattformat": "Sheet format",
+"A4 quer (8 Spalten)": "A4 landscape (8 columns)",
+"A3 quer (10 Spalten)": "A3 landscape (10 columns)",
+"Anlage / Projekt": "Plant / project",
+"Änderung": "Revision",
+"Großer Plan auf mehrere Blätter statt verkleinert": "Large plan on several sheets instead of scaled down",
+"Betriebsmittel- und Stückliste als eigenes Blatt": "Equipment and parts list as a separate sheet",
+"Im Druckdialog „Als PDF speichern“ wählen. Das Schriftfeld gilt für alle Pläne der Anlage.": "Choose “Save as PDF” in the print dialog. The title block applies to all plans of the system.",
+"Plan als PDF mit Schriftfeld (A4 oder A3 quer), groß auf Wunsch über mehrere Blätter, mit Betriebsmittel- und Stückliste als eigenem Blatt": "Plan as PDF with title block (A4 or A3 landscape), large plans optionally over several sheets, with equipment and parts list as a separate sheet"
 });
 VALIS_EN.vorlagen({
 "\"⟦0⟧\" deklariert": "\"⟦0⟧\" declared",

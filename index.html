@@ -6055,7 +6055,7 @@ const aktiv = resolveLinked(obj, spsState);
             <canvas id="analyzer-fs" width="340" height="230" title="Kraft über dem Weg je Zylinder (aus Druck A/B und den Kolbenflächen)" style="display:none;position:absolute;right:24px;bottom:58px;pointer-events:none;z-index:2;"></canvas>
             <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #aaa;">
                 <span>Zeichnet jeden Simulations-Tick auf: Bits als Flanke (High/Low), Zahlen (Analogwerte) als Kurve mit Skala. Maus über die Kurven: Werte zu diesem Zeitpunkt. Zeitachse unten: Simulationszeit in Sekunden.</span>
-                <span style="display:flex;gap:6px;"><select class="zeitraffer-wahl" onchange="window._setZeitraffer(this.value)" title="Zeitraffer: SPS-Zeit, Öltemperatur und Regelstrecken laufen schneller (nicht die Mechanik)" style="background:#555;color:#fff;border:none;border-radius:3px;padding:4px;"><option value="1">⏩ 1×</option><option value="10">⏩ 10×</option><option value="60">⏩ 60×</option><option value="300">⏩ 300×</option></select><button onclick="window._toggleAnalyzerDruck(this)" title="Druckverläufe der Zylinderkammern A (Kolbenseite) und B (Stangenseite) in bar und den Kolbenweg in mm als Spuren zeigen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">🫧 Zylinderdrücke</button><button onclick="window._toggleAnalyzerFs(this)" title="Kraft über dem Weg (F-s-Diagramm) je Zylinder: F = pA · A(Kolben) − pB · A(Ring)" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📐 Kraft–Weg</button><button onclick="window._toggleAnalyzerUeberlagern(this)" title="Alle Analogwerte (z. B. Sollwert w, Istwert x, Stellgröße y) in eine gemeinsame Spur legen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📈 Analog überlagern</button>
+                <span style="display:flex;gap:6px;"><select class="zeitraffer-wahl" onchange="window._setZeitraffer(this.value)" title="Zeitraffer: SPS-Zeit, Öltemperatur und Regelstrecken laufen schneller (nicht die Mechanik)" style="background:#555;color:#fff;border:none;border-radius:3px;padding:4px;"><option value="1">⏩ 1×</option><option value="10">⏩ 10×</option><option value="60">⏩ 60×</option><option value="300">⏩ 300×</option></select><button onclick="window._toggleAnalyzerDruck(this)" title="Druckverläufe der Zylinderkammern A (Kolbenseite) und B (Stangenseite) in bar und den Kolbenweg in mm als Spuren zeigen. Proportionalventile im Fluidplan zeigen dazu Sollwert (V), Schieberlage (%) und Durchfluss bzw. Druck." style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">🫧 Zylinderdrücke</button><button onclick="window._toggleAnalyzerFs(this)" title="Kraft über dem Weg (F-s-Diagramm) je Zylinder: F = pA · A(Kolben) − pB · A(Ring)" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📐 Kraft–Weg</button><button onclick="window._toggleAnalyzerUeberlagern(this)" title="Alle Analogwerte (z. B. Sollwert w, Istwert x, Stellgröße y) in eine gemeinsame Spur legen" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">📈 Analog überlagern</button>
                 <button onclick="clearAnalyzer()" style="background: #555; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; white-space: nowrap;">🗑️ Verlauf leeren</button></span>
             </div>
         </div>
@@ -28509,6 +28509,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'regler_parameter': return 'Regler einstellen';
                 case 'custom_js':       return 'Bedingung erfüllen';
                 case 'fluid_fehler':    return 'Fehler im Fluidplan finden';
+                case 'fluid_kennlinie': return 'Kennlinie aufnehmen';
                 case 'el_fehler':       return 'Fehler in der Elektrik finden';
                 default:                return cond.type;
             }
@@ -28532,6 +28533,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 case 'regler_parameter': return `${cond.variable}: ` + ['kp', 'tn', 'tv'].filter(k => cond[k + 'Min'] != null || cond[k + 'Max'] != null).map(k => `${k.toUpperCase()} ${cond[k + 'Min'] != null ? cond[k + 'Min'] : '…'} … ${cond[k + 'Max'] != null ? cond[k + 'Max'] : '…'}`).join(', ');
                 case 'custom_js':       return cond.expression || '(JS)';
                 case 'fluid_fehler':    return 'Fluidplan: alle versteckten Fehler gefunden';
+                case 'fluid_kennlinie': return 'Fluidplan: Kennlinie ' + (cond.ventil ? 'von ' + cond.ventil + ' ' : 'eines Proportionalventils ') + 'aufgenommen';
                 case 'el_fehler':       return 'Elektrik: alle versteckten Fehler im Steckaufbau gefunden';
                 default:                return '';
             }
@@ -29321,6 +29323,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     case 'variable_exists': return (globalInputs||[]).includes(cond.variable) || (globalOutputs||[]).includes(cond.variable);
                     case 'code_contains':   return new RegExp(cond.pattern).test(document.getElementById('code').value);
                     case 'fluid_fehler':    return !!(window.Fluidplan && window.Fluidplan.fehlerGefunden());
+                    case 'fluid_kennlinie': return !!(window.Fluidplan && window.Fluidplan.kennlinieAufgenommen(cond.ventil || ''));
                     case 'el_fehler':       return !!(window.ElMessen && window.ElMessen.fehlerGefunden());
                     case 'component_type':  return (componentTypes[cond.variable] || 'taster') === cond.compType;
                     case 'logic_equivalent': {
@@ -29586,6 +29589,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             { value:'factory_object',  group:'Aufbau & Zuordnung',    label:'Fabrikobjekt ist mit Variable verknüpft' },
             { value:'festo_train',     group:'Aufbau & Zuordnung',    label:'Steckaufbau (Trainingsmodus) abgeschlossen' },
             { value:'fluid_fehler',    group:'Aufbau & Zuordnung',    label:'Fluidplan: alle versteckten Fehler gefunden', nurFluidplan: true },
+            { value:'fluid_kennlinie', group:'Aufbau & Zuordnung',    label:'Fluidplan: Kennlinie eines Proportionalventils aufgenommen', nurFluidplan: true },
             { value:'el_fehler',       group:'Aufbau & Zuordnung',    label:'Elektrik: alle versteckten Fehler im Steckaufbau gefunden' },
             // Analogwerte & Regler
             { value:'analog_wert',     group:'Analogwerte & Regler',  label:'Analogwert ist größer/kleiner/etwa gleich' },
@@ -29609,6 +29613,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             component_type:  'Erfüllt, wenn der gewählten Variable der angegebene Bauteiltyp zugewiesen ist (z. B. „A_MOTOR" ist ein Motor, nicht eine LED). Der Typ wird im Sim-Panel per Klick auf die Variable gewählt.',
             factory_object:  'Erfüllt, wenn in der 2D-Anlage ein Objekt des gewählten Bauteils steht, das mit der angegebenen Variable verknüpft ist (Rechtsklick auf das Objekt → Variable zuweisen).',
             el_fehler:       'Erfüllt, sobald im Steckaufbau alle versteckten elektrischen Fehler gemeldet und per „Befund prüfen“ bestätigt sind. Die Fehler baut die Lehrkraft im Steckaufbau ein (🔍 Fehlersuche: Buchse oder Kabel anklicken) und speichert die Anlage als Ausgangszustand der Aufgabe. Gemessen wird mit dem 🩺 Multimeter.',
+            fluid_kennlinie: 'Erfüllt, sobald im Fluidplan die Kennlinie eines Proportionalventils vollständig aufgenommen ist (Diagramm „Kennlinie“, Knopf „Kennlinie aufnehmen“ bei laufender Simulation). Im JSON der Aufgabe kann "ventil" das Kennzeichen eines bestimmten Ventils nennen.',
             fluid_fehler:    'Erfüllt, sobald im Fluidplan alle versteckten Fehler gemeldet und per „Befund prüfen“ bestätigt sind. Die Fehler baut die Lehrkraft im Fluidplan ein (🔍 Fehlersuche) und speichert die Anlage als Ausgangszustand der Aufgabe.',
             festo_train:     'Erfüllt, wenn im Steckaufbau-Panel der Trainingsmodus genutzt und der komplette Aufbau erfolgreich verkabelt wurde — also alle geforderten Kabel korrekt gesteckt sind.',
             analog_wert:     'Erfüllt, wenn die Zahl-Variable (z. B. ein Analogeingang wie TEMP oder eine Stellgröße Y) während der Simulation den Vergleich erfüllt. Der Vergleichswert darf eine Zahl oder eine Variable sein. „etwa gleich“ heißt: innerhalb der Toleranz.',
@@ -30590,6 +30595,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 factory_object:  '{ "objectType": "conveyor", "linkedVar": "A_BAND" }',
                 festo_train:     '{ }',
                 fluid_fehler:    '{ }',
+                fluid_kennlinie: '{ "ventil": "-QM1" }',
                 el_fehler:       '{ }',
                 analog_wert:     '{ "variable": "TEMP", "op": ">=", "value": 45, "tol": 1 }',
                 analog_band:     '{ "variable": "OELTEMP", "sollwert": 45, "tol": 2, "seconds": 60 }',
@@ -49255,6 +49261,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window.clearAnalyzer = function() {
             analyzerHistory = [];
             for (const k in _anaZylInfo) delete _anaZylInfo[k];
+            for (const k in _anaPropInfo) delete _anaPropInfo[k];
             analyzerSimTimeMs = 0;
             drawAnalyzer();
         };
@@ -49273,7 +49280,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._anaOszDruck = false; window._anaOszFs = false;
         const _anaZylEinheit = {};   // Kanal → Einheit
         const _anaZylInfo = {};      // Zylindername → { hub, dw, hyd }
+        // Proportionalventile im Fluidplan: „-QM1 U“ (Sollwert, V), „-QM1 s“ (Schieberlage, %),
+        // „-QM1 Q“ (l/min) bzw. „-QN1 p“ (bar)
+        const _anaPropInfo = {};     // Ventilname → Kanäle
+        const _PROP_EINHEIT = { U: 'V', s: '%', Q: 'l/min', p: 'bar', I: 'mA' };
         window._anaZylMitschnitt = function (e) {
+            const P = typeof window._fpPropMess === 'function' ? window._fpPropMess() : null;
+            if (P) for (const n in P) {
+                const k = [];
+                for (const a of ['U', 'I', 's', 'Q', 'p']) if (typeof P[n][a] === 'number') { e[n + ' ' + a] = +P[n][a].toFixed(3); _anaZylEinheit[n + ' ' + a] = _PROP_EINHEIT[a]; k.push(n + ' ' + a); }
+                _anaPropInfo[n] = k;
+            }
             const M = typeof window._fpZylMess === 'function' ? window._fpZylMess() : null; if (!M) return;
             for (const id in M) {
                 const o = factoryObjects.find(q => q.id === id); if (!o) continue;
@@ -49289,6 +49306,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (!window._anaOszDruck) return [];
             const k = [];
             Object.keys(_anaZylInfo).sort().forEach(n => { k.push(n + ' pA'); if (_anaZylInfo[n].dw) k.push(n + ' pB'); k.push(n + ' s'); });
+            Object.keys(_anaPropInfo).sort().forEach(n => { _anaPropInfo[n].forEach(c => k.push(c)); });
             return k;
         }
         function _analyzerIstAnalog(v, hist) {
@@ -81751,7 +81769,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 </script>
 <script src="blatt.js?v=20261122a"></script>
 <script src="schaltplan-blatt.js?v=20261122a"></script>
-<script src="fluidplan.js?v=20261122b"></script>
+<script src="fluidplan.js?v=20261122d"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>

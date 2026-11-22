@@ -150,6 +150,158 @@ const FAELLE = {
     R.push(['Öffnung bei 7,75 V = 50 % (Überdeckung 10 %)', Math.abs(V().auf[0] - 0.5) < 0.02, V().auf[0].toFixed(3)]);
     return R;
   },
+  'Proportional-Druckregelventil (Pneumatik): Druck folgt dem Sollwert': () => {
+    const F = Fluidplan, R = [];
+    const q = F.setzen('quelle', 0, 400, { p: 7 });
+    const dr = F.setzen('druckregel', 0, 250, { prop: true, varS: 'Y', von: 0, bis: 6, hyst: 0, tau: 50 }, '-QN1');
+    const z = F.setzen('zyl_ew', 0, 0, { d: 32, hub: 50 }, '-MM1');
+    const m = F.setzen('manometer', 100, 150);
+    F.verbinden(q, '1', dr, '1'); F.verbinden(dr, '2', z, 'K'); F.verbinden(dr, '2', m, '1');
+    R.push(['Prüfung ohne Meldung', F.pruefen().length === 0, JSON.stringify(F.pruefen())]);
+    const P = y => { spsState.Y = y; F._schritt(2); return F.zustand().teile[dr]; };
+    F._neu();
+    const p0 = P(0), p5 = P(50), p10 = P(100), p3 = P(30);
+    R.push(['0 V: kein Druck am Ausgang', p0.p['2'] < 0.2, p0.p['2']]);
+    R.push(['5 V: 3 bar', Math.abs(p5.p['2'] - 3) < 0.25, p5.p['2']]);
+    R.push(['10 V: 6 bar', Math.abs(p10.p['2'] - 6) < 0.25, p10.p['2']]);
+    R.push(['zurück auf 3 V: Ventil entlüftet auf 1,8 bar', Math.abs(p3.p['2'] - 1.8) < 0.3, p3.p['2']]);
+    R.push(['Zustand meldet den Sollwert in bar', Math.abs(p3.wert - 1.8) < 0.02, p3.wert]);
+    // Hysterese: gleicher Sollwert, von unten und von oben angefahren
+    F.aendern(dr, { hyst: 10 }); F._neu();
+    P(0); const auf = P(50).wert; P(100); const ab = P(50).wert;
+    R.push(['Hysterese 10 %: von oben 0,6 bar mehr als von unten', Math.abs((ab - auf) - 0.6) < 0.05, `${auf.toFixed(2)} / ${ab.toFixed(2)} bar`]);
+    // Zeitkonstante
+    F.aendern(dr, { hyst: 0, tau: 500 }); F._neu(); spsState.Y = 0; F._schritt(0.5); spsState.Y = 100; F._schritt(0.496);
+    const w = F.zustand().teile[dr].wert;
+    R.push(['Zeitkonstante 0,5 s: nach 0,5 s etwa 63 %', w > 3.4 && w < 4.1, w.toFixed(2)]);
+    // Anfangs- und Endwert
+    F.aendern(dr, { tau: 50, von: 1, bis: 5 }); F._neu();
+    R.push(['Bereich 1 … 5 bar: 0 V = 1 bar, 10 V = 5 bar', Math.abs(P(0).p['2'] - 1) < 0.25 && Math.abs(P(100).p['2'] - 5) < 0.25, '']);
+    return R;
+  },
+  'Proportional-Druckbegrenzungsventil (Hydraulik): Presskraft über den Druck': () => {
+    const F = Fluidplan, R = [];
+    const agg = F.setzen('aggregat', 0, 500, { q: 10, p: 200 });
+    const dbv = F.setzen('dbv', 150, 400, { prop: true, varS: 'Y', von: 10, bis: 110, hyst: 0, tau: 50 }, '-QNA1');
+    const v = F.setzen('ventil', 0, 250, { hyd: true, wege: '4/2', links: 'magnet', rechts: 'feder', varL: 'Y1' }, '-QMA1');
+    const z = F.setzen('zyl_dw', 0, 0, { hyd: true, d: 50, dStange: 25, hub: 100 }, '-MMA1');
+    const tk = F.setzen('tank', 150, 500);
+    F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    F.verbinden(agg, 'P', dbv, 'P'); F.verbinden(dbv, 'T', tk, '1');
+    R.push(['Prüfung ohne Meldung', F.pruefen().length === 0, JSON.stringify(F.pruefen())]);
+    spsState.Y1 = true; spsState.Y = 0; F._neu(); F._schritt(6);
+    const Z = () => F.zustand().teile[z], D = () => F.zustand().teile[dbv];
+    R.push(['ausgefahren am Anschlag', Z().anteil > 0.98, Z().anteil.toFixed(2)]);
+    const AK = Math.PI * 50 * 50 / 400;
+    const P = y => { spsState.Y = y; F._schritt(1.5); return Z().p.K; };
+    const a = P(0), b = P(50), c = P(100), d = P(20);
+    R.push(['0 V: 10 bar am Kolben', Math.abs(a - 10) < 2.5, a.toFixed(1)]);
+    R.push(['5 V: 60 bar, Presskraft etwa 118 kN · 0,1', Math.abs(b - 60) < 3, `${b.toFixed(1)} bar = ${(b * AK / 100).toFixed(1)} kN`]);
+    R.push(['10 V: 110 bar', Math.abs(c - 110) < 4, c.toFixed(1)]);
+    R.push(['zurück auf 2 V: Druck fällt auf 30 bar', Math.abs(d - 30) < 3, d.toFixed(1)]);
+    R.push(['Ventil meldet offen und Sollwert', D().offen === true || Math.abs(D().wert - 30) < 0.5, JSON.stringify([D().offen, D().wert])]);
+    return R;
+  },
+  'Proportional-Stromregelventil (Hydraulik): Vorschub folgt dem Sollwert, unabhängig von der Last': () => {
+    const F = Fluidplan, R = [];
+    const agg = F.setzen('aggregat', 0, 500, { q: 30, p: 100 });
+    const sr = F.setzen('stromregel', 0, 380, { prop: true, varS: 'Y', von: 0, bis: 10, hyst: 0, tau: 50 }, '-RNA1');
+    const v = F.setzen('ventil', 0, 250, { hyd: true, wege: '4/3', mitte: 'gesperrt', links: 'magnet', rechts: 'magnet', varL: 'Y1', varR: 'Y2' }, '-QMA1');
+    const z = F.setzen('zyl_dw', 0, 0, { hyd: true, d: 40, dStange: 20, hub: 300, last: 0 }, '-MMA1');
+    F.verbinden(agg, 'P', sr, '1'); F.verbinden(sr, '2', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', z, 'K'); F.verbinden(v, '2', z, 'S');
+    R.push(['Prüfung ohne Meldung', F.pruefen().length === 0, JSON.stringify(F.pruefen())]);
+    const Z = () => F.zustand().teile[z];
+    const AK = Math.PI * 40 * 40 / 400;   // cm²
+    const tempo = y => { spsState.Y1 = false; spsState.Y2 = true; spsState.Y = 100; F._schritt(4); spsState.Y2 = false; spsState.Y = y; spsState.Y1 = true; F._schritt(0.5); const a = Z().x; F._schritt(0.5); return (Z().x - a) / 0.5; };
+    F._neu();
+    const soll = q => q * 1000 / 60 / AK * 10;   // l/min → mm/s
+    const v5 = tempo(50), v10 = tempo(100), v2 = tempo(20), v0 = tempo(0);
+    R.push(['5 V: 5 l/min', Math.abs(v5 - soll(5)) < soll(5) * 0.12, `${v5.toFixed(1)} mm/s (Soll ${soll(5).toFixed(1)})`]);
+    R.push(['10 V: 10 l/min', Math.abs(v10 - soll(10)) < soll(10) * 0.12, `${v10.toFixed(1)} mm/s (Soll ${soll(10).toFixed(1)})`]);
+    R.push(['2 V: 2 l/min', Math.abs(v2 - soll(2)) < soll(2) * 0.15, `${v2.toFixed(1)} mm/s (Soll ${soll(2).toFixed(1)})`]);
+    R.push(['0 V: steht', Math.abs(v0) < 0.5, v0.toFixed(2)]);
+    F.aendern(z, { last: 5000 }); F._neu();
+    const vl = tempo(50);
+    R.push(['mit 5 kN Last: gleiche Geschwindigkeit (Druckwaage)', Math.abs(vl - v5) < v5 * 0.1, `${vl.toFixed(1)} gegen ${v5.toFixed(1)} mm/s`]);
+    // Rampe: Sollwert steigt in Stufen, Geschwindigkeit steigt mit
+    F.aendern(z, { last: 0 }); F.aendern(sr, { tau: 1000, bis: 5 }); F._neu();
+    spsState.Y1 = false; spsState.Y2 = true; spsState.Y = 100; F._schritt(4); spsState.Y2 = false; spsState.Y = 0; F._schritt(8); spsState.Y1 = true; spsState.Y = 100;
+    F._schritt(0.2); const x0 = Z().x; F._schritt(0.2); const x1 = Z().x; F._schritt(2.6); const x2 = Z().x; F._schritt(0.3); const x3 = Z().x;
+    const va = (x1 - x0) / 0.2, ve = (x3 - x2) / 0.3;
+    R.push(['Zeitkonstante 1 s: fährt sanft an (Rampe)', va < ve * 0.45 && ve > 55, `${va.toFixed(0)} → ${ve.toFixed(0)} mm/s`]);
+    return R;
+  },
+  'Druck- und Stromventile: Symbol, Umstellen, Listen': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fluid-wrapper'), offen = !!fw && fw.offsetWidth > 100;
+    if (!offen) F.umschalten();
+    const a = F.setzen('druckregel', 0, 0, {}), b = F.setzen('dbv', 100, 0, {}), c = F.setzen('stromregel', 200, 0, {});
+    F.aendern(a, { prop: true }); F.aendern(b, { prop: true }); F.aendern(c, { prop: true });
+    const T = id => F.plan().teile.find(x => x.id === id);
+    R.push(['Umstellen auf proportional setzt Bereich und Kennwerte', T(a).o.bis === 6 && T(b).o.bis === 100 && T(c).o.bis === 20 && T(a).o.tau === 50, JSON.stringify([T(a).o, T(b).o, T(c).o])]);
+    R.push(['Kennzeichen bleiben -QN, -QNA, -RNA', /^-QN\d/.test(T(a).bez) && /^-QNA\d/.test(T(b).bez) && /^-RNA\d/.test(T(c).bez), [T(a).bez, T(b).bez, T(c).bez].join(' ')]);
+    R.push(['Prüfung meldet drei fehlende Sollwerte', F.pruefen().filter(m => /Sollwert/.test(m)).length === 3, '']);
+    await warte(200);
+    const n = [a, b, c].map(id => document.querySelectorAll(`svg.fp-svg .fp-teil[data-t="${id}"] .fp-bet-propw`).length);
+    R.push(['Symbole zeigen den Proportionalmagneten', n.join('') === '111', n.join('/')]);
+    const L = JSON.stringify(F._listen());
+    R.push(['Stückliste: Proportional-Druckregelventil, -Druckbegrenzungsventil, -Stromregelventil mit Bereich', /Proportional-Druckregelventil/.test(L) && /Proportional-Druckbegrenzungsventil/.test(L) && /Proportional-Stromregelventil/.test(L) && /Q = 0 … 20 l\/min/.test(L) && /p = 5 … 100 bar/.test(L), '']);
+    F.aendern(a, { prop: false });
+    await warte(100);
+    R.push(['Zurückstellen: wieder Feder statt Magnet', document.querySelectorAll(`svg.fp-svg .fp-teil[data-t="${a}"] .fp-bet-propw`).length === 0, '']);
+    const pal = () => [...document.querySelectorAll('.fp-pal span')].map(e => e.textContent.trim());
+    const wechsel = m => { const k = document.querySelector('.fp-reiter-k[data-m="' + m + '"]'); if (k) k.click(); };
+    wechsel('pneu'); const pp = pal(); wechsel('hyd'); const ph = pal(); wechsel('pneu');
+    R.push(['Palette kennt die fünf Proportionalventile', ['5/3 Proportional-Wegeventil', 'Proportional-Druckregelventil'].every(n => pp.includes(n)) && ['4/3 Proportional-Wegeventil', 'Proportional-Druckbegrenzungsventil', 'Proportional-Stromregelventil'].every(n => ph.includes(n)), '']);
+    F._leeren(); if (!offen) F.umschalten();
+    return R;
+  },
+  'Kennlinie: Soll-Kennlinie, Aufnahme mit Hysterese, Diagramm': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fluid-wrapper'), offen = !!fw && fw.offsetWidth > 100;
+    if (!offen) F.umschalten();
+    // Prüfstand: Pumpe mit 35 bar, A frei in den Tank
+    const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
+    const v = F.setzen('ventil', 0, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'Y', qn: 40, ueber: 10, hyst: 4, tau: 20 }, '-QMA1');
+    const tk = F.setzen('tank', 200, 300), st = F.setzen('stopfen', 100, -50, { hyd: true });
+    F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', tk, '1'); F.verbinden(v, '2', st, '1');
+    let k = F.kennlinie(v);
+    const bei = (l, u) => l.find(p => p[0] === u)[1];
+    R.push(['Soll-Kennlinie: 5 V = 0, 10 V = +40, 0 V = −40 l/min', bei(k.soll, 50) === 0 && Math.abs(bei(k.soll, 100) - 40) < 1e-6 && Math.abs(bei(k.soll, 0) + 40) < 1e-6, JSON.stringify([bei(k.soll, 0), bei(k.soll, 50), bei(k.soll, 100)])]);
+    R.push(['… Totzone durch Überdeckung: 5,5 V = 0', bei(k.soll, 55) === 0 && bei(k.soll, 60) > 0, bei(k.soll, 60).toFixed(2)]);
+    R.push(['noch nichts aufgenommen', !F.kennlinieAufgenommen() && k.mess.length === 0 && !k.fertig, '']);
+    // Aufnahme: 20 s Rampe 0 → 10 V → 0 V
+    spsState.Y = 50; F._neu(); F._schritt(0.5);
+    R.push(['Aufnahme startet', F.kennlinieAufnehmen(v, 20) === true && F.kennlinie(v).laeuft, '']);
+    F._schritt(10);
+    R.push(['in der Mitte der Rampe bei 10 V und vollem Durchfluss', Math.abs(F.zustand().teile[v].q - 40) < 3 && F.kennlinie(v).laeuft, F.zustand().teile[v].q.toFixed(1)]);
+    F._schritt(10.2);
+    k = F.kennlinie(v);
+    R.push(['nach 20 s fertig, über 500 Messpunkte', k.fertig && !k.laeuft && k.mess.length > 500, k.mess.length]);
+    R.push(['Bedingung „Kennlinie aufgenommen“ erfüllt (auch mit Kennzeichen)', F.kennlinieAufgenommen() && F.kennlinieAufgenommen('-QMA1') && !F.kennlinieAufgenommen('-QMA9'), '']);
+    // Hysterese: bei 7,5 V liegt der Rückweg über dem Hinweg
+    const halb = k.mess.length / 2, hin = k.mess.slice(0, halb).reduce((a, p) => Math.abs(p[0] - 75) < Math.abs(a[0] - 75) ? p : a), rueck = k.mess.slice(halb).reduce((a, p) => Math.abs(p[0] - 75) < Math.abs(a[0] - 75) ? p : a);
+    R.push(['Hysterese sichtbar: Rückweg bei 7,5 V über dem Hinweg', rueck[1] - hin[1] > 1.5 && rueck[1] - hin[1] < 6, `hin ${hin[1].toFixed(1)}, zurück ${rueck[1].toFixed(1)} l/min`]);
+    R.push(['Sättigung: nie über Nenndurchfluss', Math.max(...k.mess.map(p => p[1])) < 42, Math.max(...k.mess.map(p => p[1])).toFixed(1)]);
+    R.push(['nach der Aufnahme gilt wieder der SPS-Sollwert', (F._schritt(0.5), Math.abs(F.zustand().teile[v].s) < 0.05), F.zustand().teile[v].s.toFixed(3)]);
+    // Diagramm
+    F._kennZeigen(v); await warte(300);
+    const d = document.getElementById('fp-diag');
+    R.push(['Diagramm zeigt Soll-Kennlinie, aufgenommene Kurve und Arbeitspunkt', !!d && d.classList.contains('offen') && !!d.querySelector('.fp-kenn-soll') && !!d.querySelector('.fp-kenn-mess') && !!d.querySelector('.fp-kenn-punkt'), '']);
+    R.push(['Knopf „Kennlinie aufnehmen“ sichtbar', !!document.getElementById('fp-d-auf') && document.getElementById('fp-d-auf').style.display !== 'none', '']);
+    // Druckventil: Kennlinie p über U
+    const dr = F.setzen('druckregel', 500, 100, { prop: true, varS: 'Y', von: 0, bis: 6, hyst: 0, tau: 50 }, '-QN1');
+    const kd = F.kennlinie(dr);
+    R.push(['Druckregelventil: Soll-Kennlinie 0 … 6 bar', bei(kd.soll, 0) === 0 && bei(kd.soll, 50) === 3 && bei(kd.soll, 100) === 6 && kd.info.einheit === 'bar', '']);
+    // Oszilloskop-Kanäle
+    const m = window._fpPropMess && (() => { const alt = window.isSimulationActive; return window._fpPropMess(); })();
+    R.push(['Messwerte für das Oszilloskop (läuft nur in der Simulation)', m === null || (m && typeof m === 'object'), JSON.stringify(m)]);
+    d.classList.remove('offen');
+    F._leeren(); if (!offen) F.umschalten();
+    return R;
+  },
   'Fehler, Symbol, Umstellen, Listen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

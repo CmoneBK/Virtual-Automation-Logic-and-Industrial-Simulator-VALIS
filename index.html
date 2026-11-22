@@ -72169,6 +72169,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         res.ventile.push(o);
                     }
                 });
+                // Proportionalventile des Fluidplans mit externer Verstärkerkarte
+                try {
+                    ((window.Fluidplan && Fluidplan.propKarten) ? Fluidplan.propKarten() : []).forEach(k => {
+                        res.ventile.push({ _fp: k.id, id: 'fp:' + k.id, type: 'valve_prop_fp', linkedVar: k.varS, bez: k.bez, nullS: k.nullS, ueber: k.ueber, hyd: k.hyd, nenn: k.nenn, grenzen: k.grenzen });
+                    });
+                } catch (_) {}
                 const g = (typeof currentGraph !== 'undefined' && currentGraph) ? currentGraph : null;
                 const code = (document.getElementById('code') || {}).value || '';
                 if (g && g.nodes) g.nodes.forEach((n, aus) => {
@@ -72209,7 +72215,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const rhs = i >= 0 ? lbl.slice(i + 1) : lbl;
                     (rhs.match(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g) || []).forEach(v => { if (istQuelle.has(v) && !res.ifEin.includes(v)) res.ifEin.push(v); });
                     const typ = (typeof componentTypes !== 'undefined' && componentTypes[aus]) || '';
-                    if ((typ === 'analog_out' || objs.some(o => o && o.linkedVar === aus && anlageTypen.has(o.type))) && !res.ifAus.includes(aus)) res.ifAus.push(aus);
+                    if ((typ === 'analog_out' || objs.some(o => o && o.linkedVar === aus && anlageTypen.has(o.type)) || res.ventile.some(v => v._fp && v.linkedVar === aus)) && !res.ifAus.includes(aus)) res.ifAus.push(aus);
                 });
                 // Sollwertgeber, die einen PID speisen, nutzen die Skala des Istwerts
                 // (w und x müssen in Volt vergleichbar sein)
@@ -73068,7 +73074,97 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
             // ---- Proportionalverstärker, 2-kanalig, für ein 4/3-Proportionalventil ----
             const PV_STROM = { grund: 100, sprung: 50, max: 800 }; // mA
+            // Karte eines Proportionalventils aus dem Fluidplan: alle Einsteller sind
+            // echt (Grund-, Sprung-, Maximalstrom, Rampen, Dither) und wirken auf das
+            // Ventil im Plan. Die Magnete A und B sitzen als eigenes Feld daneben.
+            const PVM_W = 150;
+            const _pvSchritt = { grund: [10, 50], sprung: [10, 50], max: [10, 100], rampeAuf: [0.1, 1], rampeAb: [0.1, 1], dither: [10, 50] };
+            function drawAnaPropKarteFp(parent, x, y, idx, ventil, pos) {
+                const W = ANA_PV.w, H = ANA_PV.h, FP = window.Fluidplan;
+                const g = _anaKoerper(parent, x, y, W, H, `Proportionalverstärker ${idx}`, '2 Kanäle · Sollwert ±10 V → Magnetstrom A / B (PWM)', 'ana_pv', idx);
+                const yv = ventil.linkedVar, G = ventil.grenzen || {};
+                const live = () => { try { return FP.propKarteLive(ventil._fp) || {}; } catch (_) { return {}; } };
+                const karte = () => live().karte || {};
+                _anaText(g, 18, 58, 'Betriebsart: 1 × zweikanalig (Proportional-Wegeventil ' + (ventil.bez || '') + ')', { 'font-size': 8.5, 'font-weight': 'bold' });
+                _anaText(g, 18, 70, 'W1 positiv → Magnet A, W1 negativ → Magnet B', { 'font-size': 8 });
+                [['W1', yv], ['W2', null]].forEach(([n, v], i) => {
+                    const cx = 34 + i * 120;
+                    _anaText(g, cx - 16, 94, `Sollwert ${n}`, { 'font-weight': 'bold', 'font-size': 8.5 });
+                    drawSocket(g, cx, 114, ANA_SIG, `PV${idx}_${n}`, `PV${idx}`);
+                    drawSocket(g, cx + 30, 114, ANA_GND, `PV${idx}_${n}M`, `PV${idx}`);
+                    _anaBelegt(g, cx + 15, 138, v);
+                    if (i === 0) {
+                        _anaLcd(g, cx - 16, 146, 72, () => _anaZahl(live().w1 || 0, 2) + ' V');
+                        if (v) (pos.ein[v] = pos.ein[v] || []).push({ x: x + cx, y: y + 114, key: `PV${idx}_${n}` });
+                        if (v) (pos.mEin[v] = pos.mEin[v] || []).push({ x: x + cx + 30, y: y + 114, key: `PV${idx}_${n}M` });
+                    }
+                });
+                _anaText(g, 270, 94, 'Freigabe (24 V)', { 'font-weight': 'bold', 'font-size': 8.5 });
+                ['OE A', 'OE B', 'INT W1', 'INT W2'].forEach((n, i) => {
+                    const cx = 280 + (i % 2) * 60, cy = 114 + Math.floor(i / 2) * 44;
+                    drawSocket(g, cx, cy, PALETTE.socketBlack, `PV${idx}_${n.replace(' ', '')}`, `PV${idx}`);
+                    _anaText(g, cx, cy + 20, n, { 'text-anchor': 'middle', 'font-size': 7.5 });
+                });
+                _anaLed(g, 400, 114, '#43a047', () => (typeof isSimulationActive === 'undefined') || isSimulationActive);
+                _anaText(g, 400, 132, 'frei', { 'text-anchor': 'middle', 'font-size': 7 });
+                // Einsteller (drehbar): Ströme in mA, Rampen in s, Dither in %
+                el('line', { x1: 14, y1: 180, x2: W - 14, y2: 180, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
+                const melden = _anaHinweis(g, 18, 282);
+                [['grund', 'Grundstrom', 'mA', 0], ['sprung', 'Sprungstrom', 'mA', 0], ['max', 'Maximalstrom', 'mA', 0],
+                 ['rampeAuf', 'Rampe auf', 's', 1], ['rampeAb', 'Rampe ab', 's', 1], ['dither', 'Dither', '%', 0]].forEach(([key, n, einheit, st], i) => {
+                    const px = 46 + i * 70, gr = G[key] || [0, 1];
+                    _anaPoti(g, px, 208, n, () => ((karte()[key] || 0) - gr[0]) / ((gr[1] - gr[0]) || 1), () => _anaZahl(karte()[key] || 0, st) + ' ' + einheit);
+                    _anaDrehbar(g, px, 208, 15, n, (richtung, gross) => {
+                        const alt = karte()[key] || 0, s = _pvSchritt[key][gross ? 1 : 0];
+                        const neu = Math.round((alt + richtung * s) * 100) / 100;
+                        if (neu < gr[0] || neu > gr[1]) melden(n + ': ' + _anaZahl(gr[0], st) + ' … ' + _anaZahl(gr[1], st) + ' ' + einheit);
+                        try { FP.propKarteSetzen(ventil._fp, key, neu); } catch (_) {}
+                        _anaNeuZeichnen();
+                    });
+                });
+                const vt = _anaText(g, 18, 262, '', { 'font-size': 7.5 });
+                const vSet = () => { const k = karte(); vt.textContent = 'Verstärkung = (Imax − Igrund − Isprung) / 10 V = ' + _anaZahl(((k.max || 0) - (k.grund || 0) - (k.sprung || 0)) / 10, 0) + ' mA/V'; };
+                vSet(); _anaLive.push(vSet);
+                // Ausgänge A und B zu den Proportionalmagneten
+                el('line', { x1: 14, y1: 286, x2: W - 14, y2: 286, stroke: '#cccccc', 'stroke-width': 0.6 }, g);
+                ['A', 'B'].forEach((s, i) => {
+                    const bx = 30 + i * 200;
+                    _anaText(g, bx, 304, `Ausgang ${s} (Magnet ${s})`, { 'font-weight': 'bold' });
+                    _anaLed(g, bx + 6, 324, '#ffd600', () => (live()['i' + s] || 0) > (karte().grund || 0) + 1);
+                    _anaLcd(g, bx + 20, 315, 74, () => _anaZahl(live()['i' + s] || 0, 0) + ' mA');
+                    drawSocket(g, bx + 120, 324, PALETTE.socketBlack, `PV${idx}_${s}1`, `PV${idx}`);
+                    drawSocket(g, bx + 150, 324, PALETTE.socketBlack, `PV${idx}_${s}2`, `PV${idx}`);
+                    _anaText(g, bx + 135, 348, 'bis 1 A', { 'text-anchor': 'middle', 'font-size': 7 });
+                });
+                _anaText(g, 18, 372, 'Ventil im Fluidplan: ' + (ventil.bez || 'Proportional-Wegeventil') + (ventil.hyd ? ' (Hydraulik)' : ' (Pneumatik)'), { 'font-size': 8.5 });
+                _anaText(g, 18, 386, `Mitte ${_anaZahl(ventil.nullS, 0)} % (= 0 V) · Überdeckung ${_anaZahl(ventil.ueber, 0)} % · Nennstrom ${ventil.nenn} mA`, { 'font-size': 8 });
+                const vy = H - 34;
+                _anaText(g, 18, vy + 4, '+24 V', { 'font-size': 8, fill: PALETTE.socketRed, 'font-weight': 'bold' });
+                drawSocket(g, 64, vy, PALETTE.socketRed, `PV${idx}_24V`, `PV${idx}`);
+                drawSocket(g, 94, vy, PALETTE.socketBlue, `PV${idx}_0V`, `PV${idx}`);
+                _anaVersorgung.push([`PV${idx}_24V`, `PV${idx}_0V`]);
+                // Feld mit den beiden Proportionalmagneten des Ventils
+                const mg = _anaKoerper(parent, x + W + 18, y, PVM_W, 230, 'Proportionalventil', ventil.bez || '', 'ana_pvm', idx);
+                ['A', 'B'].forEach((s, i) => {
+                    const my = 78 + i * 72;
+                    _anaText(mg, 18, my - 12, `Magnet ${s}`, { 'font-weight': 'bold', 'font-size': 8.5 });
+                    el('rect', { x: 18, y: my - 4, width: 46, height: 26, rx: 2, fill: '#eceff1', stroke: '#607d8b', 'stroke-width': 1 }, mg);
+                    el('line', { x1: 22, y1: my + 18, x2: 60, y2: my, stroke: '#607d8b', 'stroke-width': 1 }, mg);
+                    drawSocket(mg, 88, my + 9, PALETTE.socketBlack, `PVM${idx}_${s}1`, `PVM${idx}`);
+                    drawSocket(mg, 118, my + 9, PALETTE.socketBlack, `PVM${idx}_${s}2`, `PVM${idx}`);
+                    const lt = _anaText(mg, 18, my + 36, '', { 'font-size': 7.5, 'font-family': 'Consolas, monospace' });
+                    const set = () => { lt.textContent = _anaZahl(live()['i' + s] || 0, 0) + ' mA'; };
+                    set(); _anaLive.push(set);
+                    _anaPvmKabel.push({ fromKey: `PV${idx}_${s}1`, toKey: `PVM${idx}_${s}1`, color: 'blue', strand: '__PVM__' + idx, label: 'Proportionalmagnete ' + (ventil.bez || idx), pvm: s });
+                    _anaPvmKabel.push({ fromKey: `PVM${idx}_${s}2`, toKey: `PV${idx}_${s}2`, color: 'blue', strand: '__PVM__' + idx, label: 'Proportionalmagnete ' + (ventil.bez || idx), pvm: s });
+                });
+                const st = _anaText(mg, 18, 216, '', { 'font-size': 8 });
+                const sSet = () => { st.textContent = 'Schieber ' + _anaZahl((live().s || 0) * 100, 0) + ' %'; };
+                sSet(); _anaLive.push(sSet);
+            }
+            let _anaPvmKabel = [];
             function drawAnaPropVerstaerkerPanel(parent, x, y, idx, ventil, pos) {
+                if (ventil._fp) return drawAnaPropKarteFp(parent, x, y, idx, ventil, pos);
                 const W = ANA_PV.w, H = ANA_PV.h;
                 const g = _anaKoerper(parent, x, y, W, H, `Proportionalverstärker ${idx}`, '2 Kanäle · Sollwert ±10 V → Magnetstrom A / B (PWM)', 'ana_pv', idx);
                 const a = (typeof window._anaCfg === 'function') ? window._anaCfg(ventil) : (ventil.ana || {});
@@ -73144,7 +73240,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _anaKompKontakte = {}; _anaVersorgung = []; _anaSkala = {};
                 window._anaKompKontakte = _anaKompKontakte; window._anaVersorgung = _anaVersorgung;
                 // Ohne Analog-Reihe dürfen keine Kabel der vorigen Schaltung stehen bleiben
-                _anaKabelListe.length = 0;
+                _anaKabelListe.length = 0; _anaPvmKabel = [];
                 let d;
                 try { d = _anaSammeln(); } catch (e) { return { w: 0, h: 0, n: 0 }; }
                 _anaSkala = d.skala || {};
@@ -73190,7 +73286,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 });
                 d.ventile.forEach((v, i) => {
                     drawAnaPropVerstaerkerPanel(svg, cx, top, i + 1, v, pos);
-                    cx += ANA_PV.w + GAP; maxH = Math.max(maxH, ANA_PV.h);
+                    cx += ANA_PV.w + GAP + (v._fp ? PVM_W + GAP : 0); maxH = Math.max(maxH, ANA_PV.h);
                 });
                 // Signal- und Massekabel kommen in die gemeinsame Kabelliste (damit
                 // Schritt- und Trainingsmodus sie mitführen): Ausgang eines Gebers bzw.
@@ -73204,6 +73300,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     pos.ein[v].forEach(z => _anaKabelListe.push({ fromKey: q.key, toKey: z.key, color: 'orange', ana: 'signal', anaVar: v, strand: '__ANA__' + v }));
                     (pos.mEin[v] || []).forEach(z => { if (pos.mAus[v]) _anaKabelListe.push({ fromKey: pos.mAus[v].key, toKey: z.key, color: 'grey', ana: 'masse', anaVar: v, strand: '__ANA__' + v }); });
                 });
+                // Verstärkerausgänge → Proportionalmagnete (Hin- und Rückleiter je Magnet)
+                _anaPvmKabel.forEach(c => _anaKabelListe.push(c));
                 // Stellsignale ohne Karte als Abnehmer gehen direkt zur Anlage
                 let stubBreite = 0;
                 const anlageName = { oil_cooler_hyd: 'Ölkühler (Kühlwasserventil)', fan: 'Lüfter', heater: 'Heizung', regelstrecke: 'Regelstrecke', valve_prop: 'Proportionalventil' };
@@ -73220,11 +73318,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const kartenZahl = n + ki + ifKarten + d.pids.length + d.zrs.length + d.ventile.length;
                 return { w: cx - x0 + stubBreite, h: 26 + maxH + 30, n: kartenZahl };
             }
+            window._anaReiheTest = svg => drawAnalogRow(svg, 0, 0);   // für pruefungen/proportional-pruefung.js
             // Signatur der Analog-Reihe (für den Skip im Anschluss-Renderer)
             function _anaSignatur() {
                 try {
                     const d = _anaSammeln();
-                    return JSON.stringify([d.quellen.map(q => q.v + q.name), d.zps.map(z => z.aus + z.args.join()), d.pids.map(p => p.aus + p.args.join()), d.zrs.map(p => p.aus + p.args.join()), d.ifEin.join(), d.ifAus.join(), d.ventile.map(v => v.id + v.linkedVar + v.targetCylinderId)]);
+                    return JSON.stringify([d.quellen.map(q => q.v + q.name), d.zps.map(z => z.aus + z.args.join()), d.pids.map(p => p.aus + p.args.join()), d.zrs.map(p => p.aus + p.args.join()), d.ifEin.join(), d.ifAus.join(), d.ventile.map(v => v.id + v.linkedVar + (v._fp ? v.bez + v.nullS + v.ueber : v.targetCylinderId))]);
                 } catch (_) { return ''; }
             }
             window._updateFestoAnalog = function() {
@@ -75106,7 +75205,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const anaStr = [];
                 (window._anaKabelListe || []).forEach(c => {
                     cables.push(Object.assign({}, c));
-                    if (!anaStr.some(x => x.id === c.strand)) anaStr.push({ id: c.strand, label: `Analogsignal ${c.anaVar}` });
+                    if (!anaStr.some(x => x.id === c.strand)) anaStr.push({ id: c.strand, label: c.label || `Analogsignal ${c.anaVar}` });
                 });
                 kompStr.unshift(...anaStr);
                 if (vers.length) kompStr.unshift({ id: '__ANA_VERS__', label: 'Versorgung der Analogkarten' });
@@ -75820,6 +75919,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if ((m = key.match(/^KK(\d+)_([AB]\d)_(11|12|14)$/))) return `Komparatorkarte ${m[1]} · Relais ${m[2]} (${m[3]})`;
                 if ((m = key.match(/^PK(\d+)_([wx])_([PN])$/))) return `PID-Reglerkarte ${m[1]} · Eingang ${m[2].toUpperCase()} ${m[3] === 'P' ? '+' : '−'}`;
                 if ((m = key.match(/^PK(\d+)_(Y|YM)$/))) return `PID-Reglerkarte ${m[1]} · Ausgang ${m[2] === 'Y' ? 'Y' : 'Y Masse'}`;
+                if ((m = key.match(/^PV(\d+)_([AB])([12])$/))) return `Proportionalverstärker ${m[1]} · Ausgang ${m[2]} (${m[3] === '1' ? '+' : '−'})`;
+                if ((m = key.match(/^PVM(\d+)_([AB])([12])$/))) return `Proportionalventil ${m[1]} · Magnet ${m[2]} (${m[3]})`;
                 if ((m = key.match(/^PV(\d+)_(W\d)(M?)$/))) return `Proportionalverstärker ${m[1]} · Sollwert ${m[2]}${m[3] ? ' Masse' : ''}`;
                 if ((m = key.match(/^(AG|KK|PK|PV)(\d+)_(24V|0V)$/))) return `${{ AG: 'Analoggeber', KK: 'Komparatorkarte', PK: 'PID-Reglerkarte', PV: 'Proportionalverstärker' }[m[1]]} ${m[2]} · ${m[3] === '24V' ? '+24V' : '0V'}`;
                 if ((m = key.match(/^M(\d+)_S\d+_(24V_a|X2)$/))) {
@@ -75848,6 +75949,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return 'Schließt den Stromkreis über 0V der Verteilung.';
                 if (cable.ana === 'signal') return 'Führt das Analogsignal (0 … 10 V) von der Quelle zum Eingang der Karte.';
                 if (cable.ana === 'masse') return 'Analogmasse: Bezug für den Differenzeingang, ohne ihn schwebt das Signal.';
+                if (cable.pvm) return /^PVM/.test(to) ? `Der Verstärker speist den Strom in den Proportionalmagneten ${cable.pvm}.` : `Rückleiter des Magneten ${cable.pvm} zum Verstärker, erst damit fließt der Strom.`;
                 if (cable.strand === '__ANA_VERS__') return cable.color === 'red' ? 'Versorgt die Analogkarte mit +24V.' : 'Schließt die Versorgung der Analogkarte über 0V.';
                 if (/^KK\d+_[AB]\d_11$/.test(to)) return '+24V auf die Wurzel 11 des Komparator-Relais.';
                 if (/^KK\d+_[AB]\d_1[24]$/.test(from)) return 'Komparator-Relais schaltet das Hilfsrelais, dessen Kontakte im Strang stecken.';
@@ -81776,7 +81878,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 <script src="blatt.js?v=20261122a"></script>
 <script src="schaltplan-blatt.js?v=20261122a"></script>
 <script src="elektroplan-blatt.js?v=20261122a"></script>
-<script src="fluidplan.js?v=20261122d"></script>
+<script src="fluidplan.js?v=20261122e"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>

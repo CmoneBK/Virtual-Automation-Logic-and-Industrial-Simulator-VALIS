@@ -302,6 +302,118 @@ const FAELLE = {
     F._leeren(); if (!offen) F.umschalten();
     return R;
   },
+  'Verstärkerkarte: Ströme, Sprungstrom, Maximalstrom, Rampe, Dither': () => {
+    const F = Fluidplan, R = [];
+    const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
+    const v = F.setzen('ventil', 0, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'Y', qn: 40, ueber: 10, hyst: 0, tau: 20, nullS: 50, elektronik: 'karte' });
+    const tk = F.setzen('tank', 200, 300), st = F.setzen('stopfen', 100, -50, { hyd: true });
+    F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', tk, '1'); F.verbinden(v, '2', st, '1');
+    const Q = (y, t) => { spsState.Y = y; F._schritt(t || 0.8); return F.zustand().teile[v]; };
+    const K = F.propKarten();
+    R.push(['Karte ist gemeldet, Lieferzustand 0 / 0 / 800 mA', K.length === 1 && K[0].id === v && K[0].karte.grund === 0 && K[0].karte.sprung === 0 && K[0].karte.max === 800, JSON.stringify(K[0] && K[0].karte)]);
+    F._neu(); F._schritt(0.3);
+    let z = Q(100);
+    R.push(['10 V: Magnet A 800 mA, Magnet B stromlos, Schieber voll', Math.abs(z.iA - 800) < 1 && z.iB < 1 && z.s > 0.98, `${z.iA.toFixed(0)}/${z.iB.toFixed(0)} mA, s ${z.s.toFixed(2)}`]);
+    z = Q(0);
+    R.push(['0 V: Magnet B 800 mA', Math.abs(z.iB - 800) < 1 && z.iA < 1 && z.s < -0.98, `${z.iA.toFixed(0)}/${z.iB.toFixed(0)} mA`]);
+    // ohne Sprungstrom: 5,4 V liegt in der Überdeckung (10 %), kein Durchfluss
+    z = Q(50, 0.5); z = Q(54);
+    R.push(['ohne Sprungstrom: 5,4 V bleibt in der Überdeckung', z.q < 0.2 && Math.abs(z.iA - 64) < 2, `Q ${z.q.toFixed(2)}, IA ${z.iA.toFixed(0)} mA`]);
+    // Sprungstrom 80 mA = 10 % vom Nennstrom: überspringt die Überdeckung
+    R.push(['Sprungstrom einstellen', F.propKarteSetzen(v, 'sprung', 80) === 80, '']);
+    z = Q(50, 0.5); z = Q(54);
+    R.push(['mit Sprungstrom 80 mA: 5,4 V gibt schon Durchfluss', z.q > 1 && z.iA > 135 && z.iA < 145, `Q ${z.q.toFixed(2)}, IA ${z.iA.toFixed(0)} mA`]);
+    Q(100); F.propKarteSetzen(v, 'sprung', 80);
+    R.push(['Einstellen setzt die laufende Simulation nicht zurück', F.zustand().teile[v].s > 0.9, F.zustand().teile[v].s.toFixed(2)]);
+    // Grundstrom fließt in beiden Magneten
+    F.propKarteSetzen(v, 'grund', 100);
+    z = Q(50, 0.5);
+    R.push(['Grundstrom 100 mA: bei 5 V in beiden Magneten, Schieber in der Mitte', Math.abs(z.iA - 100) < 1 && Math.abs(z.iB - 100) < 1 && Math.abs(z.s) < 0.01, `${z.iA.toFixed(0)}/${z.iB.toFixed(0)} mA`]);
+    // Maximalstrom begrenzt den Hub
+    F.propKarteSetzen(v, 'max', 500);
+    z = Q(100);
+    R.push(['Maximalstrom 500 mA: Schieber nur halb (400 mA Unterschied)', Math.abs(z.iA - 500) < 1 && Math.abs(z.s - 0.5) < 0.03, `IA ${z.iA.toFixed(0)}, s ${z.s.toFixed(2)}`]);
+    R.push(['Grenzen der Einsteller greifen', F.propKarteSetzen(v, 'max', 5000) === 1000 && F.propKarteSetzen(v, 'grund', -5) === 0, '']);
+    // Rampe: 2 s für 0 → 10 V
+    F.propKarteSetzen(v, 'max', 800); F.propKarteSetzen(v, 'sprung', 0); F.propKarteSetzen(v, 'rampeAuf', 2); F.propKarteSetzen(v, 'rampeAb', 0);
+    z = Q(50, 0.5); z = Q(100, 1);
+    R.push(['Rampe auf 2 s: nach 1 s erst halber Sollwert', Math.abs(z.w - 0.5) < 0.05 && Math.abs(z.iA - 400) < 40, `w ${z.w.toFixed(2)}, IA ${z.iA.toFixed(0)}`]);
+    z = Q(100, 1.3);
+    R.push(['… nach 2 s voll', z.w > 0.99 && z.s > 0.95, `w ${z.w.toFixed(2)}`]);
+    z = Q(50, 0.2);
+    R.push(['Rampe ab 0 s: sofort zurück', Math.abs(z.w) < 0.01 && Math.abs(z.s) < 0.02, `w ${z.w.toFixed(2)}, s ${z.s.toFixed(3)}`]);
+    const live = F.propKarteLive(v);
+    R.push(['Live-Werte für den Steckaufbau', live && Math.abs(live.w1) < 0.1 && live.karte.rampeAuf === 2, JSON.stringify(live)]);
+    // Dither: ohne Dither dreifache Hysterese
+    F.propKarteSetzen(v, 'rampeAuf', 0);
+    F.aendern(v, { hyst: 4, ueber: 0 }); F._neu(); F._schritt(0.3);
+    const breite = () => { Q(0, 0.6); const auf = Q(75).s; Q(100, 0.6); const ab = Q(75).s; return ab - auf; };
+    const mit = breite();
+    F.propKarteSetzen(v, 'dither', 0);
+    const ohne = breite();
+    R.push(['Dither 100 %: Hysterese wie eingestellt (4 %)', Math.abs(mit - 0.08) < 0.02, mit.toFixed(3)]);
+    R.push(['Dither 0 %: Hysterese dreimal so groß', Math.abs(ohne - 0.24) < 0.04, ohne.toFixed(3)]);
+    const o = F.plan().teile.find(x => x.id === v).o;
+    R.push(['Einstellungen stehen im Plan (werden gespeichert)', o.karte && o.karte.dither === 0 && o.karte.grund === 0, JSON.stringify(o.karte)]);
+    return R;
+  },
+  'Fehler am Proportionalventil: Sollwertleitung, Schmutz, Nullpunkt': () => {
+    const F = Fluidplan, R = [];
+    const bau = (extra) => {
+      F._leeren();
+      const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
+      const v = F.setzen('ventil', 0, 100, Object.assign({ hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'Y', qn: 40, ueber: 0, hyst: 2, tau: 20, nullS: 50 }, extra || {}));
+      const tk = F.setzen('tank', 200, 300), st = F.setzen('stopfen', 100, -50, { hyd: true });
+      F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', tk, '1'); F.verbinden(v, '2', st, '1');
+      return v;
+    };
+    const mitFehler = (v, f) => { const p = F.exportieren(); p.fehler = { [v]: f }; F.importieren(p); F._neu(); F._schritt(0.3); };
+    const Q = (v, y, t) => { spsState.Y = y; F._schritt(t || 0.8); return F.zustand().teile[v]; };
+    let v = bau();
+    const liste = F._fehlerListe ? F._fehlerListe(v).map(x => x[0]).join() : '';
+    R.push(['Fehlerliste des Proportionalventils', /spule/.test(liste) && /sollwert/.test(liste) && /schmutz/.test(liste) && /nullpunkt/.test(liste), liste]);
+    mitFehler(v, 'sollwert');
+    let z = Q(v, 100);
+    R.push(['Sollwertleitung unterbrochen (eingebaut): Ventil sieht 0 V, Schieber ganz auf B', z.s < -0.95, z.s.toFixed(2)]);
+    v = bau({ elektronik: 'karte' }); mitFehler(v, 'sollwert');
+    z = Q(v, 100);
+    R.push(['Sollwertleitung unterbrochen (Karte): W1 = 0 V, Schieber in der Mitte', Math.abs(z.s) < 0.02 && z.iA < 1, z.s.toFixed(2)]);
+    v = bau(); mitFehler(v, 'nullpunkt');
+    z = Q(v, 50);
+    R.push(['Nullpunkt verstellt: bei 5 V fließt schon Öl', z.s > 0.1 && z.q > 3, `s ${z.s.toFixed(2)}, Q ${z.q.toFixed(1)}`]);
+    v = bau(); mitFehler(v, 'schmutz');
+    Q(v, 0, 0.6); const auf = Q(v, 75).s; Q(v, 100, 0.6); const ab = Q(v, 75).s;
+    R.push(['Schieber verschmutzt: Hysterese deutlich größer', ab - auf > 0.15, (ab - auf).toFixed(3)]);
+    return R;
+  },
+  'Steckaufbau: Verstärkerkarte mit Drehknöpfen und Magnetkabeln': async () => {
+    const F = Fluidplan, R = [];
+    const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
+    const v = F.setzen('ventil', 0, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'YPROP', qn: 40, elektronik: 'karte' });
+    const v2 = F.setzen('ventil', 300, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'YZWEI', qn: 40 });
+    const d = window._anaSammeln();
+    const e = d.ventile.filter(x => x._fp);
+    R.push(['Nur das Ventil mit Karte bekommt einen Verstärker', e.length === 1 && e[0]._fp === v && e[0].linkedVar === 'YPROP', JSON.stringify(e.map(x => x.linkedVar))]);
+    // Karte zeichnen (ohne den ganzen Steckaufbau): eigenes SVG
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    document.body.appendChild(svg);
+    let ok = true, fehler = '';
+    try { window._anaReiheTest(svg); } catch (err) { ok = false; fehler = String(err); }
+    R.push(['Analog-Reihe zeichnet ohne Fehler', ok, fehler]);
+    const karte = svg.querySelector('[data-festo-panel-type="ana_pv"]'), feld = svg.querySelector('[data-festo-panel-type="ana_pvm"]');
+    R.push(['Verstärkerkarte und Magnetfeld sind da', !!karte && !!feld, '']);
+    const txt = karte ? karte.textContent : '';
+    R.push(['Sechs Einsteller beschriftet', ['Grundstrom', 'Sprungstrom', 'Maximalstrom', 'Rampe auf', 'Rampe ab', 'Dither'].every(n => txt.includes(n)), '']);
+    const kabel = (window._anaKabelListe || []).filter(c => c.pvm);
+    R.push(['Vier Magnetkabel (A und B, hin und zurück)', kabel.length === 4 && kabel.some(c => c.fromKey === 'PV1_A1' && c.toKey === 'PVM1_A1') && kabel.some(c => c.fromKey === 'PVM1_B2' && c.toKey === 'PV1_B2'), JSON.stringify(kabel.map(c => c.fromKey + '>' + c.toKey))]);
+    // Drehknopf Sprungstrom: Klick rechts = +10 mA
+    const knopf = karte ? [...karte.querySelectorAll('circle')].filter(c => c.querySelector('title') && /^Sprungstrom/.test(c.querySelector('title').textContent))[0] : null;
+    if (knopf) { const b = knopf.getBoundingClientRect(); knopf.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: b.left + b.width * 0.8, clientY: b.top + b.height / 2 })); }
+    const k = F.propKarten()[0].karte;
+    R.push(['Klick rechts am Knopf Sprungstrom: +10 mA im Plan', !!knopf && k.sprung === 10, JSON.stringify(k)]);
+    svg.remove();
+    return R;
+  },
   'Fehler, Symbol, Umstellen, Listen': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

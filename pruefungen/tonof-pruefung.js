@@ -154,6 +154,18 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Editor: beide Zeiten an der Spule (2/5) und -KF', ced2.t1 === 2 && ced2.t2 === 5 && /2\/5/.test(ced2.zeit) && /KF/.test(ced2.kf || ''), JSON.stringify(ced2).slice(0, 300));
   ok('Editor: Spulensymbol mit gefülltem Feld, Kontakt mit zwei Bögen', ced2.feld && ced2.boegen >= 2, JSON.stringify(ced2).slice(0, 300));
   ok('Editor: Palette hat das Zeitrelais TONOF', ced2.palette);
+  const ced3 = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const ta = document.getElementById('code');
+    const out = {};
+    for (const c of ['OUT := TONOF(IN, 2, 5)', 'OUT := TON(IN, 2)', 'OUT := TOF(IN, 2)']) {
+      ta.value = c; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(600);
+      window.cedGenerateFromCode(); await warte(200);
+      out[c] = { teile: window._cedState.components.map(k => k.type + ':' + (k.varName || '')).join(', '), code: window.cedGenerateCode(true).trim() };
+    }
+    return out;
+  });
+  Object.entries(ced3).forEach(([c, r]) => ok(`Editor: ${c} – zweiter Strang Kontakt → LED OUT wie im Auto-Plan, Code bleibt`, /relay_no:OUT/.test(r.teile) && /led:OUT/.test(r.teile) && r.code === c.replace(/\s+/g, ' ').replace(/ := /, ' := '), JSON.stringify(r)));
   ok('Editor: geänderte T_AUS geht in den Code', /LUEFTER\s*:=\s*TONOF\(\s*TASTER\s*,\s*2(\.0)?\s*,\s*7\s*\)/.test(ced2.code), String(ced2.code).slice(0, 200));
 
   console.log('FUP nach Norm (wie im TIA Portal)');

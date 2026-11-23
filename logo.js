@@ -188,7 +188,7 @@
       return null;
     };
     const grund = (text, zeile, art) => { if (!modell.gruende.some(g => g.text === text && g.zeile === zeile)) modell.gruende.push({ text, zeile: zeile == null ? null : zeile, art: art || 'nicht' }); };
-    const fussnote = (text) => { if (!modell.fussnoten.includes(text)) modell.fussnoten.push(text); };
+    const fussnote = (text, b) => { if (!modell.fussnoten.includes(text)) modell.fussnoten.push(text); if (b) b.fussnote = modell.fussnoten.indexOf(text) + 1; };
 
     const memo = new Map();
     function neuerBaustein(typ, src, zeile) {
@@ -271,7 +271,7 @@
         b.sek = z.wert;
         if (n.type === 'TP') {
           b.par.push({ n: 'TH', w: z.text }, { n: 'TL', w: '00:00 s' }, { n: 'N', w: '1' });
-          fussnote('TP → Flankengetriggertes Wischrelais: Der Impuls läuft wie bei TP auch dann weiter, wenn Trg vorher auf 0 geht. Anders als bei TP startet ein neuer Impuls an Trg während der Zeit sie auf der LOGO! neu.');
+          fussnote('TP → Flankengetriggertes Wischrelais: Der Impuls läuft wie bei TP auch dann weiter, wenn Trg vorher auf 0 geht. Anders als bei TP startet ein neuer Impuls an Trg während der Zeit sie auf der LOGO! neu.', b);
         } else b.par.push({ n: 'T', w: z.text });
         if (!z.genau) grund('Zeit ' + komma(sek) + ' s passt nicht genau in die Zeitbasis der LOGO! (' + z.text + ').', zeile, 'hinweis');
         if (z.ausserhalb) grund('Zeit ' + komma(sek) + ' s ist länger als 99:59 h.', zeile, 'nicht');
@@ -309,7 +309,8 @@
           const ru = ablegen(und);
           b.ein.push({ pin: 'R', ref: ru, neg: false });
           b.umbau = true;
-          fussnote('Setzdominanter Speicher (RS): Die LOGO! hat nur das Selbsthalterelais, bei dem Rücksetzen gewinnt. Davor steht deshalb R UND NICHT S. Sind beide 1, bleibt der Ausgang gesetzt wie im VALIS-Programm.');
+          fussnote('Setzdominanter Speicher (RS): Die LOGO! hat nur das Selbsthalterelais, bei dem Rücksetzen gewinnt. Davor steht deshalb R UND NICHT S. Sind beide 1, bleibt der Ausgang gesetzt wie im VALIS-Programm.', b);
+          und.fussnote = b.fussnote;
         }
         ablegen(b); return platz;
       }
@@ -370,8 +371,8 @@
           const r = ablegen(b); memo.set(id, r); return r;
         }
       }
-      if (/\.(cv|et|q)\b/.test(ausdruck)) return kein('Zählerstand oder Zeitwert in einer Rechnung (' + ausdruck + '): auf der LOGO! über einen Parameterverweis von Hand bauen.');
-      if (/\b(min|max|abs|floor|ceil|round)\s*\(|\?|%/.test(ausdruck)) return kein('Rechnung „' + ausdruck + '“ hat kein Gegenstück in der LOGO! (nur + − × ÷ mit bis zu vier Werten).');
+      if (/\.(cv|et|q)\b/i.test(ausdruck)) return kein('Zählerstand oder Zeitwert in einer Rechnung (' + ausdruck + '): auf der LOGO! über einen Parameterverweis von Hand bauen.');
+      if (/\b(min|max|abs|floor|ceil|round)\s*\(|\?|%/i.test(ausdruck)) return kein('Rechnung „' + ausdruck + '“ hat kein Gegenstück in der LOGO! (nur + − × ÷ mit bis zu vier Werten).');
       const v = zerlegeVergleich(ausdruck);
       if (v) {
         let a = wert(v.a), bw = wert(v.b), op = v.op;
@@ -622,4 +623,408 @@
       if (typeof window._logoNeu === 'function') window._logoNeu();
     }
   };
+})();
+
+// =====================================================================
+// LOGO!-Ansicht im Logikplan (Schalter „LOGO!“ neben „FUP“)
+// ---------------------------------------------------------------------
+// Zeichnet die abgebildete Schaltung wie in LOGO!Soft Comfort (FUP):
+// Kästen mit Nummer B001 … und Funktionsnamen, Klemmen I1/Q1/M1 mit dem
+// Variablennamen darüber, Negation als Kreis, Parameter unter dem Kasten.
+// Je Ausgang oder Merker ein Strang; ein Baustein, der schon gezeichnet
+// ist, steht später nur noch als Verweis (B003) am Eingang. Oben der
+// Passt-Kasten mit Gründen, ein Klick springt zur Zeile im Code.
+// Live-Färbung aus dem Simulationszustand (1 grün, 0 blau gestrichelt).
+// Reine Ansicht: bearbeitet wird weiter im Code oder im Logikplan.
+// =====================================================================
+(function () {
+  'use strict';
+  if (!window.Logo || window._logoRender) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const LS_AN = 'valisLogoAnsicht';
+  let an = false;
+  try { an = localStorage.getItem(LS_AN) === '1'; } catch (_) {}
+  window.logoAnsicht = an;
+  let modell = null, layout = null, zoom = 1, groesse = null;
+  const T = (s) => s; // Texte übersetzt sprache-en.js im DOM
+  const doc = () => (typeof _fbsDoc === 'function' ? _fbsDoc() : document); // eslint-disable-line no-undef
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  function el(tag, attrs, parent) {
+    const e = doc().createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, s, o) {
+    o = o || {};
+    const t = el('text', { x, y, 'font-family': o.mono ? 'Consolas, monospace' : "'Segoe UI', Arial, sans-serif", 'font-size': o.size || 12,
+      'font-weight': o.bold ? 'bold' : 'normal', 'text-anchor': o.anchor || 'start', fill: o.fill || '#111' }, parent);
+    t.textContent = s;
+    return t;
+  }
+
+  // ---------- Host im Logikplan ----------
+  function host() {
+    const d = doc();
+    let h = d.getElementById('logo-host');
+    if (h) return h;
+    const fup = d.getElementById('fup-norm-host');
+    if (!fup || !fup.parentNode) return null;
+    h = d.createElement('div');
+    h.id = 'logo-host';
+    h.setAttribute('style', 'display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:41;');
+    h.innerHTML =
+      '<div id="logo-leiste" style="position:sticky; top:0; left:0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px \'Segoe UI\', Arial, sans-serif; color:#455a64; z-index:2;">' +
+        '<span><b>LOGO!</b> · ' + T('Ansicht des Codes, wie er auf einer LOGO! 8 aussieht') + ' · <span style="color:#2e7d32;font-weight:bold;">1 = grün</span>, <span style="color:#1565c0;">0 = blau gestrichelt</span></span>' +
+        '<span style="margin-left:auto; display:inline-flex; gap:2px; align-items:center;">' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1/1.2)" title="Verkleinern (oder Mausrad)">−</button>' +
+          '<span id="logo-zoom-anzeige" style="min-width:40px; text-align:center;">100 %</span>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1.2)" title="Vergrößern (oder Mausrad)">+</button>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(0)" title="Zoom zurücksetzen (100 %)">⟲</button>' +
+        '</span>' +
+        '<span id="logo-knoepfe" style="display:inline-flex; gap:4px;">' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoListeZeigen()" title="Bausteinliste unter dem Plan ein- oder ausblenden">📋 Bausteinliste</button>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoDrucken()" title="Bausteinliste und Zuordnungsliste mit LOGO!-Klemmen auf einem Blatt drucken oder als PDF speichern">🖨 Drucken</button>' +
+        '</span>' +
+        '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoSvg()" title="LOGO!-Plan als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>' +
+      '</div>' +
+      '<div id="logo-passt" style="margin:8px 10px 0; font:12px \'Segoe UI\', Arial, sans-serif;"></div>' +
+      '<svg id="logo-svg" xmlns="http://www.w3.org/2000/svg" style="display:block;"></svg>' +
+      '<div id="logo-fuss" style="margin:0 10px 12px; font:11px \'Segoe UI\', Arial, sans-serif; color:#455a64;"></div>' +
+      '<div id="logo-liste" style="margin:0 10px 16px; font:12px \'Segoe UI\', Arial, sans-serif; color:#263238;"></div>';
+    fup.parentNode.insertBefore(h, fup.nextSibling);
+    zoomBinden(h);
+    return h;
+  }
+
+  // ---------- Passt-Kasten ----------
+  function passtHtml(m) {
+    const p = m.passt;
+    const farbe = { grund: ['#e8f5e9', '#2e7d32'], erweiterung: ['#e8f5e9', '#2e7d32'], nicht: ['#fff8e1', '#e65100'] }[p.stufe];
+    const kopf = p.stufe === 'grund' ? '✔ ' + T('Passt auf ein LOGO! 8 Grundgerät') + ' (' + p.zahlen.I + ' I, ' + p.zahlen.Q + ' Q' + (p.zahlen.AI ? ', ' + p.zahlen.AI + ' AI' : '') + ', ' + p.zahlen.B + ' ' + T('Bausteine') + ')'
+      : p.stufe === 'erweiterung' ? '✔ ' + T('Passt auf eine LOGO! 8 mit Erweiterungsmodul') + ' (' + p.zahlen.I + ' I, ' + p.zahlen.Q + ' Q' + (p.zahlen.AI ? ', ' + p.zahlen.AI + ' AI' : '') + (p.zahlen.AQ ? ', ' + p.zahlen.AQ + ' AQ' : '') + ', ' + p.zahlen.B + ' ' + T('Bausteine') + ')'
+        : '⚠ ' + T('Passt so nicht auf eine LOGO! 8');
+    let h = '<div data-logo-passt="' + p.stufe + '" style="background:' + farbe[0] + '; border-left:4px solid ' + farbe[1] + '; padding:6px 10px; border-radius:3px;">' +
+      '<b style="color:' + farbe[1] + ';">' + esc(kopf) + '</b>';
+    if (p.erweiterung.length) h += '<div style="margin-top:3px; color:#33691e;">' + p.erweiterung.map(esc).join(' · ') + '</div>';
+    const liste = p.gruende.slice().sort((a, b) => (a.art === 'nicht' ? 0 : 1) - (b.art === 'nicht' ? 0 : 1));
+    if (liste.length) {
+      h += '<ul style="margin:4px 0 0; padding-left:18px;">';
+      liste.forEach(g => {
+        const zeile = g.zeile != null ? ' <a href="#" data-logo-zeile="' + g.zeile + '" style="color:#1565c0;">' + T('Zeile') + ' ' + (g.zeile + 1) + '</a>' : '';
+        h += '<li style="color:' + (g.art === 'nicht' ? '#bf360c' : '#5d4037') + ';">' + (g.art === 'nicht' ? '' : 'ℹ ') + esc(g.text) + zeile + '</li>';
+      });
+      h += '</ul>';
+    }
+    return h + '</div>';
+  }
+  function zeileZeigen(idx) {
+    const ta = document.getElementById('code');
+    if (!ta) return;
+    const z = ta.value.split('\n');
+    if (idx < 0 || idx >= z.length) return;
+    let off = 0;
+    for (let i = 0; i < idx; i++) off += z[i].length + 1;
+    try { ta.focus(); } catch (_) {}
+    ta.selectionStart = off; ta.selectionEnd = off + z[idx].length;
+    const cs = getComputedStyle(ta);
+    const lh = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) * 1.5);
+    ta.scrollTop = Math.max(0, (parseFloat(cs.paddingTop) || 0) + idx * lh - ta.clientHeight / 2 + lh);
+    if (window._updateCurrentLineHighlight) window._updateCurrentLineHighlight();
+  }
+  window._logoZeileZeigen = zeileZeigen;
+
+  // ---------- Bäume aus dem Modell ----------
+  const PIN = 28, BW = 46, BW_SF = 92, STUB = 18, GAP = 26, OPW_MIN = 120, ZW = 7.2;
+  function baeume(m) {
+    const gezeichnet = new Set();
+    const vonRef = (ref, wurzelB) => {
+      if (ref.art === 'b') {
+        const b = ref.b;
+        if (gezeichnet.has(b) || b === wurzelB) return { kind: 'op', text: b.kurz, sub: '', ref };
+        gezeichnet.add(b);
+        return { kind: 'box', b, ref, ins: b.ein.filter(e => !(e.pin === 'Dir' && e.ref.art === 'c' && e.ref.k === 'lo')).map(e => ({ pin: e.pin, neg: e.neg, child: vonRef(e.ref) })) };
+      }
+      if (ref.art === 'c') return { kind: 'op', text: ref.k, sub: '', ref, konst: true };
+      return { kind: 'op', text: ref.k, sub: ref.name || '', ref };
+    };
+    return m.schritte.filter(s => s.art === 'k').map(s => ({ klemme: s.klemme, name: s.name, ref: s.ref, baum: vonRef(s.ref) }));
+  }
+  function messen(it) {
+    if (it.kind === 'op') { it.h = 32; it.outY = 24; return it; }
+    let cur = 0, prev = -1e9;
+    const pins = [];
+    it.ins.forEach(inp => {
+      const c = messen(inp.child);
+      let top = cur;
+      if (top + c.outY < prev + PIN) top = prev + PIN - c.outY;
+      inp._top = top; prev = top + c.outY; pins.push(prev); cur = top + c.h + 6;
+    });
+    if (!pins.length) pins.push(16);
+    const sf = SF_TYP.has(it.b.typ);
+    const parZeilen = sf ? it.b.par.length : 0;
+    let boxTop = pins[0] - 16;
+    let boxBot = pins[pins.length - 1] + 16;
+    if (boxBot - boxTop < 40) boxBot = boxTop + 40;
+    const oben = boxTop - 30; // Nummer und Name über dem Kasten
+    let minTop = oben;
+    it.ins.forEach(i => { minTop = Math.min(minTop, i._top); });
+    const d = -minTop;
+    it.ins.forEach(i => { i._top += d; });
+    it.pins = pins.map(p => p + d);
+    it.boxTop = boxTop + d; it.boxBot = boxBot + d;
+    it.outY = (it.boxTop + it.boxBot) / 2;
+    if (it.ins.length === 1) it.outY = it.pins[0];
+    let h = it.boxBot + parZeilen * 13 + 4;
+    it.ins.forEach(i => { h = Math.max(h, i._top + i.child.h); });
+    it.h = h;
+    return it;
+  }
+  const SF_TYP = new Set(['TON', 'TOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', TON: '⊓→', TOF: '→⊓', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
+  function breite(it) {
+    if (it.kind !== 'box') return 0;
+    let m = 0;
+    it.ins.forEach(i => { m = Math.max(m, breite(i.child)); });
+    return m + (SF_TYP.has(it.b.typ) ? BW_SF : BW) + 2 * STUB + GAP;
+  }
+  function zeichnen(g, it, y, xAus, ctx) {
+    if (it.kind === 'op') {
+      const ly = y + it.outY, x0 = ctx.left;
+      const ln = el('line', { x1: x0 + ctx.opW - 4, y1: ly, x2: xAus, y2: ly, stroke: '#111', 'stroke-width': 1.6 }, g);
+      ctx.wires.push({ el: ln, ref: it.ref });
+      txt(g, x0 + ctx.opW - 8, ly - 4, it.text, { anchor: 'end', bold: !it.konst, mono: true, fill: it.konst ? '#0d47a1' : (it.ref.art === 'b' ? '#6a1b9a' : '#111') });
+      if (it.sub) txt(g, x0 + ctx.opW - 8, ly - 17, it.sub, { anchor: 'end', size: 10, fill: '#666' });
+      return;
+    }
+    const b = it.b, sf = SF_TYP.has(b.typ), w = sf ? BW_SF : BW;
+    const bx = xAus - w - STUB, top = y + it.boxTop, bot = y + it.boxBot;
+    const gg = el('g', { 'data-logo-b': b.kurz }, g);
+    el('rect', { x: bx, y: top, width: w, height: bot - top, fill: sf ? '#f3f8ff' : '#fff', stroke: '#111', 'stroke-width': 1.6, rx: 2 }, gg);
+    txt(gg, bx, top - 6, b.kurz, { bold: true, size: 11, fill: '#1565c0', mono: true });
+    if (sf) txt(gg, bx + 34, top - 6, b.name, { size: 10, fill: '#37474f' });
+    if (b.fussnote) {
+      let fx = bx + 34;
+      if (sf) { const nt = gg.lastChild; let lw = b.name.length * 5.6; try { lw = nt.getComputedTextLength() || lw; } catch (_) {} fx = bx + 36 + lw; }
+      txt(gg, fx, top - 10, String(b.fussnote), { size: 9, fill: '#bf360c', bold: true });
+    }
+    txt(gg, bx + w / 2 + (sf ? 10 : 0), (top + bot) / 2 + 5, SYMBOL[b.typ] || b.typ, { anchor: 'middle', bold: true, size: sf ? 12 : 14 });
+    const tip = el('title', {}, gg); tip.textContent = Logo.zeilen({ bausteine: [b], verbindungen: [] })[0].text;
+    // Ausgang (bei NOT mit Kreis wie in LOGO!Soft)
+    const oy = y + it.outY;
+    const ln = el('line', { x1: bx + w + (b.typ === 'NOT' ? 8 : 0), y1: oy, x2: xAus, y2: oy, stroke: '#111', 'stroke-width': 1.6 }, g);
+    ctx.wires.push({ el: ln, ref: it.ref });
+    if (b.typ === 'NOT') el('circle', { cx: bx + w + 4, cy: oy, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, gg);
+    txt(gg, bx + w - 4, oy - 4, 'Q', { anchor: 'end', size: 9, fill: '#555' });
+    // Parameter unter dem Kasten
+    if (sf) b.par.forEach((p, i) => txt(gg, bx + 2, bot + 12 + i * 13, p.n + ' = ' + p.w, { size: 10, mono: true, fill: '#0d47a1' }));
+    // Eingänge
+    const kindAus = bx - STUB;
+    it.ins.forEach((inp, i) => {
+      const py = y + it.pins[i];
+      zeichnen(g, inp.child, y + inp._top, inp.child.kind === 'box' ? kindAus - GAP : bx, ctx);
+      if (inp.child.kind === 'box') {
+        const l2 = el('line', { x1: kindAus - GAP, y1: py, x2: bx, y2: py, stroke: '#111', 'stroke-width': 1.6 }, g);
+        ctx.wires.push({ el: l2, ref: inp.child.ref });
+      }
+      if (inp.pin) txt(gg, bx + 3, py + 4, inp.pin, { size: 9, fill: '#333' });
+      if (inp.neg) el('circle', { cx: bx - 4, cy: py, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, gg);
+    });
+  }
+
+  function render(graph) {
+    const h = host();
+    if (!h) return;
+    const cs = doc().getElementById('custom-svg');
+    if (!window.logoAnsicht) {
+      h.style.display = 'none';
+      if (cs) cs.style.visibility = window.fbsFupMode ? 'hidden' : '';
+      return;
+    }
+    h.style.display = 'block';
+    if (cs) cs.style.visibility = 'hidden';
+    const svg = doc().getElementById('logo-svg');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    try { modell = Logo.abbilden(graph || null, {}); } catch (e) { console.warn('LOGO!', e); modell = null; }
+    layout = { wires: [] };
+    const passt = doc().getElementById('logo-passt');
+    const fuss = doc().getElementById('logo-fuss');
+    if (!modell || !modell.schritte.length) {
+      passt.innerHTML = '';
+      fuss.innerHTML = '';
+      svg.setAttribute('width', 500); svg.setAttribute('height', 60);
+      txt(svg, 20, 34, T('Kein Programm – im Code-Editor eine Zuweisung schreiben, z. B. LAMPE := TASTER'), { fill: '#666' });
+      return;
+    }
+    const liste = doc().getElementById('logo-liste');
+    if (liste) liste.innerHTML = listeAn ? listeHtml(modell) : '';
+    passt.innerHTML = passtHtml(modell);
+    passt.querySelectorAll('[data-logo-zeile]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); zeileZeigen(+a.getAttribute('data-logo-zeile')); }));
+    fuss.innerHTML = modell.fussnoten.map((f, i) => '<div style="margin-top:3px;"><sup>' + (i + 1) + '</sup> ' + esc(f) + '</div>').join('');
+    const straenge = baeume(modell);
+    let lang = 0;
+    const sammle = (it) => { if (it.kind === 'op') { lang = Math.max(lang, it.text.length, (it.sub || '').length * 0.8); return; } it.ins.forEach(i => sammle(i.child)); };
+    let maxW = 0;
+    straenge.forEach(s => { messen(s.baum); sammle(s.baum); maxW = Math.max(maxW, breite(s.baum)); });
+    const ctx = { wires: layout.wires, left: 14, opW: Math.max(OPW_MIN, Math.ceil(lang * ZW + 20)) };
+    const rechts = ctx.left + ctx.opW + maxW + 40;
+    let y = 10, langZiel = 0;
+    straenge.forEach(s => { langZiel = Math.max(langZiel, String(s.name || '').length); });
+    straenge.forEach(s => {
+      const g = el('g', { 'data-logo-strang': s.klemme }, svg);
+      const c = s.baum;
+      const top = y + (c.kind === 'box' ? 8 : 4);
+      const ay = top + c.outY;
+      // Klemme am rechten Rand (wie der Ausgangsblock in LOGO!Soft)
+      const kw = 40, kh = 24;
+      el('rect', { x: rechts, y: ay - kh / 2, width: kw, height: kh, fill: /^M|^AM/.test(s.klemme) ? '#fff8e1' : '#e8f5e9', stroke: '#111', 'stroke-width': 1.6, rx: 3 }, g);
+      txt(g, rechts + kw / 2, ay + 5, s.klemme, { anchor: 'middle', bold: true, mono: true, size: 12 });
+      txt(g, rechts + kw + 6, ay + 4, s.name, { mono: true, size: 11, fill: '#37474f' });
+      if (c.kind === 'box') {
+        zeichnen(g, c, top, rechts - 20 - GAP, ctx);
+        const ln = el('line', { x1: rechts - 20 - GAP, y1: ay, x2: rechts, y2: ay, stroke: '#111', 'stroke-width': 1.6 }, g);
+        layout.wires.push({ el: ln, ref: s.ref });
+      } else zeichnen(g, c, top, rechts, ctx);
+      y = top + c.h + 16;
+      el('line', { x1: 8, y1: y - 8, x2: rechts + kw + 20 + langZiel * 7, y2: y - 8, stroke: '#eceff1', 'stroke-width': 1 }, g);
+    });
+    const w = Math.ceil(Math.max(rechts + 60 + langZiel * 7.5, 400)), hh = y + 10;
+    svg.setAttribute('width', w); svg.setAttribute('height', hh);
+    svg.setAttribute('viewBox', '0 0 ' + w + ' ' + hh);
+    svg.style.maxWidth = 'none';
+    groesse = { w, h: hh };
+    zoomAnwenden();
+    live();
+  }
+
+  // ---------- Bausteinliste und Druck ----------
+  const LS_LISTE = 'valisLogoListe';
+  let listeAn = true;
+  try { listeAn = localStorage.getItem(LS_LISTE) !== '0'; } catch (_) {}
+  function listeHtml(m) {
+    const z = Logo.zeilen(m);
+    if (!z.length) return '';
+    return '<h4 style="margin:10px 0 4px; font-size:13px;">' + T('Bausteinliste zum Abtippen in LOGO!Soft Comfort') + '</h4>' +
+      '<div data-logo-liste style="font:12px Consolas, monospace; line-height:1.6; background:#f5f7f8; border:1px solid #cfd8dc; border-radius:3px; padding:6px 10px;">' +
+      z.map(x => '<div>' + esc(x.text) + (x.b && x.b.fussnote ? ' <sup style="color:#bf360c;">' + x.b.fussnote + '</sup>' : '') + '</div>').join('') + '</div>';
+  }
+  window._logoListeZeigen = function (an_) {
+    listeAn = an_ === undefined ? !listeAn : !!an_;
+    try { localStorage.setItem(LS_LISTE, listeAn ? '1' : '0'); } catch (_) {}
+    window._logoNeu();
+  };
+  // Ein Blatt: Passt-Prüfung, Bausteinliste, Zuordnungsliste mit LOGO!-Klemmen, Fußnoten
+  window._logoDruckHtml = function () {
+    const m = Logo.aktuell();
+    const zl = (typeof window._spsZuordnungData === 'function') ? window._spsZuordnungData() : { inputs: [], outputs: [], merker: [] };
+    const p = m.passt;
+    const kopf = p.stufe === 'grund' ? T('Passt auf ein LOGO! 8 Grundgerät') : p.stufe === 'erweiterung' ? T('Passt auf eine LOGO! 8 mit Erweiterungsmodul') : T('Passt so nicht auf eine LOGO! 8');
+    const zeilen = (rows) => rows.map(r => '<tr><td class="m"><b>' + esc(r.logo || '–') + '</b></td><td class="m">' + esc(r.name) + '</td><td class="m">' + esc(r.kz || '–') + '</td><td class="m">' + esc(r.addr) + '</td><td>' + esc(r.type) + '</td><td>' + esc(r.comment) + '</td></tr>').join('');
+    const tab = (titel, rows) => !rows.length ? '' : '<h3>' + esc(titel) + '</h3><table><thead><tr><th>' + T('LOGO!-Klemme') + '</th><th>' + T('Variable') + '</th><th>' + T('Kennzeichen') + '</th><th>' + T('SPS-Adresse') + '</th><th>' + T('Bauteil') + '</th><th>' + T('Kommentar') + '</th></tr></thead><tbody>' + zeilen(rows) + '</tbody></table>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>' + T('LOGO!-Programm') + '</title><style>' +
+      "body{font:12px 'Segoe UI',Arial,sans-serif;color:#000;margin:14mm 12mm}h1{font-size:17px;margin:0 0 4px}h2{font-size:14px;margin:14px 0 4px}h3{font-size:12px;margin:10px 0 3px}" +
+      'table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:2px 6px;text-align:left;vertical-align:top}th{background:#eee}td.m{font-family:Consolas,monospace;white-space:nowrap}' +
+      '.liste div{font-family:Consolas,monospace;padding:1px 0}.passt{border-left:4px solid #555;padding:3px 8px;margin:6px 0}.fuss{font-size:10.5px;color:#333;margin-top:10px}' +
+      '</style></head><body><h1>' + T('LOGO!-Programm (Maßstab LOGO! 8)') + '</h1>' +
+      '<div class="passt"><b>' + esc(kopf) + '</b>' + (p.erweiterung.length ? '<br>' + p.erweiterung.map(esc).join(' · ') : '') +
+      (p.gruende.length ? '<ul style="margin:3px 0 0;padding-left:16px;">' + p.gruende.map(g => '<li>' + esc(g.text) + (g.zeile != null ? ' (' + T('Zeile') + ' ' + (g.zeile + 1) + ')' : '') + '</li>').join('') + '</ul>' : '') + '</div>' +
+      '<h2>' + T('Bausteinliste') + '</h2><div class="liste">' + Logo.zeilen(m).map(x => '<div>' + esc(x.text) + (x.b && x.b.fussnote ? ' <sup>' + x.b.fussnote + '</sup>' : '') + '</div>').join('') + '</div>' +
+      '<h2>' + T('Zuordnungsliste mit LOGO!-Klemmen') + '</h2>' + tab(T('Eingänge'), zl.inputs) + tab(T('Ausgänge'), zl.outputs) + tab(T('Merker'), zl.merker) +
+      (m.fussnoten.length ? '<div class="fuss">' + m.fussnoten.map((f, i) => '<div><sup>' + (i + 1) + '</sup> ' + esc(f) + '</div>').join('') + '</div>' : '') +
+      '<div class="fuss">' + T('Erstellt mit VALIS. Das Programm in LOGO!Soft Comfort von Hand eingeben; VALIS lädt nichts direkt in die LOGO!.') + '</div>';
+  };
+  window._logoDrucken = function () {
+    const w = window.open('', '_blank');
+    if (!w) { alert(T('Das Druckfenster wurde blockiert. Bitte Pop-ups für diese Seite erlauben.')); return; }
+    w.document.open(); w.document.write(window._logoDruckHtml() + '<script>window.onload=function(){window.print();}<\/script></body></html>'); w.document.close();
+  };
+
+  // ---------- Live-Werte aus dem VALIS-Zustand ----------
+  function wertVon(ref, tiefe) {
+    const st = (typeof spsState !== 'undefined') ? spsState : {}; // eslint-disable-line no-undef
+    const tm = window.simTimers || {};
+    if (!ref) return false;
+    if (ref.art === 'c') return ref.k === 'hi';
+    if (ref.art === 'k') return st[ref.name];
+    const b = ref.b;
+    if (!b || tiefe > 30) return false;
+    const ein = (pin) => { const e = b.ein.find(x => x.pin === pin); return e ? wertVon(e.ref, tiefe + 1) : 0; };
+    const bits = () => b.ein.map(e => { const v = !!wertVon(e.ref, tiefe + 1); return e.neg ? !v : v; });
+    switch (b.typ) {
+      case 'AND': return bits().every(Boolean);
+      case 'OR': return bits().some(Boolean);
+      case 'NOT': return !bits()[0];
+      case 'TON': case 'TOF': case 'TP': case 'CTU': return !!(tm[b.src] && tm[b.src].q);
+      case 'SHR': return !!st[b.src];
+      case 'ASW': case 'AKOMP': {
+        const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);
+        if (b.ein_ !== b.aus_) { const z = tm['ZP_' + b.src]; return z ? (b.ein_ > b.aus_ && z.ein < z.aus ? !z.q : !!z.q) : x > b.ein_; }
+        return x > b.ein_;
+      }
+      default: return st[b.src];
+    }
+  }
+  function live() {
+    if (!layout || !window.logoAnsicht) return;
+    const aktiv = (typeof isSimulationActive !== 'undefined') && isSimulationActive; // eslint-disable-line no-undef
+    layout.wires.forEach(w => {
+      if (!aktiv) { w.el.setAttribute('stroke', '#111'); w.el.removeAttribute('stroke-dasharray'); w.el.setAttribute('stroke-width', 1.6); return; }
+      let v = false;
+      try { v = wertVon(w.ref, 0); } catch (_) {}
+      const on = typeof v === 'number' ? v !== 0 : !!v;
+      w.el.setAttribute('stroke', on ? '#2e7d32' : '#1565c0');
+      if (on) w.el.removeAttribute('stroke-dasharray'); else w.el.setAttribute('stroke-dasharray', '5,3');
+      w.el.setAttribute('stroke-width', on ? 2.4 : 1.6);
+    });
+  }
+
+  // ---------- Zoom ----------
+  function zoomAnwenden() {
+    const svg = doc().getElementById('logo-svg');
+    if (!svg || !groesse) return;
+    svg.style.width = (groesse.w * zoom) + 'px';
+    svg.style.height = (groesse.h * zoom) + 'px';
+    const a = doc().getElementById('logo-zoom-anzeige');
+    if (a) a.textContent = Math.round(zoom * 100) + ' %';
+  }
+  window._logoZoom = function (f) { zoom = f === 0 ? 1 : Math.max(0.2, Math.min(4, zoom * f)); zoomAnwenden(); };
+  function zoomBinden(h) {
+    h.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.altKey && Math.abs(e.deltaY) < 1) return; e.preventDefault(); window._logoZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+  }
+
+  // ---------- Schalter und Export ----------
+  function knopf() {
+    const b = doc().getElementById('btn-fbs-logo');
+    if (!b) return;
+    b.textContent = window.logoAnsicht ? '🟩 LOGO!: AN' : '🟩 LOGO!: AUS';
+    b.style.backgroundColor = window.logoAnsicht ? '#2e7d32' : '#455a64';
+  }
+  window._toggleLogoAnsicht = function (an_) {
+    window.logoAnsicht = an_ === undefined ? !window.logoAnsicht : !!an_;
+    try { localStorage.setItem(LS_AN, window.logoAnsicht ? '1' : '0'); } catch (_) {}
+    knopf();
+    render(typeof currentGraph !== 'undefined' ? currentGraph : null); // eslint-disable-line no-undef
+  };
+  window._logoSvg = function () {
+    const svg = doc().getElementById('logo-svg');
+    if (!svg) return;
+    const c = svg.cloneNode(true);
+    c.setAttribute('xmlns', NS);
+    c.removeAttribute('style');
+    const bg = doc().createElementNS(NS, 'rect');
+    bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', '#fff');
+    c.insertBefore(bg, c.firstChild);
+    const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(c)], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'VALIS_LOGO.svg';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  window._logoRender = render;
+  window._logoLive = live;
+  window._logoModell = () => modell;
+  window._logoNeu = () => render(typeof currentGraph !== 'undefined' ? currentGraph : null); // eslint-disable-line no-undef
+  function init() { knopf(); if (window.logoAnsicht) window._logoNeu(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

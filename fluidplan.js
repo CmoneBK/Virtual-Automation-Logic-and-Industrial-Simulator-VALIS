@@ -26,7 +26,7 @@
     const NS = 'http://www.w3.org/2000/svg';
     const RASTER = 10;
     const P_AN = 0.3;          // ab hier gilt eine Leitung als belüftet (bar)
-    const DT = 0.001;          // Teilschritt (s)
+    let DT = 0.001;            // Teilschritt (s); das Druckluftnetz rechnet mit eigener Schrittweite (netzSchritt)
     const G_VENTIL = 1.0;        // Leitwert offener Ventilweg
     const G_QUELLE = 40;       // Leitwert der Druckluftquelle
     // Drossel: Öffnung % = Anteil am Nenndurchfluss der voll geöffneten Drossel,
@@ -1026,6 +1026,81 @@
     };
 
     // ------------------------------------------------------------
+    // Druckluftnetz (Christoph, 23.11.2026): Kompressor mit Druckschalter, Behälter,
+    // Rohrleitung mit Länge und Innendurchmesser, Kugelhahn/Abgang und der Verbraucher
+    // „diese Anlage“ (die 2D-Anlage dieses Standes). Die Teile tragen `netz: true`,
+    // rechnen in netzSchritt() mit eigener Schrittweite und haben kein Gegenstück in
+    // der 2D-Anlage: dort steht der Kompressor für den Abgang, an dem die Anlage hängt.
+    // ------------------------------------------------------------
+    TYP.kompressor = {
+        name: 'Kompressor mit Druckschalter', buchstabe: 'Z', kette: 0, netz: true,
+        optionen: { q: 400, pEin: 6, pAus: 7, aus: false },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -30, dir: [0, -1], art: 'v', ohneNr: true }], box: [-38, -32, 30, 16] }; },
+        zeichne(t, g) {
+            L16(g, 0, -12, 0, -30);
+            el('circle', { class: 'fp-komp', cx: 0, cy: 0, r: 12, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+            // Verdichter: offenes Dreieck zeigt in Förderrichtung (DIN ISO 1219-1)
+            el('path', { d: 'M0,-12 L-5,-4 L5,-4 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.3 }, g);
+            // Antriebsmotor mit Welle
+            L16(g, -18, -1.5, -12, -1.5, 1.1); L16(g, -18, 1.5, -12, 1.5, 1.1);
+            el('circle', { class: 'fp-komp-motor', cx: -26, cy: 0, r: 8, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            el('text', { x: -26, y: 3.5, 'text-anchor': 'middle', 'font-size': 10, fill: 'currentColor' }, g).textContent = 'M';
+            // Druckschalter: Steuerleitung vom Ausgang auf den Schalter
+            el('path', { d: 'M0,-22 H16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '3 2' }, g);
+            el('rect', { x: 16, y: -27, width: 10, height: 10, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
+            el('path', { class: 'fp-komp-kontakt', d: 'M18,-19 L24,-25', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
+            if (!bild) el('rect', { class: 'fp-hand', x: -36, y: -14, width: 50, height: 28, 'data-t': t.id, 'data-seite': 'N' }, g);
+        }
+    };
+    TYP.behaelter = {
+        name: 'Druckluftbehälter', buchstabe: 'Z', netz: true,
+        optionen: { V: 500, pSV: 11 },
+        geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-42, -14, 42, 14] }; },
+        zeichne(t, g) {
+            L16(g, -40, 0, -28, 0); L16(g, 28, 0, 40, 0);
+            el('rect', { class: 'fp-behaelter', x: -28, y: -10, width: 56, height: 20, rx: 10, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.6 }, g);
+        }
+    };
+    TYP.rohr = {
+        name: 'Rohrleitung', buchstabe: 'W', netz: true,
+        optionen: { L: 20, d: 25 },
+        geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-42, -9, 42, 9] }; },
+        zeichne(t, g) {
+            L16(g, -40, 0, -30, 0); L16(g, 30, 0, 40, 0);
+            L16(g, -30, -6, -30, 6, 1.4); L16(g, 30, -6, 30, 6, 1.4);
+            L16(g, -30, -2.5, 30, -2.5, 1.3); L16(g, -30, 2.5, 30, 2.5, 1.3);
+            // Strömungspfeil (zeigt beim Rechnen in Flussrichtung)
+            el('path', { class: 'fp-rohr-pfeil', d: 'M-5,-2.2 L4,0 L-5,2.2 Z', fill: 'currentColor', opacity: 0 }, g);
+        }
+    };
+    TYP.hahn = {
+        name: 'Kugelhahn', buchstabe: 'V', netz: true,
+        optionen: { zu: false, leck: 0, abgang: false },
+        geometrie() { return { ports: [{ id: '1', x: -20, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 20, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-22, -14, 22, 9] }; },
+        zeichne(t, g) {
+            L16(g, -20, 0, -10, 0); L16(g, 10, 0, 20, 0);
+            // Absperrventil: zwei Dreiecke Spitze an Spitze, geschlossen ausgefüllt
+            el('path', { class: 'fp-hahn', d: 'M-10,-6 L0,0 L-10,6 Z M10,-6 L0,0 L10,6 Z', fill: t.o.zu ? 'currentColor' : 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, g);
+            L16(g, 0, 0, 0, -9, 1.2); L16(g, -6, -9, 6, -9, 1.6);
+            // Abgang: Schnellkupplung am Ausgang
+            if (t.o.abgang) { L16(g, 14, -5, 14, 5, 1.4); L16(g, 17, -5, 17, 5, 1.4); }
+            if (!bild) el('rect', { class: 'fp-hand', x: -12, y: -12, width: 24, height: 20, 'data-t': t.id, 'data-seite': 'N' }, g);
+        }
+    };
+    TYP.anlage = {
+        name: 'Verbraucher', buchstabe: '', ohneBez: true, netz: true,
+        optionen: { art: 'diese' },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -30, dir: [0, -1], art: 'v', ohneNr: true }], box: [-44, -32, 44, 20] }; },
+        zeichne(t, g) {
+            L16(g, 0, -30, 0, -18);
+            el('rect', { class: 'fp-anlage', x: -42, y: -18, width: 84, height: 36, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.2, 'stroke-dasharray': '8 3 2 3' }, g);
+            el('text', { x: 0, y: -3, 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 600, fill: 'currentColor' }, g).textContent = window.currentLang === 'en' ? 'this plant' : 'diese Anlage';
+            el('text', { x: 0, y: 10, 'text-anchor': 'middle', 'font-size': 8.5, fill: 'currentColor' }, g).textContent = window.currentLang === 'en' ? '(2D factory)' : '(2D-Anlage)';
+        }
+    };
+    const istNetz = t => !!(t && TYP[t.typ] && TYP[t.typ].netz);
+
+    // ------------------------------------------------------------
     // Palette (Vorlagen)
     // ------------------------------------------------------------
     const PALETTE = [
@@ -1077,6 +1152,14 @@
             { name: 'Zeitverzögerungsventil', typ: 'zeit' },
             { name: 'Druckfolgeventil', typ: 'folge' },
             { name: 'Druckschalter (elektrisch)', typ: 'dschalter' }
+        ] },
+        { kat: 'Druckluftnetz', teile: [
+            { name: 'Kompressor mit Druckschalter', typ: 'kompressor' },
+            { name: 'Druckluftbehälter', typ: 'behaelter' },
+            { name: 'Rohrleitung (Länge, Innendurchmesser)', typ: 'rohr' },
+            { name: 'Kugelhahn', typ: 'hahn' },
+            { name: 'Abgang (Kugelhahn mit Kupplung)', typ: 'hahn', o: { abgang: true } },
+            { name: 'Diese Anlage (2D-Anlage)', typ: 'anlage' }
         ] }
     ];
     // Hydraulik-Palette: dieselben Teile mit o.hyd (Öl), dazu Aggregat, Tank, Druck- und Stromventile
@@ -1216,7 +1299,9 @@
     // Kennbuchstaben Pneumatik nach Tabellenbuch Metall, Kennzeichnung im Schaltplan (DIN EN 81346-2)
     const KENN = { zyl_dw: 'MM', zyl_ew: 'MM', schwenk: 'MM', quelle: 'GQA', wartung: 'GQ', druckregel: 'QN', manometer: 'PG',
         aggregat: 'GPA', tank: 'CLA', dbv: 'QNA', stromregel: 'RNA', speicher: 'CMA', entsperr: 'RMA', filter: 'HQ',
-        rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP' };
+        rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP',
+        // Druckluftnetz: Kompressor wie die Druckluftquelle (-GQA), Behälter -CM, Rohrleitung -WP, Kugelhahn -QM
+        kompressor: 'GQA', behaelter: 'CM', rohr: 'WP', hahn: 'QM' };
     // Hydraulik nach Tabellenbuch Metall, Hydraulikzylinder und hydraulische Grundschaltungen:
     // -MMA1 Zylinder, -QMA1 Wegeventil, -RNA1 Stromregelventil, -RMA1 Rückschlagventil (entsperrbar),
     // -QNA1 Druckbegrenzungsventil, -GPA1 Pumpe/Aggregat, -CLA1 Tank, -CMA1 Speicher, -BPB1 Druckschalter
@@ -1849,7 +1934,7 @@
             if (t.bez) {
                 const bb = boxWelt(t);
                 // Zylinder und Wegeventile: links über dem Symbol, kleine Teile rechts daneben
-                const oben = t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'ventil' || t.typ === 'zeit' || t.typ === 'folge' || t.typ === 'wartung' || t.typ === 'quelle';
+                const oben = t.typ === 'zyl_dw' || t.typ === 'zyl_ew' || t.typ === 'ventil' || t.typ === 'zeit' || t.typ === 'folge' || t.typ === 'wartung' || t.typ === 'quelle' || !!T.netz;
                 if (oben) el('text', { class: 'fp-bez', x: bb[0] + (t.typ === 'ventil' ? 10 : 0), y: bb[1] - 2 }, ebTeile).textContent = t.bez;
                 else el('text', { class: 'fp-bez', x: bb[2] + 2, y: bb[1] + 10 }, ebTeile).textContent = t.bez;
             }
@@ -1873,6 +1958,12 @@
             if (t.typ === 'dschalter') {
                 const bb = boxWelt(t);
                 el('text', { class: 'fp-var', x: bb[0], y: bb[3] + 12 }, ebTeile).textContent = (t.o.var || '?') + ' ≥ ' + t.o.p + ' bar';
+            }
+            // Druckluftnetz: Kenndaten unter dem Teil, darunter die Live-Werte (nicht mitgedreht)
+            if (T.netz) {
+                const bb = boxWelt(t), txt = netzText(t);
+                if (txt) el('text', { class: 'fp-var', x: bb[0], y: bb[3] + 10 }, ebTeile).textContent = txt;
+                ref.nw = el('text', { class: 'fp-var fp-nw', x: bb[0], y: bb[3] + (txt ? 21 : 10) }, ebTeile);
             }
             // Anschlussnummern
             for (const p of gg.ports) {
@@ -2518,6 +2609,28 @@
             variable('Sensor Ende: VALIS-Eingang', 'sensV', 'in');
         } else if (t.typ === 'quelle') {
             num('Druck', 'p', 1, 12, 0.5, 'bar');
+            if (netzAktiv()) h('div', { class: 'fp-hinw', text: 'Diese Quelle hängt am Druckluftnetz („diese Anlage“): Ihr Druck ist der Druck am Abgang des Netzes.' }, box);
+        } else if (t.typ === 'kompressor') {
+            num('Liefermenge (angesaugte Luft)', 'q', 10, 20000, 10, 'l/min');
+            num('Druckschalter: einschalten bei', 'pEin', 0.5, 15, 0.1, 'bar');
+            num('Druckschalter: ausschalten bei', 'pAus', 1, 16, 0.1, 'bar');
+            const c = fld('Kompressor aus (Druckabfallprüfung)', h('input', { type: 'checkbox' })); c.checked = !!t.o.aus; c.onchange = () => setze(() => { t.o.aus = c.checked; });
+            h('div', { class: 'fp-hinw', text: 'Der Druckschalter ist ein Zweipunktregler: Der Kompressor fördert, bis der Ausschaltdruck erreicht ist, und läuft erst wieder an, wenn der Druck auf den Einschaltdruck gefallen ist. Beim Simulieren schaltet ein Klick auf den Kompressor ihn aus und wieder ein.' }, box);
+        } else if (t.typ === 'behaelter') {
+            num('Volumen', 'V', 1, 20000, 1, 'l');
+            num('Sicherheitsventil öffnet bei', 'pSV', 2, 20, 0.5, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Der Behälter speichert Druckluft: Je größer er ist, desto langsamer steigt und fällt der Druck und desto seltener schaltet der Kompressor. Das Sicherheitsventil wird nie verstellt; der Ausschaltdruck bleibt deutlich darunter.' }, box);
+        } else if (t.typ === 'rohr') {
+            num('Länge', 'L', 0.5, 2000, 0.5, 'm');
+            num('Innendurchmesser', 'd', 4, 300, 1, 'mm');
+            h('div', { class: 'fp-hinw', text: 'Volumen der Leitung: ' + zf(rohrVolumen(t.o), 1) + ' l (zählt zum Speicher). Der Druckverlust steigt mit Durchfluss und Länge und fällt stark mit dem Durchmesser. Gerechnet wird mit einer üblichen Näherung für Druckluftleitungen: Δp = 1,6 · 10³ · V̇^1,85 · L / (d⁵ · p) mit V̇ in m³/s, L und d in m, p absolut in Pa. Faustregel, steht so nicht im Tabellenbuch.' }, box);
+        } else if (t.typ === 'hahn') {
+            const c = fld('geschlossen', h('input', { type: 'checkbox' })); c.checked = !!t.o.zu; c.onchange = () => setze(() => { t.o.zu = c.checked; });
+            const k = fld('Abgang mit Schnellkupplung', h('input', { type: 'checkbox' })); k.checked = !!t.o.abgang; k.onchange = () => setze(() => { t.o.abgang = k.checked; });
+            num('Leckage hinter dem Hahn (bei 6 bar)', 'leck', 0, 2000, 1, 'l/min');
+            h('div', { class: 'fp-hinw', text: 'Beim Simulieren öffnet und schließt ein Klick den Hahn. Die Leckage sitzt am Ausgang (Kupplung, Schlauch, Verschraubung): Ist der Hahn zu, verliert das Netz dort nichts mehr.' }, box);
+        } else if (t.typ === 'anlage') {
+            h('div', { class: 'fp-hinw', text: 'Hier hängt die 2D-Anlage dieses Standes am Netz: Ihre Zylinder und Leckagen nehmen die Luft an diesem Punkt ab, und der Kompressor der 2D-Anlage zeigt den Druck, der hier ankommt. Ohne dieses Teil hat die 2D-Anlage einen festen Druck.' }, box);
         } else if (istPropW(t)) {
             const K = PROP_W[t.typ];
             variable('Sollwert: VALIS-Ausgang (Analogwert)', 'varS', 'out');
@@ -2597,6 +2710,8 @@
             for (const p of geo(t).ports) {
                 if (belegt.has(t.id + ':' + p.id)) continue;
                 if (p.art === 'r' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
+                if (t.typ === 'behaelter' || (t.typ === 'hahn' && t.o.abgang && p.id === '2')) continue;   // freier Stutzen am Behälter ist verschlossen, eine Kupplung ohne Stecker dicht
+                if (t.typ === 'kompressor' || t.typ === 'anlage') { meld.push(`${n}: nicht ans Netz angeschlossen.`); continue; }
                 if (t.typ === 'knoten') { meld.push(`Verbindungspunkt ohne Leitung`); continue; }
                 if (p.art === 's') meld.push(`${n}: Steueranschluss ${p.id} ist frei – das Ventil bekommt nie Steuerdruck.`);
                 else if (istHyd(t)) { if (t.typ !== 'tank' && t.typ !== 'speicher') meld.push(`${n}: Anschluss ${p.nr || p.id} ist offen – hier tritt Öl aus.`); }
@@ -2613,7 +2728,8 @@
             if (istPropW(t) && !t.o.varS) meld.push(`${n}: Das Proportionalventil hat keinen Sollwert (VALIS-Ausgang).`);
         }
         const pneuTeile = plan.teile.filter(t => !istHyd(t) && t.typ !== 'knoten'), hydTeile = plan.teile.filter(istHyd);
-        if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle')) meld.push('Es gibt keine Druckluftquelle.');
+        if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle' || t.typ === 'kompressor')) meld.push('Es gibt keine Druckluftquelle.');
+        if (plan.teile.some(t => t.typ === 'anlage') && !plan.teile.some(t => t.typ === 'kompressor')) meld.push('„Diese Anlage“ hängt an keinem Kompressor: Die 2D-Anlage behält ihren festen Druck.');
         if (hydTeile.length && !plan.teile.some(t => t.typ === 'aggregat')) meld.push('Es gibt kein Hydraulikaggregat.');
         const bez = {};
         plan.teile.forEach(t => { if (t.bez) bez[t.bez] = (bez[t.bez] || 0) + 1; });
@@ -2667,6 +2783,8 @@
         const T = TYP[t.typ]; let n = T ? T.name : t.typ;
         if (t.typ === 'ventil') n = (t.o.wege || '3/2') + (istProp(t) ? '-Proportional-Wegeventil' : '-Wegeventil');
         if (t.typ === 'wartung' && t.o.kurz) n += ' (Kurzform)';
+        if (t.typ === 'hahn' && t.o.abgang) n = 'Abgang (Kugelhahn mit Kupplung)';
+        if (t.typ === 'anlage') n = 'Diese Anlage (2D-Anlage)';
         if (istPropW(t)) n = 'Proportional-' + n;
         if (istHyd(t) && /^(zyl_|ventil|rueck|drossel|drv)/.test(t.typ)) n += ', hydraulisch';
         return n;
@@ -2688,6 +2806,11 @@
             case 'schwenk': d.push('Schwenkwinkel ' + zf(o.winkel) + '°'); break;
             case 'quelle': case 'wartung': case 'druckregel': case 'folge': case 'dschalter': case 'dbv': if (o.p != null) d.push('p = ' + zf(o.p) + ' bar'); if (o.var) d.push('Ausgang ' + o.var); break;
             case 'aggregat': d.push('p = ' + zf(o.p) + ' bar', 'Q = ' + zf(o.q) + ' l/min'); break;
+            case 'kompressor': d.push('Q = ' + zf(o.q) + ' l/min', 'ein ' + zf(o.pEin) + ' bar', 'aus ' + zf(o.pAus) + ' bar'); break;
+            case 'behaelter': d.push('V = ' + zf(o.V) + ' l', 'Sicherheitsventil ' + zf(o.pSV) + ' bar'); break;
+            case 'rohr': d.push('L = ' + zf(o.L) + ' m', 'Innen-Ø ' + zf(o.d) + ' mm'); break;
+            case 'hahn': if (o.abgang) d.push('Abgang mit Kupplung'); if (o.zu) d.push('geschlossen'); if (zahl(o.leck, 0) > 0) d.push('Leckage ' + zf(o.leck) + ' l/min'); break;
+            case 'anlage': d.push('2D-Anlage dieses Standes'); break;
             case 'stromregel': d.push('Q = ' + zf(o.q) + ' l/min'); break;
             case 'drossel': case 'drv': d.push('Öffnung ' + zf(o.offen, 0) + ' %'); break;
             case 'zeit': d.push('t = ' + zf(o.zeit) + ' s'); break;
@@ -3100,6 +3223,8 @@
         }
         // Wartungseinheit aus der 2D-Anlage: nur Bild, rechnet als durchgehende Leitung
         for (const t of plan.teile) if (t.typ === 'wartung' && t.o.durch) vereine(t.id + ':1', t.id + ':2');
+        // Druckluftbehälter: beide Stutzen sind derselbe Raum
+        for (const t of plan.teile) if (t.typ === 'behaelter') vereine(t.id + ':1', t.id + ':2');
         const netzVon = {}, netze = [];
         const idx = {};
         for (const k of alle) {
@@ -3111,6 +3236,19 @@
         for (const t of plan.teile) if (istHyd(t)) for (const p of geo(t).ports) { const N0 = netze[netzVon[t.id + ':' + p.id]]; if (N0) { N0.hyd = true; N0.E = E_OEL; } }
         for (const l of plan.leitungen) { const n = netzVon[l.a.t + ':' + l.a.p]; if (n != null) netze[n].V += netze[n].hyd ? V_LEITUNG_H : V_LEITUNG; }
         netze.forEach(n => { if (n.hyd) n.V += 0.01; n.M = n.V; });
+        // Druckluftnetz: Behälter und Rohrleitungen sind Speicher (die Leitung je zur Hälfte an ihren Enden)
+        const netzTeile = plan.teile.filter(istNetz);
+        for (const t of netzTeile) {
+            const k = id => netze[netzVon[t.id + ':' + id]];
+            for (const p of geo(t).ports) { const N0 = k(p.id); if (N0) N0.netz = true; }
+            if (t.typ === 'behaelter') k('1').V += Math.max(1, zahl(t.o.V, 500));
+            if (t.typ === 'rohr') { const v = rohrVolumen(t.o); k('1').V += v / 2; k('2').V += v / 2; }
+        }
+        // kleine Knoten zwischen Netzteilen bekommen ein Anschlussvolumen (rechnet ruhiger)
+        netze.forEach(n => { if (n.netz && !n.hyd && n.V < 0.5) n.V = 0.5; });
+        // Das Netz steht beim Start unter Druck (höchster Ausschaltdruck), sonst liefe der Kompressor erst minutenlang
+        const pStart = netzTeile.filter(t => t.typ === 'kompressor').reduce((m, t) => Math.max(m, zahl(t.o.pAus, 7)), 0);
+        netze.forEach(n => { if (n.netz && !n.hyd) n.M = n.V * (1 + pStart); });
         // Offene Anschlüsse (ohne Leitung) blasen ab
         for (const t of plan.teile) for (const p of geo(t).ports) {
             const k = t.id + ':' + p.id;
@@ -3118,6 +3256,8 @@
             if (t.typ === 'knoten' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
             if (t.typ === 'quelle' || t.typ === 'manometer' || t.typ === 'dschalter') continue;
             if (t.typ === 'tank' || t.typ === 'speicher') continue;
+            if (t.typ === 'kompressor' || t.typ === 'behaelter' || t.typ === 'anlage') continue;
+            if (t.typ === 'hahn' && t.o.abgang && p.id === '2') continue;   // Schnellkupplung ohne Stecker ist dicht
             if (p.art === 's') continue; // freier Steueranschluss: kein Druck
             const G0 = netze[netzVon[k]].hyd ? G_HV : G_VENTIL;   // Öl tritt aus (in die Wanne)
             netze[netzVon[k]].offen.push({ t: t.id, p: p.id, g: p.art === 'r' ? G0 : G0 * 0.8 });
@@ -3143,10 +3283,15 @@
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
             if (t.typ === 'wechsel') z.seite = 'X';
             if (t.typ === 'speicher') z.voil = 0;
+            if (t.typ === 'kompressor') { z.lauf = false; z.aus = !!t.o.aus; z.schalt = 0; z.laufS = 0; z.simS = 0; z.ein = []; z.p = pStart; }
+            if (t.typ === 'hahn') { z.zu = !!t.o.zu; z.qSum = 0; z.q = 0; z.qLeck = 0; }
+            if (t.typ === 'rohr') { z.qSum = 0; z.q = 0; z.dp = 0; }
+            if (t.typ === 'behaelter') { z.sv = false; z.p = pStart; }
+            if (t.typ === 'anlage') { z.ent = 0; z.q = 0; z.qSum = 0; z.p = pStart; }
             if (istPropW(t)) { z.soll = 0; z.h = 0; z.u = 0; z.wert = propWVon(t); }
             zust[t.id] = z;
         }
-        sim = { netze, netzVon, zust, zeit: 0, schreib: {} };
+        sim = { netze, netzVon, zust, zeit: 0, schreib: {}, netzTeile, netzZeit: 0 };
         // Kammervolumen der Antriebe gleich mit Füllung (drucklos) ins Netz, sonst saugt der erste Schritt ein Vakuum
         for (const t of plan.teile) {
             if (t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew' && t.typ !== 'schwenk') continue;
@@ -3248,7 +3393,7 @@
         return false;
     }
 
-    function simSchritt(dtGesamt) {
+    function simSchritt(dtGesamt, dtNetz) {
         if (!sim) simInit();
         const S = sim;
         if (!schattenLauf) kennVor(dtGesamt);
@@ -3311,9 +3456,20 @@
                 if (t.o.var && S.schreib) S.schreib[t.o.var] = t.o.oeffner ? !z.an : z.an;
             }
         }
+        // Quelle einer verbundenen Anlage hängt am Druckluftnetz: Druck am Abgang „diese Anlage“
+        S.pNetz = !schattenLauf && plan.anlage ? netzDruckAnlage() : null;
         // --- Teilschritte: Strömung und Kolben ---
         const n = Math.max(1, Math.min(60, Math.round(dtGesamt / DT)));
-        for (let i = 0; i < n; i++) teilschritt();
+        // Das Druckluftnetz rechnet die ganze Bildzeit mit eigener Schrittweite (große Speicher,
+        // lange Leitungen), verteilt über die Teilschritte der kleinen Bauteile
+        const hatNetz = S.netzTeile && S.netzTeile.length > 0;
+        const dtN = hatNetz ? (dtNetz != null ? dtNetz : dtGesamt) * netzRaffer : 0, mN = hatNetz ? Math.max(1, Math.min(600, Math.ceil(dtN / 0.002))) : 0;
+        let gemacht = 0;
+        for (let i = 0; i < n; i++) {
+            teilschritt();
+            if (hatNetz) { const bis = Math.round(mN * (i + 1) / n); for (; gemacht < bis; gemacht++) netzSchritt(dtN / mN); }
+        }
+        if (hatNetz) netzNach(dtN);
         // Stetigventile: Durchfluss zum Anschluss 4 (A) in l/min, Stellung für Anzeige und Abgleich
         for (const t of plan.teile) if (istProp(t)) {
             const z = S.zust[t.id];
@@ -3352,7 +3508,7 @@
         }
         // Quellen
         for (const t of plan.teile) {
-            if (t.typ === 'quelle') fluss(netz(t, '1'), 'Q', G_QUELLE, 0, fehlerAktiv(t.id) === 'druck' ? 2.5 : zahl(t.o.p, 6));
+            if (t.typ === 'quelle') fluss(netz(t, '1'), 'Q', G_QUELLE, 0, fehlerAktiv(t.id) === 'druck' ? 2.5 : S.pNetz != null ? S.pNetz : zahl(t.o.p, 6));
             if (t.typ === 'aggregat') {
                 // Pumpe fördert Q in P, das eingebaute Druckbegrenzungsventil lässt über p in den Tank ab
                 const nP = netz(t, 'P'), fe = fehlerAktiv(t.id);
@@ -3525,6 +3681,235 @@
             z.x = x; z.v = v;
         }
     }
+    // ------------------------------------------------------------
+    // Druckluftnetz rechnen
+    // ------------------------------------------------------------
+    let netzRaffer = 1;                 // Zeitraffer nur für das Netz (Auswertung über Stunden)
+    const G_HAHN = 400;                 // offener Kugelhahn: voller Durchgang, praktisch ohne Druckverlust
+    const LECK_P = 6;                   // Leckagen sind bei 6 bar angegeben (wie in der 2D-Anlage)
+    // Volumen einer Rohrleitung in l: Innendurchmesser in mm, Länge in m
+    const rohrVolumen = o => Math.PI / 4 * Math.pow(Math.max(2, zahl(o.d, 25)) / 100, 2) * Math.max(0.1, zahl(o.L, 20)) * 10;
+    // Druckverlust einer Druckluftleitung, übliche Näherung (Faustregel, steht so nicht im Tabellenbuch):
+    //   Δp = 1,6 · 10³ · V̇^1,85 · L / (d⁵ · p)   mit V̇ in m³/s (angesaugte Luft), L und d in m, p absolut in Pa
+    const ROHR_K = 1.6e3, ROHR_N = 1.85;
+    // qLmin in l/min, pBar = Überdruck in der Leitung → Δp in bar
+    function rohrDruckverlust(o, qLmin, pBar) {
+        const d = Math.max(2, zahl(o.d, 25)) / 1000, L = Math.max(0.1, zahl(o.L, 20));
+        return ROHR_K * Math.pow(Math.abs(qLmin) / 60000, ROHR_N) * L / (Math.pow(d, 5) * (Math.max(0, pBar) + 1) * 1e5) / 1e5;
+    }
+    // Durchfluss in l/min, der bei Δp (bar) durch die Leitung geht
+    function rohrDurchfluss(o, dpBar, pBar) {
+        const d = Math.max(2, zahl(o.d, 25)) / 1000, L = Math.max(0.1, zahl(o.L, 20));
+        return Math.pow(Math.abs(dpBar) * 1e5 * Math.pow(d, 5) * (Math.max(0, pBar) + 1) * 1e5 / (ROHR_K * L), 1 / ROHR_N) * 60000;
+    }
+    function netzText(t) {
+        const o = t.o;
+        if (t.typ === 'kompressor') return zf(o.q, 0) + ' l/min · ' + zf(o.pEin) + ' … ' + zf(o.pAus) + ' bar';
+        if (t.typ === 'behaelter') return zf(o.V, 0) + ' l';
+        if (t.typ === 'rohr') return zf(o.L) + ' m · Ø ' + zf(o.d, 0) + ' mm';
+        if (t.typ === 'hahn') return zahl(o.leck, 0) > 0 ? (window.currentLang === 'en' ? 'Leakage ' : 'Leckage ') + zf(o.leck, 0) + ' l/min' : '';
+        return '';
+    }
+    // Ein Netzschritt (dt in s): Kompressoren, Leitungen, Hähne, Leckagen, Sicherheitsventile
+    function netzSchritt(dt) {
+        const S = sim, N = S.netze, DT0 = DT;
+        DT = dt;
+        try {
+            for (const t of S.netzTeile) {
+                const z = S.zust[t.id], o = t.o;
+                switch (t.typ) {
+                    case 'kompressor': {
+                        const n1 = netz(t, '1'); if (n1 == null) break;
+                        const p = druckVon(n1), fe = fehlerAktiv(t.id);
+                        const pAus = zahl(o.pAus, 7), pEin = Math.min(pAus - 0.05, zahl(o.pEin, 6));
+                        if (z.aus || fe === 'aus') z.lauf = false;
+                        else if (!z.lauf && p <= pEin) { z.lauf = true; z.schalt++; z.ein.push(S.netzZeit); if (z.ein.length > 400) z.ein.shift(); }
+                        else if (z.lauf && p >= pAus) z.lauf = false;
+                        if (z.lauf) { N[n1].M += Math.max(0, zahl(o.q, 400)) / 60 * dt * (fe === 'verschleiss' ? 0.5 : 1); z.laufS += dt; }
+                        z.simS += dt;
+                        break;
+                    }
+                    case 'rohr': {
+                        const na = netz(t, '1'), nb = netz(t, '2'); if (na == null || nb == null || na === nb) break;
+                        const A = N[na], B = N[nb], pa = A.M / A.V - 1, pb = B.M / B.V - 1, dp = pa - pb;
+                        if (Math.abs(dp) < 1e-9) break;
+                        let q = Math.sign(dp) * rohrDurchfluss(o, dp, (pa + pb) / 2) / 60 * dt;
+                        if (fehlerAktiv(t.id) === 'zu') q *= 0.02;
+                        const gl = dp / (1 / A.V + 1 / B.V);
+                        if (Math.abs(q) > Math.abs(gl)) q = gl;
+                        A.M -= q; B.M += q; z.qSum += q;
+                        break;
+                    }
+                    case 'hahn': {
+                        const n1 = netz(t, '1'), n2 = netz(t, '2');
+                        if (!z.zu) z.qSum += fluss(n1, n2, G_HAHN, 0);
+                        // Leckage am Ausgang: wächst mit dem Druck (angegeben bei 6 bar)
+                        const leck = zahl(o.leck, 0) + (fehlerAktiv(t.id) === 'leck' ? 60 : 0);
+                        z.qLeck = 0;
+                        if (leck > 0 && n2 != null) {
+                            const B = N[n2], p2 = B.M / B.V - 1;
+                            if (p2 > 0) { const m = Math.min(leck / 60 * p2 / LECK_P * dt, B.M - B.V); B.M -= m; z.qLeck = leck * p2 / LECK_P; z.leckSum = (z.leckSum || 0) + m; }
+                        }
+                        break;
+                    }
+                    case 'behaelter': {
+                        const n1 = netz(t, '1'), zuviel = mengeBis(n1, zahl(o.pSV, 11));
+                        z.sv = zuviel > 0;
+                        if (zuviel > 0) N[n1].M -= zuviel;
+                        break;
+                    }
+                }
+            }
+            S.netzZeit += dt;
+        } finally { DT = DT0; }
+    }
+    // Nach den Netzschritten eines Bildes: Anzeigewerte (Durchfluss in l/min, Druckverlust, Drücke)
+    function netzNach(dtN) {
+        const S = sim;
+        for (const t of S.netzTeile) {
+            const z = S.zust[t.id];
+            if (t.typ === 'rohr') {
+                const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0;
+                z.q += (q - z.q) * 0.2;
+                z.dp = rohrDruckverlust(t.o, z.q, (pPort(t, '1') + pPort(t, '2')) / 2);
+            } else if (t.typ === 'hahn') {
+                const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0; z.q += (q - z.q) * 0.2; z.p = pPort(t, '2');
+            } else if (t.typ === 'anlage') {
+                const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0; z.q += (q - z.q) * 0.1; z.p = pPort(t, '1');
+            } else if (t.typ === 'kompressor' || t.typ === 'behaelter') z.p = pPort(t, '1');
+        }
+    }
+    // Schaltspiele je Stunde aus den Einschaltzeiten (Mittel über die letzten Spiele)
+    function schaltspiele(z) {
+        const e = z.ein || [];
+        if (e.length < 2) return 0;
+        const k = e.slice(-6);
+        return 3600 * (k.length - 1) / Math.max(1e-6, k[k.length - 1] - k[0]);
+    }
+    // --- „diese Anlage“: die 2D-Anlage hängt an diesem Punkt des Netzes ---
+    // Der sichtbare Plan trägt das Netz; der Schattenplan der 2D-Anlage rechnet daneben.
+    let hPlan = null, hSim = null;
+    const HP = () => schattenLauf ? hPlan : plan;
+    const HS = () => schattenLauf ? hSim : sim;
+    const netzAnlage = () => { const p = HP(); return p && p.teile.some(t => t.typ === 'kompressor') ? p.teile.find(t => t.typ === 'anlage' && t.o.art === 'diese') || null : null; };
+    const netzAktiv = () => !!netzAnlage();
+    // Druck am Abgang „diese Anlage“ (bar) oder null, wenn kein Netz gezeichnet ist
+    function netzDruckAnlage() {
+        const a = netzAnlage(), s = HS(); if (!a || !s) return null;
+        const n = s.netzVon[a.id + ':1'], N0 = n != null ? s.netze[n] : null;
+        return N0 ? Math.max(0, N0.M / N0.V - 1) : null;
+    }
+    // Die 2D-Anlage nimmt Luft ab (Normliter): Zylinderhübe und Leckagen ihrer Bauteile
+    function netzEntnehmen(nl) {
+        const a = netzAnlage(), s = HS(); if (!a || !s || !(nl > 0)) return 0;
+        const n = s.netzVon[a.id + ':1'], N0 = n != null ? s.netze[n] : null; if (!N0) return 0;
+        const m = Math.min(nl * netzRaffer, Math.max(0, N0.M - N0.V));
+        N0.M -= m;
+        const z = s.zust[a.id]; if (z) z.qSum += m;
+        return m;
+    }
+    // Stand des Netzes für die 2D-Anlage: Druck am Abgang und der führende Kompressor
+    function netzStand() {
+        const a = netzAnlage(), s = HS(), p = HP(); if (!a || !s) return null;
+        const ks = p.teile.filter(t => t.typ === 'kompressor'), zs = ks.map(t => s.zust[t.id]).filter(Boolean);
+        if (!zs.length) return null;
+        return { p: netzDruckAnlage(), lauf: zs.some(z => z.lauf), aus: zs.every(z => z.aus), schalt: zs.reduce((m, z) => m + z.schalt, 0),
+            laufS: Math.max(...zs.map(z => z.laufS)), simS: Math.max(...zs.map(z => z.simS)), spiele: Math.max(...zs.map(schaltspiele)) };
+    }
+    // Netz am Kompressor der 2D-Anlage: ein Kompressor, ein Behälter, „diese Anlage“
+    const netzEinfach = () => { const n = plan.teile.filter(istNetz); return n.length === 3 && ['kompressor', 'behaelter', 'anlage'].every(a => n.some(t => t.typ === a)); };
+    function netzAnlegen(w) {
+        let x0 = 0, y0 = 0;
+        if (plan.teile.length) {
+            let minX = Infinity, maxY = -Infinity;
+            for (const t of plan.teile) { const b = boxWelt(t); minX = Math.min(minX, b[0]); maxY = Math.max(maxY, b[3]); }
+            x0 = snap(minX + 40); y0 = snap(maxY + 120);
+        }
+        const belegt = new Set(plan.teile.map(t => t.bez).concat(elektroKennzeichen()).concat((fabrik() || []).map(o => o.normLabel).filter(Boolean)));
+        const T = (typ, x, y, o) => {
+            const oo = Object.assign({}, TYP[typ].optionen, o || {}, { auto: true });
+            const t = { id: neueId(), typ, x: snap(x), y: snap(y), rot: 0, bez: TYP[typ].ohneBez ? '' : freiesKennzeichen(kennCode(typ, oo), belegt), o: oo };
+            if (t.bez) belegt.add(t.bez);
+            plan.teile.push(t); return t;
+        };
+        const L = (a, ap, b, bp) => plan.leitungen.push({ id: neueId(), a: { t: a.id, p: ap }, b: { t: b.id, p: bp } });
+        const k = T('kompressor', x0, y0 + 40, { q: w.q, pEin: w.pEin, pAus: w.pAus, aus: !!w.aus });
+        const b = T('behaelter', x0 + 100, y0, { V: w.V });
+        const a = T('anlage', x0 + 240, y0 + 40, { art: 'diese' });
+        L(k, '1', b, '1'); L(b, '2', a, '1');
+    }
+    // Die 2D-Anlage braucht ein Netz (Häkchen „Druckluftnetz simulieren“ oder eine Leckage):
+    // steht keines im Plan, kommt das einfache Netz mit den Werten des 2D-Kompressors dazu.
+    function netzSichern(comp, wegenLeck) {
+        if (schattenLauf || netzAnlage()) return false;
+        const c = (comp && comp.pneu) || {};
+        const pAus = zahl(comp && comp.pressure, 6), hyst = Math.max(0.1, c.hyst != null ? zahl(c.hyst, 1) : 1);
+        abgleichStumm(() => aendern(() => {
+            const k = plan.teile.find(t => t.typ === 'kompressor');
+            if (k) {
+                // Netz ist gezeichnet, nur „diese Anlage“ fehlt: an den ersten freien Abgang, sonst an den Kompressor
+                const belegt = new Set(); plan.leitungen.forEach(l => { belegt.add(l.a.t + ':' + l.a.p); belegt.add(l.b.t + ':' + l.b.p); });
+                const ab = plan.teile.find(t => t.typ === 'hahn' && !belegt.has(t.id + ':2'));
+                const an = ab ? portLage(ab, '2') : portLage(k, '1');
+                const a = { id: neueId(), typ: 'anlage', x: snap(an.x + (ab ? 0 : 140)), y: snap(an.y + 70), rot: 0, bez: '', o: Object.assign({}, TYP.anlage.optionen) };
+                plan.teile.push(a);
+                plan.leitungen.push({ id: neueId(), a: { t: ab ? ab.id : k.id, p: ab ? '2' : '1' }, b: { t: a.id, p: '1' } });
+            } else netzAnlegen({ q: zahl(comp && comp.maxFlow, 200), pAus, pEin: Math.max(0.1, +(pAus - hyst).toFixed(2)), V: Math.max(1, zahl(c.netzV, 10)), aus: !!c.aus });
+            if (wegenLeck) plan.netzLeck = true; else delete plan.netzLeck;
+        }, true));
+        // die alten Einstellungen am 2D-Kompressor stehen jetzt im Plan
+        if (comp && comp.pneu) { delete comp.pneu.netz; delete comp.pneu.netzV; delete comp.pneu.hyst; delete comp.pneu.aus; }
+        netzSpiegel = null;
+        return true;
+    }
+    // Netz wieder abschalten: das einfache Netz verschwindet, ein gezeichnetes Netz verliert nur „diese Anlage“
+    function netzEntfernen() {
+        if (schattenLauf) return;
+        const alle = plan.teile.filter(istNetz); if (!alle.length) return;
+        const weg = new Set((alle.every(t => t.o.auto) && netzEinfach() ? alle : alle.filter(t => t.typ === 'anlage' && t.o.art === 'diese')).map(t => t.id));
+        abgleichStumm(() => aendern(() => {
+            plan.teile = plan.teile.filter(t => !weg.has(t.id));
+            plan.leitungen = plan.leitungen.filter(l => !weg.has(l.a.t) && !weg.has(l.b.t));
+            delete plan.netzLeck;
+        }, true));
+        netzSpiegel = null;
+    }
+    // Netzdruck und Fördermenge am 2D-Kompressor = Ausschaltdruck und Liefermenge des ersten Kompressors im Plan
+    let netzSpiegel = null;
+    function netzAbgleich(comp) {
+        const k = netzAktiv() && comp ? plan.teile.find(t => t.typ === 'kompressor') : null;
+        if (!k) { netzSpiegel = null; return false; }
+        let geaendert = false, planNeu = false;
+        const kp = zahl(k.o.pAus, 7), kq = zahl(k.o.q, 400), cp = zahl(comp.pressure, 6), cq = zahl(comp.maxFlow, 200);
+        if (!netzSpiegel || netzSpiegel.id !== k.id) {
+            if (cp !== kp) { comp.pressure = kp; geaendert = true; }
+            if (cq !== kq) { comp.maxFlow = kq; geaendert = true; }
+        } else {
+            if (cp !== netzSpiegel.p) { const h = Math.max(0.05, kp - zahl(k.o.pEin, 6)); k.o.pAus = cp; k.o.pEin = Math.max(0.1, +(cp - h).toFixed(2)); planNeu = true; }
+            else if (kp !== netzSpiegel.p) { comp.pressure = kp; geaendert = true; }
+            if (cq !== netzSpiegel.q) { k.o.q = cq; planNeu = true; }
+            else if (kq !== netzSpiegel.q) { comp.maxFlow = kq; geaendert = true; }
+        }
+        netzSpiegel = { id: k.id, p: zahl(k.o.pAus, 7), q: zahl(k.o.q, 400) };
+        if (planNeu) { geoCache.clear(); abgleichStumm(speichern); zeichnen(); }
+        return geaendert;
+    }
+    // Einstellungen für das Menü des 2D-Kompressors
+    function netzCfg() {
+        const k = plan.teile.find(t => t.typ === 'kompressor'); if (!k || !netzAktiv()) return null;
+        const beh = plan.teile.filter(t => t.typ === 'behaelter'), rohre = plan.teile.filter(t => t.typ === 'rohr');
+        return { einfach: netzEinfach(), V: beh.length ? zahl(beh[0].o.V, 500) : 0, hyst: +(zahl(k.o.pAus, 7) - zahl(k.o.pEin, 6)).toFixed(2), aus: !!k.o.aus,
+            teile: plan.teile.filter(istNetz).length, kompressoren: plan.teile.filter(t => t.typ === 'kompressor').length,
+            volumen: beh.reduce((m, t) => m + zahl(t.o.V, 0), 0) + rohre.reduce((m, t) => m + rohrVolumen(t.o), 0) };
+    }
+    function netzSetzen(w) {
+        const k = plan.teile.find(t => t.typ === 'kompressor'), b = plan.teile.find(t => t.typ === 'behaelter'); if (!k) return;
+        abgleichStumm(() => aendern(() => {
+            if (w.V != null && b) b.o.V = Math.max(1, zahl(w.V, b.o.V));
+            if (w.hyst != null) k.o.pEin = Math.max(0.1, +(zahl(k.o.pAus, 7) - Math.max(0.1, zahl(w.hyst, 1))).toFixed(2));
+            if (w.aus != null) plan.teile.forEach(t => { if (t.typ === 'kompressor') t.o.aus = !!w.aus; });
+        }, true));
+    }
     function flaechen(t) {
         if (t.typ === 'schwenk') {
             // Ersatz: Flügel wie ein Zylinder 32 mm, „Hub" in Grad
@@ -3557,6 +3942,9 @@
         const t = teil(id); if (!t || !sim) return;
         const b = seite === 'L' ? t.o.links : t.o.rechts;
         const z = sim.zust[id];
+        // Druckluftnetz: Klick schließt/öffnet den Hahn, schaltet den Kompressor aus/ein
+        if (t.typ === 'hahn') { if (an) { z.zu = !z.zu; klick(); } return; }
+        if (t.typ === 'kompressor') { if (an) { z.aus = !z.aus; klick(); } return; }
         if (b === 'hebel') { if (an) { if (seite === 'L') { z.rasteL = !z.rasteL; if (z.rasteL) z.rasteR = false; } else { z.rasteR = !z.rasteR; if (z.rasteR) z.rasteL = false; } } return; }   // ein Hebel: Einrasten auf einer Seite löst die andere
         const key = id + ':' + seite;
         if (an) gedrueckt.add(key); else gedrueckt.delete(key);
@@ -3656,7 +4044,35 @@
                 r.kugel.setAttribute('transform', auf ? `translate(0,${sk * 5})` : '');
             }
             if (t.typ === 'dschalter') { const k = r.g.querySelector('.fp-kontakt'); if (k) k.setAttribute('d', z && z.an ? 'M12,2 H18 L26,-4' : 'M12,2 H18 L26,-8'); }
+            if (istNetz(t)) netzDarstellen(t, r, z);
         }
+    }
+    // Live-Anzeige der Netzteile: Druck, Durchfluss, Druckverlust, Schaltspiele
+    function netzDarstellen(t, r, z) {
+        let txt = '';
+        const en = window.currentLang === 'en', W2 = (de, e) => en ? e : de;
+        if (t.typ === 'kompressor') {
+            const m = r.g.querySelector('.fp-komp-motor'), k = r.g.querySelector('.fp-komp-kontakt');
+            if (m) m.setAttribute('fill', z && z.lauf ? 'var(--fp-aktiv)' : 'var(--fp-papier)');
+            if (k) k.setAttribute('d', z && z.lauf ? 'M18,-19 L24,-19' : 'M18,-19 L24,-25');
+            if (z) {
+                const ed = z.simS > 0 ? Math.round(100 * z.laufS / z.simS) : 0, sp = schaltspiele(z);
+                txt = (z.aus ? W2('AUS', 'OFF') : z.lauf ? W2('fördert', 'delivering') : W2('steht', 'idle')) + ' · ' + zf(z.p, 2) + ' bar · ' + W2('ED ', 'duty ') + ed + ' % · ' + z.schalt + W2('× ein', '× on') + (sp > 0 ? ' (' + zf(sp, 0) + '/h)' : '');
+            }
+        } else if (t.typ === 'behaelter') {
+            if (z) txt = zf(z.p, 2) + ' bar' + (z.sv ? W2(' · Sicherheitsventil bläst ab', ' · safety valve blowing off') : '');
+        } else if (t.typ === 'rohr') {
+            const pf = r.g.querySelector('.fp-rohr-pfeil');
+            if (pf) { const q = z ? z.q : 0; pf.setAttribute('opacity', Math.abs(q) > 0.5 ? 1 : 0); pf.setAttribute('transform', q < 0 ? 'scale(-1,1)' : ''); }
+            if (z) txt = zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, z.dp < 0.1 ? 3 : 2) + ' bar';
+        } else if (t.typ === 'hahn') {
+            const k = r.g.querySelector('.fp-hahn'), zu = z ? z.zu : !!t.o.zu;
+            if (k) k.setAttribute('fill', zu ? 'currentColor' : 'var(--fp-papier)');
+            if (z) txt = (zu ? W2('zu', 'closed') : zf(Math.abs(z.q), 0) + ' l/min') + ' · ' + zf(z.p, 2) + ' bar' + (z.qLeck > 0.05 ? W2(' · Leck ', ' · leak ') + zf(z.qLeck, 0) + ' l/min' : '');
+        } else if (t.typ === 'anlage') {
+            if (z) txt = zf(z.p, 2) + ' bar · ' + zf(z.q, 0) + ' l/min';
+        }
+        if (r.nw && r.nw.textContent !== txt) r.nw.textContent = txt;
     }
 
     // Laufschleife: rechnet, solange die VALIS-Simulation läuft
@@ -3799,11 +4215,11 @@
         }
     }
     const analogBekannt = new Set();
-    function planTakt(dt) {
+    function planTakt(dt, dtNetz) {
         if (!sim) simInit();
         try { presseLasten(); } catch (e) {}
         sim.schreib = {}; sim.schreibA = {};
-        simSchritt(dt);
+        simSchritt(dt, dtNetz);
         // VALIS-Eingänge schreiben
         const s = sps(); let geaendert = false;
         for (const v in sim.schreib) { const w = !!sim.schreib[v]; if (s[v] !== w) { s[v] = w; geaendert = true; } }
@@ -3813,12 +4229,13 @@
     // Aufruf aus der 2D-Anlage vor der Zylinder-Mechanik, dt in s (schon mit simSpeed)
     window._fpTakt = function (dt) {
         if (!simLaeuft() || !(dt > 0)) return;
-        if (plan.anlage && plan.teile.length && warLaufend) {
+        // Auch ein Plan, der nur das Druckluftnetz der 2D-Anlage trägt, rechnet im Takt der 2D-Anlage
+        if ((plan.anlage || netzAktiv()) && plan.teile.length && warLaufend) {
             taktZeit = performance.now();
-            try { laufFehlerSetzen(); } catch (e) { console.warn('Fluidplan ← 2D (Fehler)', e); }
+            if (plan.anlage) try { laufFehlerSetzen(); } catch (e) { console.warn('Fluidplan ← 2D (Fehler)', e); }
             let hv = null;
-            try { hv = hydSichtbarVor(); } catch (e) { console.warn('Hydraulik (verbunden)', e); }
-            planTakt(Math.min(0.1, dt));
+            if (plan.anlage) try { hv = hydSichtbarVor(); } catch (e) { console.warn('Hydraulik (verbunden)', e); }
+            planTakt(Math.min(0.1, dt), Math.min(2, dt));
             if (hv) try { hydSichtbarNach(hv, Math.min(0.1, dt), dt); } catch (e) { console.warn('Hydraulik (verbunden)', e); }
         }
         try { hydSchattenTakt(dt); } catch (e) { hschatten = null; console.warn('Hydraulik (Schattenplan)', e); }
@@ -3855,12 +4272,14 @@
         if (plan.anlage && ts - rueckZeit > 300) { rueckZeit = ts; ausRueck = true; try { rueckAbgleich(); } catch (e) { console.warn('Fluidplan ← 2D', e); } finally { ausRueck = false; } }
         else if (!plan.anlage) gesehen2D = null;
         if (ts - plakettenZeit > 500) { plakettenZeit = ts; try { plaketten2D(); } catch (e) {} }
+        // Druckluftnetz der 2D-Anlage auch ohne Simulation abgleichen (alter Stand zieht um, Leckage, Netzdruck)
+        if (!laeuft && ts - netzPflegeZeit > 300) { netzPflegeZeit = ts; try { if (typeof window._pneuNetzStep === 'function') window._pneuNetzStep(0); } catch (e) { console.warn('Druckluftnetz', e); } }
         if (!plan.teile.length) { letzte = ts; return; }
         const dt = Math.min(0.05, Math.max(0, (ts - letzte) / 1000)) * (window.simSpeed || 1);
         letzte = ts;
         // Mit der 2D-Anlage verbunden rechnet die 2D-Anlage den Takt (window._fpTakt),
         // damit ihr Zylinder im selben Bild steht wie der Planzylinder.
-        const vomTakt = plan.anlage && performance.now() - taktZeit < 250;
+        const vomTakt = (plan.anlage || netzAktiv()) && performance.now() - taktZeit < 250;
         if (laeuft && dt > 0 && !vomTakt) planTakt(dt);
         if (laeuft && sim) aufzeichnen();
         if (offen) { darstellen(); diagZeichnen(); }
@@ -3869,6 +4288,7 @@
     // Zylinder an freien Schläuchen: die Spulen-Plakette (▶ AUS | EIN ◀) des 2D-Magnetventils
     // gibt es dort nicht, die Ventile stehen als eigene Teile daneben.
     let plakettenZeit = 0;
+    let netzPflegeZeit = 0;
     function plaketten2D() {
         const F = fabrik(); if (!F) return;
         for (const o of F) {
@@ -3918,6 +4338,9 @@
         zyl_ew: [['dichtung', 'Kolbendichtung undicht'], ['klemmt', 'Zylinder schwergängig'], ['sensor', 'Endlagensensoren defekt']],
         schwenk: [['klemmt', 'Schwenkantrieb schwergängig'], ['sensor', 'Sensoren defekt']],
         quelle: [['druck', 'Versorgungsdruck zu niedrig (2,5 bar)']],
+        kompressor: [['aus', 'Kompressor läuft nicht an'], ['verschleiss', 'Liefermenge halbiert (Verschleiß)']],
+        rohr: [['zu', 'Leitung zugesetzt (kaum Durchgang)']],
+        hahn: [['leck', 'Kupplung undicht (60 l/min bei 6 bar)']],
         wartung: [['druck', 'Druckregler verstellt (2,5 bar)'], ['zu', 'Filter verstopft']],
         druckregel: [['druck', 'Druckregler verstellt (2,5 bar)']],
         drossel: [['zu', 'Drossel verstopft']],
@@ -4583,7 +5006,7 @@ function versorgungMerken(F) {
         const zx = zone ? zone.x : 20, zy = zone ? zone.y : 600;
         let nr = 0;
         for (const t of plan.teile) {
-            if (abgedeckt.has(t.id) || istHyd(t) || ['zyl_dw', 'zyl_ew', 'quelle', 'knoten'].includes(t.typ)) continue;
+            if (abgedeckt.has(t.id) || istHyd(t) || istNetz(t) || ['zyl_dw', 'zyl_ew', 'quelle', 'knoten'].includes(t.typ)) continue;
             if (gast[t.id] && !abgedeckt.has(gast[t.id])) continue;   // sitzt im Symbol seines Wirts
             let o = t.o.anlage ? F.find(q => q.id === t.o.anlage) : null;
             if (o && o.type !== 'pneu_fp') o = null;
@@ -4982,6 +5405,20 @@ function versorgungMerken(F) {
             void sp;
         }
     }
+    // Das Druckluftnetz bleibt stehen, wenn die 2D-Anlage den Plan neu aufbaut: unter die neuen Teile
+    function netzBehalten(neu) {
+        const teile = plan.teile.filter(istNetz), ids = new Set(teile.map(t => t.id));
+        const leitungen = plan.leitungen.filter(l => ids.has(l.a.t) && ids.has(l.b.t));
+        if (teile.length && neu.length) {
+            let maxY = -Infinity, minX = Infinity, nMinY = Infinity, nMinX = Infinity;
+            for (const t of neu) { maxY = Math.max(maxY, t.y + 60); minX = Math.min(minX, t.x); }
+            for (const t of teile) { nMinY = Math.min(nMinY, t.y); nMinX = Math.min(nMinX, t.x); }
+            const dx = snap(minX - nMinX), dy = snap(maxY + 140 - nMinY);
+            teile.forEach(t => { t.x += dx; t.y += dy; });
+            leitungen.forEach(l => { delete l.pkt; });
+        }
+        return { teile, leitungen };
+    }
     function ausAnlage() {
         const F = fabrik(); if (!F) return 0;
         const zyl = F.filter(o => (o.type === 'zylinder_double' || o.type === 'zylinder_single') && o.hasPneumatics);
@@ -4989,7 +5426,7 @@ function versorgungMerken(F) {
         if (!zyl.length) { status('In der 2D-Anlage gibt es keinen Zylinder mit Pneumatik oder Hydraulik.'); return 0; }
         // Pneumatik und Hydraulik in derselben 2D-Anlage: beide kommen in den Plan, die Hydraulik rechts daneben
         const hz = F.some(o => o.type === 'hydraulic_unit') ? hydZylinder(F) : [];
-        if (plan.teile.length && !W().confirm(`Der Fluidplan wird durch die ${hz.length ? 'Pneumatik und Hydraulik' : 'Pneumatik'} der 2D-Anlage ersetzt. Weiter?`)) return 0;
+        if (plan.teile.some(t => !istNetz(t)) && !W().confirm(`Der Fluidplan wird durch die ${hz.length ? 'Pneumatik und Hydraulik' : 'Pneumatik'} der 2D-Anlage ersetzt. Weiter?`)) return 0;
         if (hz.length) hydSpiegel.clear();
         aendern(() => {
             const r = planAus2D(F, zyl, F.find(o => o.type === 'compressor'), null, F.filter(o => o.type === 'pneu_fp'));
@@ -5003,7 +5440,8 @@ function versorgungMerken(F) {
                 const R = reeds2D(o, F);
                 t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : '';
             });
-            plan.teile = r.teile; plan.leitungen = r.leitungen; plan.erzeugt = []; plan.anlage = true;
+            const nz = netzBehalten(r.teile);
+            plan.teile = r.teile.concat(nz.teile); plan.leitungen = r.leitungen.concat(nz.leitungen); plan.erzeugt = []; plan.anlage = true;
             if (hz.length) {
                 const h = planAusHyd2D(F, hz);
                 let maxX = -Infinity; for (const t of plan.teile) maxX = Math.max(maxX, boxWelt(t)[2]);
@@ -5027,7 +5465,7 @@ function versorgungMerken(F) {
     // Hydraulik der 2D-Anlage als Plan übernehmen und verbinden
     function ausAnlageHyd(F) {
         const zyl = hydZylinder(F);
-        if (plan.teile.length && !W().confirm('Der Fluidplan wird durch die Hydraulik der 2D-Anlage ersetzt. Weiter?')) return 0;
+        if (plan.teile.some(t => !istNetz(t)) && !W().confirm('Der Fluidplan wird durch die Hydraulik der 2D-Anlage ersetzt. Weiter?')) return 0;
         hydSpiegel.clear();
         aendern(() => {
             const r = planAusHyd2D(F, zyl);
@@ -5037,7 +5475,8 @@ function versorgungMerken(F) {
                 const R = reeds2D(o, F);
                 t.o.sensH = R.H ? R.H.var : ''; t.o.sensV = R.V ? R.V.var : ''; t.o.sensWeg = R.W ? R.W.var : '';
             });
-            plan.teile = r.plan.teile; plan.leitungen = r.plan.leitungen; plan.erzeugt = []; plan.anlage = true;
+            const nz = netzBehalten(r.plan.teile);
+            plan.teile = r.plan.teile.concat(nz.teile); plan.leitungen = r.plan.leitungen.concat(nz.leitungen); plan.erzeugt = []; plan.anlage = true;
             F.filter(istMess2D).forEach(m => { if ((m.role || 'P') === 'P' || zyl.some(o => o.id === m.targetCylinderId)) hydMessNeu(m); });
         });
         einpassen();
@@ -5052,8 +5491,9 @@ function versorgungMerken(F) {
     let schatten = null, schattenLauf = false;
     function mitPlan(p, s, fn) {
         const ap = plan, as = sim;
+        hPlan = ap; hSim = as;
         plan = p; sim = s; schattenLauf = true;
-        try { return fn(); } finally { const ns = sim; plan = ap; sim = as; schattenLauf = false; if (schatten && schatten.plan === p) schatten.sim = ns; }
+        try { return fn(); } finally { const ns = sim; plan = ap; sim = as; schattenLauf = false; hPlan = hSim = null; if (schatten && schatten.plan === p) schatten.sim = ns; }
     }
     const pneuAb = (a, ap, b, bp) => {
         if (!a || !b) return false;
@@ -6036,7 +6476,7 @@ function versorgungMerken(F) {
     // Pneumatik oder Hydraulik, wird sie ohne Rückfrage übernommen und verbunden
     // (Christoph 15.11.2026). Nur Versorgungsteile ohne Zylinder: leeren Plan verbinden.
     function autoVerbinden() {
-        if (plan.anlage || plan.teile.length || window._fpKeinAutoVerbinden) return '';
+        if (plan.anlage || plan.teile.some(t => !istNetz(t)) || window._fpKeinAutoVerbinden) return '';
         if (typeof isLoadingFactory !== 'undefined' && isLoadingFactory) return '';
         const F = fabrik(); if (!F || !F.length) return '';
         const zyl = F.some(q => (q.type === 'zylinder_double' || q.type === 'zylinder_single') && (q.hasPneumatics || q.hasHydraulics));
@@ -8250,6 +8690,7 @@ function versorgungMerken(F) {
                 if (z.wert != null) { r.wert = z.wert; r.soll = z.soll; r.u = z.u; }
                 if (z.auf === true || z.auf === false) r.offen = z.auf;
                 if (z.an != null) r.an = z.an;
+                if (istNetz(t)) Object.assign(r, { lauf: z.lauf, aus: z.aus, schalt: z.schalt, zu: z.zu, q: z.q, dp: z.dp, pNetz: z.p, sv: z.sv, qLeck: z.qLeck, laufS: z.laufS, simS: z.simS, spiele: z.ein ? schaltspiele(z) : undefined });
                 const ports = {};
                 for (const p of geo(t).ports) ports[p.id] = +pPort(t, p.id).toFixed(3);
                 r.p = ports;
@@ -8308,7 +8749,17 @@ function versorgungMerken(F) {
         beispielCode: (i) => (BEISPIELE[i] || {}).code || '',
         _leeren: () => { planImport(null); gedrueckt.clear(); },
         _wege: () => { const W = alleWege(); return { wege: Object.fromEntries(W.wege), netz: Object.fromEntries(W.netz), punkte: abzweigPunkte() }; },
+        _einpassen: () => einpassen(),
         typen: () => Object.keys(TYP),
+        // Druckluftnetz: Kopplung an die 2D-Anlage (index.html, _pneuNetzStep) und Prüfungen
+        netz: {
+            aktiv: () => netzAktiv(), stand: netzStand, entnehmen: netzEntnehmen, sichern: netzSichern, entfernen: netzEntfernen,
+            abgleich: netzAbgleich, cfg: netzCfg, setzen: netzSetzen, nurLeck: () => !!plan.netzLeck, druck: netzDruckAnlage,
+            raffer: (n) => { if (n != null) netzRaffer = Math.max(1, Math.min(600, +n || 1)); return netzRaffer; },
+            // rechnet sek Sekunden Netzzeit in Bildern von `bild` Sekunden (Prüfungen)
+            rechnen: (sek, bild) => { if (!sim) simInit(); const b = bild || 0.05, n = Math.round(sek / b); for (let i = 0; i < n; i++) { sim.schreib = {}; sim.schreibA = {}; simSchritt(b); } },
+            druckverlust: (o, q, p) => rohrDruckverlust(o, q, p), durchfluss: (o, dp, p) => rohrDurchfluss(o, dp, p), volumen: (o) => rohrVolumen(o)
+        },
         offen: () => offen
     };
 

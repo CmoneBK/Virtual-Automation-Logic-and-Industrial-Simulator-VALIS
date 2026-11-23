@@ -10120,3 +10120,43 @@ VALIS_EN.vorlagen({
 VALIS_EN.dazu({
 "Diagramm schließen (wieder öffnen mit dem Knopf „Diagramm“ oben)": "Close the diagram (reopen with the “Diagram” button above)"
 });
+// Druckluftnetz im Fluidplan (23.11.2026)
+VALIS_EN.dazu({
+"Druckluftnetz": "Compressed-air network",
+"Kompressor mit Druckschalter": "Compressor with pressure switch",
+"Druckluftbehälter": "Air receiver",
+"Rohrleitung": "Pipe",
+"Rohrleitung (Länge, Innendurchmesser)": "Pipe (length, inside diameter)",
+"Kugelhahn": "Ball valve",
+"Abgang (Kugelhahn mit Kupplung)": "Outlet (ball valve with coupling)",
+"Diese Anlage (2D-Anlage)": "This plant (2D factory)",
+"Liefermenge (angesaugte Luft) (l/min)": "Delivery (free air) (l/min)",
+"Druckschalter: einschalten bei (bar)": "Pressure switch: cut in at (bar)",
+"Druckschalter: ausschalten bei (bar)": "Pressure switch: cut out at (bar)",
+"Der Druckschalter ist ein Zweipunktregler: Der Kompressor fördert, bis der Ausschaltdruck erreicht ist, und läuft erst wieder an, wenn der Druck auf den Einschaltdruck gefallen ist. Beim Simulieren schaltet ein Klick auf den Kompressor ihn aus und wieder ein.": "The pressure switch is a two-position controller: the compressor delivers until the cut-out pressure is reached and only starts again when the pressure has fallen to the cut-in pressure. While simulating, a click on the compressor switches it off and on again.",
+"Volumen (l)": "Volume (l)",
+"Sicherheitsventil öffnet bei (bar)": "Safety valve opens at (bar)",
+"Der Behälter speichert Druckluft: Je größer er ist, desto langsamer steigt und fällt der Druck und desto seltener schaltet der Kompressor. Das Sicherheitsventil wird nie verstellt; der Ausschaltdruck bleibt deutlich darunter.": "The receiver stores compressed air: the larger it is, the more slowly the pressure rises and falls and the less often the compressor switches. The safety valve is never adjusted; the cut-out pressure stays well below it.",
+"Länge (m)": "Length (m)",
+"Innendurchmesser (mm)": "Inside diameter (mm)",
+"geschlossen": "closed",
+"Abgang mit Schnellkupplung": "Outlet with quick coupling",
+"Leckage hinter dem Hahn (bei 6 bar) (l/min)": "Leakage behind the valve (at 6 bar) (l/min)",
+"Beim Simulieren öffnet und schließt ein Klick den Hahn. Die Leckage sitzt am Ausgang (Kupplung, Schlauch, Verschraubung): Ist der Hahn zu, verliert das Netz dort nichts mehr.": "While simulating, a click opens and closes the valve. The leakage sits at the outlet (coupling, hose, fitting): with the valve closed the network loses nothing there.",
+"Hier hängt die 2D-Anlage dieses Standes am Netz: Ihre Zylinder und Leckagen nehmen die Luft an diesem Punkt ab, und der Kompressor der 2D-Anlage zeigt den Druck, der hier ankommt. Ohne dieses Teil hat die 2D-Anlage einen festen Druck.": "This is where the 2D factory of this file is connected to the network: its cylinders and leaks take their air at this point, and the compressor of the 2D factory shows the pressure that arrives here. Without this part the 2D factory has a fixed pressure.",
+"Diese Quelle hängt am Druckluftnetz („diese Anlage“): Ihr Druck ist der Druck am Abgang des Netzes.": "This source is fed by the compressed-air network (“this plant”): its pressure is the pressure at the network outlet.",
+"Kompressor läuft nicht an": "Compressor does not start",
+"Liefermenge halbiert (Verschleiß)": "Delivery halved (wear)",
+"Leitung zugesetzt (kaum Durchgang)": "Pipe clogged (hardly any flow)",
+"Kupplung undicht (60 l/min bei 6 bar)": "Coupling leaking (60 l/min at 6 bar)",
+"„Diese Anlage“ hängt an keinem Kompressor: Die 2D-Anlage behält ihren festen Druck.": "“This plant” is not connected to any compressor: the 2D factory keeps its fixed pressure.",
+"Netzdruck aus Speicher, Druckschalter, Luftverbrauch der Zylinder und Leckage. Das Netz steht im Fluidplan und lässt sich dort ausbauen (Behälter, Leitungen, weitere Anlagen). Ist eine Leckage-Rate > 0 gesetzt, läuft es ohnehin.": "Network pressure from receiver, pressure switch, air consumption of the cylinders and leakage. The network is part of the fluid plan and can be extended there (receivers, pipes, further plants). If a leak rate > 0 is set, it runs anyway.",
+"Netz im Fluidplan zeigen": "Show network in fluid plan",
+"2D-Anlage dieses Standes": "2D factory of this file",
+"Abgang mit Kupplung": "outlet with coupling"
+});
+VALIS_EN.vorlagen({
+"⟦0⟧: nicht ans Netz angeschlossen.": "⟦0⟧: not connected to the network.",
+"Das Netz steht im Fluidplan: ⟦0⟧ Teile, Speicher ⟦1⟧ l.": "The network is in the fluid plan: ⟦0⟧ parts, storage ⟦1⟧ l.",
+"Volumen der Leitung: ⟦0⟧ l (zählt zum Speicher). Der Druckverlust steigt mit Durchfluss und Länge und fällt stark mit dem Durchmesser. Gerechnet wird mit einer üblichen Näherung für Druckluftleitungen: Δp = 1,6 · 10³ · V̇^1,85 · L / (d⁵ · p) mit V̇ in m³/s, L und d in m, p absolut in Pa. Faustregel, steht so nicht im Tabellenbuch.": "Volume of the pipe: ⟦0⟧ l (counts as storage). The pressure loss rises with flow and length and falls sharply with the diameter. It is calculated with a common approximation for compressed-air pipes: Δp = 1.6 · 10³ · V̇^1.85 · L / (d⁵ · p) with V̇ in m³/s, L and d in m, p absolute in Pa. Rule of thumb, not from the reference book."
+});

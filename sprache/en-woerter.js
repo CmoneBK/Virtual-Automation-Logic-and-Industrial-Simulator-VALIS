@@ -10214,3 +10214,43 @@ VALIS_EN.dazu({
 VALIS_EN.vorlagen({
 "⟦0⟧: nicht angeschlossen.": "⟦0⟧: not connected."
 });
+
+// Druckluftnetz: Auswertung (23.11.2026)
+VALIS_EN.dazu({
+"Durchflusssensor (Hauptleitung)": "Flow sensor (main line)",
+"Messbereich (l/min)": "Measuring range (l/min)",
+"Durchfluss: VALIS-Eingang (Analogwert in l/min)": "Flow: VALIS input (analogue value in l/min)",
+"Schaltausgang: VALIS-Eingang": "Switching output: VALIS input",
+"Schaltpunkt (l/min)": "Switching point (l/min)",
+"Der Durchflusssensor in der Hauptleitung misst, wie viel Luft die Halle abnimmt, und zählt die Menge. Steht die Fertigung, zeigt er die Leckage des Netzes. Oberhalb des Messbereichs bleibt der Wert am Endwert stehen. Im Oszilloskop erscheinen Durchfluss und Druck als Kanäle.": "The flow sensor in the main line measures how much air the hall draws and counts the quantity. When production is stopped it shows the leakage of the network. Above the measuring range the value stays at full scale. Flow and pressure appear as channels in the oscilloscope.",
+"Netz": "Network",
+"Druckluftnetz: Druck an Kompressor, Behälter, Abgängen und Anlagen über der Zeit mit den Schaltpunkten, dazu Kennzahlen, Behälter-Rechner und Druckabfallprüfung": "Compressed-air network: pressure at compressor, receiver, outlets and plants over time with the switching points, plus key figures, receiver calculator and pressure decay test",
+"Zeitraffer": "Time lapse",
+"Das Netz rechnet schneller als die Uhr, damit man Schaltspiele und Druckabfall nicht abwarten muss. Die 2D-Anlage und die Schaltung laufen in normaler Zeit weiter.": "The network runs faster than the clock so that you do not have to wait for switching cycles and pressure decay. The 2D factory and the circuit keep running in normal time.",
+"Kennzahlen": "Key figures",
+"Netzzeit": "Network time",
+"Schaltspiele": "Switching cycles",
+"Schaltspiele je Stunde aus den letzten Einschaltungen des Kompressors": "Switching cycles per hour from the compressor's most recent starts",
+"Einschaltdauer": "Duty cycle",
+"Luftbedarf im Mittel": "Mean air demand",
+"Vom Kompressor im Mittel gelieferte Luft: Verbraucher und Leckagen zusammen": "Air delivered by the compressor on average: consumers and leakage together",
+"Leckage im Mittel": "Mean leakage",
+"Leckagen an Abgängen und Ableitern im Plan (ohne die Leckagen in der 2D-Anlage)": "Leakage at outlets and drains in the plan (without the leakage in the 2D factory)",
+"Energie": "Energy",
+"Kosten der Druckluft": "Cost of compressed air",
+"Kosten der Leckage": "Cost of leakage",
+"1 bar weniger Netzdruck spart": "1 bar less network pressure saves",
+"Faustregel: Jedes bar weniger Netzdruck spart einen festen Anteil der Antriebsenergie des Kompressors.": "Rule of thumb: every bar less network pressure saves a fixed share of the compressor's drive energy.",
+"Kosten rechnen mit": "Costs are calculated with",
+"Strompreis (€/kWh)": "Electricity price (€/kWh)",
+"Leistung je m³/min (kW)": "Power per m³/min (kW)",
+"Betriebsstunden im Jahr (h)": "Operating hours per year (h)",
+"Ersparnis je bar (%)": "Saving per bar (%)",
+"Preis je m³ Druckluft": "Price per m³ of compressed air",
+"Behälter-Rechner": "Receiver calculator",
+"Zulässige Schaltspiele (1/h)": "Permissible switching cycles (1/h)",
+"Druckabfallprüfung": "Pressure decay test",
+"⏱ Messung starten": "⏱ Start measurement",
+"Kompressor ausschalten (Klick auf den Kompressor), Verbraucher schließen, dann die Messung starten und nach einigen Minuten Netzzeit beenden. Gemessen wird am gewählten Netzteil, sonst am Behälter. Geschlossene Hähne trennen den Abschnitt ab.": "Switch off the compressor (click on it), close the consumers, then start the measurement and stop it after a few minutes of network time. The measurement is taken at the selected network part, otherwise at the receiver. Closed valves isolate the section.",
+"Druckabfallprüfung: zuerst die Simulation starten.": "Pressure decay test: start the simulation first."
+});

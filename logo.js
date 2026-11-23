@@ -60,6 +60,16 @@
     ASW: 'Analoger Schwellwertschalter', AKOMP: 'Analogkomparator',
     ARITH: 'Arithmetikanweisung', PI: 'PI-Regler'
   };
+  const NAME_EN = {
+    AND: 'AND', OR: 'OR', NOT: 'NOT',
+    TON: 'On-delay', TOF: 'Off-delay', TP: 'Edge triggered wiping relay',
+    CTU: 'Up/down counter', SHR: 'Latching relay',
+    ASW: 'Analog threshold trigger', AKOMP: 'Analog comparator',
+    ARITH: 'Math instruction', PI: 'PI controller'
+  };
+  // Texte deutsch oder englisch (VALIS-Sprache beim Abbilden)
+  const EN = () => window.currentLang === 'en';
+  const L = (de, en) => (EN() ? en : de);
   const SF = new Set(['TON', 'TOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
   const ID = /^[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*$/;
   const ZAHL = /^-?\d+(?:[.,]\d+)?$/;
@@ -192,7 +202,7 @@
 
     const memo = new Map();
     function neuerBaustein(typ, src, zeile) {
-      return { nr: 0, typ, name: NAME[typ] || typ, ein: [], par: [], ziele: [], src: src || null, zeile: zeile == null ? null : zeile, hinweise: [] };
+      return { nr: 0, typ, name: (EN() ? NAME_EN : NAME)[typ] || typ, ein: [], par: [], ziele: [], src: src || null, zeile: zeile == null ? null : zeile, hinweise: [] };
     }
     function ablegen(b) {
       modell.bausteine.push(b);
@@ -271,10 +281,11 @@
         b.sek = z.wert;
         if (n.type === 'TP') {
           b.par.push({ n: 'TH', w: z.text }, { n: 'TL', w: '00:00 s' }, { n: 'N', w: '1' });
-          fussnote('TP → Flankengetriggertes Wischrelais: Der Impuls läuft wie bei TP auch dann weiter, wenn Trg vorher auf 0 geht. Anders als bei TP startet ein neuer Impuls an Trg während der Zeit sie auf der LOGO! neu.', b);
+          fussnote(L('TP → Flankengetriggertes Wischrelais: Der Impuls läuft wie bei TP auch dann weiter, wenn Trg vorher auf 0 geht. Anders als bei TP startet ein neuer Impuls an Trg während der Zeit sie auf der LOGO! neu.',
+            'TP → Edge triggered wiping relay: as with TP, the pulse continues even if Trg drops to 0 earlier. Unlike TP, a new pulse at Trg while the time is running restarts it on the LOGO!.'), b);
         } else b.par.push({ n: 'T', w: z.text });
-        if (!z.genau) grund('Zeit ' + komma(sek) + ' s passt nicht genau in die Zeitbasis der LOGO! (' + z.text + ').', zeile, 'hinweis');
-        if (z.ausserhalb) grund('Zeit ' + komma(sek) + ' s ist länger als 99:59 h.', zeile, 'nicht');
+        if (!z.genau) grund(L('Zeit ' + komma(sek) + ' s passt nicht genau in die Zeitbasis der LOGO! (' + z.text + ').', 'Time ' + sek + ' s does not fit the LOGO! time base exactly (' + z.text + ').'), zeile, 'hinweis');
+        if (z.ausserhalb) grund(L('Zeit ' + komma(sek) + ' s ist länger als 99:59 h.', 'Time ' + sek + ' s is longer than 99:59 h.'), zeile, 'nicht');
         ablegen(b); return platz;
       }
       if (n.type === 'CTU' || n.type === 'CTD') {
@@ -286,9 +297,9 @@
         b.ein.push({ pin: 'Dir', ref: konst(n.type === 'CTD'), neg: false });
         const pv = parseInt((String(n.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0;
         b.pv = pv;
-        b.par.push({ n: 'Ein', w: String(pv) }, { n: 'Aus', w: String(pv) });
-        if (n.type === 'CTD') grund('Rückwärtszähler (CTD) bitte von Hand prüfen.', zeile, 'hinweis');
-        if (pv === 0) grund('Zähler mit Vorwahl 0: die LOGO! schaltet Q schon vor dem ersten Impuls.', zeile, 'hinweis');
+        b.par.push({ n: L('Ein', 'On'), w: String(pv) }, { n: L('Aus', 'Off'), w: String(pv) });
+        if (n.type === 'CTD') grund(L('Rückwärtszähler (CTD) bitte von Hand prüfen.', 'Please check the down counter (CTD) by hand.'), zeile, 'hinweis');
+        if (pv === 0) grund(L('Zähler mit Vorwahl 0: die LOGO! schaltet Q schon vor dem ersten Impuls.', 'Counter with preset 0: the LOGO! switches Q on before the first pulse.'), zeile, 'hinweis');
         ablegen(b); return platz;
       }
       if (n.type === 'SR' || n.type === 'RS') {
@@ -305,11 +316,12 @@
           const und = neuerBaustein('AND', id, zeile);
           und.ein.push({ pin: '', ref: quelle(r.sourceId), neg: !!r.inverted });
           und.ein.push({ pin: '', ref: quelle(s.sourceId), neg: !s.inverted });
-          und.hinweise.push('vor R: Setzen dominant');
+          und.hinweise.push(L('vor R: Setzen dominant', 'before R: set dominant'));
           const ru = ablegen(und);
           b.ein.push({ pin: 'R', ref: ru, neg: false });
           b.umbau = true;
-          fussnote('Setzdominanter Speicher (RS): Die LOGO! hat nur das Selbsthalterelais, bei dem Rücksetzen gewinnt. Davor steht deshalb R UND NICHT S. Sind beide 1, bleibt der Ausgang gesetzt wie im VALIS-Programm.', b);
+          fussnote(L('Setzdominanter Speicher (RS): Die LOGO! hat nur das Selbsthalterelais, bei dem Rücksetzen gewinnt. Davor steht deshalb R UND NICHT S. Sind beide 1, bleibt der Ausgang gesetzt wie im VALIS-Programm.',
+            'Set-dominant latch (RS): the LOGO! only has the latching relay, where reset wins. That is why R AND NOT S comes before it. If both are 1, the output stays set as in the VALIS program.'), b);
           und.fussnote = b.fussnote;
         }
         ablegen(b); return platz;
@@ -332,7 +344,7 @@
         return null;
       };
       const kein = (txt) => { grund(txt, zeile, 'nicht'); modell.nichtVergleichbar.push(id); const r = konst(false); memo.set(id, r); return r; };
-      if (n.regler === 'ZUSTAND') return kein('Zustandsregler (ZUSTAND) gibt es auf der LOGO! nicht.');
+      if (n.regler === 'ZUSTAND') return kein(L('Zustandsregler (ZUSTAND) gibt es auf der LOGO! nicht.', 'The LOGO! has no state controller (ZUSTAND).'));
       if (n.regler) {
         const args = ((ausdruck.match(/\((.*)\)\s*$/) || [0, ''])[1]).split(',').map(a => a.trim());
         if (n.regler === 'ZWEIPUNKT') {
@@ -341,7 +353,7 @@
           let ein, aus;
           const richt = /^(KUEHLEN|KÜHLEN|INVERS)$/i.test(args[3] || '') ? -1 : (args[3] ? 1 : 0);
           const a1 = wert(args[1]), a2 = wert(args[2]);
-          if (!x || !x.ref || !a1 || a1.zahl == null || !a2 || a2.zahl == null) return kein('ZWEIPUNKT mit Variablen als Schaltpunkt: auf der LOGO! nur mit festen Werten.');
+          if (!x || !x.ref || !a1 || a1.zahl == null || !a2 || a2.zahl == null) return kein(L('ZWEIPUNKT mit Variablen als Schaltpunkt: auf der LOGO! nur mit festen Werten.', 'ZWEIPUNKT with variables as switching points: on the LOGO! only with fixed values.'));
           if (richt === 0) { ein = a1.zahl; aus = a2.zahl; } else { const h = Math.abs(a2.zahl) / 2; ein = richt > 0 ? a1.zahl - h : a1.zahl + h; aus = richt > 0 ? a1.zahl + h : a1.zahl - h; }
           const b = neuerBaustein('ASW', id, zeile);
           b.ein.push({ pin: 'Ax', ref: x.ref, neg: false });
@@ -349,49 +361,49 @@
           const unter = (a) => Math.ceil(a) - 1;
           if (ein <= aus) {
             // ein unten (Heizen): Schwellwert schaltet oben ein, NOT dreht um
-            b.par.push({ n: 'Ein', w: komma(aus) }, { n: 'Aus', w: komma(unter(ein)) });
+            b.par.push({ n: L('Ein', 'On'), w: komma(aus) }, { n: L('Aus', 'Off'), w: komma(unter(ein)) });
             b.ein_ = aus; b.aus_ = unter(ein);
             const r = ablegen(b);
             const nb = nicht(r, id, zeile);
             memo.set(id, nb); return nb;
           }
-          b.par.push({ n: 'Ein', w: komma(ein) }, { n: 'Aus', w: komma(unter(aus)) });
+          b.par.push({ n: L('Ein', 'On'), w: komma(ein) }, { n: L('Aus', 'Off'), w: komma(unter(aus)) });
           b.ein_ = ein; b.aus_ = unter(aus);
           const r = ablegen(b); memo.set(id, r); return r;
         }
         if (n.regler === 'PID') {
           const b = neuerBaustein('PI', id, zeile);
           const w = wert(args[0]), x = wert(args[1]);
-          if (!x || !x.ref) return kein('PID: Istwert muss eine Variable sein.');
+          if (!x || !x.ref) return kein(L('PID: Istwert muss eine Variable sein.', 'PID: the actual value must be a variable.'));
           b.ein.push({ pin: 'PV', ref: x.ref, neg: false });
           b.par.push({ n: 'SP', w: w ? (w.zahl != null ? komma(w.zahl) : w.name) : args[0] }, { n: 'KC', w: args[2] || '' }, { n: 'TI', w: (args[3] || '') + ' s' });
-          if (args[4] && zahl(args[4]) !== 0) grund('Der PI-Regler der LOGO! hat keinen D-Anteil (TV = ' + args[4] + ' fällt weg).', zeile, 'hinweis');
-          grund('PI-Regler: Die LOGO! gibt 0 … 1000 aus, VALIS 0 … 100 % – Verstärkung des Analogausgangs anpassen.', zeile, 'hinweis');
+          if (args[4] && zahl(args[4]) !== 0) grund(L('Der PI-Regler der LOGO! hat keinen D-Anteil (TV = ' + args[4] + ' fällt weg).', 'The LOGO! PI controller has no D part (TV = ' + args[4] + ' is dropped).'), zeile, 'hinweis');
+          grund(L('PI-Regler: Die LOGO! gibt 0 … 1000 aus, VALIS 0 … 100 % – Verstärkung des Analogausgangs anpassen.', 'PI controller: the LOGO! outputs 0 … 1000, VALIS 0 … 100 % – adjust the gain of the analog output.'), zeile, 'hinweis');
           modell.nichtVergleichbar.push(id);
           const r = ablegen(b); memo.set(id, r); return r;
         }
       }
-      if (/\.(cv|et|q)\b/i.test(ausdruck)) return kein('Zählerstand oder Zeitwert in einer Rechnung (' + ausdruck + '): auf der LOGO! über einen Parameterverweis von Hand bauen.');
-      if (/\b(min|max|abs|floor|ceil|round)\s*\(|\?|%/i.test(ausdruck)) return kein('Rechnung „' + ausdruck + '“ hat kein Gegenstück in der LOGO! (nur + − × ÷ mit bis zu vier Werten).');
+      if (/\.(cv|et|q)\b/i.test(ausdruck)) return kein(L('Zählerstand oder Zeitwert in einer Rechnung (' + ausdruck + '): auf der LOGO! über einen Parameterverweis von Hand bauen.', 'Counter value or time value in a calculation (' + ausdruck + '): build it by hand on the LOGO! with a parameter reference.'));
+      if (/\b(min|max|abs|floor|ceil|round)\s*\(|\?|%/i.test(ausdruck)) return kein(L('Rechnung „' + ausdruck + '“ hat kein Gegenstück in der LOGO! (nur + − × ÷ mit bis zu vier Werten).', 'Calculation “' + ausdruck + '” has no counterpart on the LOGO! (only + − × ÷ with up to four values).'));
       const v = zerlegeVergleich(ausdruck);
       if (v) {
         let a = wert(v.a), bw = wert(v.b), op = v.op;
-        if (!a || !bw) return kein('Vergleich „' + ausdruck + '“: vor dem Vergleich die Rechnung in eine eigene Zeile schreiben.');
-        if (a.zahl != null && bw.zahl != null) return kein('Vergleich zweier Zahlen „' + ausdruck + '“.');
+        if (!a || !bw) return kein(L('Vergleich „' + ausdruck + '“: vor dem Vergleich die Rechnung in eine eigene Zeile schreiben.', 'Comparison “' + ausdruck + '”: write the calculation in its own line before comparing.'));
+        if (a.zahl != null && bw.zahl != null) return kein(L('Vergleich zweier Zahlen „' + ausdruck + '“.', 'Comparison of two numbers “' + ausdruck + '”.'));
         if (a.zahl != null) { const t = a; a = bw; bw = t; op = { '>': '<', '<': '>', '>=': '<=', '<=': '>=', '==': '==', '!=': '!=' }[op]; }
         // LOGO! rechnet ganzzahlig: A >= c ⇔ A > c − 1
         const schwelle = (ax, ay, c) => {
           const b = neuerBaustein(ay ? 'AKOMP' : 'ASW', id, zeile);
           b.ein.push({ pin: 'Ax', ref: ax, neg: false });
           if (ay) b.ein.push({ pin: 'Ay', ref: ay, neg: false });
-          b.par.push({ n: 'Ein', w: komma(c) }, { n: 'Aus', w: komma(c) });
+          b.par.push({ n: L('Ein', 'On'), w: komma(c) }, { n: L('Aus', 'Off'), w: komma(c) });
           b.ein_ = c; b.aus_ = c;
           return ablegen(b);
         };
         const ay = bw.ref || null;
         const c = bw.ref ? 0 : bw.zahl;
         const ganz = (x) => Math.ceil(x) - 1;
-        if (bw.zahl != null && !Number.isInteger(bw.zahl)) grund('Vergleich mit ' + komma(bw.zahl) + ': die LOGO! rechnet mit ganzen Zahlen – Messbereich über Verstärkung und Nullpunkt im Baustein einstellen.', zeile, 'hinweis');
+        if (bw.zahl != null && !Number.isInteger(bw.zahl)) grund(L('Vergleich mit ' + komma(bw.zahl) + ': die LOGO! rechnet mit ganzen Zahlen – Messbereich über Verstärkung und Nullpunkt im Baustein einstellen.', 'Comparison with ' + bw.zahl + ': the LOGO! calculates with whole numbers – set the measuring range with gain and offset in the block.'), zeile, 'hinweis');
         let r;
         if (op === '>') r = schwelle(a.ref, ay, ay ? 0 : Math.floor(c));
         else if (op === '>=') r = schwelle(a.ref, ay, ay ? -1 : ganz(c));
@@ -403,14 +415,14 @@
           const g = neuerBaustein(op === '==' ? 'AND' : 'OR', id, zeile);
           g.ein.push({ pin: '', ref: lo, neg: op !== '==' }, { pin: '', ref: hi, neg: op === '==' });
           r = ablegen(g);
-          grund('Vergleich auf Gleichheit „' + ausdruck + '“ braucht auf der LOGO! zwei Schwellwertschalter.', zeile, 'hinweis');
+          grund(L('Vergleich auf Gleichheit „' + ausdruck + '“ braucht auf der LOGO! zwei Schwellwertschalter.', 'Equality check “' + ausdruck + '” needs two threshold triggers on the LOGO!.'), zeile, 'hinweis');
         }
         memo.set(id, r); return r;
       }
       // Arithmetikanweisung: bis vier Werte, + − * /
       const teile = ausdruck.replace(/\s+/g, '').split(/[-+*/()]/).filter(Boolean);
-      if (!teile.length) return kein('Rechnung „' + ausdruck + '“ ohne Gegenstück.');
-      if (teile.length > 4) return kein('Rechnung „' + ausdruck + '“ hat mehr als vier Werte: auf der LOGO! auf mehrere Arithmetikanweisungen aufteilen.');
+      if (!teile.length) return kein(L('Rechnung „' + ausdruck + '“ ohne Gegenstück.', 'Calculation “' + ausdruck + '” without counterpart.'));
+      if (teile.length > 4) return kein(L('Rechnung „' + ausdruck + '“ hat mehr als vier Werte: auf der LOGO! auf mehrere Arithmetikanweisungen aufteilen.', 'Calculation “' + ausdruck + '” has more than four values: split it into several math instructions on the LOGO!.'));
       if (teile.length === 1) {
         // reine Zahl oder Weitergabe
         const w = wert(teile[0]);
@@ -426,8 +438,8 @@
       });
       b.formel = formel;
       b.js = ausdruck.replace(/[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*/g, (m) => (namen[m] ? 'v.' + namen[m] : (/^(TRUE)$/i.test(m) ? '1' : '0')));
-      b.par.push({ n: 'Formel', w: formel });
-      if (/\//.test(ausdruck)) grund('Teilen in „' + ausdruck + '“: die LOGO! rechnet ganzzahlig (Rest fällt weg).', zeile, 'hinweis');
+      b.par.push({ n: L('Formel', 'Formula'), w: formel });
+      if (/\//.test(ausdruck)) grund(L('Teilen in „' + ausdruck + '“: die LOGO! rechnet ganzzahlig (Rest fällt weg).', 'Division in “' + ausdruck + '”: the LOGO! calculates with whole numbers (the remainder is dropped).'), zeile, 'hinweis');
       const r = ablegen(b); memo.set(id, r); return r;
     }
 
@@ -461,9 +473,10 @@
 
     if (/^\s*SCHRITTKETTE\b/im.test(text)) {
       const i = zeilenText.findIndex(z => /^\s*SCHRITTKETTE\b/i.test(z));
-      grund('Schrittkette (S7-GRAPH): auf der LOGO! von Hand mit Selbsthalterelais je Schritt bauen.', i < 0 ? null : i, 'nicht');
+      grund(L('Schrittkette (S7-GRAPH): auf der LOGO! von Hand mit Selbsthalterelais je Schritt bauen.', 'Step sequence (S7-GRAPH): build it by hand on the LOGO! with one latching relay per step.'), i < 0 ? null : i, 'nicht');
     }
-    if (vg.konflikt.length) vg.konflikt.forEach(kf => grund('Klemme ' + kf.klemme + ' für ' + kf.name + ' geht nicht (' + ({ art: 'falsche Art', doppelt: 'schon vergeben', reserviert: 'Sondermerker der LOGO!' }[kf.grund]) + ') – VALIS schlägt eine andere vor.', null, 'hinweis'));
+    if (vg.konflikt.length) vg.konflikt.forEach(kf => grund(L('Klemme ' + kf.klemme + ' für ' + kf.name + ' geht nicht (' + ({ art: 'falsche Art', doppelt: 'schon vergeben', reserviert: 'Sondermerker der LOGO!' }[kf.grund]) + ') – VALIS schlägt eine andere vor.',
+      'Terminal ' + kf.klemme + ' for ' + kf.name + ' is not possible (' + ({ art: 'wrong type', doppelt: 'already used', reserviert: 'special flag of the LOGO!' }[kf.grund]) + ') – VALIS suggests another one.'), null, 'hinweis'));
     modell.passt = passtPruefen(modell);
     return modell;
   }
@@ -476,20 +489,21 @@
     const nB = (m.bausteine || []).length;
     let stufe = 'grund';
     const zuViel = (txt) => { gruende.push({ text: txt, zeile: null, art: 'nicht' }); };
-    if (hoechst.I > GRENZE.I) zuViel(zaehl.I + ' digitale Eingänge: die LOGO! 8 hat auch mit Erweiterungen höchstens ' + GRENZE.I + '.');
-    if (hoechst.Q > GRENZE.Q) zuViel(zaehl.Q + ' digitale Ausgänge: höchstens ' + GRENZE.Q + ' mit Erweiterungen.');
-    if (hoechst.AI > GRENZE.AI) zuViel(zaehl.AI + ' Analogeingänge: höchstens ' + GRENZE.AI + '.');
-    if (hoechst.AQ > GRENZE.AQ) zuViel(zaehl.AQ + ' Analogausgänge: höchstens ' + GRENZE.AQ + '.');
-    if (hoechst.M > GRENZE.M) zuViel(zaehl.M + ' Merker: höchstens ' + (GRENZE.M - M_BELEGT.size) + ' frei.');
-    if (hoechst.AM > GRENZE.AM) zuViel(zaehl.AM + ' Analogmerker: höchstens ' + GRENZE.AM + '.');
-    if (nB > GRENZE.B) zuViel(nB + ' Bausteine: die LOGO! 8 nimmt höchstens ' + GRENZE.B + '.');
+    if (hoechst.I > GRENZE.I) zuViel(L(zaehl.I + ' digitale Eingänge: die LOGO! 8 hat auch mit Erweiterungen höchstens ' + GRENZE.I + '.', zaehl.I + ' digital inputs: even with expansions the LOGO! 8 has at most ' + GRENZE.I + '.'));
+    if (hoechst.Q > GRENZE.Q) zuViel(L(zaehl.Q + ' digitale Ausgänge: höchstens ' + GRENZE.Q + ' mit Erweiterungen.', zaehl.Q + ' digital outputs: at most ' + GRENZE.Q + ' with expansions.'));
+    if (hoechst.AI > GRENZE.AI) zuViel(L(zaehl.AI + ' Analogeingänge: höchstens ' + GRENZE.AI + '.', zaehl.AI + ' analog inputs: at most ' + GRENZE.AI + '.'));
+    if (hoechst.AQ > GRENZE.AQ) zuViel(L(zaehl.AQ + ' Analogausgänge: höchstens ' + GRENZE.AQ + '.', zaehl.AQ + ' analog outputs: at most ' + GRENZE.AQ + '.'));
+    if (hoechst.M > GRENZE.M) zuViel(L(zaehl.M + ' Merker: höchstens ' + (GRENZE.M - M_BELEGT.size) + ' frei.', zaehl.M + ' flags: at most ' + (GRENZE.M - M_BELEGT.size) + ' free.'));
+    if (hoechst.AM > GRENZE.AM) zuViel(L(zaehl.AM + ' Analogmerker: höchstens ' + GRENZE.AM + '.', zaehl.AM + ' analog flags: at most ' + GRENZE.AM + '.'));
+    if (nB > GRENZE.B) zuViel(L(nB + ' Bausteine: die LOGO! 8 nimmt höchstens ' + GRENZE.B + '.', nB + ' blocks: the LOGO! 8 takes at most ' + GRENZE.B + '.'));
     // Grundgerät oder Erweiterung?
     const iGrund = Object.values(m.klemmen || {}).every(k => { const a = klemmeArt(k); return !a || (a.art === 'I' ? a.nr <= GRUND.I : a.art === 'Q' ? a.nr <= GRUND.Q : a.art === 'AI' ? a.nr <= GRUND.AI : a.art === 'AQ' ? false : true); });
     const erw = [];
     const iMehr = Math.max(0, hoechst.I - GRUND.I), qMehr = Math.max(0, hoechst.Q - GRUND.Q);
-    if (iMehr || qMehr) erw.push('Digital: ' + [iMehr ? iMehr + ' Eingänge mehr (I9 …)' : '', qMehr ? qMehr + ' Ausgänge mehr (Q5 …)' : ''].filter(Boolean).join(', ') + ', z. B. DM8 (4 E / 4 A) oder DM16 (8 E / 8 A)');
-    if (hoechst.AI > GRUND.AI) erw.push('Analog: AM2 für AI5 …');
-    if (hoechst.AQ > 0) erw.push('Analogausgang: AM2 AQ (das Grundgerät 12/24 RCE hat keinen)');
+    if (iMehr || qMehr) erw.push(L('Digital: ' + [iMehr ? iMehr + ' Eingänge mehr (I9 …)' : '', qMehr ? qMehr + ' Ausgänge mehr (Q5 …)' : ''].filter(Boolean).join(', ') + ', z. B. DM8 (4 E / 4 A) oder DM16 (8 E / 8 A)',
+      'Digital: ' + [iMehr ? iMehr + ' more inputs (I9 …)' : '', qMehr ? qMehr + ' more outputs (Q5 …)' : ''].filter(Boolean).join(', ') + ', e.g. DM8 (4 I / 4 Q) or DM16 (8 I / 8 Q)'));
+    if (hoechst.AI > GRUND.AI) erw.push(L('Analog: AM2 für AI5 …', 'Analog: AM2 for AI5 …'));
+    if (hoechst.AQ > 0) erw.push(L('Analogausgang: AM2 AQ (das Grundgerät 12/24 RCE hat keinen)', 'Analog output: AM2 AQ (the 12/24 RCE base module has none)'));
     if (!iGrund) stufe = 'erweiterung';
     if (gruende.some(g => g.art === 'nicht')) stufe = 'nicht';
     return { stufe, gruende, erweiterung: erw, zahlen: { I: zaehl.I, Q: zaehl.Q, M: zaehl.M, AI: zaehl.AI, AQ: zaehl.AQ, AM: zaehl.AM, B: nB } };
@@ -596,7 +610,7 @@
       if (ziel.length) s += ' → ' + ziel.join(', ');
       out.push({ text: s, b });
     });
-    m.verbindungen.forEach(v => out.push({ text: v.klemme + ' ← ' + refText(v.ref) + '  (ohne Baustein)', v }));
+    m.verbindungen.forEach(v => out.push({ text: v.klemme + ' ← ' + refText(v.ref) + '  ' + L('(ohne Baustein)', '(no block)'), v }));
     return out;
   }
 
@@ -646,7 +660,29 @@
   try { an = localStorage.getItem(LS_AN) === '1'; } catch (_) {}
   window.logoAnsicht = an;
   let modell = null, layout = null, zoom = 1, groesse = null;
-  const T = (s) => s; // Texte übersetzt sprache-en.js im DOM
+  // Texte der Ansicht: deutsch, englisch aus dieser Tabelle (VALIS-Sprache)
+  const EN_T = {
+    'Ansicht des Codes, wie er auf einer LOGO! 8 aussieht': 'View of the code as it looks on a LOGO! 8',
+    '1 = grün': '1 = green', '0 = blau gestrichelt': '0 = blue dashed',
+    'Passt auf ein LOGO! 8 Grundgerät': 'Fits a LOGO! 8 base module',
+    'Passt auf eine LOGO! 8 mit Erweiterungsmodul': 'Fits a LOGO! 8 with expansion module',
+    'Passt so nicht auf eine LOGO! 8': 'Does not fit a LOGO! 8 as it is',
+    'Bausteine': 'blocks', 'Zeile': 'Line',
+    'Kein Programm – im Code-Editor eine Zuweisung schreiben, z. B. LAMPE := TASTER': 'No program – write an assignment in the code editor, e.g. LAMPE := TASTER',
+    'Bausteinliste zum Abtippen in LOGO!Soft Comfort': 'Block list to type into LOGO!Soft Comfort',
+    'Bausteinliste': 'Block list', 'LOGO!-Klemme': 'LOGO! terminal', 'Variable': 'Variable', 'Kennzeichen': 'Designation',
+    'SPS-Adresse': 'PLC address', 'Bauteil': 'Component', 'Kommentar': 'Comment', 'LOGO!-Programm': 'LOGO! program',
+    'LOGO!-Programm (Maßstab LOGO! 8)': 'LOGO! program (reference LOGO! 8)', 'Zuordnungsliste mit LOGO!-Klemmen': 'Assignment list with LOGO! terminals',
+    'Eingänge': 'Inputs', 'Ausgänge': 'Outputs', 'Merker': 'Flags',
+    'Erstellt mit VALIS. Das Programm in LOGO!Soft Comfort von Hand eingeben; VALIS lädt nichts direkt in die LOGO!.': 'Made with VALIS. Enter the program by hand in LOGO!Soft Comfort; VALIS does not download anything to the LOGO!.',
+    'Das Druckfenster wurde blockiert. Bitte Pop-ups für diese Seite erlauben.': 'The print window was blocked. Please allow pop-ups for this page.',
+    'Verkleinern (oder Mausrad)': 'Zoom out (or mouse wheel)', 'Vergrößern (oder Mausrad)': 'Zoom in (or mouse wheel)', 'Zoom zurücksetzen (100 %)': 'Reset zoom (100 %)',
+    'Bausteinliste unter dem Plan ein- oder ausblenden': 'Show or hide the block list below the diagram',
+    'Bausteinliste und Zuordnungsliste mit LOGO!-Klemmen auf einem Blatt drucken oder als PDF speichern': 'Print the block list and the assignment list with LOGO! terminals on one sheet or save them as PDF',
+    '📋 Bausteinliste': '📋 Block list', '🖨 Drucken': '🖨 Print', '💾 Als SVG speichern': '💾 Save as SVG',
+    'LOGO!-Plan als SVG-Grafik speichern, z. B. für ein Arbeitsblatt': 'Save the LOGO! diagram as an SVG graphic, e.g. for a worksheet'
+  };
+  const T = (s) => (window.currentLang === 'en' && EN_T[s]) || s;
   const doc = () => (typeof _fbsDoc === 'function' ? _fbsDoc() : document); // eslint-disable-line no-undef
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -664,6 +700,21 @@
     return t;
   }
 
+  function leisteInnen() {
+    return '<span><b>LOGO!</b> · ' + T('Ansicht des Codes, wie er auf einer LOGO! 8 aussieht') + ' · <span style="color:#2e7d32;font-weight:bold;">' + T('1 = grün') + '</span>, <span style="color:#1565c0;">' + T('0 = blau gestrichelt') + '</span></span>' +
+        '<span style="margin-left:auto; display:inline-flex; gap:2px; align-items:center;">' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1/1.2)" title="' + T('Verkleinern (oder Mausrad)') + '">−</button>' +
+          '<span id="logo-zoom-anzeige" style="min-width:40px; text-align:center;">' + Math.round(zoom * 100) + ' %</span>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1.2)" title="' + T('Vergrößern (oder Mausrad)') + '">+</button>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(0)" title="' + T('Zoom zurücksetzen (100 %)') + '">⟲</button>' +
+        '</span>' +
+        '<span id="logo-knoepfe" style="display:inline-flex; gap:4px;">' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoListeZeigen()" title="' + T('Bausteinliste unter dem Plan ein- oder ausblenden') + '">' + T('📋 Bausteinliste') + '</button>' +
+          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoDrucken()" title="' + T('Bausteinliste und Zuordnungsliste mit LOGO!-Klemmen auf einem Blatt drucken oder als PDF speichern') + '">' + T('🖨 Drucken') + '</button>' +
+        '</span>' +
+        '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoSvg()" title="' + T('LOGO!-Plan als SVG-Grafik speichern, z. B. für ein Arbeitsblatt') + '">' + T('💾 Als SVG speichern') + '</button>';
+  }
+
   // ---------- Host im Logikplan ----------
   function host() {
     const d = doc();
@@ -676,18 +727,7 @@
     h.setAttribute('style', 'display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:41;');
     h.innerHTML =
       '<div id="logo-leiste" style="position:sticky; top:0; left:0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; padding:4px 10px; background:#fafafa; border-bottom:1px solid #ddd; font:12px \'Segoe UI\', Arial, sans-serif; color:#455a64; z-index:2;">' +
-        '<span><b>LOGO!</b> · ' + T('Ansicht des Codes, wie er auf einer LOGO! 8 aussieht') + ' · <span style="color:#2e7d32;font-weight:bold;">1 = grün</span>, <span style="color:#1565c0;">0 = blau gestrichelt</span></span>' +
-        '<span style="margin-left:auto; display:inline-flex; gap:2px; align-items:center;">' +
-          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1/1.2)" title="Verkleinern (oder Mausrad)">−</button>' +
-          '<span id="logo-zoom-anzeige" style="min-width:40px; text-align:center;">100 %</span>' +
-          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(1.2)" title="Vergrößern (oder Mausrad)">+</button>' +
-          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoZoom(0)" title="Zoom zurücksetzen (100 %)">⟲</button>' +
-        '</span>' +
-        '<span id="logo-knoepfe" style="display:inline-flex; gap:4px;">' +
-          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoListeZeigen()" title="Bausteinliste unter dem Plan ein- oder ausblenden">📋 Bausteinliste</button>' +
-          '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoDrucken()" title="Bausteinliste und Zuordnungsliste mit LOGO!-Klemmen auf einem Blatt drucken oder als PDF speichern">🖨 Drucken</button>' +
-        '</span>' +
-        '<button class="btn-export" style="background:#607d8b; border:1px solid #455a64; padding:2px 8px; font-size:11px;" onclick="window._logoSvg()" title="LOGO!-Plan als SVG-Grafik speichern, z. B. für ein Arbeitsblatt">💾 Als SVG speichern</button>' +
+        leisteInnen() +
       '</div>' +
       '<div id="logo-passt" style="margin:8px 10px 0; font:12px \'Segoe UI\', Arial, sans-serif;"></div>' +
       '<svg id="logo-svg" xmlns="http://www.w3.org/2000/svg" style="display:block;"></svg>' +
@@ -844,6 +884,8 @@
     }
     h.style.display = 'block';
     if (cs) cs.style.visibility = 'hidden';
+    const leiste = doc().getElementById('logo-leiste');
+    if (leiste) leiste.innerHTML = leisteInnen(); // Sprache kann gewechselt haben
     const svg = doc().getElementById('logo-svg');
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     try { modell = Logo.abbilden(graph || null, {}); } catch (e) { console.warn('LOGO!', e); modell = null; }
@@ -1006,6 +1048,21 @@
     knopf();
     render(typeof currentGraph !== 'undefined' ? currentGraph : null); // eslint-disable-line no-undef
   };
+  // ?ansicht=logo (z. B. aus einer Seite von t-bk.de): Logikplan zeigen, LOGO!-Ansicht an
+  (function () {
+    let q = null;
+    try { q = new URLSearchParams(location.search); } catch (_) { return; }
+    if (!q || q.get('ansicht') !== 'logo') return;
+    const los = () => setTimeout(() => {
+      const fbs = document.getElementById('fbs-wrapper');
+      if (fbs && fbs.style.display === 'none' && typeof window.toggleWorkspaceView === 'function') {
+        try { window.toggleWorkspaceView('fbs-wrapper'); } catch (_) {}
+      }
+      window._toggleLogoAnsicht(true);
+    }, 1500);
+    if (document.readyState === 'complete') los();
+    else window.addEventListener('load', los);
+  })();
   window._logoSvg = function () {
     const svg = doc().getElementById('logo-svg');
     if (!svg) return;

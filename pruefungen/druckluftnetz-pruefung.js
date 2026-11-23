@@ -382,6 +382,73 @@ const FAELLE = {
     clearFactory(true); F._leeren();
     return R;
   },
+  'Aufbereitung: Druckverlust der Kette aus Trockner, Filter und Wartungseinheit': () => {
+    const F = Fluidplan, R = [];
+    // großer Kompressor mit enger Hysterese hält 7 bar; ein Baustein nimmt gleichmäßig 500 l/min ab
+    const k = F.setzen('kompressor', 0, 100, { q: 3000, pEin: 6.95, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 2000 });
+    const ab = F.setzen('ableiter', 120, 140);
+    const tr = F.setzen('ktrockner', 260, 60, { qN: 1000, dpN: 0.2 });
+    const fi = F.setzen('nfilter', 400, 60, { qN: 1000, dpN: 0.08 });
+    const h = F.setzen('hahn', 520, 60, { abgang: true });
+    const w = F.setzen('awartung', 640, 60, { p: 6, qN: 1000, dpN: 0.3 });
+    const a = F.setzen('anlage', 760, 160, { art: 'baustein', name: 'Linie', bedarf: 2, takte: 250, pMin: 5.5 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', tr, '1'); F.verbinden(b, '1', ab, '1'); F.verbinden(tr, '2', fi, '1'); F.verbinden(fi, '2', h, '1'); F.verbinden(h, '2', w, '1'); F.verbinden(w, '2', a, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    R.push(['Plan ohne Meldung (Ableiter angeschlossen, nichts offen)', F.pruefen().length === 0, F.pruefen().join(' | ')]);
+    F.netz.raffer(5); F.netz.rechnen(12, 0.05);
+    // Δp = Δp_N · (Q/Q_N)²: Trockner 0,2 · 0,25 = 0,05 bar, Filter 0,08 · 0,25 = 0,02 bar
+    R.push(['Trockner: Δp = 0,2 bar · (500/1000)² = 0,05 bar', Math.abs(Z(tr).dp - 0.05) < 0.012 && Math.abs(Z(tr).q - 500) < 40, Z(tr).dp.toFixed(3) + ' bar bei ' + Z(tr).q.toFixed(0) + ' l/min']);
+    R.push(['Filter: Δp = 0,08 bar · (500/1000)² = 0,02 bar', Math.abs(Z(fi).dp - 0.02) < 0.008, Z(fi).dp.toFixed(3)]);
+    R.push(['Wartungseinheit regelt auf 6 bar', Math.abs(Z(a).pNetz - 6) < 0.08, Z(a).pNetz.toFixed(2)]);
+    R.push(['Druckverlust der Kette am Verbraucher rund 1 bar (7 → 6)', Math.abs(Z(a).dpKette - 1) < 0.12, Z(a).dpKette.toFixed(2)]);
+    // Filter verschmutzt (100 % = zehnfacher Druckverlust): 0,2 bar, Wechselanzeige noch nicht
+    F.netz.raffer(1); F.aendern(fi, { schmutz: 100 }); F._neu(); F.netz.raffer(5); F.netz.rechnen(12, 0.05);
+    R.push(['Filter 100 % verschmutzt: zehnfacher Druckverlust (0,2 bar)', Math.abs(Z(fi).dp - 0.2) < 0.04, Z(fi).dp.toFixed(3)]);
+    // Fehler „Filter zu“: der Verbraucher bekommt den Druck nicht mehr
+    F.netz.raffer(1); F.aendern(fi, { schmutz: 0 }); F.fehlerSetzen(fi, 'zu'); F._neu(); F.netz.raffer(5); F.netz.rechnen(24, 0.05);
+    R.push(['Fehler „Filter zugesetzt“: Differenzdruck über der Wechselanzeige, Anlage meldet Druck zu niedrig', Z(fi).dp > 0.35 && Z(a).zuNiedrig === true, 'Δp ' + Z(fi).dp.toFixed(2) + ' bar, Anlage ' + Z(a).pNetz.toFixed(2) + ' bar']);
+    F.fehlerSetzen(fi, null);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Aufbereitung: Kondensat am Behälter und im Trockner, Fehler „Trockner aus“': () => {
+    const F = Fluidplan, R = [];
+    const k = F.setzen('kompressor', 0, 100, { q: 1000, pEin: 6.9, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 1000 });
+    const tr = F.setzen('ktrockner', 260, 60, { qN: 1000, dpN: 0.2, tp: 3 });
+    const a = F.setzen('anlage', 400, 160, { art: 'baustein', name: 'Linie', bedarf: 5, takte: 100, pMin: 5 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', tr, '1'); F.verbinden(tr, '2', a, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    const K = F.netz.kondensat(7, 3);
+    R.push(['Sättigung bei 20 °C rund 17,3 g/m³, bei 3 °C rund 5,9 g/m³', Math.abs(F.netz.kondensat(7, 20).satt - 17.3) < 0.2 && Math.abs(K.satt - 5.95) < 0.1, F.netz.kondensat(7, 20).satt.toFixed(2) + ' / ' + K.satt.toFixed(2)]);
+    R.push(['Kondensat je m³ angesaugter Luft bei 7 bar: Behälter rund 8,2 g, Trockner rund 1,4 g', Math.abs(K.behaelter - 8.19) < 0.1 && Math.abs(K.trockner - 1.41) < 0.05, K.behaelter.toFixed(2) + ' / ' + K.trockner.toFixed(2)]);
+    R.push(['Prüfung meldet den fehlenden Kondensatableiter', F.pruefen().some(m => /Kondensatableiter/.test(m)), '']);
+    F.netz.raffer(20); F.netz.rechnen(30, 0.05);   // 10 min, rund 5 m³ Luft
+    const luft = Z(a).luft / 1000;
+    R.push(['Rund 5 m³ Luft in 10 Minuten', Math.abs(luft - 5) < 0.2, luft.toFixed(2) + ' m³']);
+    R.push(['Ohne Ableiter steht das Kondensat im Behälter (rund 41 g)', Math.abs(Z(b).kond - luft * K.behaelter) < 6 && Z(b).ableiter === false, Z(b).kond.toFixed(1) + ' g']);
+    R.push(['Trockner scheidet rund 7 g ab, Luft am Verbraucher ist trocken', Math.abs(Z(tr).kond - luft * K.trockner) < 0.8 && !Z(a).feucht && Z(tr).nass === 0, Z(tr).kond.toFixed(2) + ' g']);
+    // Fehler „Trockner aus“
+    F.fehlerSetzen(tr, 'aus'); F._neu(); F.netz.raffer(20); F.netz.rechnen(30, 0.05);
+    R.push(['Fehler „Trockner aus“: Wasser geht ins Netz, Verbraucher meldet feuchte Luft', Z(tr).kond === 0 && Z(tr).nass > 5 && Z(a).feucht === true, Z(tr).nass.toFixed(2) + ' g']);
+    R.push(['Der Druckverlust des Trockners bleibt', Z(tr).dp > 0.02, Z(tr).dp.toFixed(3)]);
+    F.fehlerSetzen(tr, null);
+    // mit Ableiter am Behälter: Kondensat wird abgeleitet
+    F.netz.raffer(1);
+    const ab = F.setzen('ableiter', 120, 140); F.verbinden(b, '1', ab, '1'); F._neu(); F.netz.raffer(20); F.netz.rechnen(30, 0.05);
+    R.push(['Mit Ableiter: Behälter bleibt leer, der Ableiter hat das Kondensat', Z(b).kond === 0 && Z(ab).kond > 30 && Z(b).ableiter === true, Z(ab).kond.toFixed(1) + ' g']);
+    // Ableiter hängt offen: Leck
+    F.fehlerSetzen(ab, 'offen'); F._neu(); F.netz.raffer(5); F.netz.rechnen(4, 0.05);
+    R.push(['Fehler „Ableiter hängt offen“: bläst rund 58 l/min ab', Z(ab).qLeck > 50 && Z(ab).qLeck < 60, Z(ab).qLeck.toFixed(1)]);
+    F.fehlerSetzen(ab, 'zu'); F._neu(); F.netz.raffer(20); F.netz.rechnen(10, 0.05);
+    R.push(['Fehler „Ableiter verstopft“: Kondensat bleibt im Behälter', Z(b).kond > 5 && Z(ab).kond === 0, Z(b).kond.toFixed(1) + ' g']);
+    F.fehlerSetzen(ab, null);
+    F.netz.raffer(1);
+    return R;
+  },
   'Verbundener Plan: Netz bleibt beim Übernehmen, Quelle hängt am Abgang': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

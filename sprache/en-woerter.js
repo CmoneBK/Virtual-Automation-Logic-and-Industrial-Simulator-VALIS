@@ -10197,3 +10197,30 @@ VALIS_EN.vorlagen({
 "⟦0⟧: Der Einschaltdruck des Kompressors liegt unter dem Mindestdruck dieser Anlage.": "⟦0⟧: The compressor's cut-in pressure is below the minimum pressure of this plant.",
 "Luftbedarf und Leckage (⟦0⟧ l/min) sind größer als die Liefermenge der Kompressoren (⟦1⟧ l/min): Der Druck im Netz fällt.": "Air demand and leakage (⟦0⟧ l/min) exceed the delivery of the compressors (⟦1⟧ l/min): the pressure in the network falls."
 });
+
+// Druckluftnetz: Aufbereitung (23.11.2026)
+VALIS_EN.dazu({
+"Kältetrockner": "Refrigeration dryer",
+"Druckluftfilter": "Compressed-air filter",
+"Kondensatableiter": "Condensate drain",
+"Wartungseinheit am Abgang": "Service unit at the outlet",
+"Nenndurchfluss (l/min)": "Nominal flow (l/min)",
+"Druckverlust bei Nenndurchfluss (bar)": "Pressure loss at nominal flow (bar)",
+"Druckverlust bei Nenndurchfluss (neues Element) (bar)": "Pressure loss at nominal flow (new element) (bar)",
+"Drucktaupunkt (°C)": "Pressure dew point (°C)",
+"Trockner aus": "Dryer off",
+"Verschmutzung (%)": "Contamination (%)",
+"Element wechseln ab Differenzdruck (bar)": "Change element from differential pressure (bar)",
+"Trockner aus (Kältekreis ausgefallen)": "Dryer off (refrigeration circuit failed)",
+"Filter zugesetzt": "Filter clogged",
+"Kondensatableiter verstopft": "Condensate drain blocked",
+"Kondensatableiter hängt offen (bläst ab)": "Condensate drain stuck open (blowing off)",
+"Der Kältetrockner kühlt die Druckluft auf den Drucktaupunkt, das Wasser fällt aus und wird abgeleitet. Dahinter fällt kein Kondensat mehr aus, solange die Leitung wärmer ist als der Drucktaupunkt. Ist der Trockner aus, strömt die Luft feucht durch: Das Wasser fällt dann im Netz und an den Verbrauchern aus. Der Druckverlust wächst mit dem Quadrat des Durchflusses. Beim Simulieren schaltet ein Klick den Trockner aus und ein.": "The refrigeration dryer cools the compressed air to the pressure dew point; the water condenses and is drained. Downstream no more condensate forms as long as the pipe is warmer than the pressure dew point. If the dryer is off, the air passes through wet: the water then condenses in the network and at the consumers. The pressure loss grows with the square of the flow. While simulating, a click switches the dryer off and on.",
+"Der Filter hält Schmutz und Öltröpfchen zurück. Mit der Verschmutzung steigt sein Druckverlust (bei 100 % auf das Zehnfache). Die Differenzdruckanzeige meldet, wann das Element gewechselt wird. Jedes Zehntel Bar, das die Aufbereitung kostet, muss der Kompressor zusätzlich erzeugen.": "The filter retains dirt and oil droplets. Its pressure loss rises with contamination (tenfold at 100 %). The differential pressure indicator shows when the element has to be changed. Every tenth of a bar the air treatment costs has to be generated additionally by the compressor.",
+"Der Kondensatableiter lässt das Wasser ab, das sich an seinem Anschluss sammelt, zum Beispiel am Behälter. Ohne Ableiter bleibt das Kondensat im Behälter stehen und muss von Hand abgelassen werden. Kondensat enthält Öl und gehört in den Öl-Wasser-Trenner, nicht in den Abfluss.": "The condensate drain releases the water that collects at its port, for example at the receiver. Without a drain the condensate stays in the receiver and has to be drained by hand. Condensate contains oil and belongs in the oil-water separator, not in the sewer.",
+"Die Wartungseinheit am Abgang filtert die Luft und regelt den Druck für die Anlage dahinter. Sie kann den Druck nur senken: Kommt am Eingang weniger an als eingestellt (plus ihr eigener Druckverlust), fällt auch der Ausgang.": "The service unit at the outlet filters the air and regulates the pressure for the plant behind it. It can only reduce the pressure: if less arrives at the inlet than set (plus its own pressure loss), the outlet drops as well.",
+"Am Behälter fehlt ein Kondensatableiter: Das Kondensat bleibt im Behälter stehen.": "The receiver has no condensate drain: the condensate stays in the receiver."
+});
+VALIS_EN.vorlagen({
+"⟦0⟧: nicht angeschlossen.": "⟦0⟧: not connected."
+});

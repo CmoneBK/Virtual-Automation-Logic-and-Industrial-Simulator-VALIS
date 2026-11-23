@@ -3429,6 +3429,7 @@
                     </div>
                     <button id="btn-fbs-networks" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsNetworkMode()" title="Netzwerkmodus — teilt den Logikplan SPS-typisch in nummerierte Netzwerke (pro Output-Zuweisung ein Netzwerk). Jedes Netzwerk ist in sich abgeschlossen: benötigte Eingänge werden pro Netzwerk dupliziert (TIA-Portal-Style). Optional: ein Kommentar `// NETZWERK 1: Sicherheitskreis` im Code überschreibt die Aufteilung und gruppiert mehrere Outputs unter einem Titel.">🗂 Netzwerke: AUS</button>
                     <button id="btn-fbs-fup" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleFbsFup()" title="FUP-Darstellung nach Norm (IEC 61131-3) — zeichnet das Programm Netzwerk für Netzwerk wie im TIA-Portal oder auf Papier: Operanden mit Betriebsmittelkennzeichen und SPS-Adresse direkt am Eingang, Kästen &amp; / &gt;=1 / SR / RS / TON / CTU, Negation als Kreis, Zuweisung „=“ am Ende. In der Simulation: 1 = grün, 0 = blau gestrichelt. Reine Ansicht — bearbeitet wird im Code oder im normalen Logikplan.">📐 FUP: AUS</button>
+                    <button id="btn-fbs-logo" class="btn-export" style="background-color: #455a64; border: 1px solid #263238;" onclick="window._toggleLogoAnsicht()" title="LOGO!-Ansicht (Maßstab LOGO! 8) — zeigt das Programm so, wie es auf einer LOGO! aussieht: Klemmen I1, Q1, M1, AI1, nummerierte Bausteine B001 … mit den Namen aus LOGO!Soft Comfort, oben die Prüfung, ob das Programm auf eine LOGO! passt. Reine Ansicht — bearbeitet wird im Code oder im normalen Logikplan.">🟩 LOGO!: AUS</button>
                     <button class="panel-info-btn" onclick="showPanelInfo('fbs-wrapper', this)" title="Kontext-Hilfe zu diesem Fenster (Logikplan)">ℹ️</button>
                 </div>
                 <div id="fup-norm-host" style="display:none; position:absolute; top:56px; left:0; right:0; bottom:0; overflow:auto; background:#fff; z-index:40;">
@@ -5855,6 +5856,8 @@ const aktiv = resolveLinked(obj, spsState);
             #zuordnung-modal .zl-table{width:100%;border-collapse:collapse;font-size:12px;}
             #zuordnung-modal .zl-table th{background:#2b2b3b;color:#ddd;text-align:left;padding:5px 7px;border:1px solid #3a3a4a;font-weight:600;}
             #zuordnung-modal .zl-table td{padding:4px 7px;border:1px solid #3a3a4a;color:#ccc;vertical-align:top;}
+            #zuordnung-modal input.zl-logo{width:44px;background:#1e1e2a;color:#a5d6a7;border:1px solid #455a64;border-radius:3px;font:12px Consolas,monospace;padding:1px 3px;}
+            #zuordnung-modal input.zl-logo.fest{color:#fff;border-color:#66bb6a;font-weight:bold;}
             #zuordnung-modal .zl-mono{font-family:Consolas,'Courier New',monospace;white-space:nowrap;}
             #zuordnung-modal .zl-live{white-space:nowrap;min-width:70px;}
             #zuordnung-modal .zl-bit{display:inline-block;min-width:16px;text-align:center;border-radius:3px;padding:0 4px;font-weight:bold;font-family:Consolas,monospace;}
@@ -6516,11 +6519,15 @@ const aktiv = resolveLinked(obj, spsState);
                 "zl_col_group": "Gruppe",
                 "zl_col_var": "Variable (Symbol)",
                 "zl_col_addr": "Adresse",
+                "zl_col_logo": "LOGO!",
                 "zl_col_kz": "Kennzeichen",
                 "zl_col_type": "Bauteil / Typ",
                 "zl_col_contact": "Öffner/Schließer",
                 "zl_col_comment": "Kommentar",
                 "zl_col_state": "Zustand",
+                "zl_logo_tip": "Klemme auf einer LOGO! 8 (I, Q, M, AI, AQ, AM). VALIS schlägt sie vor, du kannst jede ändern.",
+                "zl_logo_vorschlag": "Vorschlag von VALIS. Ändern legt die Klemme fest, leer = wieder Vorschlag.",
+                "zl_logo_fest": "Fest vergeben. Leer machen = wieder Vorschlag von VALIS.",
                 "zl_nc": "Öffner (NC)",
                 "zl_no": "Schließer (NO)",
                 "zl_kind_sr": "Speicher SR (rücksetzdominant)",
@@ -6946,11 +6953,15 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "zl_col_group": "Group",
                 "zl_col_var": "Variable (symbol)",
                 "zl_col_addr": "Address",
+                "zl_col_logo": "LOGO!",
                 "zl_col_kz": "Designation",
                 "zl_col_type": "Device / type",
                 "zl_col_contact": "NC/NO",
                 "zl_col_comment": "Comment",
                 "zl_col_state": "State",
+                "zl_logo_tip": "Terminal on a LOGO! 8 (I, Q, M, AI, AQ, AM). VALIS suggests one, you can change any.",
+                "zl_logo_vorschlag": "Suggested by VALIS. Changing it fixes the terminal, empty = suggestion again.",
+                "zl_logo_fest": "Fixed. Empty = VALIS suggestion again.",
                 "zl_nc": "NC (Öffner)",
                 "zl_no": "NO (Schließer)",
                 "zl_kind_sr": "Memory SR (reset-dominant)",
@@ -16773,6 +16784,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function drawGraph(graph) {
             currentGraph = graph;
             if (typeof window._fupRender === 'function') { try { window._fupRender(graph); } catch (e) { console.warn('FUP:', e); } }
+            if (typeof window._logoRender === 'function') { try { window._logoRender(graph); } catch (e) { console.warn('LOGO!:', e); } }
             let isFirstRun = !panZoomInstance;
             svgHalos.innerHTML = '';
             svgLines.innerHTML = '';
@@ -23438,6 +23450,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 }
             }
             if (window.fbsFupMode && typeof window._fupLive === 'function') { try { window._fupLive(); } catch (_) {} }
+            if (window.logoAnsicht && typeof window._logoLive === 'function') { try { window._logoLive(); } catch (_) {} }
             // Live-Update für Schrittketten-Panel: aktive Schritte hervorheben.
             if (typeof window._highlightActiveSchrittketten === 'function') {
                 window._highlightActiveSchrittketten();
@@ -81475,7 +81488,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             b.textContent = window.fbsFupMode ? '📐 FUP: AN' : '📐 FUP: AUS';
             b.style.backgroundColor = window.fbsFupMode ? '#1976d2' : '#455a64';
             const cs = doc().getElementById('custom-svg');
-            if (cs) cs.style.visibility = window.fbsFupMode ? 'hidden' : '';
+            if (cs) cs.style.visibility = (window.fbsFupMode || window.logoAnsicht) ? 'hidden' : '';
         }
         window._toggleFbsFup = function () {
             window.fbsFupMode = !window.fbsFupMode;
@@ -81595,9 +81608,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const io = window._spsIoLabels(graph, ins, outs);
             const physOutSet = new Set(io.physOut);
             const info = codeInfo();
+            // LOGO!-Klemme (logo.js): Vorschlag oder von der Lehrkraft fest vergeben
+            let lm = null;
+            try { lm = window.Logo ? window.Logo.abbilden(graph0, {}) : null; } catch (_) { lm = null; }
             const row = (name, role) => {
                 const t = (typeof componentTypes !== 'undefined' && componentTypes[name]) || (role === 'in' ? 'taster' : 'led');
                 const r = { name, role, addr: addrOf(name, role), kz: io.labels[name] || '', comment: info.comment[name] || '' };
+                r.logo = (lm && lm.klemmen[name]) || '';
+                r.logoFest = !!(lm && lm.rollen[name] && lm.rollen[name].fest);
                 if (role === 'in' && t === 'analog_in') { r.type = typeLabel(t); r.contact = '–'; }
                 else if (role === 'in') { r.type = typeLabel(t); r.contact = isNC(t) ? T('zl_nc') : T('zl_no'); r.nc = isNC(t); }
                 else if (role === 'out') { r.type = typeLabel(t); r.contact = '–'; }
@@ -81629,9 +81647,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function section(title, rows, hint) {
             if (!rows.length) return '';
             let h = `<h4 class="zl-sec">${esc(title)}${hint ? ` <span class="zl-hint">${esc(hint)}</span>` : ''}</h4>`;
-            h += `<table class="zl-table"><thead><tr><th>${esc(T('zl_col_var'))}</th><th>${esc(T('zl_col_addr'))}</th><th>${esc(T('zl_col_kz'))}</th><th>${esc(T('zl_col_type'))}</th><th>${esc(T('zl_col_contact'))}</th><th>${esc(T('zl_col_comment'))}</th><th class="zl-live-h">${esc(T('zl_col_state'))}</th></tr></thead><tbody>`;
+            h += `<table class="zl-table"><thead><tr><th>${esc(T('zl_col_var'))}</th><th>${esc(T('zl_col_addr'))}</th><th title="${esc(T('zl_logo_tip'))}">${esc(T('zl_col_logo'))}</th><th>${esc(T('zl_col_kz'))}</th><th>${esc(T('zl_col_type'))}</th><th>${esc(T('zl_col_contact'))}</th><th>${esc(T('zl_col_comment'))}</th><th class="zl-live-h">${esc(T('zl_col_state'))}</th></tr></thead><tbody>`;
             rows.forEach(r => {
-                h += `<tr><td class="zl-mono"><b>${esc(r.name)}</b></td><td class="zl-mono">${esc(r.addr)}</td><td class="zl-mono">${esc(r.kz || '–')}</td><td>${esc(r.type)}</td><td>${esc(r.contact)}</td><td>${esc(r.comment)}</td>`
+                h += `<tr><td class="zl-mono"><b>${esc(r.name)}</b></td><td class="zl-mono">${esc(r.addr)}</td>`
+                    + `<td class="zl-mono">${r.logo ? `<input class="zl-logo${r.logoFest ? ' fest' : ''}" data-zl-logo="${esc(r.name)}" value="${esc(r.logo)}" size="4" title="${esc(T(r.logoFest ? 'zl_logo_fest' : 'zl_logo_vorschlag'))}">` : '–'}</td>`
+                    + `<td class="zl-mono">${esc(r.kz || '–')}</td><td>${esc(r.type)}</td><td>${esc(r.contact)}</td><td>${esc(r.comment)}</td>`
                     + `<td class="zl-live" data-zl-var="${esc(r.name)}" data-zl-nc="${r.nc ? 1 : 0}"></td></tr>`;
             });
             return h + '</tbody></table>';
@@ -81647,6 +81667,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                   + section(T('zl_merker'), d.merker, T('zl_merker_hint'));
             if (!h) h = `<p class="zl-empty">${esc(T('zl_empty'))}</p>`;
             body.innerHTML = h;
+            // LOGO!-Klemme ändern: leer = wieder Vorschlag
+            body.querySelectorAll('input.zl-logo').forEach(inp => inp.addEventListener('change', () => {
+                if (window.Logo) window.Logo.klemmeSetzen(inp.getAttribute('data-zl-logo'), inp.value.trim());
+                render();
+            }));
             updateLive();
         }
         function updateLive() {
@@ -81687,9 +81712,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._zuordnungCsv = function () {
             const d = window._spsZuordnungData();
             const q = (s) => { s = String(s == null ? '' : s); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-            let csv = [T('zl_col_group'), T('zl_col_var'), T('zl_col_addr'), T('zl_col_kz'), T('zl_col_type'), T('zl_col_contact'), T('zl_col_comment')].map(q).join(';') + '\n';
+            let csv = [T('zl_col_group'), T('zl_col_var'), T('zl_col_addr'), T('zl_col_logo'), T('zl_col_kz'), T('zl_col_type'), T('zl_col_contact'), T('zl_col_comment')].map(q).join(';') + '\n';
             [[T('zl_inputs'), d.inputs], [T('zl_outputs'), d.outputs], [T('zl_merker'), d.merker]].forEach(([g, rows]) => {
-                rows.forEach(r => { csv += [g, r.name, r.addr, r.kz, r.type, r.contact, r.comment].map(q).join(';') + '\n'; });
+                rows.forEach(r => { csv += [g, r.name, r.addr, r.logo, r.kz, r.type, r.contact, r.comment].map(q).join(';') + '\n'; });
             });
             return csv;
         };
@@ -81704,8 +81729,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._printZuordnungsliste = function () {
             const d = window._spsZuordnungData();
             const sec = (title, rows) => !rows.length ? '' :
-                `<h2>${esc(title)}</h2><table><thead><tr><th>${esc(T('zl_col_var'))}</th><th>${esc(T('zl_col_addr'))}</th><th>${esc(T('zl_col_kz'))}</th><th>${esc(T('zl_col_type'))}</th><th>${esc(T('zl_col_contact'))}</th><th>${esc(T('zl_col_comment'))}</th></tr></thead><tbody>`
-                + rows.map(r => `<tr><td class="m"><b>${esc(r.name)}</b></td><td class="m">${esc(r.addr)}</td><td class="m">${esc(r.kz || '–')}</td><td>${esc(r.type)}</td><td>${esc(r.contact)}</td><td>${esc(r.comment)}</td></tr>`).join('')
+                `<h2>${esc(title)}</h2><table><thead><tr><th>${esc(T('zl_col_var'))}</th><th>${esc(T('zl_col_addr'))}</th><th>${esc(T('zl_col_logo'))}</th><th>${esc(T('zl_col_kz'))}</th><th>${esc(T('zl_col_type'))}</th><th>${esc(T('zl_col_contact'))}</th><th>${esc(T('zl_col_comment'))}</th></tr></thead><tbody>`
+                + rows.map(r => `<tr><td class="m"><b>${esc(r.name)}</b></td><td class="m">${esc(r.addr)}</td><td class="m">${esc(r.logo || '–')}</td><td class="m">${esc(r.kz || '–')}</td><td>${esc(r.type)}</td><td>${esc(r.contact)}</td><td>${esc(r.comment)}</td></tr>`).join('')
                 + '</tbody></table>';
             const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(T('zl_title'))}</title><style>
                 body{font:12px 'Segoe UI',Arial,sans-serif;color:#000;margin:18mm 14mm}
@@ -81970,7 +81995,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 <script src="elektroplan-blatt.js?v=20261122a"></script>
 <script src="plansatz.js?v=20261122a"></script>
 <script src="fluidplan.js?v=20261123a"></script>
-<script src="logo.js?v=20261123a"></script>
+<script src="logo.js?v=20261123c"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>
 <script src="uebungsanlagen.js?v=20261115d"></script>

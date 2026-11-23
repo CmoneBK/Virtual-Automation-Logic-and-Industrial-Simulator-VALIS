@@ -26,6 +26,9 @@
  *   R_TRIG → AND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 0 → 1
  *   F_TRIG → NAND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 1 → 0
  *   CTU  → Vor-/Rückwärtszähler (R, Cnt, Dir = lo, Ein = Aus = PV)
+ *   CTD  → Vor-/Rückwärtszähler (R ← LD, Cnt ← CD, Dir = hi, StartVal = PV,
+ *          Ein = Aus = 1) mit NOT dahinter: Q = CV <= 0. Vor dem ersten LD
+ *          weicht die LOGO! ab (Start bei StartVal statt 0, Hinweis).
  *   SR   → Selbsthalterelais (Rücksetzen dominant, wie die LOGO!)
  *   RS   → Selbsthalterelais mit R UND NICHT S davor, weil die LOGO! kein
  *          setzdominantes Speicherglied hat (Fußnote).
@@ -335,17 +338,37 @@
         if (z.ausserhalb) grund(L('Zeit ' + komma(sek) + ' s ist länger als 99:59 h.', 'Time ' + sek + ' s is longer than 99:59 h.'), zeile, 'nicht');
         ablegen(b); return platz;
       }
-      if (n.type === 'CTU' || n.type === 'CTD') {
+      if (n.type === 'CTD') {
+        // Rückwärtszähler: Vor-/Rückwärtszähler mit Dir = hi, StartVal = PV, R ← LD
+        // (R setzt auf StartVal zurück), On = Off = 1. Q des Zählers ist CV >= 1,
+        // CTD will CV <= 0: dahinter ein NOT.
+        const platz = { art: 'b', b: null };
+        memo.set(id, platz);
+        b = neuerBaustein('CTU', id, zeile);
+        sfEingang(b, 'R', pin('LD'));
+        sfEingang(b, 'Cnt', pin('CD'));
+        b.ein.push({ pin: 'Dir', ref: konst(true), neg: false });
+        const pv = parseInt((String(n.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0;
+        b.pv = 1; b.start = pv;
+        b.par.push({ n: 'StartVal', w: String(pv) }, { n: L('Ein', 'On'), w: '1' }, { n: L('Aus', 'Off'), w: '1' });
+        const r = ablegen(b);
+        const nb = neuerBaustein('NOT', id, zeile);
+        nb.ein.push({ pin: '', ref: r, neg: false });
+        platz.b = ablegen(nb).b;
+        grund(L('Rückwärtszähler (CTD): Die LOGO! beginnt beim Einschalten mit StartVal = ' + pv + ', die SPS mit 0 (Q = 1). Erst nach dem ersten Laden (LD) verhalten sich beide gleich.',
+          'Down counter (CTD): the LOGO! starts at StartVal = ' + pv + ' when switched on, the PLC at 0 (Q = 1). Only after the first load (LD) do both behave the same.'), zeile, 'hinweis');
+        return platz;
+      }
+      if (n.type === 'CTU') {
         b = neuerBaustein('CTU', id, zeile);
         const platz = { art: 'b', b };
         memo.set(id, platz);
         sfEingang(b, 'R', pin('R'));
-        sfEingang(b, 'Cnt', pin('CU') || pin('CD'));
-        b.ein.push({ pin: 'Dir', ref: konst(n.type === 'CTD'), neg: false });
+        sfEingang(b, 'Cnt', pin('CU'));
+        b.ein.push({ pin: 'Dir', ref: konst(false), neg: false });
         const pv = parseInt((String(n.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0;
         b.pv = pv;
         b.par.push({ n: L('Ein', 'On'), w: String(pv) }, { n: L('Aus', 'Off'), w: String(pv) });
-        if (n.type === 'CTD') grund(L('Rückwärtszähler (CTD) bitte von Hand prüfen.', 'Please check the down counter (CTD) by hand.'), zeile, 'hinweis');
         if (pv === 0) grund(L('Zähler mit Vorwahl 0: die LOGO! schaltet Q schon vor dem ersten Impuls.', 'Counter with preset 0: the LOGO! switches Q on before the first pulse.'), zeile, 'hinweis');
         ablegen(b); return platz;
       }
@@ -578,7 +601,7 @@
       if (s.art === 'k') { z.k[s.klemme] = lesen(z, s.ref); return; }
       const b = s.b;
       let st = z.s.get(b);
-      if (!st) { st = { q: false, ta: 0, cv: 0, alt: false }; z.s.set(b, st); }
+      if (!st) { st = { q: false, ta: 0, cv: b.start || 0, alt: false }; z.s.set(b, st); }
       const w = b.ein.map(e => { const v = bit(lesen(z, e.ref)); return e.neg ? !v : v; });
       switch (b.typ) {
         case 'AND': st.q = w.every(Boolean); break;
@@ -624,7 +647,7 @@
         }
         case 'CTU': {
           const r = bit(ein(b, 'R')), cnt = bit(ein(b, 'Cnt')), dir = bit(ein(b, 'Dir'));
-          if (r) st.cv = 0;
+          if (r) st.cv = b.start || 0;
           else if (cnt && !st.alt) st.cv += dir ? -1 : 1;
           st.alt = cnt;
           if (st.cv >= b.pv) st.q = true; else if (st.cv < b.pv) st.q = false;
@@ -1066,7 +1089,8 @@
       case 'AND': return bits().every(Boolean);
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
-      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'CTU': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
+      case 'CTU': if (b.start != null) return !(tm[b.src] && tm[b.src].q); return !!(tm[b.src] && tm[b.src].q); // CTD: Zähler-Q ist das Gegenteil
+      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

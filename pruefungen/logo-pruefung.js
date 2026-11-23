@@ -206,7 +206,14 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   console.log('Ansicht im Logikplan');
   await page.evaluate(() => { const ta = document.getElementById('code'); ta.value = 'MOTOR := SR(START AND NOT STOER, STOP)\nLAMPE := TON(MOTOR, 3)\nX := RS(EIN, AUS)\nH := X OR LAMPE\nW := max(A, B)'; ta.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForTimeout(1500);
-  await page.evaluate(() => { try { toggleWorkspaceView('fbs-wrapper'); } catch (e) {} window._toggleLogoAnsicht(true); });
+  await page.evaluate(() => { const w = document.getElementById('fbs-wrapper'); if (w && w.style.display === 'none') { try { toggleWorkspaceView('fbs-wrapper'); } catch (e) {} } });
+  await page.waitForTimeout(400);
+  // Mit der Maus klicken wie ein Mensch (die Leiste lässt Klicks nur auf Knöpfe durch)
+  let klickFehler = '';
+  try { await page.click('#btn-fbs-logo', { timeout: 3000 }); } catch (e) { klickFehler = e.message.split('\n')[0]; }
+  await page.waitForTimeout(300);
+  ok('Knopf „LOGO!“ lässt sich mit der Maus drücken', !klickFehler && (await page.evaluate(() => window.logoAnsicht)) === true, klickFehler);
+  await page.evaluate(() => window._toggleLogoAnsicht(true));
   await page.waitForTimeout(600);
   r = await page.evaluate(() => {
     const h = document.getElementById('logo-host'), svg = document.getElementById('logo-svg');

@@ -449,6 +449,123 @@ const FAELLE = {
     F.netz.raffer(1);
     return R;
   },
+  'Auswertung: Kennzahlen und Kosten wie in der Lernsituation (120 l/min = 720 € im Jahr)': () => {
+    const F = Fluidplan, R = [];
+    // Netz der Lernsituation: 400 l/min, 1500 l, 7 bar, Leckage 120 l/min bei 7 bar (= 102,9 l/min bei 6 bar), Fertigung 190 l/min
+    const k = F.setzen('kompressor', 0, 100, { q: 400, pEin: 6.2, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 1500 });
+    const m = F.setzen('nmess', 260, 60, { bereich: 1000, var: 'AI_LUFT', varSchalt: 'B_VIEL', schaltpunkt: 250 });
+    const h = F.setzen('hahn', 400, 60, { abgang: true, leck: 120 * 6 / 6.6 });
+    const a = F.setzen('anlage', 400, 160, { art: 'baustein', name: 'Fertigung', bedarf: 19 / 60, takte: 600, pMin: 5 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', m, '1'); F.verbinden(m, '2', h, '1'); F.verbinden(m, '2', a, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    const K0 = F.netz.kennzahlen();
+    R.push(['Preis je m³: 6,25 kW je m³/min · 0,24 €/kWh / 60 = 0,025 €', Math.abs(K0.euroM3 - 0.025) < 1e-9, K0.euroM3.toFixed(4)]);
+    R.push(['Speicher im Netz 1500 l', Math.abs(K0.volumen - 1500) < 1, K0.volumen.toFixed(0)]);
+    F.netz.raffer(20); F.netz.rechnen(180, 0.05);   // 60 min
+    const K = F.netz.kennzahlen(), kp = K.kompressoren[0];
+    R.push(['Leckage im Mittel rund 120 l/min (bei im Mittel 6,6 bar)', Math.abs(K.leck - 120) < 5, K.leck.toFixed(1)]);
+    R.push(['Leckagekosten rund 720 € im Jahr', Math.abs(K.leckEuroJahr - 720) < 30, K.leckEuroJahr.toFixed(0) + ' €']);
+    R.push(['Luftbedarf im Mittel rund 310 l/min (der Speicher gibt am Ende noch etwas ab)', Math.abs(K.qv - 310) < 22, K.qv.toFixed(0)]);
+    R.push(['Einschaltdauer = Bedarf / Liefermenge (rund 78 %)', Math.abs(kp.ed - K.qv / 400) < 0.03, (kp.ed * 100).toFixed(0) + ' %']);
+    R.push(['Energie: 2,5 kW · ED, im Jahr · 4000 h · 0,24 €', Math.abs(K.kW - 2.5 * kp.ed) < 0.01 && Math.abs(K.euroJahr - K.kW * 4000 * 0.24) < 0.5, K.kW.toFixed(2) + ' kW, ' + K.euroJahr.toFixed(0) + ' €']);
+    R.push(['1 bar weniger spart 7 % davon', Math.abs(K.sparBar - K.euroJahr * 0.07) < 0.01, K.sparBar.toFixed(0) + ' €']);
+    // Behälter-Rechner: z = Q_K · L · (1 − L) · 60 / (V · Δp)
+    const B = F.netz.behaelter();
+    const zSoll = 400 * B.lb * (1 - B.lb) * 60 / (1500 * 0.8);
+    R.push(['Behälter-Rechner nimmt den gemessenen Bedarf', B.gemessen === true && Math.abs(B.qv - K.qv) < 1e-6 && Math.abs(B.dp - 0.8) < 1e-9, '']);
+    R.push(['Gerechnete Schaltspiele passen zur Simulation', Math.abs(B.zIst - zSoll) < 1e-6 && Math.abs(kp.spiele - B.zIst) < 0.5, 'gerechnet ' + B.zIst.toFixed(2) + ' /h, simuliert ' + kp.spiele.toFixed(2) + ' /h']);
+    const B2 = F.netz.behaelter({ qk: 400, qv: 200, dp: 1, z: 10 });
+    R.push(['Rechenbeispiel: 400 l/min, halbe Auslastung, 1 bar, 10/h → 600 l', Math.abs(B2.vErf - 600) < 1e-6 && Math.abs(B2.vWorst - 600) < 1e-6, B2.vErf.toFixed(0) + ' l']);
+    // Kosten umstellen
+    F.netz.kosten({ strom: 0.30 });
+    R.push(['Strompreis 0,30 €/kWh: Preis je m³ steigt auf 0,03125 €', Math.abs(F.netz.kennzahlen().euroM3 - 0.03125) < 1e-9 && F.plan().netzKosten.strom === 0.30, '']);
+    F.netz.kosten({ strom: 0.24 });
+    // Durchflusssensor
+    R.push(['Durchflusssensor misst den Bedarf der Halle und schreibt den Analogwert', Math.abs(Z(m).q - 310) < 15 && Math.abs(F._schreibA().AI_LUFT - Math.abs(Z(m).q)) < 0.06, Z(m).q.toFixed(0) + ' l/min']);
+    R.push(['Schaltausgang über 250 l/min, Mengenzähler rund 18,6 m³', F._schreib().B_VIEL === true && Math.abs(Z(m).summe / 1000 - 18.6) < 0.4, (Z(m).summe / 1000).toFixed(2) + ' m³']);
+    // Aufzeichnung
+    const A = F.netz.aufzeichnung();
+    R.push(['Aufzeichnung: Druck an Kompressor, Behälter, Abgang und Anlage', A && A.n > 200 && A.n <= 2400 && Object.keys(A.p).length === 4 && A.p[k].length === A.n, A && A.n + ' Punkte']);
+    R.push(['Aufzeichnung bleibt zwischen den Schaltpunkten', A && Math.min(...A.p[b]) > 6.15 && Math.max(...A.p[b]) < 7.05, A && Math.min(...A.p[b]).toFixed(2) + ' … ' + Math.max(...A.p[b]).toFixed(2)]);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Auswertung: Druckabfallprüfung fürs ganze Netz und für einen abgesperrten Abschnitt': () => {
+    const F = Fluidplan, R = [];
+    // Lernsituation: 1500 l, von 7,0 auf 6,2 bar in 10 min → 120 l/min
+    const k = F.setzen('kompressor', 0, 100, { q: 400, pEin: 6, pAus: 7, aus: true });
+    const b = F.setzen('behaelter', 120, 60, { V: 1500 });
+    const h1 = F.setzen('hahn', 260, 60, {});
+    const b2 = F.setzen('behaelter', 400, 60, { V: 500 });
+    const ab = F.setzen('hahn', 540, 60, { abgang: true, leck: 60 });
+    const lk = F.setzen('hahn', 120, 160, { abgang: true, leck: 109.2 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', h1, '1'); F.verbinden(h1, '2', b2, '1'); F.verbinden(b2, '2', ab, '1'); F.verbinden(b, '1', lk, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    // Abschnitt absperren: Hahn zu, gemessen wird am ersten Behälter
+    F.druecken(h1, 'N', true); F.druecken(h1, 'N', false);
+    const s = F.netz.pruefStart();
+    R.push(['Start: 7,0 bar, Abschnitt 1500 l (Hahn zu trennt den Rest ab), Kompressor aus', s && Math.abs(s.p0 - 7) < 0.01 && Math.abs(s.V - 1500) < 3 && s.kompAn === false, s && s.V.toFixed(0) + ' l']);
+    F.netz.raffer(20); F.netz.rechnen(30, 0.05);   // 10 min
+    const e = F.netz.pruefStopp();
+    R.push(['Nach 10 min rund 6,2 bar', e && Math.abs(e.p1 - 6.2) < 0.03 && Math.abs(e.t - 600) < 1, e && e.p1.toFixed(3) + ' bar']);
+    R.push(['Leckage = V · Δp / t = 1500 · 0,8 / 10 = 120 l/min', e && Math.abs(e.leck - 120) < 4, e && e.leck.toFixed(1)]);
+    R.push(['Der abgesperrte Rest verliert für sich (60 l/min an 500 l)', Z(b2).pNetz < 6.0, Z(b2).pNetz.toFixed(2)]);
+    // ganzes Netz: Hahn auf
+    F.netz.raffer(1); F._neu();
+    const s2 = F.netz.pruefStart();
+    R.push(['Ganzes Netz: Abschnitt 2000 l', s2 && Math.abs(s2.V - 2000) < 4, s2 && s2.V.toFixed(0)]);
+    F.netz.raffer(20); F.netz.rechnen(15, 0.05);
+    const e2 = F.netz.pruefStopp();
+    // beide Leckagen bei im Mittel rund 6,7 bar: (109,2 + 60) · 6,7/6 ≈ 189 l/min
+    R.push(['Ganzes Netz: beide Leckagen zusammen (rund 190 l/min)', e2 && Math.abs(e2.leck - 189) < 8, e2 && e2.leck.toFixed(1)]);
+    // läuft der Kompressor mit, warnt die Prüfung
+    F.netz.raffer(1); F.aendern(k, { aus: false }); F._neu();
+    const s3 = F.netz.pruefStart();
+    R.push(['Kompressor nicht aus: Hinweis', s3 && s3.kompAn === true, '']);
+    F.netz.pruefStopp();
+    return R;
+  },
+  'Auswertung: Netz-Diagramm mit Kennzahlen, Rechenweg und Oszilloskop-Kanälen': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    F.oeffnen(); await warte(300);
+    const k = F.setzen('kompressor', 0, 100, { q: 400, pEin: 6.5, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 200 });
+    const m = F.setzen('nmess', 260, 60, {});
+    const h = F.setzen('hahn', 400, 60, { abgang: true, leck: 150 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', m, '1'); F.verbinden(m, '2', h, '1');
+    F.netz.diagramm(); await warte(200);
+    const box = document.getElementById('fp-diag'), panel = box.querySelector('.fp-netzkz');
+    R.push(['Knopf „Netz“ im Diagrammfenster, Kennzahlen daneben', !!document.getElementById('fp-d-netz') && document.getElementById('fp-d-netz').classList.contains('an') && !!panel && panel.style.display !== 'none', '']);
+    const sel = panel.querySelector('#fp-nz-raffer'); sel.value = '20'; sel.onchange();
+    R.push(['Zeitraffer stellt das Netz auf × 20', F.netz.raffer() === 20, String(F.netz.raffer())]);
+    if (!isSimulationActive) toggleSimulation();
+    await warte(6000);   // rund 2 min Netzzeit
+    const svg = box.querySelector(':scope > svg');
+    R.push(['Diagramm zeichnet Verläufe und die Schaltpunkte', svg.querySelectorAll('path[data-reihe]').length >= 2 && /aus 7 bar/.test(svg.textContent) && /ein 6,5 bar/.test(svg.textContent), svg.querySelectorAll('path[data-reihe]').length + ' Linien']);
+    R.push(['Balken „Kompressor läuft“', svg.querySelectorAll('rect[data-lauf]').length >= 1, String(svg.querySelectorAll('rect[data-lauf]').length)]);
+    const txt = id => panel.querySelector('#' + id).textContent;
+    R.push(['Kennzahlen zeigen Schaltspiele, Einschaltdauer und Kosten', /\/h/.test(txt('fp-nz-spiele')) && /%/.test(txt('fp-nz-ed')) && /€/.test(txt('fp-nz-leckeuro')) && /0,025 €\/m³/.test(txt('fp-nz-m3')), txt('fp-nz-spiele') + ' | ' + txt('fp-nz-ed') + ' | ' + txt('fp-nz-leckeuro')]);
+    R.push(['Behälter-Rechner zeigt den Rechenweg', /V = Q_K · L · \(1 − L\) · 60 \/ \(z · Δp\)/.test(txt('fp-nz-beh')) && /Vorhanden: 200 l/.test(txt('fp-nz-beh')), txt('fp-nz-beh').split('\n')[2]]);
+    // Kosten im Feld ändern
+    const ein = panel.querySelector('input[data-kosten="stunden"]'); ein.value = '2000'; ein.onchange();
+    R.push(['Betriebsstunden im Feld geändert: im Plan gespeichert', F.plan().netzKosten.stunden === 2000, '']);
+    ein.value = '4000'; ein.onchange();
+    // Druckabfallprüfung über den Knopf
+    F.druecken(k, 'N', true); F.druecken(k, 'N', false);
+    const pb = panel.querySelector('#fp-nz-pruef'); pb.click(); await warte(3000); pb.click(); await warte(300);
+    R.push(['Druckabfallprüfung über den Knopf: Rechenweg mit Ergebnis in l/min', /V̇_L = V · \(p₁ − p₂\) \/ t/.test(txt('fp-nz-pruefw')) && /l\/min/.test(txt('fp-nz-pruefw')), txt('fp-nz-pruefw').split('\n')[1]]);
+    // Oszilloskop-Kanäle
+    const M = window._fpPropMess(), kb = F.plan().teile.find(t => t.id === k).bez, mb = F.plan().teile.find(t => t.id === m).bez;
+    R.push(['Oszilloskop: Druck am Kompressor, Durchfluss und Druck am Sensor', M && typeof M[kb].p === 'number' && typeof M[mb].Q === 'number' && typeof M[mb].p === 'number', kb + ', ' + mb]);
+    toggleSimulation(); await warte(200);
+    F.netz.raffer(1);
+    document.getElementById('fp-d-zu').click();
+    return R;
+  },
   'Verbundener Plan: Netz bleibt beim Übernehmen, Quelle hängt am Abgang': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

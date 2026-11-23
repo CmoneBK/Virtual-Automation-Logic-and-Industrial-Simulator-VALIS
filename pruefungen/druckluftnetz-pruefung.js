@@ -655,6 +655,17 @@ const FAELLE = {
     if (getComputedStyle(lp).display === 'none') toggleWorkspaceView('fbs-wrapper');
     return R;
   },
+  'Palette: Vorschaubilder der Netzteile ohne schwarze Flächen': async () => {
+    const F = Fluidplan, R = [];
+    F.oeffnen(); await new Promise(r => setTimeout(r, 400));
+    const schwarz = [];
+    document.querySelectorAll('.fp-pal').forEach(d => d.querySelectorAll('svg rect, svg path, svg circle').forEach(n => {
+      const cs = getComputedStyle(n), f = cs.fill, bb = n.getBBox();
+      if (/^rgb\(0, 0, 0\)$/.test(f) && +cs.fillOpacity > 0 && +cs.opacity > 0 && bb.width * bb.height > 150) schwarz.push(d.textContent.trim() + ' ' + n.tagName + '.' + n.getAttribute('class'));
+    }));
+    R.push(['Kein Vorschaubild der Palette hat eine schwarz gefüllte Fläche', document.querySelectorAll('.fp-pal').length > 30 && schwarz.length === 0, schwarz.join(' | ')]);
+    return R;
+  },
   'Netz im Auto-Schaltplan: nicht verbundener Plan zeigt das Netz neben der Pneumatik': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

@@ -1049,7 +1049,7 @@
             el('path', { d: 'M0,-22 H16', fill: 'none', stroke: 'currentColor', 'stroke-width': 1, 'stroke-dasharray': '3 2' }, g);
             el('rect', { x: 16, y: -27, width: 10, height: 10, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.1 }, g);
             el('path', { class: 'fp-komp-kontakt', d: 'M18,-19 L24,-25', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2 }, g);
-            if (!bild) el('rect', { class: 'fp-hand', x: -36, y: -14, width: 50, height: 28, 'data-t': t.id, 'data-seite': 'N' }, g);
+            if (!bild) el('rect', { class: 'fp-hand', fill: 'transparent', x: -36, y: -14, width: 50, height: 28, 'data-t': t.id, 'data-seite': 'N' }, g);
         }
     };
     TYP.behaelter = {
@@ -1084,7 +1084,7 @@
             L16(g, 0, 0, 0, -9, 1.2); L16(g, -6, -9, 6, -9, 1.6);
             // Abgang: Schnellkupplung am Ausgang
             if (t.o.abgang) { L16(g, 14, -5, 14, 5, 1.4); L16(g, 17, -5, 17, 5, 1.4); }
-            if (!bild) el('rect', { class: 'fp-hand', x: -12, y: -12, width: 24, height: 20, 'data-t': t.id, 'data-seite': 'N' }, g);
+            if (!bild) el('rect', { class: 'fp-hand', fill: 'transparent', x: -12, y: -12, width: 24, height: 20, 'data-t': t.id, 'data-seite': 'N' }, g);
         }
     };
     // Aufbereitung (Schritt 3): Kältetrockner, Druckluftfilter, Kondensatableiter, Wartungseinheit am Abgang.
@@ -1100,7 +1100,7 @@
             L16(g, 0, -14, 0, -20, 1.1); el('path', { d: 'M-2.5,-19 L0,-24 L2.5,-19 Z', fill: 'currentColor' }, g);
             L16(g, 0, 14, 0, 19, 1.1).setAttribute('stroke-dasharray', '2 1.5'); el('path', { d: 'M-2.5,18 L0,22 L2.5,18 Z', fill: 'currentColor' }, g);
             el('text', { x: 0, y: 3.5, 'text-anchor': 'middle', 'font-size': 8, fill: 'currentColor' }, g).textContent = '❄';
-            if (!bild) el('rect', { class: 'fp-hand', x: -16, y: -16, width: 32, height: 32, 'data-t': t.id, 'data-seite': 'N' }, g);
+            if (!bild) el('rect', { class: 'fp-hand', fill: 'transparent', x: -16, y: -16, width: 32, height: 32, 'data-t': t.id, 'data-seite': 'N' }, g);
         }
     };
     TYP.nfilter = {
@@ -1156,7 +1156,7 @@
                 const nm = String(t.o.name || (window.currentLang === 'en' ? 'Plant' : 'Anlage'));
                 el('text', { x: 0, y: -3, 'text-anchor': 'middle', 'font-size': nm.length > 14 ? 8 : 10, 'font-weight': 600, fill: 'currentColor' }, g).textContent = nm.length > 19 ? nm.slice(0, 18) + '…' : nm;
                 el('text', { x: 0, y: 10, 'text-anchor': 'middle', 'font-size': 7.5, fill: 'currentColor' }, g).textContent = zfL(bausteinBedarf(t.o), 0) + ' l/min · ≥ ' + zfL(t.o.pMin, 1) + ' bar';
-                if (!bild) el('rect', { class: 'fp-hand', x: -42, y: -18, width: 84, height: 36, 'data-t': t.id, 'data-seite': 'N' }, g);
+                if (!bild) el('rect', { class: 'fp-hand', fill: 'transparent', x: -42, y: -18, width: 84, height: 36, 'data-t': t.id, 'data-seite': 'N' }, g);
                 return;
             }
             el('text', { x: 0, y: -3, 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 600, fill: 'currentColor' }, g).textContent = window.currentLang === 'en' ? 'this plant' : 'diese Anlage';

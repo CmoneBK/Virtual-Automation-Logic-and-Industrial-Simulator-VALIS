@@ -10160,3 +10160,30 @@ VALIS_EN.vorlagen({
 "Das Netz steht im Fluidplan: ⟦0⟧ Teile, Speicher ⟦1⟧ l.": "The network is in the fluid plan: ⟦0⟧ parts, storage ⟦1⟧ l.",
 "Volumen der Leitung: ⟦0⟧ l (zählt zum Speicher). Der Druckverlust steigt mit Durchfluss und Länge und fällt stark mit dem Durchmesser. Gerechnet wird mit einer üblichen Näherung für Druckluftleitungen: Δp = 1,6 · 10³ · V̇^1,85 · L / (d⁵ · p) mit V̇ in m³/s, L und d in m, p absolut in Pa. Faustregel, steht so nicht im Tabellenbuch.": "Volume of the pipe: ⟦0⟧ l (counts as storage). The pressure loss rises with flow and length and falls sharply with the diameter. It is calculated with a common approximation for compressed-air pipes: Δp = 1.6 · 10³ · V̇^1.85 · L / (d⁵ · p) with V̇ in m³/s, L and d in m, p absolute in Pa. Rule of thumb, not from the reference book."
 });
+
+// Druckluftnetz: weitere Anlagen als Verbraucher-Baustein (23.11.2026)
+VALIS_EN.dazu({
+"Verbraucher": "Consumer",
+"Weitere Anlage (Verbraucher-Baustein)": "Another plant (consumer block)",
+"Name der Anlage": "Name of the plant",
+"Luftbedarf je Takt (angesaugte Luft) (l)": "Air demand per cycle (free air) (l)",
+"Takte (1/min)": "Cycles (1/min)",
+"Gleichzeitigkeit (%)": "Simultaneity (%)",
+"Mindestdruck (bar)": "Minimum pressure (bar)",
+"Meldung „Druck reicht“: VALIS-Eingang": "Signal “pressure sufficient”: VALIS input",
+"Anlage steht (nimmt keine Luft ab)": "Plant stopped (draws no air)",
+"Luftbedarf aus gespeichertem Stand …": "Air demand from a saved project …",
+"Luftbedarf aus dieser 2D-Anlage": "Air demand from this 2D factory",
+"Eine .valisave-Datei wählen: Aus ihren pneumatischen Zylindern (Kolben, Stange, Hub, Druck) wird der Luftbedarf für einen Takt gerechnet (jeder Zylinder fährt einmal aus und ein).": "Choose a .valisave file: the air demand for one cycle is calculated from its pneumatic cylinders (piston, rod, stroke, pressure); every cylinder extends and retracts once.",
+"Rechnet den Luftbedarf für einen Takt aus den pneumatischen Zylindern der 2D-Anlage dieses Standes.": "Calculates the air demand for one cycle from the pneumatic cylinders of this project's 2D factory.",
+"In diesem Stand ist kein pneumatischer Zylinder.": "This project has no pneumatic cylinder.",
+"Die Datei ist kein VALIS-Stand.": "The file is not a VALIS project.",
+"Der Baustein steht für eine weitere Anlage der Halle: Er nimmt je Takt seinen Luftbedarf ab. Fällt der Druck an seinem Anschluss unter den Mindestdruck, meldet er „Druck zu niedrig“ und sein Takt wird langsamer, unter 30 % des Mindestdrucks steht er. Gleichzeitigkeit: Anteil der Verbraucher, die im Takt wirklich mitlaufen. Beim Simulieren hält ein Klick die Anlage an und startet sie wieder.": "The block stands for another plant in the hall: it draws its air demand every cycle. If the pressure at its port falls below the minimum pressure, it reports “pressure too low” and its cycle slows down; below 30 % of the minimum pressure it stops. Simultaneity: share of the consumers that really run in the cycle. While simulating, a click stops the plant and starts it again."
+});
+VALIS_EN.vorlagen({
+"Mittlerer Luftbedarf: ⟦0⟧ l · ⟦1⟧ 1/min · ⟦2⟧ % = ⟦3⟧ l/min.": "Mean air demand: ⟦0⟧ l · ⟦1⟧ 1/min · ⟦2⟧ % = ⟦3⟧ l/min.",
+"Übernommen: ⟦0⟧ Zylinder bei ⟦1⟧ bar, je Takt einmal aus und ein.": "Taken over: ⟦0⟧ cylinders at ⟦1⟧ bar, extending and retracting once per cycle.",
+"Übernommen: ⟦0⟧ Zylinder bei ⟦1⟧ bar, je Takt einmal aus und ein. Leckage in dem Stand: ⟦2⟧ l/min (am Abgang als Leckage eintragen).": "Taken over: ⟦0⟧ cylinders at ⟦1⟧ bar, extending and retracting once per cycle. Leakage in that project: ⟦2⟧ l/min (enter it as leakage at the outlet).",
+"⟦0⟧: Der Einschaltdruck des Kompressors liegt unter dem Mindestdruck dieser Anlage.": "⟦0⟧: The compressor's cut-in pressure is below the minimum pressure of this plant.",
+"Luftbedarf und Leckage (⟦0⟧ l/min) sind größer als die Liefermenge der Kompressoren (⟦1⟧ l/min): Der Druck im Netz fällt.": "Air demand and leakage (⟦0⟧ l/min) exceed the delivery of the compressors (⟦1⟧ l/min): the pressure in the network falls."
+});

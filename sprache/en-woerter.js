@@ -10365,3 +10365,29 @@ VALIS_EN.vorlagen({
 "⟦0⟧: Wischzeit = ein SPS-Zyklus, nicht einstellbar.": "⟦0⟧: wiping time = one PLC cycle, not adjustable.",
 "Flanke (⟦0⟧) als Wischrelais, ⟦1⟧: Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. Multifunktions-Zeitrelais anderer Hersteller haben sie, mit einer einstellbaren Wischzeit; in der SPS dauert der Impuls genau einen Zyklus.": "Edge (⟦0⟧) as a wiping relay, ⟦1⟧: the FESTO timer relay 162243 has no such function. Multi-function timer relays from other makers have it, with an adjustable wiping time; in the PLC the pulse lasts exactly one cycle."
 });
+// Speichernde Einschaltverzögerung TONR (TIA: IN, R, PT)
+VALIS_EN.dazu({
+"Timer: Speichernde Einschaltverzögerung (TONR)": "Timer: retentive on-delay (TONR)",
+"Speichernde Einschaltverzögerung": "Retentive on-delay",
+"speichernde Einschaltverzögerung": "retentive on-delay",
+"Zeit akkumulieren": "accumulate time",
+"Betriebszeit": "operating time",
+"Zählt die Zeit zusammen, in der IN wahr ist. Fällt IN ab, bleibt die Zeit stehen und läuft beim nächsten Mal weiter. Sind die Sekunden erreicht, wird OUT wahr und bleibt wahr, bis R wahr wird. R setzt die Zeit auf 0 und OUT auf falsch. Baustein im TIA Portal (TONR), Reihenfolge der Eingänge wie dort: IN, R, PT.": "Adds up the time during which IN is true. If IN drops, the time holds and continues next time. Once the seconds are reached, OUT becomes true and stays true until R becomes true. R sets the time to 0 and OUT to false. Block in the TIA Portal (TONR), inputs in the same order as there: IN, R, PT.",
+"Die Zeit läuft nur, solange der Eingang anliegt, und bleibt bei Abfall stehen statt auf 0 zu gehen. Ist die eingestellte Zeit insgesamt erreicht, schaltet der Ausgang ein und bleibt an, bis der Rücksetzeingang R kommt. <code>OUT := TONR(IN, R, 10.0)</code>. Baustein im TIA Portal; als Bauteil gibt es kein Steckmodul dafür.": "The time only runs while the input is present and holds when it drops instead of going to 0. Once the set time has been reached in total, the output switches on and stays on until the reset input R comes. <code>OUT := TONR(IN, R, 10.0)</code>. Block in the TIA Portal; there is no plug-in module for it as a component.",
+"Falsche Anzahl an Argumenten für TONR": "Wrong number of arguments for TONR",
+"`TONR` (speichernde Einschaltverzögerung) braucht GENAU drei Argumente wie im TIA Portal: das Eingangssignal IN, das Rücksetzsignal R und die Zeit PT in Sekunden. Die Zeit läuft nur, solange IN = 1, und bleibt stehen, wenn IN abfällt. Erst R setzt sie auf 0 zurück.": "`TONR` (retentive on-delay) needs EXACTLY three arguments as in the TIA Portal: the input signal IN, the reset signal R and the time PT in seconds. The time only runs while IN = 1 and holds when IN drops. Only R resets it to 0.",
+"Schreibe `TONR(IN, R, Sekunden)` — z.B. `TONR(MOTOR_LAEUFT, QUITTIEREN, 10)`.": "Write `TONR(IN, R, seconds)` — e.g. `TONR(MOTOR_RUNNING, ACKNOWLEDGE, 10)`.",
+"Zeit-Argument von TONR ist keine gültige Zeit": "Time argument of TONR is not a valid time",
+"Zeitrelais TONR (speichernd)": "Timer relay TONR (retentive)",
+"Funktion TONR": "Function TONR",
+"Zeit insgesamt [s] (TONR, läuft nur bei Spannung am Strang)": "Total time [s] (TONR, only runs while the path is energised)",
+"Rücksetzen durch (Variable oder Ausdruck, leer = nie):": "Reset by (variable or expression, empty = never):",
+"Zeitrelais mit speichernder Ansprechverzögerung (TONR): die Zeit läuft nur, solange der Strang Spannung hat, und bleibt bei Abfall stehen. Ist sie insgesamt abgelaufen, schaltet es und bleibt, bis die Rücksetzbedingung kommt. Doppelklick: Zeit und Rücksetzen. Im Code: TONR(Strang, Reset, Zeit).": "Timer relay with retentive on-delay (TONR): the time only runs while the path is energised and holds when it drops. Once it has run out in total, it switches and stays until the reset condition comes. Double-click: time and reset. In code: TONR(path, reset, time).",
+"Speichernde Einschaltverzögerung (TONR): Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. Die Zeit läuft nur, solange die Spule A1/A2 Spannung hat, und bleibt bei Abfall stehen. Ist sie insgesamt abgelaufen, schalten die Kontakte und bleiben, bis R1/R2 Spannung bekommt. Multifunktionsrelais anderer Hersteller haben das als additive Ansprechverzögerung.": "Retentive on-delay (TONR): the FESTO timer relay 162243 does not have this function. The time only runs while coil A1/A2 is energised and holds when it drops. Once it has run out in total, the contacts switch and stay until R1/R2 is energised. Multi-function relays from other manufacturers offer this as an additive on-delay.",
+"Rücksetzen R1/R2 der speichernden Einschaltverzögerung (TONR): setzt die gesammelte Zeit auf 0 und das Relais zurück. Diese Buchsen gibt es am FESTO 162243 nicht.": "Reset R1/R2 of the retentive on-delay (TONR): sets the accumulated time to 0 and resets the relay. The FESTO 162243 does not have these sockets.",
+"Betriebsstundenzähler": "Hours counter"
+});
+VALIS_EN.vorlagen({
+"⟦0⟧ insgesamt (auch mit Pausen) mindestens ⟦1⟧ aktiv war, seit ⟦2⟧ zuletzt zurückgesetzt hat": "⟦0⟧ has been active for at least ⟦1⟧ in total (pauses included) since ⟦2⟧ last reset it",
+"Das dritte Argument von `TONR` ist die Zeit PT in Sekunden (größer als 0), nicht `⟦0⟧`. An zweiter Stelle steht das Rücksetzsignal R.": "The third argument of `TONR` is the time PT in seconds (greater than 0), not `⟦0⟧`. The second place holds the reset signal R."
+});

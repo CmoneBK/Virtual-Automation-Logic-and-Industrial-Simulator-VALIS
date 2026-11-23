@@ -1089,16 +1089,29 @@
     };
     TYP.anlage = {
         name: 'Verbraucher', buchstabe: '', ohneBez: true, netz: true,
-        optionen: { art: 'diese' },
+        // art 'diese': die 2D-Anlage dieses Standes. art 'baustein': eine weitere Anlage der Halle,
+        // nur als Verbraucher (Luftbedarf je Takt in Normlitern, Takte je Minute, Gleichzeitigkeit, Mindestdruck)
+        optionen: { art: 'diese', name: 'Anlage', bedarf: 20, takte: 10, gleich: 100, pMin: 5, aus: false, var: '' },
         geometrie() { return { ports: [{ id: '1', x: 0, y: -30, dir: [0, -1], art: 'v', ohneNr: true }], box: [-44, -32, 44, 20] }; },
-        zeichne(t, g) {
+        zeichne(t, g, bild) {
             L16(g, 0, -30, 0, -18);
             el('rect', { class: 'fp-anlage', x: -42, y: -18, width: 84, height: 36, fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.2, 'stroke-dasharray': '8 3 2 3' }, g);
+            if (t.o.art === 'baustein') {
+                const nm = String(t.o.name || (window.currentLang === 'en' ? 'Plant' : 'Anlage'));
+                el('text', { x: 0, y: -3, 'text-anchor': 'middle', 'font-size': nm.length > 14 ? 8 : 10, 'font-weight': 600, fill: 'currentColor' }, g).textContent = nm.length > 19 ? nm.slice(0, 18) + '…' : nm;
+                el('text', { x: 0, y: 10, 'text-anchor': 'middle', 'font-size': 7.5, fill: 'currentColor' }, g).textContent = zfL(bausteinBedarf(t.o), 0) + ' l/min · ≥ ' + zfL(t.o.pMin, 1) + ' bar';
+                if (!bild) el('rect', { class: 'fp-hand', x: -42, y: -18, width: 84, height: 36, 'data-t': t.id, 'data-seite': 'N' }, g);
+                return;
+            }
             el('text', { x: 0, y: -3, 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 600, fill: 'currentColor' }, g).textContent = window.currentLang === 'en' ? 'this plant' : 'diese Anlage';
             el('text', { x: 0, y: 10, 'text-anchor': 'middle', 'font-size': 8.5, fill: 'currentColor' }, g).textContent = window.currentLang === 'en' ? '(2D factory)' : '(2D-Anlage)';
         }
     };
     const istNetz = t => !!(t && TYP[t.typ] && TYP[t.typ].netz);
+    const zfL = (v, n) => { const x = Number(v); return isFinite(x) ? x.toLocaleString('de-DE', { maximumFractionDigits: n == null ? 2 : n }) : String(v); };
+    const istBaustein = t => !!t && t.typ === 'anlage' && t.o.art === 'baustein';
+    // Mittlerer Luftbedarf eines Bausteins in l/min (Normzustand) bei vollem Takt
+    const bausteinBedarf = o => Math.max(0, Number(o.bedarf) || 0) * Math.max(0, Number(o.takte) || 0) * Math.max(0, Math.min(100, o.gleich == null ? 100 : Number(o.gleich) || 0)) / 100;
 
     // ------------------------------------------------------------
     // Palette (Vorlagen)
@@ -1159,7 +1172,8 @@
             { name: 'Rohrleitung (Länge, Innendurchmesser)', typ: 'rohr' },
             { name: 'Kugelhahn', typ: 'hahn' },
             { name: 'Abgang (Kugelhahn mit Kupplung)', typ: 'hahn', o: { abgang: true } },
-            { name: 'Diese Anlage (2D-Anlage)', typ: 'anlage' }
+            { name: 'Diese Anlage (2D-Anlage)', typ: 'anlage' },
+            { name: 'Weitere Anlage (Verbraucher-Baustein)', typ: 'anlage', o: { art: 'baustein' } }
         ] }
     ];
     // Hydraulik-Palette: dieselben Teile mit o.hyd (Öl), dazu Aggregat, Tank, Druck- und Stromventile
@@ -2629,6 +2643,31 @@
             const k = fld('Abgang mit Schnellkupplung', h('input', { type: 'checkbox' })); k.checked = !!t.o.abgang; k.onchange = () => setze(() => { t.o.abgang = k.checked; });
             num('Leckage hinter dem Hahn (bei 6 bar)', 'leck', 0, 2000, 1, 'l/min');
             h('div', { class: 'fp-hinw', text: 'Beim Simulieren öffnet und schließt ein Klick den Hahn. Die Leckage sitzt am Ausgang (Kupplung, Schlauch, Verschraubung): Ist der Hahn zu, verliert das Netz dort nichts mehr.' }, box);
+        } else if (istBaustein(t)) {
+            const nm = fld('Name der Anlage', h('input', { value: t.o.name || '' })); nm.onchange = () => setze(() => { t.o.name = nm.value.trim() || 'Anlage'; });
+            num('Luftbedarf je Takt (angesaugte Luft)', 'bedarf', 0, 100000, 0.1, 'l');
+            num('Takte', 'takte', 0, 600, 0.1, '1/min');
+            num('Gleichzeitigkeit', 'gleich', 0, 100, 1, '%');
+            num('Mindestdruck', 'pMin', 0.5, 15, 0.1, 'bar');
+            variable('Meldung „Druck reicht“: VALIS-Eingang', 'var', 'in');
+            const c = fld('Anlage steht (nimmt keine Luft ab)', h('input', { type: 'checkbox' })); c.checked = !!t.o.aus; c.onchange = () => setze(() => { t.o.aus = c.checked; });
+            h('div', { class: 'fp-hinw', text: 'Mittlerer Luftbedarf: ' + zf(t.o.bedarf) + ' l · ' + zf(t.o.takte) + ' 1/min · ' + zf(t.o.gleich, 0) + ' % = ' + zf(bausteinBedarf(t.o), 1) + ' l/min.' }, box);
+            const b1 = h('button', { class: 'fp-btn', style: 'display:block;margin-top:6px', type: 'button', text: 'Luftbedarf aus gespeichertem Stand …', title: 'Eine .valisave-Datei wählen: Aus ihren pneumatischen Zylindern (Kolben, Stange, Hub, Druck) wird der Luftbedarf für einen Takt gerechnet (jeder Zylinder fährt einmal aus und ein).' }, box);
+            const b2 = h('button', { class: 'fp-btn', style: 'display:block;margin-top:6px', type: 'button', text: 'Luftbedarf aus dieser 2D-Anlage', title: 'Rechnet den Luftbedarf für einen Takt aus den pneumatischen Zylindern der 2D-Anlage dieses Standes.' }, box);
+            const nehmen = (r, name) => {
+                if (!r || !(r.zyl > 0)) { W().alert('In diesem Stand ist kein pneumatischer Zylinder.'); return; }
+                setze(() => { t.o.bedarf = Math.round(r.nl * 100) / 100; if (r.leck > 0) t.o.leckStand = Math.round(r.leck * 10) / 10; else delete t.o.leckStand; if (name) t.o.name = name; t.o.quelle = { zyl: r.zyl, p: r.p }; });
+            };
+            b1.onclick = () => {
+                const f = h('input', { type: 'file', accept: '.valisave,.json,application/json' });
+                f.onchange = () => { const d = f.files && f.files[0]; if (!d) return; const rd = new FileReader();
+                    rd.onload = () => { let r = null; try { r = luftbedarfAus(String(rd.result)); } catch (e) { r = null; } if (!r) { W().alert('Die Datei ist kein VALIS-Stand.'); return; } nehmen(r, d.name.replace(/\.(valisave|json)$/i, '').slice(0, 24)); };
+                    rd.readAsText(d); };
+                f.click();
+            };
+            b2.onclick = () => { let r = null; try { r = luftbedarfAus({ objects: fabrik() || [], fluidplan: plan }); } catch (e) {} nehmen(r, ''); };
+            if (t.o.quelle) h('div', { class: 'fp-hinw', text: 'Übernommen: ' + zf(t.o.quelle.zyl, 0) + ' Zylinder bei ' + zf(t.o.quelle.p) + ' bar, je Takt einmal aus und ein.' + (t.o.leckStand > 0 ? ' Leckage in dem Stand: ' + zf(t.o.leckStand) + ' l/min (am Abgang als Leckage eintragen).' : '') }, box);
+            h('div', { class: 'fp-hinw', text: 'Der Baustein steht für eine weitere Anlage der Halle: Er nimmt je Takt seinen Luftbedarf ab. Fällt der Druck an seinem Anschluss unter den Mindestdruck, meldet er „Druck zu niedrig“ und sein Takt wird langsamer, unter 30 % des Mindestdrucks steht er. Gleichzeitigkeit: Anteil der Verbraucher, die im Takt wirklich mitlaufen. Beim Simulieren hält ein Klick die Anlage an und startet sie wieder.' }, box);
         } else if (t.typ === 'anlage') {
             h('div', { class: 'fp-hinw', text: 'Hier hängt die 2D-Anlage dieses Standes am Netz: Ihre Zylinder und Leckagen nehmen die Luft an diesem Punkt ab, und der Kompressor der 2D-Anlage zeigt den Druck, der hier ankommt. Ohne dieses Teil hat die 2D-Anlage einen festen Druck.' }, box);
         } else if (istPropW(t)) {
@@ -2729,7 +2768,10 @@
         }
         const pneuTeile = plan.teile.filter(t => !istHyd(t) && t.typ !== 'knoten'), hydTeile = plan.teile.filter(istHyd);
         if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle' || t.typ === 'kompressor')) meld.push('Es gibt keine Druckluftquelle.');
-        if (plan.teile.some(t => t.typ === 'anlage') && !plan.teile.some(t => t.typ === 'kompressor')) meld.push('„Diese Anlage“ hängt an keinem Kompressor: Die 2D-Anlage behält ihren festen Druck.');
+        for (const t of plan.teile) if (istBaustein(t) && plan.teile.some(k => k.typ === 'kompressor' && zahl(k.o.pEin, 6) < zahl(t.o.pMin, 5))) meld.push(`${t.o.name || 'Anlage'}: Der Einschaltdruck des Kompressors liegt unter dem Mindestdruck dieser Anlage.`);
+        { const qk = plan.teile.filter(t => t.typ === 'kompressor').reduce((m, t) => m + zahl(t.o.q, 0), 0), qv = plan.teile.filter(t => istBaustein(t) && !t.o.aus).reduce((m, t) => m + bausteinBedarf(t.o), 0) + plan.teile.filter(t => t.typ === 'hahn').reduce((m, t) => m + zahl(t.o.leck, 0), 0);
+          if (qk > 0 && qv > qk) meld.push(`Luftbedarf und Leckage (${zf(qv, 0)} l/min) sind größer als die Liefermenge der Kompressoren (${zf(qk, 0)} l/min): Der Druck im Netz fällt.`); }
+        if (plan.teile.some(t => t.typ === 'anlage' && !istBaustein(t)) && !plan.teile.some(t => t.typ === 'kompressor')) meld.push('„Diese Anlage“ hängt an keinem Kompressor: Die 2D-Anlage behält ihren festen Druck.');
         if (hydTeile.length && !plan.teile.some(t => t.typ === 'aggregat')) meld.push('Es gibt kein Hydraulikaggregat.');
         const bez = {};
         plan.teile.forEach(t => { if (t.bez) bez[t.bez] = (bez[t.bez] || 0) + 1; });
@@ -2784,7 +2826,7 @@
         if (t.typ === 'ventil') n = (t.o.wege || '3/2') + (istProp(t) ? '-Proportional-Wegeventil' : '-Wegeventil');
         if (t.typ === 'wartung' && t.o.kurz) n += ' (Kurzform)';
         if (t.typ === 'hahn' && t.o.abgang) n = 'Abgang (Kugelhahn mit Kupplung)';
-        if (t.typ === 'anlage') n = 'Diese Anlage (2D-Anlage)';
+        if (t.typ === 'anlage') n = istBaustein(t) ? 'Anlage „' + (t.o.name || 'Anlage') + '“ (Verbraucher-Baustein)' : 'Diese Anlage (2D-Anlage)';
         if (istPropW(t)) n = 'Proportional-' + n;
         if (istHyd(t) && /^(zyl_|ventil|rueck|drossel|drv)/.test(t.typ)) n += ', hydraulisch';
         return n;
@@ -2810,7 +2852,7 @@
             case 'behaelter': d.push('V = ' + zf(o.V) + ' l', 'Sicherheitsventil ' + zf(o.pSV) + ' bar'); break;
             case 'rohr': d.push('L = ' + zf(o.L) + ' m', 'Innen-Ø ' + zf(o.d) + ' mm'); break;
             case 'hahn': if (o.abgang) d.push('Abgang mit Kupplung'); if (o.zu) d.push('geschlossen'); if (zahl(o.leck, 0) > 0) d.push('Leckage ' + zf(o.leck) + ' l/min'); break;
-            case 'anlage': d.push('2D-Anlage dieses Standes'); break;
+            case 'anlage': if (istBaustein(t)) d.push(zf(o.bedarf) + ' l je Takt', zf(o.takte) + ' Takte/min', 'Gleichzeitigkeit ' + zf(o.gleich, 0) + ' %', 'Mindestdruck ' + zf(o.pMin) + ' bar'); else d.push('2D-Anlage dieses Standes'); break;
             case 'stromregel': d.push('Q = ' + zf(o.q) + ' l/min'); break;
             case 'drossel': case 'drv': d.push('Öffnung ' + zf(o.offen, 0) + ' %'); break;
             case 'zeit': d.push('t = ' + zf(o.zeit) + ' s'); break;
@@ -3287,7 +3329,7 @@
             if (t.typ === 'hahn') { z.zu = !!t.o.zu; z.qSum = 0; z.q = 0; z.qLeck = 0; }
             if (t.typ === 'rohr') { z.qSum = 0; z.q = 0; z.dp = 0; }
             if (t.typ === 'behaelter') { z.sv = false; z.p = pStart; }
-            if (t.typ === 'anlage') { z.ent = 0; z.q = 0; z.qSum = 0; z.p = pStart; }
+            if (t.typ === 'anlage') { z.ent = 0; z.q = 0; z.qSum = 0; z.p = pStart; z.aus = !!t.o.aus; z.ph = 0; z.takte = 0; z.taktIst = 0; z.zuNiedrig = false; z.fSum = 0; z.luft = 0; }
             if (istPropW(t)) { z.soll = 0; z.h = 0; z.u = 0; z.wert = propWVon(t); }
             zust[t.id] = z;
         }
@@ -3702,6 +3744,33 @@
         const d = Math.max(2, zahl(o.d, 25)) / 1000, L = Math.max(0.1, zahl(o.L, 20));
         return Math.pow(Math.abs(dpBar) * 1e5 * Math.pow(d, 5) * (Math.max(0, pBar) + 1) * 1e5 / (ROHR_K * L), 1 / ROHR_N) * 60000;
     }
+    // Luftbedarf eines gespeicherten Standes für einen Takt (jeder pneumatische Zylinder fährt einmal aus und ein):
+    // V = A · Hub · (p + 1) je Hub in Normlitern, einfachwirkend nur der Vorhub. stand: Objekt oder JSON-Text (.valisave).
+    function luftbedarfAus(stand) {
+        let d = typeof stand === 'string' ? JSON.parse(stand) : stand;
+        if (!d || typeof d !== 'object') return null;
+        let f = d.factory != null ? d.factory : d;
+        if (typeof f === 'string') f = JSON.parse(f);
+        if (!f || typeof f !== 'object' || (!Array.isArray(f.objects) && !f.fluidplan)) return null;
+        const objs = Array.isArray(f.objects) ? f.objects : [], fp = f.fluidplan && Array.isArray(f.fluidplan.teile) ? f.fluidplan : null;
+        const comp = objs.find(o => o.type === 'compressor'), qu = fp && fp.teile.find(t => t.typ === 'quelle' && !(t.o && t.o.hyd));
+        const p = Math.max(0.5, zahl(comp && comp.pressure, zahl(qu && qu.o && qu.o.p, 6)));
+        let nl = 0, zyl = 0, leck = 0;
+        const hub1 = (dK, dS, hub, doppelt) => { const AK = Math.PI * dK * dK / 4, AR = AK - Math.PI * dS * dS / 4; return (AK + (doppelt ? AR : 0)) * hub * (p + 1) / 1e6; };
+        const gezaehlt = new Set();
+        for (const o of objs) {
+            if (!o.hasPneumatics || (o.type !== 'zylinder_double' && o.type !== 'zylinder_single')) continue;
+            const dw = o.type === 'zylinder_double';
+            nl += hub1(zahl(o.pistonD, 20), zahl(o.rodD, dw ? 8 : 6), zahl(o.stroke, 100), dw); zyl++; gezaehlt.add(o.id);
+        }
+        for (const o of objs) if (zahl(o.leakRate, 0) > 0) leck += zahl(o.leakRate, 0) / 100 * 50 * p / 6;
+        if (fp) for (const t of fp.teile) {
+            if ((t.typ !== 'zyl_dw' && t.typ !== 'zyl_ew') || (t.o && (t.o.hyd || (t.o.anlage && gezaehlt.has(t.o.anlage))))) continue;
+            const o = t.o || {}, dw = t.typ === 'zyl_dw';
+            nl += hub1(zahl(o.d, 20), zahl(o.dStange, 8), zahl(o.hub, dw ? 100 : 50), dw); zyl++;
+        }
+        return { nl, zyl, p, leck };
+    }
     function netzText(t) {
         const o = t.o;
         if (t.typ === 'kompressor') return zf(o.q, 0) + ' l/min · ' + zf(o.pEin) + ' … ' + zf(o.pAus) + ' bar';
@@ -3752,6 +3821,24 @@
                         }
                         break;
                     }
+                    case 'anlage': {
+                        if (o.art !== 'baustein') break;
+                        const n1 = netz(t, '1'); if (n1 == null) break;
+                        const A = N[n1], p = A.M / A.V - 1, pMin = Math.max(0.1, zahl(o.pMin, 5));
+                        if (p < pMin) z.zuNiedrig = true; else if (p >= pMin + 0.05) z.zuNiedrig = false;
+                        // Takt: unter dem Mindestdruck langsamer (Kraft und Geschwindigkeit fehlen), unter 30 % steht die Anlage
+                        const f = z.aus || fehlerAktiv(t.id) === 'aus' ? 0 : p >= pMin ? 1 : p < 0.3 * pMin ? 0 : Math.pow(p / pMin, 2);
+                        z.fSum += f * dt;
+                        const dph = Math.max(0, zahl(o.takte, 10)) / 60 * dt * f;
+                        if (dph > 0) {
+                            // Die Luft wird in den ersten 40 % des Taktes abgenommen (Zylinder fahren), danach Pause
+                            const a = z.ph, b = z.ph + dph, teil0 = (x) => Math.floor(x) + Math.min(1, (x - Math.floor(x)) / 0.4);
+                            const m = Math.min(Math.max(0, zahl(o.bedarf, 20)) * Math.max(0, Math.min(100, zahl(o.gleich, 100))) / 100 * (teil0(b) - teil0(a)), Math.max(0, A.M - A.V));
+                            A.M -= m; z.qSum += m; z.luft += m;
+                            z.takte += Math.floor(b) - Math.floor(a); z.ph = b - Math.floor(b);
+                        }
+                        break;
+                    }
                     case 'behaelter': {
                         const n1 = netz(t, '1'), zuviel = mengeBis(n1, zahl(o.pSV, 11));
                         z.sv = zuviel > 0;
@@ -3776,6 +3863,10 @@
                 const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0; z.q += (q - z.q) * 0.2; z.p = pPort(t, '2');
             } else if (t.typ === 'anlage') {
                 const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0; z.q += (q - z.q) * 0.1; z.p = pPort(t, '1');
+                if (t.o.art === 'baustein') {
+                    z.taktIst = dtN > 0 ? zahl(t.o.takte, 10) * z.fSum / dtN : 0; z.fSum = 0;
+                    if (t.o.var && S.schreib) S.schreib[t.o.var] = !z.zuNiedrig && !z.aus;
+                }
             } else if (t.typ === 'kompressor' || t.typ === 'behaelter') z.p = pPort(t, '1');
         }
     }
@@ -3817,7 +3908,7 @@
             laufS: Math.max(...zs.map(z => z.laufS)), simS: Math.max(...zs.map(z => z.simS)), spiele: Math.max(...zs.map(schaltspiele)) };
     }
     // Netz am Kompressor der 2D-Anlage: ein Kompressor, ein Behälter, „diese Anlage“
-    const netzEinfach = () => { const n = plan.teile.filter(istNetz); return n.length === 3 && ['kompressor', 'behaelter', 'anlage'].every(a => n.some(t => t.typ === a)); };
+    const netzEinfach = () => { const n = plan.teile.filter(istNetz); return n.length === 3 && !n.some(istBaustein) && ['kompressor', 'behaelter', 'anlage'].every(a => n.some(t => t.typ === a)); };
     function netzAnlegen(w) {
         let x0 = 0, y0 = 0;
         if (plan.teile.length) {
@@ -3944,7 +4035,7 @@
         const z = sim.zust[id];
         // Druckluftnetz: Klick schließt/öffnet den Hahn, schaltet den Kompressor aus/ein
         if (t.typ === 'hahn') { if (an) { z.zu = !z.zu; klick(); } return; }
-        if (t.typ === 'kompressor') { if (an) { z.aus = !z.aus; klick(); } return; }
+        if (t.typ === 'kompressor' || istBaustein(t)) { if (an) { z.aus = !z.aus; klick(); } return; }
         if (b === 'hebel') { if (an) { if (seite === 'L') { z.rasteL = !z.rasteL; if (z.rasteL) z.rasteR = false; } else { z.rasteR = !z.rasteR; if (z.rasteR) z.rasteL = false; } } return; }   // ein Hebel: Einrasten auf einer Seite löst die andere
         const key = id + ':' + seite;
         if (an) gedrueckt.add(key); else gedrueckt.delete(key);
@@ -4069,6 +4160,10 @@
             const k = r.g.querySelector('.fp-hahn'), zu = z ? z.zu : !!t.o.zu;
             if (k) k.setAttribute('fill', zu ? 'currentColor' : 'var(--fp-papier)');
             if (z) txt = (zu ? W2('zu', 'closed') : zf(Math.abs(z.q), 0) + ' l/min') + ' · ' + zf(z.p, 2) + ' bar' + (z.qLeck > 0.05 ? W2(' · Leck ', ' · leak ') + zf(z.qLeck, 0) + ' l/min' : '');
+        } else if (istBaustein(t)) {
+            const rk = r.g.querySelector('.fp-anlage'), rot = !!(z && z.zuNiedrig && !z.aus);
+            if (rk) { rk.setAttribute('stroke', rot ? '#d32f2f' : 'currentColor'); rk.setAttribute('stroke-width', rot ? 2.2 : 1.2); }
+            if (z) txt = zf(z.p, 2) + ' bar · ' + (z.aus ? W2('steht', 'stopped') : zf(z.q, 0) + ' l/min · ' + zf(z.taktIst, 1) + W2(' Takte/min', ' cycles/min')) + (rot ? W2(' · Druck zu niedrig', ' · pressure too low') : '');
         } else if (t.typ === 'anlage') {
             if (z) txt = zf(z.p, 2) + ' bar · ' + zf(z.q, 0) + ' l/min';
         }
@@ -8690,7 +8785,7 @@ function versorgungMerken(F) {
                 if (z.wert != null) { r.wert = z.wert; r.soll = z.soll; r.u = z.u; }
                 if (z.auf === true || z.auf === false) r.offen = z.auf;
                 if (z.an != null) r.an = z.an;
-                if (istNetz(t)) Object.assign(r, { lauf: z.lauf, aus: z.aus, schalt: z.schalt, zu: z.zu, q: z.q, dp: z.dp, pNetz: z.p, sv: z.sv, qLeck: z.qLeck, laufS: z.laufS, simS: z.simS, spiele: z.ein ? schaltspiele(z) : undefined });
+                if (istNetz(t)) Object.assign(r, { lauf: z.lauf, aus: z.aus, schalt: z.schalt, zu: z.zu, q: z.q, dp: z.dp, pNetz: z.p, sv: z.sv, qLeck: z.qLeck, takte: z.takte, taktIst: z.taktIst, zuNiedrig: z.zuNiedrig, luft: z.luft, laufS: z.laufS, simS: z.simS, spiele: z.ein ? schaltspiele(z) : undefined });
                 const ports = {};
                 for (const p of geo(t).ports) ports[p.id] = +pPort(t, p.id).toFixed(3);
                 r.p = ports;
@@ -8748,6 +8843,8 @@ function versorgungMerken(F) {
         beispielLaden: (i, mitCode) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i, mitCode === true); } finally { window.confirm = c; } },
         beispielCode: (i) => (BEISPIELE[i] || {}).code || '',
         _leeren: () => { planImport(null); gedrueckt.clear(); },
+        _waehlen: (id) => { fensterBauen(); auswahl = new Set([id]); zeichnen(); },
+        _schreib: () => Object.assign({}, sim ? sim.schreib : {}),
         _wege: () => { const W = alleWege(); return { wege: Object.fromEntries(W.wege), netz: Object.fromEntries(W.netz), punkte: abzweigPunkte() }; },
         _einpassen: () => einpassen(),
         typen: () => Object.keys(TYP),
@@ -8758,6 +8855,7 @@ function versorgungMerken(F) {
             raffer: (n) => { if (n != null) netzRaffer = Math.max(1, Math.min(600, +n || 1)); return netzRaffer; },
             // rechnet sek Sekunden Netzzeit in Bildern von `bild` Sekunden (Prüfungen)
             rechnen: (sek, bild) => { if (!sim) simInit(); const b = bild || 0.05, n = Math.round(sek / b); for (let i = 0; i < n; i++) { sim.schreib = {}; sim.schreibA = {}; simSchritt(b); } },
+            luftbedarf: (stand) => luftbedarfAus(stand), bedarf: (o) => bausteinBedarf(o),
             druckverlust: (o, q, p) => rohrDruckverlust(o, q, p), durchfluss: (o, dp, p) => rohrDurchfluss(o, dp, p), volumen: (o) => rohrVolumen(o)
         },
         offen: () => offen

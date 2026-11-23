@@ -254,10 +254,28 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   r = await page.evaluate(() => window._logoDruckHtml());
   ok('Druckblatt: Passt, Bausteinliste, Zuordnungsliste, Fußnote', /Passt so nicht/.test(r) && /B001 AND/.test(r) && /Zuordnungsliste mit LOGO!-Klemmen/.test(r) && /<b>I1<\/b><\/td><td class="m">START/.test(r) && /Setzdominanter/.test(r), r.length);
 
+  // Englisch: Leiste, Passt-Kasten und Liste folgen der Sprache
+  await page.evaluate(() => { window.switchLanguage('en'); });
+  await page.waitForTimeout(400);
+  r = await page.evaluate(() => ({ leiste: document.getElementById('logo-leiste').textContent, passt: document.getElementById('logo-passt').textContent, knopf: document.getElementById('btn-fbs-logo').textContent }));
+  ok('Englisch: Leiste, Passt-Kasten und Knopf', /Block list/.test(r.leiste) && /1 = green/.test(r.leiste) && /Print/.test(r.leiste) && /LOGO! 8/.test(r.passt) && !/Passt/.test(r.passt) && /ON|OFF/.test(r.knopf), JSON.stringify(r).slice(0, 400));
+  await page.evaluate(() => { window.switchLanguage('de'); });
+  await page.waitForTimeout(300);
+  r = await page.evaluate(() => document.getElementById('logo-leiste').textContent);
+  ok('Zurück auf Deutsch', /Bausteinliste/.test(r) && /1 = grün/.test(r), r.slice(0, 160));
+
   await page.evaluate(() => window._toggleLogoAnsicht(false));
   r = await page.evaluate(() => ({ h: document.getElementById('logo-host').style.display, plan: document.getElementById('custom-svg').style.visibility }));
   ok('Ausschalten zeigt wieder den Logikplan', r.h === 'none' && r.plan === '', JSON.stringify(r));
 
+  // Link von der Webseite: ?ansicht=logo öffnet den Logikplan mit LOGO!-Ansicht
+  const p2 = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  p2.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
+  await p2.addInitScript(() => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); localStorage.setItem('valisLogoAnsicht', '0'); } catch (e) {} });
+  await p2.goto(url + '?ansicht=logo'); await p2.waitForTimeout(5000);
+  r = await p2.evaluate(() => ({ an: window.logoAnsicht, h: (document.getElementById('logo-host') || {}).style?.display, fbs: document.getElementById('fbs-wrapper').style.display }));
+  ok('?ansicht=logo schaltet die LOGO!-Ansicht ein', r.an === true && r.h === 'block' && r.fbs !== 'none', JSON.stringify(r));
+  await p2.close();
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

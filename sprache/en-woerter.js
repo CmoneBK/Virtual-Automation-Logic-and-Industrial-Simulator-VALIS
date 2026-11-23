@@ -10160,3 +10160,13 @@ VALIS_EN.vorlagen({
 "Das Netz steht im Fluidplan: ⟦0⟧ Teile, Speicher ⟦1⟧ l.": "The network is in the fluid plan: ⟦0⟧ parts, storage ⟦1⟧ l.",
 "Volumen der Leitung: ⟦0⟧ l (zählt zum Speicher). Der Druckverlust steigt mit Durchfluss und Länge und fällt stark mit dem Durchmesser. Gerechnet wird mit einer üblichen Näherung für Druckluftleitungen: Δp = 1,6 · 10³ · V̇^1,85 · L / (d⁵ · p) mit V̇ in m³/s, L und d in m, p absolut in Pa. Faustregel, steht so nicht im Tabellenbuch.": "Volume of the pipe: ⟦0⟧ l (counts as storage). The pressure loss rises with flow and length and falls sharply with the diameter. It is calculated with a common approximation for compressed-air pipes: Δp = 1.6 · 10³ · V̇^1.85 · L / (d⁵ · p) with V̇ in m³/s, L and d in m, p absolute in Pa. Rule of thumb, not from the reference book."
 });
+// LOGO!-Ansicht (23.11.2026)
+VALIS_EN.dazu({
+"🟩 LOGO!: AN": "🟩 LOGO!: ON",
+"🟩 LOGO!: AUS": "🟩 LOGO!: OFF",
+"LOGO!-Ansicht (Maßstab LOGO! 8) — zeigt das Programm so, wie es auf einer LOGO! aussieht: Klemmen I1, Q1, M1, AI1, nummerierte Bausteine B001 … mit den Namen aus LOGO!Soft Comfort, oben die Prüfung, ob das Programm auf eine LOGO! passt. Reine Ansicht — bearbeitet wird im Code oder im normalen Logikplan.": "LOGO! view (reference LOGO! 8) — shows the program as it looks on a LOGO!: terminals I1, Q1, M1, AI1, numbered blocks B001 … with the names from LOGO!Soft Comfort, at the top the check whether the program fits a LOGO!. View only — editing is done in the code or in the normal logic diagram."
+});
+VALIS_EN.dazu({
+"🟩 LOGO!-Ansicht": "🟩 LOGO! view",
+"in den Optionen zeigt dasselbe Programm so, wie es auf einer LOGO! 8 aussieht: Klemmen I1, Q1, M1, nummerierte Bausteine B001 … mit den Namen aus LOGO!Soft Comfort. Oben steht, ob das Programm auf ein Grundgerät passt. Die Bausteinliste tippst du in LOGO!Soft Comfort ab, die Klemmen stellst du in der Zuordnungsliste ein.": "in the options shows the same program as it looks on a LOGO! 8: terminals I1, Q1, M1, numbered blocks B001 … with the names from LOGO!Soft Comfort. At the top it says whether the program fits a base module. You type the block list into LOGO!Soft Comfort and set the terminals in the assignment list."
+});

@@ -634,6 +634,27 @@ const FAELLE = {
     F.netz.raffer(1);
     return R;
   },
+  'Aufgabe mit Netz-Plan und ohne 2D-Anlage: der Fluidplan geht auf': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren(); await warte(300);
+    F.beispielLaden(F.beispiele().findIndex(n => n.includes('Der Kompressor schaltet zu oft')), false); await warte(300);
+    const stand = JSON.parse(JSON.stringify(getFactoryStateObj()));
+    F._leeren(); F.schliessen(); await warte(300);
+    const lp = document.getElementById('fbs-wrapper');
+    if (getComputedStyle(lp).display === 'none') { toggleWorkspaceView('fbs-wrapper'); await warte(200); }
+    window._startTask({ version: '1.0', type: 'valitask', id: 'pruef-netz', name: 'Netz', description: 'Netz', category: 'Test', preset: { code: '', factory: stand, types: {}, layout: 'flex-row' },
+      conditions: [{ type: 'custom_js', label: 'Netz da', expression: '(function(){return Fluidplan.plan().teile.length > 0;})()' }], restrictObjects: 'none', enforceMode: 'none' });
+    await warte(1800);
+    const fw = document.getElementById('fluid-wrapper');
+    R.push(['Der Plan der Aufgabe ist geladen und der Fluidplan sichtbar', F.plan().teile.length === stand.fluidplan.teile.length && getComputedStyle(fw).display !== 'none' && fw.offsetWidth > 300, fw.offsetWidth + ' px']);
+    R.push(['Ohne Programm macht der Logikplan dem Plan Platz, das Diagramm „Netz“ ist offen', getComputedStyle(lp).display === 'none' && !!document.querySelector('.fp-netzkz') && document.querySelector('.fp-netzkz').offsetWidth > 100, getComputedStyle(lp).display + ' ' + !!document.querySelector('.fp-netzkz') + ' ' + (document.querySelector('.fp-netzkz') || {}).offsetWidth + ' aktiv ' + F.netz.aktiv()]);
+    const cf = window.confirm; window.confirm = () => true; try { window._taskAbandon(); } catch (e) {} window.confirm = cf;
+    await warte(300);
+    R.push(['Aufgabe abgebrochen: keine Aufgabe mehr aktiv', !document.getElementById('task-panel') || getComputedStyle(document.getElementById('task-panel')).display === 'none', '']);
+    if (getComputedStyle(lp).display === 'none') toggleWorkspaceView('fbs-wrapper');
+    return R;
+  },
   'Netz im Auto-Schaltplan: nicht verbundener Plan zeigt das Netz neben der Pneumatik': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

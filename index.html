@@ -3657,6 +3657,7 @@
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_ton">  <span class="ced-pal-mini" data-mini="timer_ton"></span><span>Zeitrelais TON</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_tof">  <span class="ced-pal-mini" data-mini="timer_tof"></span><span>Zeitrelais TOF</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="timer_tp">   <span class="ced-pal-mini" data-mini="timer_tp"></span><span>Zeitrelais TP</span></div>
+                        <div class="ced-pal-item" draggable="true" data-ctype="timer_tonof" title="Zeitrelais mit Ansprech- und Rückfallverzögerung: zieht T_EIN nach dem Strang an und fällt T_AUS nach dessen Abfall ab. Doppelklick: beide Zeiten. Im Code: TONOF(Strang, T_EIN, T_AUS)."><span class="ced-pal-mini" data-mini="timer_tonof"></span><span>Zeitrelais TONOF (Ein/Aus)</span></div>
                         <div class="ced-pal-item" draggable="true" data-ctype="counter_ctu" title="Zählrelais (Vorwahlzähler): jede steigende Flanke im Strang zählt einen Schritt, bei der Vorwahl schalten seine Hilfskontakte. Doppelklick: Vorwahl und Rücksetzen. Im Code: CTU(Strang, Reset, Vorwahl)."><span class="ced-pal-mini" data-mini="counter_ctu"></span><span>Zählrelais (CTU)</span></div>
                         <div class="ced-pal-cat">Analog (Komparator)</div>
                         <div class="ced-pal-item" draggable="true" data-ctype="komparator" title="Relaiskontakt einer Komparatorkarte: schaltet, wenn ein Analogwert eine Schwelle über- oder unterschreitet (Zweipunktregler)."><span class="ced-pal-mini" data-mini="komparator"></span><span>Komparator (NO)</span></div>
@@ -63214,6 +63215,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 timer_ton:     { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'T_', timer:'TON', label:'Zeitrelais TON' },
                 timer_tof:     { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'T_', timer:'TOF', label:'Zeitrelais TOF' },
                 timer_tp:      { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'T_', timer:'TP',  label:'Zeitrelais TP (Puls)' },
+                // Ein-/Ausschaltverzögerung: zweite Zeit (T_AUS) in comp.timerTime2.
+                timer_tonof:   { kind:'coil',    w:50, h:40, cx:25, cy:20, prefix:'T_', timer:'TONOF', label:'Zeitrelais TONOF (Ein/Aus)' },
                 // Zählrelais (Vorwahlzähler): der Strang zählt bei jeder steigenden
                 // Flanke einen Schritt, der Kontakt schaltet bei Erreichen der Vorwahl.
                 // comp.ctuLimit = Vorwahl, comp.ctuReset = Rücksetzbedingung (Variable
@@ -63238,7 +63241,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const t = CTYPES[comp.type];
                 if (!window.circAutoNames || !t || t.kind === 'aux' || !_needsVar(comp.type)) return '';
                 const extra = { komparator: 'KOMPARATOR', komparator_nc: 'KOMPARATOR_OEFFNER',
-                    timer_ton: 'ZEITRELAIS_TON', timer_tof: 'ZEITRELAIS_TOF', timer_tp: 'ZEITRELAIS_TP', counter_ctu: 'ZAEHLER' };
+                    timer_ton: 'ZEITRELAIS_TON', timer_tof: 'ZEITRELAIS_TOF', timer_tp: 'ZEITRELAIS_TP', timer_tonof: 'ZEITRELAIS_TONOF', counter_ctu: 'ZAEHLER' };
                 const base = extra[comp.type] || window._circAutoBase(comp.type);
                 const belegt = ST.components.filter(c => c !== comp && c.varName).map(c => c.varName).join(' ');
                 const code = (document.getElementById('code') || {}).value || '';
@@ -64036,13 +64039,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                     if (m) _alsBaustein = true;
                     // Zeitrelais (TON/TOF/TP): innerer Ausdruck = Strang (IN), Zeit merken.
-                    if (!_alsBaustein) m = line.match(new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*(TON|TOF|TP)\\s*\\(\\s*(.+?)\\s*,\\s*((?:T#)?\\s*[\\d.]+\\s*(?:ms|s)?)\\s*\\)\\s*$', 'i'));
+                    // TONOF trägt zwei Zeiten (T_EIN, T_AUS), die anderen eine.
+                    if (!_alsBaustein) m = line.match(new RegExp('^(' + ID_RE_STR + ')\\s*:=\\s*(TONOF|TON|TOF|TP)\\s*\\(\\s*(.+?)\\s*,\\s*((?:T#)?\\s*[\\d.]+\\s*(?:ms|s)?)\\s*(?:,\\s*((?:T#)?\\s*[\\d.]+\\s*(?:ms|s)?)\\s*)?\\)\\s*$', 'i'));
+                    if (m && ((m[2].toUpperCase() === 'TONOF') !== (m[5] != null))) m = null;
                     if (!_alsBaustein && m) {
                         if (_nurBool(m[3])) {
                             try {
                                 const _fn = m[2].toUpperCase();
                                 assigns.push({ kette, lhs: m[1], ast: parseExpr(m[3]) });
                                 _timerForAssign[m[1]] = { fn: _fn, time: parseTimerSeconds(m[4]) };
+                                if (m[5] != null) _timerForAssign[m[1]].time2 = parseTimerSeconds(m[5]);
                                 if (!kette) _rawByLhs[m[1]] = raw;
                                 _bsOffen = null;
                                 return;
@@ -65203,6 +65209,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const _ct2 = CTYPES[c.type];
                     if (_ct2 && _ct2.timer && c.varName && _timerForAssign[c.varName]) {
                         c.timerTime = _timerForAssign[c.varName].time;
+                        if (_timerForAssign[c.varName].time2 != null) c.timerTime2 = _timerForAssign[c.varName].time2;
                     }
                     if (_ct2 && _ct2.counter && c.varName && _ctuForAssign[c.varName]) {
                         c.ctuReset = _ctuForAssign[c.varName].reset;
@@ -65674,8 +65681,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (t.kind === 'aux' && comp.varName) {
                         const _tc = ST.components.find(c => c.varName === comp.varName && CTYPES[c.type] && CTYPES[c.type].timer);
                         if (_tc) {
-                            const side = (CTYPES[_tc.type].timer === 'TOF') ? 1 : -1;
-                            el('path', {d:`M ${x} ${y-2} C ${x + side*7} ${y-5}, ${x + side*7} ${y+1}, ${x} ${y+4}`, fill:'none', 'stroke-width':1.5}, movingGroup);
+                            const _tf = CTYPES[_tc.type].timer;
+                            (_tf === 'TONOF' ? [-1, 1] : [(_tf === 'TOF') ? 1 : -1]).forEach(side =>
+                                el('path', {d:`M ${x} ${y-2} C ${x + side*7} ${y-5}, ${x + side*7} ${y+1}, ${x} ${y+4}`, fill:'none', 'stroke-width':1.5}, movingGroup));
                         }
                     }
                     if (t.nc) el('line', {x1:x, y1:y-5, x2:x+8, y2:y-5, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
@@ -65793,10 +65801,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             el('line', {x1:x-10, y1:y-10, x2:x-10, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
                         } else if (t.timer === 'TOF') {
                             el('rect', {x:x-20, y:y-10, width:10, height:20, fill:'#000'}, grp);
+                        } else if (t.timer === 'TONOF') {
+                            // Ansprech- und Rückfallverzögerung: Kreuz außen, gefülltes Feld innen
+                            el('line', {x1:x-20, y1:y-10, x2:x-10, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('line', {x1:x-10, y1:y-10, x2:x-20, y2:y+10, stroke:'#000', 'stroke-width':1.5}, grp);
+                            el('rect', {x:x-10, y:y-10, width:10, height:20, fill:'#000'}, grp);
                         } else if (t.timer === 'TP') {
                             el('polyline', {points:`${x-18},${y+5} ${x-15},${y+5} ${x-15},${y-5} ${x-5},${y-5} ${x-5},${y+5} ${x-2},${y+5}`, fill:'none', stroke:'#000', 'stroke-width':1.5}, grp);
                         }
-                        el('text', {x:x+6, y:y+3, 'font-size':8, 'text-anchor':'middle', 'font-family':'Arial', fill:'#333'}, grp).textContent = (comp.timerTime != null ? comp.timerTime : 2) + ' s';
+                        el('text', {x:x+6, y:y+3, 'font-size':8, 'text-anchor':'middle', 'font-family':'Arial', fill:'#333'}, grp).textContent = t.timer === 'TONOF'
+                            ? (comp.timerTime != null ? comp.timerTime : 2) + '/' + (comp.timerTime2 != null ? comp.timerTime2 : 5)
+                            : (comp.timerTime != null ? comp.timerTime : 2) + ' s';
                     } else {
                         // Relais: Standard-Rechteck
                         el('line', {x1:x, y1:y-20, x2:x, y2:y-10, stroke:'#000', 'stroke-width':2, class:'circ-static'}, grp);
@@ -67064,8 +67079,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         <input id="ced-pop-norm" type="text" value="${(comp.normPrefix || '').replace(/"/g, '&quot;')}" placeholder="-SJ1 / -BG1 / -KF1" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;margin-bottom:6px;"><br>
                         <label style="display:block;color:#aaa;font-size:10px;margin-bottom:2px;">Variable (SPS):</label>
                         <input id="ced-pop-input" type="text" value="${(comp.varName || '').replace(/"/g, '&quot;')}" placeholder="${t.prefix || 'VAR'}_NAME" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
-                        ${isTimer ? `<br><label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">Verzögerungszeit [s] (${t.timer}):</label>
+                        ${isTimer ? `<br><label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">${t.timer === 'TONOF' ? 'Einschaltverzögerung T_EIN [s]' : 'Verzögerungszeit [s] (' + t.timer + ')'}:</label>
                         <input id="ced-pop-time" type="number" step="0.1" min="0.1" value="${comp.timerTime != null ? comp.timerTime : 2}" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">` : ''}
+                        ${isTimer && t.timer === 'TONOF' ? `<br><label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">Ausschaltverzögerung T_AUS [s]:</label>
+                        <input id="ced-pop-time2" type="number" step="0.1" min="0.1" value="${comp.timerTime2 != null ? comp.timerTime2 : 5}" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">` : ''}
                         ${t.counter ? `<br><label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">Vorwahl (Anzahl Impulse bis zum Schalten):</label>
                         <input id="ced-pop-ctulim" type="number" step="1" min="1" value="${comp.ctuLimit != null && comp.ctuLimit !== '' ? comp.ctuLimit : 5}" style="width:200px;padding:4px;background:#1e1e1e;color:#fff;border:1px solid #555;border-radius:3px;font-size:11px;">
                         <label style="display:block;color:#aaa;font-size:10px;margin:6px 0 2px;">Rücksetzen durch (Variable oder Ausdruck, leer = nie):</label>
@@ -67203,6 +67220,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const timeInp = _d().getElementById('ced-pop-time');
                         const tn = parseFloat((timeInp && timeInp.value || '').replace(',', '.'));
                         comp.timerTime = (isFinite(tn) && tn > 0) ? tn : 2.0;
+                        if (t.timer === 'TONOF') {
+                            const t2Inp = _d().getElementById('ced-pop-time2');
+                            const tn2 = parseFloat((t2Inp && t2Inp.value || '').replace(',', '.'));
+                            comp.timerTime2 = (isFinite(tn2) && tn2 > 0) ? tn2 : 5.0;
+                        }
                     }
                 }
                 _computeNormLabel(comp);
@@ -67237,7 +67259,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (type === 'siren')   return 'H';
                 if (type === 'heater')  return 'E';
                 if (type === 'contactor') return 'QA';
-                if (['timer_ton','timer_tof','timer_tp','counter_ctu'].includes(type)) return 'KF'; // Zeitrelais (DIN EN 81346-2: Klasse K, wie im Auto-Schaltplan); alte Pläne behalten ihr gespeichertes -KTn
+                if (['timer_ton','timer_tof','timer_tp','timer_tonof','counter_ctu'].includes(type)) return 'KF'; // Zeitrelais (DIN EN 81346-2: Klasse K, wie im Auto-Schaltplan); alte Pläne behalten ihr gespeichertes -KTn
                 return null;
             }
             // Sucht die nächste freie Nummer für ein gegebenes Prefix.
@@ -67678,7 +67700,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const _ct = CTYPES[coil.type];
                         if (_ct && _ct.timer) {
                             const _time = (coil.timerTime != null ? coil.timerTime : 2);
-                            codeOps.push({ kind:'coil', name: coilVar, expr, timer: { fn: _ct.timer, time: _time } });
+                            codeOps.push({ kind:'coil', name: coilVar, expr, timer: { fn: _ct.timer, time: _time, time2: _ct.timer === 'TONOF' ? (coil.timerTime2 != null ? coil.timerTime2 : 5) : null } });
                             return;
                         }
                         // Zählrelais: Strang = Zähleingang, VAR := CTU(<Strang>, <Reset>, <Vorwahl>)
@@ -67736,7 +67758,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         return;
                     }
                     if (op.kind === 'coil') {
-                        lines.push(op.timer ? `${op.name} := ${op.timer.fn}(${op.expr}, ${op.timer.time})`
+                        lines.push(op.timer ? `${op.name} := ${op.timer.fn}(${op.expr}, ${op.timer.time}${op.timer.time2 != null ? ', ' + op.timer.time2 : ''})`
                             : op.ctu ? `${op.name} := CTU(${op.expr}, ${op.ctu.reset}, ${op.ctu.limit})`
                             : `${op.name} := ${op.expr}`);
                         lines.push('');

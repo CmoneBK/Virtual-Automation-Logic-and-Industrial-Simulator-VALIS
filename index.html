@@ -27994,6 +27994,20 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             // Globalen Betriebsmodus + Steckaufbau-Vorgaben erzwingen
             if (taskObj.enforceMode) _taskApplyForceMode(taskObj.enforceMode);
             if (taskObj.festoConfig) _taskApplyFestoConfig(taskObj.festoConfig);
+            // Aufgabe bringt nur einen Fluidplan mit (z. B. ein Druckluftnetz, keine 2D-Anlage): den Plan zeigen
+            try {
+                const _fpF = taskObj.preset && taskObj.preset.factory, _fpT = _fpF && _fpF.fluidplan;
+                if (_fpT && (_fpT.teile || []).length && !(_fpF.objects || []).length && window.Fluidplan) {
+                    setTimeout(() => { try {
+                        window.Fluidplan.oeffnen();
+                        // ohne Programm braucht die Aufgabe den Logikplan nicht: der Fluidplan bekommt den Platz
+                        const _lp = document.getElementById('fbs-wrapper');
+                        if (_lp && !(taskObj.preset.code || '').trim() && getComputedStyle(_lp).display !== 'none' && !(window.popOutWindows && window.popOutWindows['fbs-wrapper'] && !window.popOutWindows['fbs-wrapper'].closed)) window.toggleWorkspaceView('fbs-wrapper');
+                        if (window.Fluidplan.netz && _fpT.teile.some(t => t.typ === 'kompressor' || t.typ === 'behaelter')) window.Fluidplan.netz.diagramm();
+                        setTimeout(() => { try { window.Fluidplan._einpassen(); } catch (e) {} }, 400);
+                    } catch (e) {} }, 500);
+                }
+            } catch (e) {}
             // Simulation automatisch starten falls gewünscht und noch nicht aktiv
             if (taskObj.autoStartSim && !isSimulationActive) toggleSimulation();
             // Musterlösung-Button initialisieren
@@ -81998,7 +82012,7 @@ body.vi-aus .vi{display:none}body.vi-aus .vi-alt{position:static!important;width
 <script src="schaltplan-blatt.js?v=20261122a"></script>
 <script src="elektroplan-blatt.js?v=20261122a"></script>
 <script src="plansatz.js?v=20261122a"></script>
-<script src="fluidplan.js?v=20261123d"></script>
+<script src="fluidplan.js?v=20261123e"></script>
 <script src="logo.js?v=20261123d"></script>
 <script src="elektro-messen.js?v=20261115b"></script>
 <script src="grundlagen-elektro.js?v=20261115a"></script>

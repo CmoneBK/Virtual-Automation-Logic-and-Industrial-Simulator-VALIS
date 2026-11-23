@@ -20,6 +20,9 @@
  *          Impuls ab, sobald Trg vor Ablauf auf 0 geht; TP hält ihn. Ein
  *          neuer Impuls an Trg während der Zeit startet sie auf der LOGO!
  *          neu (Fußnote).
+ *   TONR → Betriebsstundenzähler (R, En, Ral = lo, MI = PT): die Zeit läuft,
+ *          solange En = 1, Q kommt nach MI insgesamt und bleibt bis R. MI
+ *          wird in Stunden und Minuten eingestellt; Sekunden gehen nicht.
  *   R_TRIG → AND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 0 → 1
  *   F_TRIG → NAND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 1 → 0
  *   CTU  → Vor-/Rückwärtszähler (R, Cnt, Dir = lo, Ein = Aus = PV)
@@ -58,14 +61,14 @@
   const AI_AUF = { 1: 'I7', 2: 'I8', 3: 'I1', 4: 'I2' };
   const NAME = {
     AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND mit Flankenauswertung', NANDF: 'NAND mit Flankenauswertung',
-    TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TONOF: 'Ein-/Ausschaltverzögerung', TP: 'Flankengetriggertes Wischrelais',
+    TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TONOF: 'Ein-/Ausschaltverzögerung', BSZ: 'Betriebsstundenzähler', TP: 'Flankengetriggertes Wischrelais',
     CTU: 'Vor-/Rückwärtszähler', SHR: 'Selbsthalterelais',
     ASW: 'Analoger Schwellwertschalter', AKOMP: 'Analogkomparator',
     ARITH: 'Arithmetikanweisung', PI: 'PI-Regler'
   };
   const NAME_EN = {
     AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND with edge evaluation', NANDF: 'NAND with edge evaluation',
-    TON: 'On-delay', TOF: 'Off-delay', TONOF: 'On-/Off-delay', TP: 'Edge triggered wiping relay',
+    TON: 'On-delay', TOF: 'Off-delay', TONOF: 'On-/Off-delay', BSZ: 'Hours counter', TP: 'Edge triggered wiping relay',
     CTU: 'Up/down counter', SHR: 'Latching relay',
     ASW: 'Analog threshold trigger', AKOMP: 'Analog comparator',
     ARITH: 'Math instruction', PI: 'PI controller'
@@ -73,7 +76,7 @@
   // Texte deutsch oder englisch (VALIS-Sprache beim Abbilden)
   const EN = () => window.currentLang === 'en';
   const L = (de, en) => (EN() ? en : de);
-  const SF = new Set(['TON', 'TOF', 'TONOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SF = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
   const ID = /^[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*$/;
   const ZAHL = /^-?\d+(?:[.,]\d+)?$/;
   const LS = 'valisLogoKlemmen';
@@ -287,6 +290,23 @@
           return z.wert;
         });
         b.sek = zeiten[0]; b.sek2 = zeiten[1];
+        ablegen(b); return platz;
+      }
+      if (n.type === 'TONR') {
+        // Speichernde Einschaltverzögerung → Betriebsstundenzähler: En zählt die Zeit,
+        // Q nach MI insgesamt, R setzt zurück. MI nur in Stunden und Minuten.
+        b = neuerBaustein('BSZ', id, zeile);
+        const platz = { art: 'b', b };
+        memo.set(id, platz);
+        sfEingang(b, 'R', pin('R'));
+        sfEingang(b, 'En', pin('IN'));
+        b.ein.push({ pin: 'Ral', ref: konst(false), neg: false });
+        const sek = Math.max(0, +n.pt || 0);
+        const min = Math.round(sek / 60);
+        b.sek = sek;
+        b.par.push({ n: 'MI', w: zwei(Math.floor(min / 60)) + ':' + zwei(min % 60) + ' h' });
+        if (Math.abs(min * 60 - sek) > 1e-6 || min < 1) grund(L('Speichernde Einschaltverzögerung (TONR) ' + komma(sek) + ' s: Der Betriebsstundenzähler der LOGO! zählt die Zeit wie TONR, sein Intervall MI wird aber in Stunden und Minuten eingestellt. Sekunden gehen nicht, nur ganze Minuten.',
+          'Retentive on-delay (TONR) ' + sek + ' s: the LOGO! hours counter adds up the time like TONR, but its interval MI is set in hours and minutes. Seconds are not possible, only whole minutes.'), zeile, 'nicht');
         ablegen(b); return platz;
       }
       if (n.type === 'R_TRIG' || n.type === 'F_TRIG') {
@@ -589,6 +609,12 @@
           else st.ta = 0;
           break;
         }
+        case 'BSZ': {
+          // Betriebsstundenzähler: Zeit läuft bei En = 1, Q nach MI, R setzt Zeit und Q zurück
+          if (bit(ein(b, 'R'))) { st.ta = 0; st.q = false; }
+          else if (bit(ein(b, 'En')) && !st.q) { st.ta += dtMs; if (st.ta >= b.sek * 1000 - 1e-6) st.q = true; }
+          break;
+        }
         case 'TP': {
           const trg = bit(ein(b, 'Trg'));
           if (trg && !st.alt) { st.q = true; st.ta = 0; } // Flanke 0 → 1 startet (auch neu)
@@ -643,8 +669,9 @@
       let s = b.kurz + ' ' + b.name;
       if (b.typ === 'AND' || b.typ === 'OR' || b.typ === 'NOT' || b.typ === 'ANDF' || b.typ === 'NANDF') s += ' · ' + b.ein.map(e => (e.neg ? 'NOT ' : '') + refText(e.ref)).join(', ');
       else {
-        const e = b.ein.filter(x => !(x.pin === 'Dir' && x.ref.art === 'c' && x.ref.k === 'lo')).map(x => x.pin + ' ← ' + refText(x.ref));
+        const e = b.ein.filter(x => !((x.pin === 'Dir' || x.pin === 'Ral') && x.ref.art === 'c' && x.ref.k === 'lo')).map(x => x.pin + ' ← ' + refText(x.ref));
         if (e.length) s += ' · ' + e.join(' · ');
+        if (b.typ === 'BSZ') s += ' · Ral = lo';
         if (b.typ === 'CTU') s += ' · Dir = ' + refText((b.ein.find(x => x.pin === 'Dir') || {}).ref || { art: 'c', k: 'lo' });
         if (b.par.length) s += ' · ' + b.par.map(p => p.n + ' = ' + p.w).join(', ');
       }
@@ -863,8 +890,8 @@
     it.h = h;
     return it;
   }
-  const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
-  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', ANDF: '&↑', NANDF: '&↓', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
+  const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', ANDF: '&↑', NANDF: '&↓', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', BSZ: 'Σh', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
   function breite(it) {
     if (it.kind !== 'box') return 0;
     let m = 0;
@@ -1039,7 +1066,7 @@
       case 'AND': return bits().every(Boolean);
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
-      case 'TON': case 'TOF': case 'TONOF': case 'TP': case 'CTU': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
+      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'CTU': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

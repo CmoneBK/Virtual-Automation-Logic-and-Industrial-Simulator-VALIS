@@ -10336,3 +10336,32 @@ VALIS_EN.vorlagen({
 "ein ⟦0⟧ s · aus ⟦1⟧ s": "on ⟦0⟧ s · off ⟦1⟧ s",
 "TONOF ⟦0⟧ / ⟦1⟧": "TONOF ⟦0⟧ / ⟦1⟧"
 });
+// Flanken R_TRIG / F_TRIG (IEC 61131-3), in den Relais-Ansichten als Wischrelais EW/AW
+VALIS_EN.dazu({
+"Flanke steigend (R_TRIG)": "Rising edge (R_TRIG)",
+"Flanke fallend (F_TRIG)": "Falling edge (F_TRIG)",
+"Erkennt die steigende Flanke: OUT ist genau einen SPS-Zyklus lang wahr, wenn CLK von falsch auf wahr wechselt. Danach wieder falsch, auch wenn CLK wahr bleibt. Baustein nach IEC 61131-3, im TIA Portal R_TRIG.": "Detects the rising edge: OUT is true for exactly one PLC cycle when CLK changes from false to true. Then false again, even if CLK stays true. Block to IEC 61131-3, R_TRIG in the TIA Portal.",
+"Erkennt die fallende Flanke: OUT ist genau einen SPS-Zyklus lang wahr, wenn CLK von wahr auf falsch wechselt. Baustein nach IEC 61131-3, im TIA Portal F_TRIG.": "Detects the falling edge: OUT is true for exactly one PLC cycle when CLK changes from true to false. Block to IEC 61131-3, F_TRIG in the TIA Portal.",
+"Weitere Bausteine nach IEC 61131-3 und Sonderfunktionen der LOGO!. Zeiten in Sekunden.": "More blocks to IEC 61131-3 and special functions of the LOGO!. Times in seconds.",
+"Wischrelais EW (R_TRIG)": "Wiping relay EW (R_TRIG)",
+"Wischrelais AW (F_TRIG)": "Wiping relay AW (F_TRIG)",
+"Funktion EW": "Function EW",
+"Funktion AW": "Function AW",
+"Einschaltwischend (EW)": "Wiping on energising (EW)",
+"Ausschaltwischend (AW)": "Wiping on de-energising (AW)",
+"Flankenauswertung": "edge evaluation",
+"Flanke": "Edge",
+"AND mit Flankenauswertung": "AND with edge evaluation",
+"NAND mit Flankenauswertung": "NAND with edge evaluation",
+"Flanke steigend (R_TRIG) als Wischrelais, einschaltwischend (EW): Der Kontakt schließt für einen SPS-Zyklus, wenn der Strang Spannung bekommt. Im Code: R_TRIG(Strang).": "Rising edge (R_TRIG) as a wiping relay, wiping on energising (EW): the contact closes for one PLC cycle when the rung is energised. In code: R_TRIG(rung).",
+"Flanke fallend (F_TRIG) als Wischrelais, ausschaltwischend (AW): Der Kontakt schließt für einen SPS-Zyklus, wenn der Strang die Spannung verliert. Im Code: F_TRIG(Strang).": "Falling edge (F_TRIG) as a wiping relay, wiping on de-energising (AW): the contact closes for one PLC cycle when the rung loses power. In code: F_TRIG(rung)."
+});
+VALIS_EN.vorlagen({
+"Falsche Anzahl an Argumenten für ⟦0⟧": "Wrong number of arguments for ⟦0⟧",
+"`⟦0⟧` (⟦1⟧ Flanke) braucht GENAU ein Argument: das Signal, dessen Flanke erkannt werden soll. Eine Zeit gibt es nicht, der Ausgang ist genau einen Zyklus lang wahr.": "`⟦0⟧` (⟦1⟧ edge) needs EXACTLY one argument: the signal whose edge is to be detected. There is no time; the output is true for exactly one cycle.",
+"Schreibe `⟦0⟧(SIGNAL)` — z.B. `⟦1⟧(TASTER)`.": "Write `⟦0⟧(SIGNAL)` — e.g. `⟦1⟧(TASTER)`.",
+"⟦0⟧ gerade (in diesem Zyklus) von 0 auf 1 gewechselt hat": "⟦0⟧ has just (in this cycle) changed from 0 to 1",
+"⟦0⟧ gerade (in diesem Zyklus) von 1 auf 0 gewechselt hat": "⟦0⟧ has just (in this cycle) changed from 1 to 0",
+"⟦0⟧: Wischzeit = ein SPS-Zyklus, nicht einstellbar.": "⟦0⟧: wiping time = one PLC cycle, not adjustable.",
+"Flanke (⟦0⟧) als Wischrelais, ⟦1⟧: Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. Multifunktions-Zeitrelais anderer Hersteller haben sie, mit einer einstellbaren Wischzeit; in der SPS dauert der Impuls genau einen Zyklus.": "Edge (⟦0⟧) as a wiping relay, ⟦1⟧: the FESTO timer relay 162243 has no such function. Multi-function timer relays from other makers have it, with an adjustable wiping time; in the PLC the pulse lasts exactly one cycle."
+});

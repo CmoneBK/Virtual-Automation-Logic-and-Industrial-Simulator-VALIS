@@ -128,7 +128,8 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     'S1 := A OR Q1\nR1 := B\nX := Q1\nS2_RS := C\nR2_RS := D AND NOT X\nY := Q2_RS',
     'MOTOR := (START OR MOTOR) AND NOT STOP',
     'Z := CTU(TON(TAKT, 0.5), RESET, 3)\nL := NOT Z',
-    'LUEFTER := TONOF(TASTER, 1.5, 0.85)\nH := LUEFTER AND NOT B\nK := TONOF(LUEFTER, 0, 2.35)'
+    'LUEFTER := TONOF(TASTER, 1.5, 0.85)\nH := LUEFTER AND NOT B\nK := TONOF(LUEFTER, 0, 2.35)',
+    'AUF := R_TRIG(TASTER)\nAB := F_TRIG(A AND NOT B)\nZ := CTU(AUF, RESET, 3)\nM := SR(AB, AUF)\nH := Z OR M'
   ];
   const ana = [['LUEFTER := TEMP > 50\nWARN := TEMP <= DRUCK\nGLEICH := TEMP == 30\nUNGL := DRUCK <> 20\nSUMME := TEMP + DRUCK * 2\nK := 40 >= TEMP', { TEMP: 'analog_in', DRUCK: 'analog_in' }],
     ['HEIZ := ZWEIPUNKT(T, 20, 4, HEIZEN)\nKUEHL := ZWEIPUNKT(T, 30, 2, KUEHLEN)', { T: 'analog_in' }]];

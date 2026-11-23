@@ -20,6 +20,8 @@
  *          Impuls ab, sobald Trg vor Ablauf auf 0 geht; TP hält ihn. Ein
  *          neuer Impuls an Trg während der Zeit startet sie auf der LOGO!
  *          neu (Fußnote).
+ *   R_TRIG → AND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 0 → 1
+ *   F_TRIG → NAND mit Flankenauswertung (ein Eingang): Q einen Zyklus lang bei 1 → 0
  *   CTU  → Vor-/Rückwärtszähler (R, Cnt, Dir = lo, Ein = Aus = PV)
  *   SR   → Selbsthalterelais (Rücksetzen dominant, wie die LOGO!)
  *   RS   → Selbsthalterelais mit R UND NICHT S davor, weil die LOGO! kein
@@ -55,14 +57,14 @@
   // Analogeingänge des Grundgeräts liegen auf Digitalklemmen
   const AI_AUF = { 1: 'I7', 2: 'I8', 3: 'I1', 4: 'I2' };
   const NAME = {
-    AND: 'AND', OR: 'OR', NOT: 'NOT',
+    AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND mit Flankenauswertung', NANDF: 'NAND mit Flankenauswertung',
     TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TONOF: 'Ein-/Ausschaltverzögerung', TP: 'Flankengetriggertes Wischrelais',
     CTU: 'Vor-/Rückwärtszähler', SHR: 'Selbsthalterelais',
     ASW: 'Analoger Schwellwertschalter', AKOMP: 'Analogkomparator',
     ARITH: 'Arithmetikanweisung', PI: 'PI-Regler'
   };
   const NAME_EN = {
-    AND: 'AND', OR: 'OR', NOT: 'NOT',
+    AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND with edge evaluation', NANDF: 'NAND with edge evaluation',
     TON: 'On-delay', TOF: 'Off-delay', TONOF: 'On-/Off-delay', TP: 'Edge triggered wiping relay',
     CTU: 'Up/down counter', SHR: 'Latching relay',
     ASW: 'Analog threshold trigger', AKOMP: 'Analog comparator',
@@ -285,6 +287,15 @@
           return z.wert;
         });
         b.sek = zeiten[0]; b.sek2 = zeiten[1];
+        ablegen(b); return platz;
+      }
+      if (n.type === 'R_TRIG' || n.type === 'F_TRIG') {
+        // Grundfunktion mit Flankenauswertung, ein Eingang
+        b = neuerBaustein(n.type === 'R_TRIG' ? 'ANDF' : 'NANDF', id, zeile);
+        const platz = { art: 'b', b };
+        memo.set(id, platz);
+        const e = pin('IN') || ie[0];
+        if (e) b.ein.push({ pin: '', ref: quelle(e.sourceId), neg: !!e.inverted });
         ablegen(b); return platz;
       }
       if (n.type === 'TON' || n.type === 'TOF' || n.type === 'TP') {
@@ -553,6 +564,13 @@
         case 'AND': st.q = w.every(Boolean); break;
         case 'OR': st.q = w.some(Boolean); break;
         case 'NOT': st.q = !w[0]; break;
+        case 'ANDF': case 'NANDF': {
+          // AND (Flanke): 1 für einen Zyklus, wenn das UND von 0 auf 1 geht; NAND (Flanke): wenn es von 1 auf 0 geht
+          const u = w.every(Boolean);
+          st.q = b.typ === 'ANDF' ? (u && !st.alt) : (!u && st.alt);
+          st.alt = u;
+          break;
+        }
         case 'TON': {
           const trg = bit(ein(b, 'Trg'));
           if (trg) { st.ta += dtMs; if (st.ta >= b.sek * 1000 - 1e-6) st.q = true; } else { st.ta = 0; st.q = false; }
@@ -623,7 +641,7 @@
     const out = [];
     m.bausteine.forEach(b => {
       let s = b.kurz + ' ' + b.name;
-      if (b.typ === 'AND' || b.typ === 'OR' || b.typ === 'NOT') s += ' · ' + b.ein.map(e => (e.neg ? 'NOT ' : '') + refText(e.ref)).join(', ');
+      if (b.typ === 'AND' || b.typ === 'OR' || b.typ === 'NOT' || b.typ === 'ANDF' || b.typ === 'NANDF') s += ' · ' + b.ein.map(e => (e.neg ? 'NOT ' : '') + refText(e.ref)).join(', ');
       else {
         const e = b.ein.filter(x => !(x.pin === 'Dir' && x.ref.art === 'c' && x.ref.k === 'lo')).map(x => x.pin + ' ← ' + refText(x.ref));
         if (e.length) s += ' · ' + e.join(' · ');
@@ -846,7 +864,7 @@
     return it;
   }
   const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
-  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
+  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', ANDF: '&↑', NANDF: '&↓', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
   function breite(it) {
     if (it.kind !== 'box') return 0;
     let m = 0;
@@ -1021,7 +1039,7 @@
       case 'AND': return bits().every(Boolean);
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
-      case 'TON': case 'TOF': case 'TONOF': case 'TP': case 'CTU': return !!(tm[b.src] && tm[b.src].q);
+      case 'TON': case 'TOF': case 'TONOF': case 'TP': case 'CTU': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

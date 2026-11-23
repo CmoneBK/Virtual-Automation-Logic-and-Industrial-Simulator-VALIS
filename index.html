@@ -9804,6 +9804,23 @@ You must output exactly this JSON format. The logic code goes as a single string
             if (role === 'out' && t === 'analog_out') return 'aout';
             return role;
         };
+        // Belegt sind nur die Adressen der Variablen, die gerade im Programm stehen.
+        // Sonst behielte jeder halbe Name beim Tippen (C, CL, CLK …) seine Adresse,
+        // und neue Eingänge landeten nach ein paar Programmen bei E3.x, wofür die
+        // SPS-Platine im Steckaufbau keine Buchse hat (Christoph 23.11.2026).
+        // Ohne Programm (Laden, Tests) gilt wie bisher die ganze Tabelle.
+        const _spsAktiv = function() {
+            const n = (globalInputs || []).concat(globalOutputs || []);
+            return n.length ? new Set(n) : null;
+        };
+        const _spsBelegt = function(prefix, ausser) {
+            const aktiv = _spsAktiv(), used = new Set();
+            for (const [k, a] of Object.entries(spsAddresses)) {
+                if (k === ausser || typeof a !== 'string' || !a.startsWith(prefix)) continue;
+                if (!aktiv || aktiv.has(k)) used.add(a);
+            }
+            return used;
+        };
         window._nextFreeSpsAddress = function(role) {
             const prefix = window._spsAddrPrefix(role);
             if (role === 'ain' || role === 'aout') {
@@ -9811,10 +9828,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 for (let w = 64; w < 1024; w += 2) if (!usedW.has(prefix + w)) return prefix + w;
                 return prefix + '1022';
             }
-            const used = new Set();
-            for (const a of Object.values(spsAddresses)) {
-                if (typeof a === 'string' && a.startsWith(prefix)) used.add(a);
-            }
+            const used = _spsBelegt(prefix);
             for (let byte = 0; byte < 256; byte++) {
                 for (let bit = 0; bit < 8; bit++) {
                     const cand = `${prefix}${byte}.${bit}`;
@@ -9828,7 +9842,9 @@ You must output exactly this JSON format. The logic code goes as a single string
             // ein Ausgang A0.3 und ist jetzt ein Merker), wird neu vergeben.
             role = window._spsAnalogRolle(name, role);
             const _have = spsAddresses[name];
-            if (_have && (_SPS_ADDR_RE[role] || _SPS_ADDR_RE.out).test(_have)) return _have;
+            // Eigene Adresse behalten, außer eine andere Variable im Programm hat sie inzwischen
+            if (_have && (_SPS_ADDR_RE[role] || _SPS_ADDR_RE.out).test(_have)
+                && !((role === 'ain' || role === 'aout') ? false : _spsBelegt(window._spsAddrPrefix(role), name).has(_have))) return _have;
             const addr = window._nextFreeSpsAddress(role);
             spsAddresses[name] = addr;
             try { localStorage.setItem('valisSpsAddresses', JSON.stringify(spsAddresses)); } catch(_) {}

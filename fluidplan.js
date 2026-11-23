@@ -163,24 +163,43 @@
     const istProp = t => !!t && t.typ === 'ventil' && !!t.o && t.o.links === 'prop';
     const PROP_STD = { varS: '', nullS: 50, ueber: 10, verlauf: 'linear', tau: 20, hyst: 2 };
     const PROP_DP_H = 35;   // bar je Steuerkante, auf die sich der Nenndurchfluss (Öl) bezieht
-    // Externe Verstärkerkarte (o.elektronik === 'karte'): Sollwert W1 (±10 V) → Rampe → Magnetstrom A/B.
+    // Externe Verstärkerkarte (o.elektronik === 'karte'), nachgebaut wie FESTO 162255 (Regelverstärker,
+    // Betriebsart zweikanalig): Sollwert W1 (±10 V) → Magnetstrom A (W1 positiv) bzw. B (W1 negativ).
+    // Jeder Kanal hat eigenen Grund-, Sprung- und Maximalstrom; die Karte hat keine Rampen
+    // (eine Sollwertrampe macht das Programm), der Dither wird als Frequenz 100 … 250 Hz eingestellt.
     // Grundstrom fließt immer durch beide Magnete (Vormagnetisierung), der Sprungstrom kommt dazu,
     // sobald der Sollwert die Null verlässt (überspringt die Überdeckung), bei 10 V fließt der
     // Maximalstrom. Der Schieber folgt dem Differenzstrom: Nennstrom 800 mA = voller Schieberweg.
-    // Dither (überlagerte Schwingung) hält den Schieber in Bewegung und verkleinert die Hysterese.
+    // Dither (überlagerte Schwingung) hält den Schieber in Bewegung und verkleinert die Hysterese;
+    // je kleiner die Ditherfrequenz, desto stärker die Wirkung.
     const PROP_I_NENN = 800;   // mA
     // Lieferzustand neutral: die Karte verhält sich wie die eingebaute Elektronik, eingestellt wird im Unterricht
-    const KARTE_STD = { grund: 0, sprung: 0, max: 800, rampeAuf: 0, rampeAb: 0, dither: 100 };
-    const KARTE_GRENZE = { grund: [0, 300], sprung: [0, 300], max: [300, 1000], rampeAuf: [0, 5], rampeAb: [0, 5], dither: [0, 100] };
+    // Bereiche und Schritte wie im Datenblatt 162255: Basic/Jump 0 … 250 mA in 1-mA-Schritten,
+    // Max 100 mA … 1 A in 5-mA-Schritten, Dither 100 … 250 Hz (kleine Frequenz = mehr Wirkung)
+    const KARTE_STD = { grundA: 0, grundB: 0, sprungA: 0, sprungB: 0, maxA: 800, maxB: 800, ditherHz: 100 };
+    const KARTE_GRENZE = { grundA: [0, 250], grundB: [0, 250], sprungA: [0, 250], sprungB: [0, 250], maxA: [100, 1000], maxB: [100, 1000], ditherHz: [100, 250] };
+    const KARTE_RASTER = { maxA: 5, maxB: 5 };
+    const KARTE_BEIDE = { grund: ['grundA', 'grundB'], sprung: ['sprungA', 'sprungB'], max: ['maxA', 'maxB'] };
     const mitKarte = t => istProp(t) && t.o.elektronik === 'karte';
-    const karteVon = t => Object.assign({}, KARTE_STD, (t.o && t.o.karte) || {});
-    // Ströme (mA) der beiden Magnete beim Sollwert w (−1 … +1, nach der Rampe)
-    function karteStrom(t, w) {
-        const k = karteVon(t), g = Math.max(0, k.grund);
-        const hub = a => a > 0.005 ? Math.max(0, k.sprung) + a * Math.max(0, k.max - k.grund - k.sprung) : 0;
-        return [g + hub(w), g + hub(-w)];
+    // Ältere Pläne (ein Strom für beide Kanäle, Rampen, Dither in %) auf die 162255 umrechnen
+    function karteNorm(roh) {
+        const r = roh || {}, k = Object.assign({}, KARTE_STD);
+        for (const key in KARTE_BEIDE) if (r[key] != null) KARTE_BEIDE[key].forEach(n => { k[n] = +r[key]; });
+        if (r.dither != null && r.ditherHz == null) k.ditherHz = 400 - 3 * Math.max(0, Math.min(100, +r.dither || 0));
+        for (const key in KARTE_STD) if (r[key] != null && isFinite(+r[key])) k[key] = +r[key];
+        for (const key in KARTE_GRENZE) { const G = KARTE_GRENZE[key], ra = KARTE_RASTER[key] || 1; k[key] = Math.max(G[0], Math.min(G[1], Math.round(k[key] / ra) * ra)); }
+        return k;
     }
-    // Schieber-Sollwert hinter der Karte (ohne Rampe): Differenzstrom / Nennstrom
+    const karteVon = t => karteNorm(t.o && t.o.karte);
+    // Ströme (mA) der beiden Magnete beim Sollwert w (−1 … +1 = W1 −10 … +10 V)
+    function karteStrom(t, w) {
+        const k = karteVon(t);
+        const kanal = (s, a) => k['grund' + s] + (a > 0.005 ? k['sprung' + s] + a * Math.max(0, k['max' + s] - k['grund' + s] - k['sprung' + s]) : 0);
+        return [kanal('A', w), kanal('B', -w)];
+    }
+    // Hysterese-Faktor des Schiebers durch den Dither: 100 Hz wie eingestellt, 250 Hz doppelt
+    const karteDitherFaktor = t => 1 + (karteVon(t).ditherHz - 100) / 150;
+    // Schieber-Sollwert hinter der Karte: Differenzstrom / Nennstrom
     const karteSoll = (t, w) => { const i = karteStrom(t, w); return Math.max(-1, Math.min(1, (i[0] - i[1]) / PROP_I_NENN)); };
     const propQn = o => Math.max(0, zahl(o.qn, o.hyd ? 40 : 700));
     // Ein Ventil auf „proportional" umstellen bzw. zurück: beide Seiten, drei Stellungen, Mitte gesperrt
@@ -2624,13 +2643,15 @@
                 if (!t.o.elektronik) t.o.elektronik = 'eingebaut';
                 wahl('Elektronik', 'elektronik', [['eingebaut', 'eingebaut (Sollwert 0 … 10 V direkt)'], ['karte', 'externe Verstärkerkarte (Magnetstrom)']]);
                 if (mitKarte(t)) {
-                    const kn = (lbl, key, schritt, einheit) => {
-                        const G = KARTE_GRENZE[key], i = fld(lbl + ' (' + einheit + ')', h('input', { type: 'number', min: G[0], max: G[1], step: schritt, value: karteVon(t)[key] }));
-                        i.onchange = () => setze(() => { t.o.karte = Object.assign(karteVon(t), { [key]: Math.max(G[0], Math.min(G[1], zahl(i.value, KARTE_STD[key]))) }); });
+                    const kn = (lbl, key, einheit) => {
+                        const G = KARTE_GRENZE[key], i = fld(lbl + ' (' + einheit + ')', h('input', { type: 'number', min: G[0], max: G[1], step: KARTE_RASTER[key] || 1, value: karteVon(t)[key] }));
+                        i.onchange = () => setze(() => { t.o.karte = Object.assign(karteVon(t), { [key]: karteNorm({ [key]: zahl(i.value, KARTE_STD[key]) })[key] }); });
                     };
-                    kn('Karte: Grundstrom', 'grund', 10, 'mA'); kn('Karte: Sprungstrom', 'sprung', 10, 'mA'); kn('Karte: Maximalstrom', 'max', 10, 'mA');
-                    kn('Karte: Rampe auf (0 → 10 V)', 'rampeAuf', 0.1, 's'); kn('Karte: Rampe ab (10 → 0 V)', 'rampeAb', 0.1, 's'); kn('Karte: Dither', 'dither', 10, '%');
-                    h('div', { class: 'fp-hinw', text: 'Die Verstärkerkarte steht im Steckaufbau (Reihe Analogtechnik) und lässt sich dort an den Drehknöpfen einstellen. Den Sprungstrom so wählen, dass der Schieber gerade die Überdeckung überspringt. Der Grundstrom fließt in beiden Magneten und zählt für den Schieberweg nicht mit: es wirkt der Unterschied der beiden Ströme, 800 mA = voller Schieberweg.' }, box);
+                    kn('Karte: Grundstrom A (IA BASIC)', 'grundA', 'mA'); kn('Karte: Grundstrom B (IB BASIC)', 'grundB', 'mA');
+                    kn('Karte: Sprungstrom A (IA JUMP)', 'sprungA', 'mA'); kn('Karte: Sprungstrom B (IB JUMP)', 'sprungB', 'mA');
+                    kn('Karte: Maximalstrom A (IA MAX)', 'maxA', 'mA'); kn('Karte: Maximalstrom B (IB MAX)', 'maxB', 'mA');
+                    kn('Karte: Ditherfrequenz (DITHER)', 'ditherHz', 'Hz');
+                    h('div', { class: 'fp-hinw', text: 'Die Verstärkerkarte ist der Regelverstärker FESTO 162255 (zweikanalig). Sie steht im Steckaufbau (Reihe Analogtechnik) und wird dort wie das Original mit Wahlschalter und Drehknopf eingestellt. Den Sprungstrom so wählen, dass der Schieber gerade die Überdeckung überspringt. Der Grundstrom fließt in beiden Magneten und zählt für den Schieberweg nicht mit: es wirkt der Unterschied der beiden Ströme, 800 mA = voller Schieberweg. Eine Rampe hat die Karte nicht: Soll der Sollwert langsam steigen oder fallen, macht das Programm die Rampe.' }, box);
                 }
             }
             if (t.o.links === 'magnet') variable('Spule links: VALIS-Ausgang', 'varL', 'out');
@@ -3586,11 +3607,8 @@
                 // die Karte sieht an W1 0 V (Mitte)
                 let w = fe === 'sollwert' && !(kennLauf && kennLauf.id === t.id) ? (karte ? 0 : -1) : propSoll(t);
                 if (karte) {
-                    // Rampe: Anstieg und Abfall des Sollwerts begrenzen (Zeit für 0 → 10 V)
-                    const k = karteVon(t), ziel = w, alt = z.w || 0;
-                    const steigt = Math.abs(ziel) > Math.abs(alt) && ziel * alt >= 0;
-                    const zeit = Math.max(0, steigt ? k.rampeAuf : k.rampeAb), dMax = zeit > 0 ? dtGesamt / zeit : Infinity;
-                    z.w = alt + Math.max(-dMax, Math.min(dMax, ziel - alt));
+                    // Die 162255 hat keine Rampe: der Strom folgt dem Sollwert sofort
+                    z.w = w;
                     const i = karteStrom(t, z.w); z.iA = i[0]; z.iB = i[1];
                     w = Math.max(-1, Math.min(1, (z.iA - z.iB) / PROP_I_NENN));
                 } else { z.w = w; z.iA = z.iB = 0; }
@@ -3710,7 +3728,7 @@
                         // Hysterese als Umkehrspanne (der Schieber folgt erst, wenn das Spiel durchfahren ist), dann Verzögerung 1. Ordnung
                         if (fe !== 'klemmt') {
                             let hy = Math.max(0, zahl(o.hyst, 2)) / 100;   // halbe Spanne in s (Signalbereich = 2)
-                            if (mitKarte(t)) hy *= 3 - 2 * Math.max(0, Math.min(100, karteVon(t).dither)) / 100;   // ohne Dither dreifache Hysterese
+                            if (mitKarte(t)) hy *= karteDitherFaktor(t);   // 100 Hz: wie eingestellt, 250 Hz: doppelt
                             if (fe === 'schmutz') hy = Math.max(0.12, hy * 5);
                             if (z.soll > z.h + hy) z.h = z.soll - hy; else if (z.soll < z.h - hy) z.h = z.soll + hy;
                             z.s += (z.h - z.s) * Math.min(1, DT / Math.max(0.001, zahl(o.tau, 20) / 1000));
@@ -9307,11 +9325,13 @@ function versorgungMerken(F) {
         kennlinie: (id) => { const t = teil(id); if (!t || !istStetig(t)) return null; const m = kennMess.get(id), soll = []; for (let u = 0; u <= 100; u += 5) soll.push([u, +kennSoll(t, u).toFixed(4)]); return { soll, mess: m ? m.punkte.slice() : [], fertig: !!(m && m.fertig), laeuft: !!(kennLauf && kennLauf.id === id), info: kennInfo(t) }; },
         kennlinieAufnehmen: (id, dauer) => kennAufnehmen(id, dauer),
         // Verstärkerkarten (Steckaufbau): Ventile mit externer Elektronik, Einstellen, Live-Werte
-        propKarten: () => plan.teile.filter(mitKarte).map(t => ({ id: t.id, bez: t.bez || '', varS: t.o.varS || '', nullS: zahl(t.o.nullS, 50), hyd: istHyd(t), ueber: zahl(t.o.ueber, 10), karte: karteVon(t), grenzen: KARTE_GRENZE, nenn: PROP_I_NENN })),
-        propKarteSetzen: (id, key, wert) => { const t = teil(id), G = KARTE_GRENZE[key]; if (!t || !mitKarte(t) || !G) return null; const v = Math.max(G[0], Math.min(G[1], +wert || 0));
+        propKarten: () => plan.teile.filter(mitKarte).map(t => ({ id: t.id, bez: t.bez || '', varS: t.o.varS || '', nullS: zahl(t.o.nullS, 50), hyd: istHyd(t), ueber: zahl(t.o.ueber, 10), karte: karteVon(t), grenzen: KARTE_GRENZE, raster: KARTE_RASTER, nenn: PROP_I_NENN })),
+        propKarteSetzen: (id, key, wert) => { const t = teil(id), G = KARTE_GRENZE[key] || (KARTE_BEIDE[key] && KARTE_GRENZE[KARTE_BEIDE[key][0]]); if (!t || !mitKarte(t) || !G) return null;
+            // grund/sprung/max ohne Kanal stellen beide Kanäle gleich
+            const keys = KARTE_BEIDE[key] || [key], v = karteNorm({ [keys[0]]: +wert || 0 })[keys[0]];
             // Einsteller der Karte wirken sofort: die laufende Simulation bleibt stehen, wo sie ist
             undoStapel.push(JSON.stringify(plan)); if (undoStapel.length > 100) undoStapel.shift(); redoStapel = [];
-            t.o.karte = Object.assign(karteVon(t), { [key]: v }); speichern(); zeichnen(); return v; },
+            const neu = karteVon(t); keys.forEach(n => { neu[n] = v; }); t.o.karte = neu; speichern(); zeichnen(); return v; },
         _fehlerListe: (id) => fehlerListe(teil(id)) || [],
         propKarteLive: (id) => { const t = teil(id); if (!t || !mitKarte(t)) return null; const z = sim && simLaeuft() ? sim.zust[id] : null; const k = karteVon(t); return z ? { w1: (z.w || 0) * 10, iA: z.iA || 0, iB: z.iB || 0, s: z.s || 0, karte: k } : { w1: 0, iA: 0, iB: 0, s: 0, karte: k }; },
         kennlinieAufgenommen: (bez) => kennAufgenommen(bez),

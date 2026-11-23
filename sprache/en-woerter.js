@@ -10418,3 +10418,31 @@ VALIS_EN.vorlagen({
 "⟦0⟧ seit dem letzten Laden durch ⟦1⟧ mindestens ⟦2⟧-mal aktiv geworden ist (oder noch nie geladen wurde)": "⟦0⟧ has become active at least ⟦2⟧ times since the last load by ⟦1⟧ (or has never been loaded)",
 "Das dritte Argument von `CTD` ist die Vorwahl PV. Es muss eine ganze Zahl sein (z.B. `10`, nicht `⟦0⟧`).": "The third argument of `CTD` is the preset PV. It must be a whole number (e.g. `10`, not `⟦0⟧`)."
 });
+// Vor-/Rückwärtszähler CTUD (TIA: CU, CD, R, LD, PV); Z = QU, dazu Z_QD und Z_CV
+VALIS_EN.dazu({
+"Vor-/Rückwärtszähler": "Up/down counter",
+"Vor-/Rückwärtszähler (CTUD)": "Up/down counter (CTUD)",
+"<b>Vor-/Rückwärtszähler:</b> CU zählt 1 hoch, CD 1 ab, R setzt auf 0, LD lädt 10. Z ist wahr ab 10, <code>Z_QD</code> bei 0 oder weniger, <code>Z_CV</code> ist der Zählerstand.": "<b>Up/down counter:</b> CU counts 1 up, CD 1 down, R resets to 0, LD loads 10. Z is true from 10, <code>Z_QD</code> at 0 or less, <code>Z_CV</code> is the count.",
+"Z := CTUD(Hoch, Runter, Reset, Laden, Vorwahl)": "Z := CTUD(Up, Down, Reset, Load, Preset)",
+"Jede steigende Flanke (0→1) an CU zählt 1 hoch, an CD 1 ab (beide zugleich: bleibt). R setzt den Zählerstand auf 0, LD lädt die Vorwahl; R hat Vorrang. Z (QU) ist wahr ab Zählerstand ≥ Vorwahl. Dazu liest man Z_QD (wahr bei Zählerstand ≤ 0) und Z_CV (Zählerstand). Reihenfolge der Eingänge wie im TIA Portal: CU, CD, R, LD, PV.": "Every rising edge (0→1) at CU counts up 1, at CD down 1 (both at once: stays). R sets the count to 0, LD loads the preset; R has priority. Z (QU) is true from count ≥ preset. In addition you can read Z_QD (true at count ≤ 0) and Z_CV (count). Inputs in the same order as in the TIA Portal: CU, CD, R, LD, PV.",
+"hoch und runter zählen": "count up and down",
+"Parkhaus": "car park",
+"Belegung": "occupancy",
+"CU zählt 1 hoch, CD 1 ab, R setzt auf 0, LD lädt die Vorwahl. <code>Z := CTUD(CU, CD, R, LD, 20)</code> ist wahr ab 20, <code>Z_QD</code> bei 0, <code>Z_CV</code> ist der Zählerstand. Baustein im TIA Portal; typisch für Belegungen wie im Parkhaus.": "CU counts up 1, CD down 1, R resets to 0, LD loads the preset. <code>Z := CTUD(CU, CD, R, LD, 20)</code> is true from 20, <code>Z_QD</code> at 0, <code>Z_CV</code> is the count. Block in the TIA Portal; typical for occupancy as in a car park.",
+"Falsche Anzahl an Argumenten für CTUD": "Wrong number of arguments for CTUD",
+"`CTUD` (Vor-/Rückwärtszähler) braucht GENAU fünf Argumente wie im TIA Portal: Hochzählen CU, Runterzählen CD, Rücksetzen R, Laden LD und die Vorwahl PV. Wer etwas nicht braucht, schreibt dort FALSE.": "`CTUD` (up/down counter) needs EXACTLY five arguments as in the TIA Portal: count up CU, count down CD, reset R, load LD and the preset PV. Write FALSE for anything you do not need.",
+"Schreibe `CTUD(HOCH, RUNTER, RESET, LADEN, VORWAHL)` — z.B. `CTUD(EINFAHRT, AUSFAHRT, RESET, FALSE, 20)`.": "Write `CTUD(UP, DOWN, RESET, LOAD, PRESET)` — e.g. `CTUD(ENTRY, EXIT, RESET, FALSE, 20)`.",
+"CTUD-Vorwahl ist keine ganze Zahl": "CTUD preset is not a whole number",
+"Rechnungen vorher in eine eigene Zeile schreiben. Ab der Vorwahl ist der Ausgang wahr, LD lädt sie in den Zähler.": "Write calculations in a separate line first. From the preset on the output is true, LD loads it into the counter.",
+"Zählrelais vor/rück (CTUD)": "Counter relay, up/down (CTUD)",
+"Zählrelais vor/rück (CTUD): jede steigende Flanke im Strang zählt einen Schritt hoch, die Bedingung CD einen ab; R setzt auf 0, LD lädt die Vorwahl. Ab der Vorwahl schalten seine Hilfskontakte. Doppelklick: Vorwahl, CD, R, LD. Im Code: CTUD(Strang, CD, R, LD, Vorwahl).": "Up/down counter relay (CTUD): every rising edge in the path counts up one step, the condition CD counts down one; R resets to 0, LD loads the preset. From the preset on its auxiliary contacts switch. Double-click: preset, CD, R, LD. In code: CTUD(path, CD, R, LD, preset).",
+"Vorwahl (schaltet ab diesem Zählerstand, LD lädt sie):": "Preset (switches from this count, LD loads it):",
+"Runterzählen (CD) durch (Variable oder Ausdruck, leer = nie):": "Count down (CD) by (variable or expression, empty = never):",
+"vor/rück (CTUD) · gibt es so nicht": "up/down (CTUD) · does not exist like this",
+"Vor-/Rückwärtszähler (CTUD): Der FESTO-Vorwahlzähler 162355 zählt nur vorwärts (A1/A2) und stellt mit R1/R2 auf 0 zurück. Die Buchsen B1/B2 (zählt 1 ab) und L1/L2 (lädt die Vorwahl) gibt es an ihm nicht; VALIS ergänzt sie hier. Der Wechsler schaltet ab Zählerstand = Vorwahl.": "Up/down counter (CTUD): the FESTO preset counter 162355 only counts up (A1/A2) and resets to 0 via R1/R2. It does not have the sockets B1/B2 (counts down 1) and L1/L2 (loads the preset); VALIS adds them here. The changeover contact switches from count = preset.",
+"Counter (CTUD)": "Counter (CTUD)"
+});
+VALIS_EN.vorlagen({
+"⟦0⟧ mindestens ⟦1⟧-mal öfter aktiv geworden ist als ⟦2⟧ (Zählerstand ab ⟦3⟧)": "⟦0⟧ has become active at least ⟦1⟧ times more often than ⟦2⟧ (count from ⟦3⟧)",
+"Das fünfte Argument von `CTUD` ist die Vorwahl PV. Es muss eine ganze Zahl sein (z.B. `10`, nicht `⟦0⟧`).": "The fifth argument of `CTUD` is the preset PV. It must be a whole number (e.g. `10`, not `⟦0⟧`)."
+});

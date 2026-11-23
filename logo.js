@@ -29,6 +29,10 @@
  *   CTD  → Vor-/Rückwärtszähler (R ← LD, Cnt ← CD, Dir = hi, StartVal = PV,
  *          Ein = Aus = 1) mit NOT dahinter: Q = CV <= 0. Vor dem ersten LD
  *          weicht die LOGO! ab (Start bei StartVal statt 0, Hinweis).
+ *   CTUD → Vor-/Rückwärtszähler (Ein = Aus = PV). Ist CD fest 0: Cnt ← CU,
+ *          Dir = lo; ist CU fest 0: Cnt ← CD, Dir = hi; sonst Cnt ← Flanke CU
+ *          ODER Flanke CD, Dir ← Flanke CD (Hinweis). R ← R (StartVal 0) oder
+ *          R ← LD (StartVal = PV); R und LD zugleich gibt es nicht.
  *   SR   → Selbsthalterelais (Rücksetzen dominant, wie die LOGO!)
  *   RS   → Selbsthalterelais mit R UND NICHT S davor, weil die LOGO! kein
  *          setzdominantes Speicherglied hat (Fußnote).
@@ -349,7 +353,7 @@
         sfEingang(b, 'Cnt', pin('CD'));
         b.ein.push({ pin: 'Dir', ref: konst(true), neg: false });
         const pv = parseInt((String(n.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0;
-        b.pv = 1; b.start = pv;
+        b.pv = 1; b.start = pv; b.ctd = true;
         b.par.push({ n: 'StartVal', w: String(pv) }, { n: L('Ein', 'On'), w: '1' }, { n: L('Aus', 'Off'), w: '1' });
         const r = ablegen(b);
         const nb = neuerBaustein('NOT', id, zeile);
@@ -358,6 +362,45 @@
         grund(L('Rückwärtszähler (CTD): Die LOGO! beginnt beim Einschalten mit StartVal = ' + pv + ', die SPS mit 0 (Q = 1). Erst nach dem ersten Laden (LD) verhalten sich beide gleich.',
           'Down counter (CTD): the LOGO! starts at StartVal = ' + pv + ' when switched on, the PLC at 0 (Q = 1). Only after the first load (LD) do both behave the same.'), zeile, 'hinweis');
         return platz;
+      }
+      if (n.type === 'CTUD') {
+        b = neuerBaustein('CTU', id, zeile);
+        const platz = { art: 'b', b };
+        memo.set(id, platz);
+        const fest0 = (e) => !e || (e.sourceId === 'FALSE' && !e.inverted);
+        const eCU = pin('CU'), eCD = pin('CD'), eR = pin('R'), eLD = pin('LD');
+        const pv = parseInt((String(n.label).match(/\((\d+)\)/) || [0, 0])[1], 10) || 0;
+        b.pv = pv;
+        if (!fest0(eR) && !fest0(eLD)) {
+          sfEingang(b, 'R', eR);
+          grund(L('Vor-/Rückwärtszähler (CTUD) mit R und LD: Der Zähler der LOGO! hat nur einen Rücksetzeingang (auf StartVal). Rücksetzen auf 0 und Laden der Vorwahl zugleich gibt es nicht.',
+            'Up/down counter (CTUD) with R and LD: the LOGO! counter has only one reset input (to StartVal). Resetting to 0 and loading the preset at the same time is not possible.'), zeile, 'nicht');
+        } else if (!fest0(eLD)) {
+          sfEingang(b, 'R', eLD);
+          b.start = pv;
+          b.par.push({ n: 'StartVal', w: String(pv) });
+          grund(L('Vor-/Rückwärtszähler (CTUD) mit LD: Die LOGO! beginnt beim Einschalten mit StartVal = ' + pv + ', die SPS mit 0. Erst nach dem ersten Laden (LD) verhalten sich beide gleich.',
+            'Up/down counter (CTUD) with LD: the LOGO! starts at StartVal = ' + pv + ' when switched on, the PLC at 0. Only after the first load (LD) do both behave the same.'), zeile, 'hinweis');
+        } else sfEingang(b, 'R', eR);
+        if (fest0(eCD)) {
+          sfEingang(b, 'Cnt', eCU);
+          b.ein.push({ pin: 'Dir', ref: konst(false), neg: false });
+        } else if (fest0(eCU)) {
+          sfEingang(b, 'Cnt', eCD);
+          b.ein.push({ pin: 'Dir', ref: konst(true), neg: false });
+        } else {
+          // zwei Zähleingänge: je eine Flanke, Cnt = Flanke CU ODER Flanke CD, Dir = Flanke CD
+          const flanke = (e) => { const f = neuerBaustein('ANDF', 'CTUD-Flanke', zeile); f.ein.push({ pin: '', ref: quelle(e.sourceId), neg: !!e.inverted }); return ablegen(f); };
+          const fu = flanke(eCU), fd = flanke(eCD);
+          const oder = neuerBaustein('OR', 'CTUD-Flanke', zeile);
+          oder.ein.push({ pin: '', ref: fu, neg: false }, { pin: '', ref: fd, neg: false });
+          b.ein.push({ pin: 'Cnt', ref: ablegen(oder), neg: false });
+          b.ein.push({ pin: 'Dir', ref: fd, neg: false });
+          grund(L('Vor-/Rückwärtszähler (CTUD): Die LOGO! hat einen Zähleingang Cnt und die Richtung Dir. CU und CD kommen deshalb über je eine Flanke auf Cnt, die Flanke von CD stellt Dir auf rückwärts. Kommen CU und CD im selben Zyklus, zählt die LOGO! 1 ab (die SPS bleibt stehen).',
+            'Up/down counter (CTUD): the LOGO! has one count input Cnt and the direction Dir. CU and CD therefore reach Cnt through one edge each; the edge of CD sets Dir to down. If CU and CD come in the same cycle, the LOGO! counts down 1 (the PLC stays).'), zeile, 'hinweis');
+        }
+        b.par.push({ n: L('Ein', 'On'), w: String(pv) }, { n: L('Aus', 'Off'), w: String(pv) });
+        ablegen(b); return platz;
       }
       if (n.type === 'CTU') {
         b = neuerBaustein('CTU', id, zeile);
@@ -453,6 +496,10 @@
           const r = ablegen(b); memo.set(id, r); return r;
         }
       }
+      const _ctudX = String(id).match(/^(.+)_(QD|CV)$/);
+      if (_ctudX && nodes.has('CTUD_' + _ctudX[1]) && /\.cv\b/i.test(ausdruck)) return kein(_ctudX[2] === 'QD'
+        ? L(id + ' (QD des CTUD): Der Zähler der LOGO! hat nur den Ausgang Q (ab Ein). Für „Zählerstand ≤ 0“ einen zweiten Zähler mit Ein = Aus = 1 und NOT dahinter von Hand bauen.', id + ' (QD of the CTUD): the LOGO! counter only has output Q (from On). For “count ≤ 0”, build a second counter with On = Off = 1 and a NOT behind it by hand.')
+        : L(id + ' (Zählerstand des CTUD): auf der LOGO! über einen Parameterverweis auf den Zähler von Hand bauen.', id + ' (count of the CTUD): build it by hand on the LOGO! with a parameter reference to the counter.'));
       if (/\.(cv|et|q)\b/i.test(ausdruck)) return kein(L('Zählerstand oder Zeitwert in einer Rechnung (' + ausdruck + '): auf der LOGO! über einen Parameterverweis von Hand bauen.', 'Counter value or time value in a calculation (' + ausdruck + '): build it by hand on the LOGO! with a parameter reference.'));
       if (/\b(min|max|abs|floor|ceil|round)\s*\(|\?|%/i.test(ausdruck)) return kein(L('Rechnung „' + ausdruck + '“ hat kein Gegenstück in der LOGO! (nur + − × ÷ mit bis zu vier Werten).', 'Calculation “' + ausdruck + '” has no counterpart on the LOGO! (only + − × ÷ with up to four values).'));
       const v = zerlegeVergleich(ausdruck);
@@ -1089,7 +1136,7 @@
       case 'AND': return bits().every(Boolean);
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
-      case 'CTU': if (b.start != null) return !(tm[b.src] && tm[b.src].q); return !!(tm[b.src] && tm[b.src].q); // CTD: Zähler-Q ist das Gegenteil
+      case 'CTU': if (b.ctd) return !(tm[b.src] && tm[b.src].q); return !!(tm[b.src] && tm[b.src].q); // CTD: Zähler-Q ist das Gegenteil
       case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {

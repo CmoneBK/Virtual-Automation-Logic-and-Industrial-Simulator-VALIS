@@ -128,6 +128,33 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     try { return window.cedGenerateCode(true); } catch (e) { return 'Fehler: ' + e.message; }
   });
   ok('Rundlauf Code → Schaltplan-Editor → Code behält TONOF', /LUEFTER\s*:=\s*TONOF\(\s*TASTER\s*,\s*2(\.0)?\s*,\s*5(\.0)?\s*\)/.test(ced), String(ced).slice(0, 300));
+  const ced2 = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const ST = window._cedState;
+    const spule = ST.components.find(c => c.varName === 'LUEFTER' && c.type === 'timer_tonof');
+    const baustein = ST.components.some(c => c.type === 'baustein' && /TONOF/.test(c.codeText || ''));
+    const r = { spule: !!spule, baustein, t1: spule && spule.timerTime, t2: spule && spule.timerTime2, kf: spule && spule.normPrefix };
+    const svg = window._cedDoc().getElementById('ced-svg') || window._cedDoc().querySelector('#ced-canvas-area svg');
+    if (spule && svg) {
+      const g = svg.querySelector(`[data-id="${spule.id}"]`) || svg.querySelector(`g[data-comp-id="${spule.id}"]`);
+      r.feld = !!(g && g.querySelector('rect[fill="#000"]'));
+      r.zeit = g ? [...g.querySelectorAll('text')].map(t => t.textContent).join(' ') : '';
+      const kontakt = ST.components.find(c => c.varName === 'LUEFTER' && window._cedTypen[c.type] && window._cedTypen[c.type].kind === 'aux');
+      const gk = kontakt && (svg.querySelector(`[data-id="${kontakt.id}"]`) || svg.querySelector(`g[data-comp-id="${kontakt.id}"]`));
+      r.boegen = gk ? gk.querySelectorAll('path').length : -1;
+    }
+    const pal = window._cedDoc().querySelector('.ced-pal-item[data-ctype="timer_tonof"]'); const tp = window._cedDoc().querySelector('.ced-pal-item[data-ctype="timer_tp"] svg');
+    r.palette = !!pal && (!tp || !!pal.querySelector('svg'));
+    if (spule) { spule.timerTime2 = 7; }
+    await warte(50);
+    r.code = window.cedGenerateCode(true);
+    return r;
+  });
+  ok('Editor: TONOF wird ein Zeitrelais (Spule), kein Programmbaustein', ced2.spule && !ced2.baustein, JSON.stringify(ced2).slice(0, 300));
+  ok('Editor: beide Zeiten an der Spule (2/5) und -KF', ced2.t1 === 2 && ced2.t2 === 5 && /2\/5/.test(ced2.zeit) && /KF/.test(ced2.kf || ''), JSON.stringify(ced2).slice(0, 300));
+  ok('Editor: Spulensymbol mit gefülltem Feld, Kontakt mit zwei Bögen', ced2.feld && ced2.boegen >= 2, JSON.stringify(ced2).slice(0, 300));
+  ok('Editor: Palette hat das Zeitrelais TONOF', ced2.palette);
+  ok('Editor: geänderte T_AUS geht in den Code', /LUEFTER\s*:=\s*TONOF\(\s*TASTER\s*,\s*2(\.0)?\s*,\s*7\s*\)/.test(ced2.code), String(ced2.code).slice(0, 200));
 
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);

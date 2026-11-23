@@ -10090,7 +10090,7 @@ VALIS_EN.dazu({
 "Diagramm, das zeigt, welcher Durchfluss oder Druck zu welchem Sollwert gehört. An ihr liest man Überdeckung, Hysterese und Verlauf (linear oder progressiv) ab.": "Diagram showing which flow or pressure belongs to which setpoint. Overlap, hysteresis and shape (linear or progressive) can be read from it.",
 "Durchflusskennlinie": "flow characteristic",
 "Druckkennlinie": "pressure characteristic",
-"Elektronik, die aus dem Sollwertsignal den Strom für die Proportionalmagnete macht. An ihr werden Grundstrom, Sprungstrom, Maximalstrom, Rampen und Dither eingestellt. Sie sitzt im Ventil (eingebaute Elektronik) oder als Karte im Schaltschrank.": "Electronics turning the setpoint signal into the current for the proportional solenoids. Base current, step current, maximum current, ramps and dither are set on it. It sits in the valve (on-board electronics) or as a card in the control cabinet.",
+"Elektronik, die aus dem Sollwertsignal den Strom für die Proportionalmagnete macht. An ihr werden Grundstrom, Sprungstrom, Maximalstrom und Dither eingestellt, bei vielen Karten auch Rampen. Sie sitzt im Ventil (eingebaute Elektronik) oder als Karte im Schaltschrank. Im VALIS-Steckaufbau ist es der Regelverstärker FESTO 162255: ohne Rampe, die Rampe macht dort das Programm.": "Electronics turning the setpoint signal into the current for the proportional solenoids. Base current, jump current, maximum current and dither are set on it, on many cards ramps as well. It sits in the valve (on-board electronics) or as a card in the control cabinet. In the VALIS patch board it is the FESTO 162255 control amplifier: no ramp, the program does the ramp there.",
 "Ventilelektronik": "valve electronics",
 "Der Sprungstrom lässt den Schieber beim kleinsten Sollwert sofort über die Überdeckung springen. Der Grundstrom fließt schon bei Sollwert 0, der Maximalstrom begrenzt die größte Öffnung.": "The step current makes the spool jump across the overlap at the smallest setpoint. The base current already flows at setpoint 0, the maximum current limits the largest opening.",
 "Sollwertrampe": "Setpoint ramp",
@@ -10275,4 +10275,40 @@ VALIS_EN.dazu({
 "Kompressor, Behälter, Trockner und Filter speisen einen Ring aus zwei Leitungen von je 120 m. Die Montage hängt am fernen Ende. Simulation starten und im Diagramm „Netz“ zusehen. Dann den Hahn im Ring anklicken: Jetzt trägt eine Leitung allein den ganzen Strom, der Druckverlust steigt auf ein Mehrfaches und die Montage meldet „Druck zu niedrig“.": "Compressor, receiver, dryer and filter feed a ring of two pipes of 120 m each. The assembly area sits at the far end. Start the simulation and watch the “Network” diagram. Then click the valve in the ring: now one pipe alone carries the whole flow, the pressure loss rises several times over and the assembly area reports “pressure too low”.",
 "Zahlen der Lernsituation: K1 liefert 3,0 m³/min, Behälter 2000 l, Netz rund 1000 l, die Halle braucht 0,8 m³/min, die Leckagen blasen 1,1 m³/min ab (die größte am Kondensatableiter, der offen hängt). Der neue Druckschalter steht auf 6,9 / 7,1 bar: Der Kompressor schaltet rund 70-mal je Stunde. Im Diagramm „Netz“ mit Zeitraffer ablesen, dann die Wege vergleichen: Druckschalter wieder auf 6,6 / 7,4 bar, Behälter 4000 l, Leckagen auf 0.": "Figures from the learning situation: K1 delivers 3.0 m³/min, receiver 2000 l, network about 1000 l, the hall needs 0.8 m³/min, the leaks blow off 1.1 m³/min (the largest at the condensate drain, which is stuck open). The new pressure switch is set to 6.9 / 7.1 bar: the compressor switches about 70 times per hour. Read this off the “Network” diagram with time lapse, then compare the options: pressure switch back to 6.6 / 7.4 bar, receiver 4000 l, leaks to 0.",
 "Zahlen der Lernsituation: Der Kompressor liefert 400 l/min, das Netz mit Behälter fasst 1500 l bei 7 bar. Der Bestand braucht 310 l/min, davon sind 120 l/min Leckage. Klick auf „Neue Geräte“ startet sie (118 l/min): Die Luft reicht nicht mehr, der Druck fällt, die Anlagen melden „Druck zu niedrig“. Druckabfallprüfung im Diagramm „Netz“: Kompressor und Anlagen anklicken (aus), Messung starten und nach 10 Minuten Netzzeit beenden (7,0 auf 6,2 bar, also 120 l/min, rund 720 € im Jahr). Leckagen an den Abgängen auf 0 stellen: Dann reicht die Luft für die neuen Geräte.": "Figures from the learning situation: the compressor delivers 400 l/min, the network with receiver holds 1500 l at 7 bar. The existing plant needs 310 l/min, of which 120 l/min is leakage. A click on “Neue Geräte” (new devices) starts them (118 l/min): there is no longer enough air, the pressure falls, the plants report “pressure too low”. Pressure decay test in the “Network” diagram: click the compressor and the plants (off), start the measurement and stop it after 10 minutes of network time (7.0 to 6.2 bar, i.e. 120 l/min, about € 720 a year). Set the leaks at the outlets to 0: then the air is enough for the new devices."
+});
+// Verstärkerkarte wie FESTO 162255 (Wahlschalter, Drehknopf, Display)
+VALIS_EN.dazu({
+"Karte: Grundstrom A (IA BASIC) (mA)": "Card: base current A (IA BASIC) (mA)",
+"Karte: Grundstrom B (IB BASIC) (mA)": "Card: base current B (IB BASIC) (mA)",
+"Karte: Sprungstrom A (IA JUMP) (mA)": "Card: jump current A (IA JUMP) (mA)",
+"Karte: Sprungstrom B (IB JUMP) (mA)": "Card: jump current B (IB JUMP) (mA)",
+"Karte: Maximalstrom A (IA MAX) (mA)": "Card: maximum current A (IA MAX) (mA)",
+"Karte: Maximalstrom B (IB MAX) (mA)": "Card: maximum current B (IB MAX) (mA)",
+"Karte: Ditherfrequenz (DITHER) (Hz)": "Card: dither frequency (DITHER) (Hz)",
+"Die Verstärkerkarte ist der Regelverstärker FESTO 162255 (zweikanalig). Sie steht im Steckaufbau (Reihe Analogtechnik) und wird dort wie das Original mit Wahlschalter und Drehknopf eingestellt. Den Sprungstrom so wählen, dass der Schieber gerade die Überdeckung überspringt. Der Grundstrom fließt in beiden Magneten und zählt für den Schieberweg nicht mit: es wirkt der Unterschied der beiden Ströme, 800 mA = voller Schieberweg. Eine Rampe hat die Karte nicht: Soll der Sollwert langsam steigen oder fallen, macht das Programm die Rampe.": "The amplifier card is the FESTO 162255 control amplifier (two-channel). It sits in the patch board (analog row) and is set there like the original with the selector switch and the rotary knob. Choose the jump current so that the spool just jumps the overlap. The base current flows in both solenoids and does not count for the spool travel: the difference of the two currents acts, 800 mA = full spool travel. The card has no ramp: if the setpoint is to rise or fall slowly, the program does the ramp.",
+"Regelverstärker 2 Kanäle · W1 ±10 V → Magnetstrom A / B (PWM)": "Control amplifier 2 channels · W1 ±10 V → solenoid current A / B (PWM)",
+"Wahlschalter": "Selector switch",
+"Drehknopf": "Rotary knob",
+"Display": "Display",
+"PWM 24 V, max. 1 A": "PWM 24 V, max. 1 A",
+"Regelverstärker FESTO 162255, Betriebsart zweikanalig: W1 0 … +10 V → Ausgang A, W1 0 … −10 V → Ausgang B. Wahlschalter wählt den Parameter, der Drehknopf stellt ihn ein (Basic/Jump 0 … 250 mA, Max 100 mA … 1 A, Dither 100 … 250 Hz). Eine Rampe hat die Karte nicht.": "FESTO 162255 control amplifier, two-channel mode: W1 0 … +10 V → output A, W1 0 … −10 V → output B. The selector switch chooses the parameter, the rotary knob sets it (basic/jump 0 … 250 mA, max 100 mA … 1 A, dither 100 … 250 Hz). The card has no ramp.",
+"Betriebsart fest: ein Ventil, zweikanalig (W1 → A und B)": "Operating mode fixed: one valve, two-channel (W1 → A and B)",
+"FESTO 162255 · Regelverstärker": "FESTO 162255 · control amplifier",
+"Analoggeber: Darstellung von VALIS. Als Steckmodul gibt es ihn so nicht – in der Werkstatt liefern Sollwertpoti oder Messumformer das Signal.": "Analog source: VALIS view. There is no such plug-in module – in the workshop a setpoint potentiometer or a transmitter supplies the signal.",
+"Sensor-Panel: Darstellung von VALIS. Der Sensor selbst ist ein Bauteil der Anlage; als Steckmodul gibt es ihn so nicht.": "Sensor panel: VALIS view. The sensor itself is a part of the plant; there is no such plug-in module.",
+"SPS-Netzteil: allgemeine Darstellung, kein bestimmtes Produkt.": "PLC power supply: generic view, no specific product.",
+"SPS-Eingangskarte: allgemeine Darstellung, kein bestimmtes Produkt.": "PLC input card: generic view, no specific product.",
+"SPS-Ausgangskarte: allgemeine Darstellung, kein bestimmtes Produkt.": "PLC output card: generic view, no specific product.",
+"Verteilung 24 V / 0 V: allgemeine Darstellung, kein bestimmtes Produkt.": "24 V / 0 V distribution: generic view, no specific product.",
+"FESTO 8185562 · Komparator": "FESTO 8185562 · comparator",
+"FESTO 162254 · PID-Regler": "FESTO 162254 · PID controller",
+"Magnetfeld: Anschlüsse der beiden Proportionalmagnete am Ventil. Als Steckmodul gibt es das so nicht.": "Solenoid field: terminals of the two proportional solenoids on the valve. There is no such plug-in module.",
+"Verstärker eines alten 2D-Proportionalventils: vereinfachte Darstellung mit festen Strömen, kein bestimmtes Produkt.": "Amplifier of an old 2D proportional valve: simplified view with fixed currents, no specific product."
+});
+VALIS_EN.vorlagen({
+"Ventil im Fluidplan: ⟦0⟧ (Hydraulik) · Mitte ⟦1⟧ % (= 0 V) · Überdeckung ⟦2⟧ %": "Valve in the fluid plan: ⟦0⟧ (hydraulics) · centre ⟦1⟧ % (= 0 V) · overlap ⟦2⟧ %",
+"Ventil im Fluidplan: ⟦0⟧ (Pneumatik) · Mitte ⟦1⟧ % (= 0 V) · Überdeckung ⟦2⟧ %": "Valve in the fluid plan: ⟦0⟧ (pneumatics) · centre ⟦1⟧ % (= 0 V) · overlap ⟦2⟧ %",
+"Verstärkung = (Imax − Ibasic − Ijump) / 10 V:  A ⟦0⟧ mA/V · B ⟦1⟧ mA/V": "Gain = (Imax − Ibasic − Ijump) / 10 V:  A ⟦0⟧ mA/V · B ⟦1⟧ mA/V",
+"⟦0⟧ wirkt erst mit 24 V am Eingang ⟦1⟧ (hier nicht belegt)": "⟦0⟧ only acts with 24 V at input ⟦1⟧ (not wired here)",
+"⟦0⟧ ist nur Anzeige": "⟦0⟧ is display only"
 });

@@ -311,7 +311,7 @@ const FAELLE = {
     F._leeren(); if (!offen) F.umschalten();
     return R;
   },
-  'Verstärkerkarte: Ströme, Sprungstrom, Maximalstrom, Rampe, Dither': () => {
+  'Verstärkerkarte (wie 162255): Ströme je Kanal, Sprungstrom, Maximalstrom, Dither in Hz, keine Rampe': () => {
     const F = Fluidplan, R = [];
     const agg = F.setzen('aggregat', 0, 300, { q: 100, p: 35 });
     const v = F.setzen('ventil', 0, 100, { hyd: true, wege: '4/3', links: 'prop', rechts: 'prop', varS: 'Y', qn: 40, ueber: 10, hyst: 0, tau: 20, nullS: 50, elektronik: 'karte' });
@@ -319,7 +319,8 @@ const FAELLE = {
     F.verbinden(agg, 'P', v, '1'); F.verbinden(v, '3', agg, 'T'); F.verbinden(v, '4', tk, '1'); F.verbinden(v, '2', st, '1');
     const Q = (y, t) => { spsState.Y = y; F._schritt(t || 0.8); return F.zustand().teile[v]; };
     const K = F.propKarten();
-    R.push(['Karte ist gemeldet, Lieferzustand 0 / 0 / 800 mA', K.length === 1 && K[0].id === v && K[0].karte.grund === 0 && K[0].karte.sprung === 0 && K[0].karte.max === 800, JSON.stringify(K[0] && K[0].karte)]);
+    R.push(['Karte ist gemeldet, Lieferzustand 0 / 0 / 800 mA je Kanal, Dither 100 Hz', K.length === 1 && K[0].id === v && ['A', 'B'].every(s => K[0].karte['grund' + s] === 0 && K[0].karte['sprung' + s] === 0 && K[0].karte['max' + s] === 800) && K[0].karte.ditherHz === 100, JSON.stringify(K[0] && K[0].karte)]);
+    R.push(['Bereiche wie im Datenblatt 162255', JSON.stringify(K[0].grenzen) === JSON.stringify({ grundA: [0, 250], grundB: [0, 250], sprungA: [0, 250], sprungB: [0, 250], maxA: [100, 1000], maxB: [100, 1000], ditherHz: [100, 250] }), JSON.stringify(K[0].grenzen)]);
     F._neu(); F._schritt(0.3);
     let z = Q(100);
     R.push(['10 V: Magnet A 800 mA, Magnet B stromlos, Schieber voll', Math.abs(z.iA - 800) < 1 && z.iB < 1 && z.s > 0.98, `${z.iA.toFixed(0)}/${z.iB.toFixed(0)} mA, s ${z.s.toFixed(2)}`]);
@@ -343,27 +344,37 @@ const FAELLE = {
     z = Q(100);
     R.push(['Maximalstrom 500 mA: Schieber nur halb (400 mA Unterschied)', Math.abs(z.iA - 500) < 1 && Math.abs(z.s - 0.5) < 0.03, `IA ${z.iA.toFixed(0)}, s ${z.s.toFixed(2)}`]);
     R.push(['Grenzen der Einsteller greifen', F.propKarteSetzen(v, 'max', 5000) === 1000 && F.propKarteSetzen(v, 'grund', -5) === 0, '']);
-    // Rampe: 2 s für 0 → 10 V
-    F.propKarteSetzen(v, 'max', 800); F.propKarteSetzen(v, 'sprung', 0); F.propKarteSetzen(v, 'rampeAuf', 2); F.propKarteSetzen(v, 'rampeAb', 0);
-    z = Q(50, 0.5); z = Q(100, 1);
-    R.push(['Rampe auf 2 s: nach 1 s erst halber Sollwert', Math.abs(z.w - 0.5) < 0.05 && Math.abs(z.iA - 400) < 40, `w ${z.w.toFixed(2)}, IA ${z.iA.toFixed(0)}`]);
-    z = Q(100, 1.3);
-    R.push(['… nach 2 s voll', z.w > 0.99 && z.s > 0.95, `w ${z.w.toFixed(2)}`]);
-    z = Q(50, 0.2);
-    R.push(['Rampe ab 0 s: sofort zurück', Math.abs(z.w) < 0.01 && Math.abs(z.s) < 0.02, `w ${z.w.toFixed(2)}, s ${z.s.toFixed(3)}`]);
+    // Keine Rampe auf der Karte: der Strom folgt dem Sollwert sofort
+    F.propKarteSetzen(v, 'max', 800); F.propKarteSetzen(v, 'sprung', 0); F.propKarteSetzen(v, 'grund', 0);
+    z = Q(50, 0.5); z = Q(100, 0.05);
+    R.push(['Keine Rampe: Strom sofort voll', Math.abs(z.w - 1) < 0.001 && Math.abs(z.iA - 800) < 1, `w ${z.w.toFixed(2)}, IA ${z.iA.toFixed(0)}`]);
+    // Kanäle getrennt einstellbar
+    R.push(['Maximalstrom B getrennt (5-mA-Raster: 403 → 405)', F.propKarteSetzen(v, 'maxB', 403) === 405, '']);
+    z = Q(0);
+    R.push(['Kanal B mit 405 mA, Kanal A bleibt 800 mA', Math.abs(z.iB - 405) < 1 && F.propKarten()[0].karte.maxA === 800, `IB ${z.iB.toFixed(0)}`]);
+    F.propKarteSetzen(v, 'sprungA', 30);
+    z = Q(75);
+    R.push(['Sprungstrom nur in Kanal A', Math.abs(z.iA - (30 + 0.5 * 770)) < 2 && z.iB < 1, `IA ${z.iA.toFixed(0)}`]);
+    F.propKarteSetzen(v, 'sprungA', 0); F.propKarteSetzen(v, 'maxB', 800);
+    z = Q(50, 0.3);
     const live = F.propKarteLive(v);
-    R.push(['Live-Werte für den Steckaufbau', live && Math.abs(live.w1) < 0.1 && live.karte.rampeAuf === 2, JSON.stringify(live)]);
-    // Dither: ohne Dither dreifache Hysterese
-    F.propKarteSetzen(v, 'rampeAuf', 0);
+    R.push(['Live-Werte für den Steckaufbau', live && Math.abs(live.w1) < 0.1 && live.karte.ditherHz === 100 && !('rampeAuf' in live.karte), JSON.stringify(live)]);
+    R.push(['Ditherfrequenz nur 100 … 250 Hz', F.propKarteSetzen(v, 'ditherHz', 20) === 100 && F.propKarteSetzen(v, 'ditherHz', 900) === 250, '']);
+    F.propKarteSetzen(v, 'ditherHz', 100);
+    // Dither: 100 Hz wirkt am stärksten, 250 Hz doppelte Hysterese
     F.aendern(v, { hyst: 4, ueber: 0 }); F._neu(); F._schritt(0.3);
     const breite = () => { Q(0, 0.6); const auf = Q(75).s; Q(100, 0.6); const ab = Q(75).s; return ab - auf; };
     const mit = breite();
-    F.propKarteSetzen(v, 'dither', 0);
+    F.propKarteSetzen(v, 'ditherHz', 250);
     const ohne = breite();
-    R.push(['Dither 100 %: Hysterese wie eingestellt (4 %)', Math.abs(mit - 0.08) < 0.02, mit.toFixed(3)]);
-    R.push(['Dither 0 %: Hysterese dreimal so groß', Math.abs(ohne - 0.24) < 0.04, ohne.toFixed(3)]);
+    R.push(['Dither 100 Hz: Hysterese wie eingestellt (4 %)', Math.abs(mit - 0.08) < 0.02, mit.toFixed(3)]);
+    R.push(['Dither 250 Hz: Hysterese doppelt so groß', Math.abs(ohne - 0.16) < 0.03, ohne.toFixed(3)]);
     const o = F.plan().teile.find(x => x.id === v).o;
-    R.push(['Einstellungen stehen im Plan (werden gespeichert)', o.karte && o.karte.dither === 0 && o.karte.grund === 0, JSON.stringify(o.karte)]);
+    R.push(['Einstellungen stehen im Plan (werden gespeichert)', o.karte && o.karte.ditherHz === 250 && o.karte.grundA === 0 && !('rampeAuf' in o.karte), JSON.stringify(o.karte)]);
+    // Alter Plan (ein Strom für beide Kanäle, Rampe, Dither in %) wird umgerechnet
+    F.aendern(v, { karte: { grund: 50, sprung: 20, max: 603, rampeAuf: 2, rampeAb: 1, dither: 50 } });
+    const alt = F.propKarten()[0].karte;
+    R.push(['Alter Plan: Ströme auf beide Kanäle, Rampe weg, Dither 50 % → 250 Hz', alt.grundA === 50 && alt.grundB === 50 && alt.sprungB === 20 && alt.maxA === 605 && alt.ditherHz === 250 && !('rampeAuf' in alt), JSON.stringify(alt)]);
     return R;
   },
   'Fehler am Proportionalventil: Sollwertleitung, Schmutz, Nullpunkt': () => {
@@ -412,14 +423,22 @@ const FAELLE = {
     const karte = svg.querySelector('[data-festo-panel-type="ana_pv"]'), feld = svg.querySelector('[data-festo-panel-type="ana_pvm"]');
     R.push(['Verstärkerkarte und Magnetfeld sind da', !!karte && !!feld, '']);
     const txt = karte ? karte.textContent : '';
-    R.push(['Sechs Einsteller beschriftet', ['Grundstrom', 'Sprungstrom', 'Maximalstrom', 'Rampe auf', 'Rampe ab', 'Dither'].every(n => txt.includes(n)), '']);
+    R.push(['Wahlschalter mit den Stellungen der 162255, Drehknopf, Display', ['FUNCTION', 'IA BASIC', 'IB BASIC', 'IA JUMP', 'IB JUMP', 'IA MAX', 'IB MAX', 'DITHER', 'CONTRAST', 'D/E', 'INT W1', 'INT W2', 'Wahlschalter', 'Drehknopf', 'Display'].every(n => txt.includes(n)), '']);
+    R.push(['Keine Rampen-Einsteller auf der Karte', !/Rampe auf|Rampe ab/.test(txt), '']);
     const kabel = (window._anaKabelListe || []).filter(c => c.pvm);
     R.push(['Vier Magnetkabel (A und B, hin und zurück)', kabel.length === 4 && kabel.some(c => c.fromKey === 'PV1_A1' && c.toKey === 'PVM1_A1') && kabel.some(c => c.fromKey === 'PVM1_B2' && c.toKey === 'PV1_B2'), JSON.stringify(kabel.map(c => c.fromKey + '>' + c.toKey))]);
-    // Drehknopf Sprungstrom: Klick rechts = +10 mA
-    const knopf = karte ? [...karte.querySelectorAll('circle')].filter(c => c.querySelector('title') && /^Sprungstrom/.test(c.querySelector('title').textContent))[0] : null;
-    if (knopf) { const b = knopf.getBoundingClientRect(); knopf.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: b.left + b.width * 0.8, clientY: b.top + b.height / 2 })); }
-    const k = F.propKarten()[0].karte;
-    R.push(['Klick rechts am Knopf Sprungstrom: +10 mA im Plan', !!knopf && k.sprung === 10, JSON.stringify(k)]);
+    // Wahlschalter dreimal rechts = IA JUMP, dann Drehknopf rechts = +1 mA, mit Umschalt +10 mA
+    const hit = n => karte ? [...karte.querySelectorAll('circle')].filter(c => c.querySelector('title') && c.querySelector('title').textContent.startsWith(n))[0] : null;
+    const klick = (c, shift) => { const b = c.getBoundingClientRect(); c.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: !!shift, clientX: b.left + b.width * 0.8, clientY: b.top + b.height / 2 })); };
+    const schalter = hit('Wahlschalter'), knopf = hit('Drehknopf');
+    if (schalter && knopf) { klick(schalter); klick(schalter); klick(schalter); klick(knopf); }
+    const anz = karte ? karte.textContent : '';
+    let k = F.propKarten()[0].karte;
+    R.push(['Wahlschalter auf IA JUMP, Drehknopf rechts: Sprungstrom A +1 mA, B bleibt', !!schalter && !!knopf && k.sprungA === 1 && k.sprungB === 0, JSON.stringify(k)]);
+    const knopf2 = svg.querySelector('[data-festo-panel-type="ana_pv"]') && hit('Drehknopf');
+    if (knopf2) klick(knopf2, true);
+    k = F.propKarten()[0].karte;
+    R.push(['Umschalt + Klick: +10 mA', k.sprungA === 11, JSON.stringify(k)]);
     svg.remove();
     return R;
   },

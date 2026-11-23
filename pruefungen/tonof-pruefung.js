@@ -156,6 +156,23 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Editor: Palette hat das Zeitrelais TONOF', ced2.palette);
   ok('Editor: geänderte T_AUS geht in den Code', /LUEFTER\s*:=\s*TONOF\(\s*TASTER\s*,\s*2(\.0)?\s*,\s*7\s*\)/.test(ced2.code), String(ced2.code).slice(0, 200));
 
+  console.log('FUP nach Norm (wie im TIA Portal)');
+  const fup = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const ta = document.getElementById('code'); ta.value = 'LUEFTER := TONOF(TASTER, 2, 5)\nLAMPE := LUEFTER'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(800);
+    window.fbsFupMode = true;
+    try { window._fupRender(currentGraph); } catch (e) { return { fehler: String(e) }; }
+    const svg = (typeof _fbsDoc === 'function' ? _fbsDoc() : document).getElementById('fup-norm-svg');
+    const texte = svg ? [...svg.querySelectorAll('text')].map(t => t.textContent) : [];
+    window.fbsFupMode = false;
+    return { texte };
+  });
+  const tx = (fup.texte || []);
+  ok('FUP: kein erfundener TONOF-Kasten', tx.length > 0 && !tx.some(t => /TONOF|PT_EIN|PT_AUS/.test(t)), tx.join(' ').slice(0, 300));
+  ok('FUP: zwei TON mit T#2s und T#5s, ein SR', tx.filter(t => t === 'TON').length === 2 && tx.includes('T#2s') && tx.includes('T#5s') && tx.includes('SR'), tx.join(' ').slice(0, 300));
+  ok('FUP: Instanzen "LUEFTER_EIN"/"LUEFTER_AUS", Rückführung über LUEFTER', tx.includes('"LUEFTER_EIN"') && tx.includes('"LUEFTER_AUS"') && tx.filter(t => t === 'LUEFTER').length >= 3 && tx.includes('S') && tx.includes('R1'), tx.join(' ').slice(0, 300));
+
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

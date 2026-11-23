@@ -81276,6 +81276,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const nm = ((n.type === 'SR' || n.type === 'RS') && isPhysOut(own)) ? ffMerker(n) : own;
                     return { kind: 'op', name: nm, src: own };
                 }
+                if (n.type === 'TONOF') return tonofTree(n, rootId, depth, path);
                 const ie = (inEdges.get(n.id) || []).slice();
                 // RS (setzdominant): R oben, S1 unten — wie im Tabellenbuch.
                 const ord = (pin) => (n.type === 'RS' && (pin === 'S' || pin === 'R')) ? (pin === 'R' ? 0 : 1) : (pinOrder[pin] ?? 0);
@@ -81284,6 +81285,30 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     kind: 'box', node: n, src: n.id,
                     ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1, (path || []).concat(n.id)) }))
                 };
+            }
+            // Ein-/Ausschaltverzögerung: Kein Normbaustein (IEC 61131-3 und TIA
+            // kennen nur TP/TON/TOF/TONR). Gezeichnet wie man sie im TIA Portal
+            // baut und wie der SCL-Export sie schreibt: zwei TON und ein SR,
+            //   "Q_EIN".TON(IN := IN AND NOT Q)  → S
+            //   "Q_AUS".TON(IN := NOT IN AND Q)  → R1     SR → Q
+            function tonofTree(n, rootId, depth, path) {
+                const ie = inEdges.get(n.id) || [];
+                const e = ie.find(x => !x.targetPin || x.targetPin === 'IN') || ie[0];
+                const qn = owner.get(n.id) || rootId;
+                const inv = !!(e && e.inverted);
+                const p2 = (path || []).concat(n.id);
+                const inTree = () => e ? tree(e.sourceId, rootId, depth + 3, p2) : { kind: 'op', name: 'FALSE', src: 'FALSE' };
+                const tm = () => (window.simTimers || {})[n.id] || {};
+                const inVal = (st) => { const v = e ? !!st[e.sourceId] : false; return inv ? !v : v; };
+                const qVal = () => !!tm().q;
+                const and = (suffix, inInv, qInv, fn) => ({ kind: 'box', node: { id: n.id + '_AND_' + suffix, type: 'GATE', label: '&' }, src: n.id + '_AND_' + suffix, liveFn: fn,
+                    ins: [{ pin: '', inv: inInv, child: inTree() }, { pin: '', inv: qInv, child: { kind: 'op', name: qn, src: qn } }] });
+                const ton = (suffix, sec, inBox, etFn) => ({ kind: 'box', node: { id: n.id + '_' + suffix, type: 'TON', label: 'TON (' + (+sec || 0) + 's)' }, src: n.id + '_' + suffix,
+                    liveFn: () => false, etFn, ownerName: '"' + qn + '_' + suffix + '"', ins: [{ pin: 'IN', inv: false, child: inBox }] });
+                const ein = ton('EIN', n.pt, and('EIN', inv, true, st => inVal(st) && !qVal()), () => qVal() ? 'T#0.0s' : 'T#' + ((Number(tm().et) || 0) / 1000).toFixed(1) + 's');
+                const aus = ton('AUS', n.pt2, and('AUS', !inv, false, st => !inVal(st) && qVal()), () => qVal() ? 'T#' + ((Number(tm().et) || 0) / 1000).toFixed(1) + 's' : 'T#0.0s');
+                return { kind: 'box', node: { id: n.id + '_SR', type: 'SR', _tonof: true }, src: n.id, liveFn: qVal,
+                    ins: [{ pin: 'S', inv: false, child: ein }, { pin: 'R', inv: false, child: aus }] };
             }
             // Netzwerk-Marker (// NETZWERK n: Titel) wie im normalen Netzwerkmodus
             const markers = [];
@@ -81306,7 +81331,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const e = ie[0];
                     const child = e ? tree(e.sourceId, r.id, 0) : { kind: 'op', name: 'FALSE', src: 'FALSE' };
                     const isFF = child.kind === 'box' && (child.node.type === 'SR' || child.node.type === 'RS');
-                    if (isFF && !(e && e.inverted) && !isPhysOut(r.id)) {
+                    // TONOF: das SR schreibt direkt auf den Operanden (auch einen Ausgang)
+                    if (isFF && !(e && e.inverted) && (!isPhysOut(r.id) || child.node._tonof)) {
                         // Ziel ist selbst ein Merker → steht als Operand über dem Kasten
                         body = { kind: 'mem', target: r.id, child };
                     } else {
@@ -81348,17 +81374,12 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (t === 'SR') return { w: BOX_W_FB, sym: 'SR', pinNames: { S: 'S', R: 'R1' }, outs: ['Q'] };
             if (t === 'RS') return { w: BOX_W_FB, sym: 'RS', pinNames: { S: 'S1', R: 'R' }, outs: ['Q'] };
             if (t === 'TON' || t === 'TOF' || t === 'TP') return { w: BOX_W_FB, sym: t, timer: true, outs: ['Q', 'ET'] };
-            // Ein-/Ausschaltverzögerung: kein IEC-Standardbaustein, Zeiten an PT_EIN und PT_AUS
-            if (t === 'TONOF') return { w: BOX_W_FB + 16, sym: 'TONOF', timer: true, outs: ['Q', 'ET'] };
             if (t === 'CTU' || t === 'CTD') return { w: BOX_W_FB, sym: t, counter: true, outs: ['Q', 'CV'] };
             return { w: BOX_W_FB + 20, sym: t, outs: ['OUT'] };
         }
         function constPin(node) {
             const m = String(node.label || '').match(/\(([^)]*)\)/);
             if (!m) return null;
-            if (node.type === 'TONOF') {
-                return [{ pin: 'PT_EIN', text: 'T#' + (+node.pt || 0) + 's' }, { pin: 'PT_AUS', text: 'T#' + (+node.pt2 || 0) + 's' }];
-            }
             if (node.type === 'TON' || node.type === 'TOF' || node.type === 'TP') {
                 const v = m[1].trim().replace(/^T#/i, '');
                 return { pin: 'PT', text: 'T#' + v.replace(/\s+/g, '') };
@@ -81439,7 +81460,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const info = isConst ? { name: item.name, sub: '' } : operandInfo(item.name, ctx.bmk);
                 const x0 = ctx.left;
                 const line = el('line', { x1: x0 + opW - 6, y1: ly, x2: xOut, y2: ly, stroke: '#111', 'stroke-width': 1.6 }, g);
-                if (!isConst) ctx.wires.push({ el: line, src: item.src });
+                if (!isConst) ctx.wires.push({ el: line, src: item.src, fn: item.liveFn });
                 txt(g, x0 + opW - 10, ly - 4, info.name, { anchor: 'end', bold: !isConst, mono: true, size: 12, fill: isConst ? '#0d47a1' : '#111' });
                 if (info.sub) txt(g, x0 + opW - 10, ly - 17, info.sub, { anchor: 'end', size: 10, fill: '#666' });
                 return;
@@ -81460,10 +81481,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (o) txt(g, bx + spec.w - 4, oy + 4, o, { anchor: 'end', size: 10, fill: '#333' });
                 if (k === 0) {
                     const ln = el('line', { x1: bx + spec.w, y1: oy, x2: xOut, y2: oy, stroke: '#111', 'stroke-width': 1.6 }, g);
-                    ctx.wires.push({ el: ln, src: item.src });
+                    ctx.wires.push({ el: ln, src: item.src, fn: item.liveFn });
                 } else if (o === 'ET' || o === 'CV') {
                     const v = txt(g, bx + spec.w + 4, oy + 4, '', { size: 10, mono: true, fill: '#0d47a1' });
-                    ctx.values.push({ el: v, node: item.node, kind: o });
+                    ctx.values.push({ el: v, node: item.node, kind: o, fn: item.etFn });
                 }
             });
             // Eingänge
@@ -81475,7 +81496,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 draw(g, inp.child, cy, inp.child.kind === 'box' ? childOut - GAP_X : bx, ctx);
                 if (inp.child.kind === 'box') {
                     const ln = el('line', { x1: childOut - GAP_X, y1: py, x2: bx, y2: py, stroke: '#111', 'stroke-width': 1.6 }, g);
-                    ctx.wires.push({ el: ln, src: inp.child.src });
+                    ctx.wires.push({ el: ln, src: inp.child.src, fn: inp.child.liveFn });
                 }
                 if (inp.pin) txt(g, bx + 4, py + 4, inp.pin, { size: 10, fill: '#333' });
                 if (inp.inv) el('circle', { cx: bx - 4, cy: py, r: 4, fill: '#fff', stroke: '#111', 'stroke-width': 1.4 }, g);
@@ -81755,7 +81776,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             const st = (typeof spsState !== 'undefined') ? spsState : {};
             lastLayout.wires.forEach(w => {
                 if (!active) { w.el.setAttribute('stroke', '#111'); w.el.removeAttribute('stroke-dasharray'); return; }
-                const on = !!st[w.src];
+                let on = !!st[w.src];
+                if (w.fn) { try { on = !!w.fn(st); } catch (_) {} }
                 w.el.setAttribute('stroke', on ? '#2e7d32' : '#1565c0');
                 if (on) w.el.removeAttribute('stroke-dasharray'); else w.el.setAttribute('stroke-dasharray', '5,3');
                 w.el.setAttribute('stroke-width', on ? 2.4 : 1.6);
@@ -81765,7 +81787,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let s = '';
                 try {
                     const tm = window.simTimers && window.simTimers[v.node.id];
-                    if (tm && v.kind === 'ET') s = 'T#' + ((Number(tm.et) || 0) / 1000).toFixed(1) + 's';
+                    if (v.fn && v.kind === 'ET') s = v.fn();
+                    else if (tm && v.kind === 'ET') s = 'T#' + ((Number(tm.et) || 0) / 1000).toFixed(1) + 's';
                     else if (tm && v.kind === 'CV') s = String(tm.cv != null ? tm.cv : '');
                 } catch (_) {}
                 v.el.textContent = s;

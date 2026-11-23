@@ -203,6 +203,61 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('alle abgebildeten Programme verhalten sich wie das VALIS-Programm', erg.fehler.length === 0, erg.fehler.length + ' Abweichungen');
   ok('mindestens 50 Programme verglichen', erg.gepr >= 50, erg.gepr);
 
+  console.log('Ansicht im Logikplan');
+  await page.evaluate(() => { const ta = document.getElementById('code'); ta.value = 'MOTOR := SR(START AND NOT STOER, STOP)\nLAMPE := TON(MOTOR, 3)\nX := RS(EIN, AUS)\nH := X OR LAMPE\nW := max(A, B)'; ta.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => { try { toggleWorkspaceView('fbs-wrapper'); } catch (e) {} window._toggleLogoAnsicht(true); });
+  await page.waitForTimeout(600);
+  r = await page.evaluate(() => {
+    const h = document.getElementById('logo-host'), svg = document.getElementById('logo-svg');
+    const bs = [...svg.querySelectorAll('[data-logo-b]')].map(g => g.getAttribute('data-logo-b'));
+    const passt = document.querySelector('[data-logo-passt]');
+    return { sichtbar: h && h.style.display === 'block', bs, knopf: document.getElementById('btn-fbs-logo').textContent, passt: passt && passt.getAttribute('data-logo-passt'), zeilen: [...document.querySelectorAll('[data-logo-zeile]')].map(a => a.getAttribute('data-logo-zeile')), fuss: document.getElementById('logo-fuss').textContent, plan: document.getElementById('custom-svg').style.visibility };
+  });
+  ok('Schalter zeigt die LOGO!-Ansicht, Logikplan darunter verborgen', r.sichtbar && /AN/.test(r.knopf) && r.plan === 'hidden', JSON.stringify(r));
+  ok('Bausteine B001 … gezeichnet', r.bs.includes('B001') && r.bs.includes('B004'), r.bs.join());
+  ok('Passt-Kasten gelb mit Sprung in Zeile 5 (max ohne Gegenstück)', r.passt === 'nicht' && r.zeilen.includes('4'), JSON.stringify(r));
+  ok('Fußnote zum RS-Umbau', /Setzdominanter Speicher/.test(r.fuss), r.fuss);
+  r = await page.evaluate(() => { document.querySelector('[data-logo-zeile="4"]').click(); const ta = document.getElementById('code'); return ta.value.slice(ta.selectionStart, ta.selectionEnd); });
+  ok('Klick auf „Zeile 5“ markiert die Zeile im Code', /^W := max/i.test(r), r);
+  await page.evaluate(() => { if (!isSimulationActive) toggleSimulation(); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => setTaster('START', true)); await page.waitForTimeout(600);
+  await page.evaluate(() => setTaster('START', false)); await page.waitForTimeout(3600);
+  r = await page.evaluate(() => {
+    const st = (sel) => { const g = document.querySelector('#logo-svg [data-logo-strang="' + sel + '"]'); return g ? [...g.querySelectorAll('line')].map(l => l.getAttribute('stroke')).filter(c => c !== '#eceff1') : []; };
+    return { m1: st('M1'), m2: st('M2'), m3: st('M3') };
+  });
+  ok('Live: Selbsthaltung MOTOR (M1) grün nach Start', r.m1.includes('#2e7d32'), JSON.stringify(r.m1));
+  ok('Live: Einschaltverzögerung nach 3 s durch (Strang M2 ganz grün)', r.m2.length && r.m2.every(c => c === '#2e7d32'), JSON.stringify(r.m2));
+  ok('Live: Speicher X (M3) aus, blau', r.m3.length && r.m3.some(c => c === '#1565c0'), JSON.stringify(r.m3));
+  await page.evaluate(() => { if (isSimulationActive) toggleSimulation(); });
+  r = await page.evaluate(() => { let fehler = ''; const a = document.createElement('a'); const alt = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () {}; try { window._logoSvg(); } catch (e) { fehler = e.message; } HTMLAnchorElement.prototype.click = alt; void a; return fehler; });
+  ok('SVG speichern läuft', r === '', r);
+  console.log('Listen');
+  r = await page.evaluate(() => { const l = document.querySelector('#logo-liste [data-logo-liste]'); return l ? l.textContent : ''; });
+  ok('Bausteinliste unter dem Plan', /B001 AND · I1, NOT I2 → B002/.test(r) && /B003 Einschaltverzögerung · Trg ← M1 · T = 03:00 s → M2/.test(r), r.slice(0, 300));
+  await page.evaluate(() => window._openZuordnungsliste());
+  await page.waitForTimeout(300);
+  r = await page.evaluate(() => [...document.querySelectorAll('#zuordnung-modal input.zl-logo')].map(i => i.getAttribute('data-zl-logo') + '=' + i.value));
+  ok('Zuordnungsliste hat die Spalte LOGO! mit Vorschlag', r.includes('START=I1') && r.includes('MOTOR=M1') && r.includes('H=Q1'), r.join(' '));
+  await page.evaluate(() => { const i = document.querySelector('#zuordnung-modal input.zl-logo[data-zl-logo="START"]'); i.value = 'I5'; i.dispatchEvent(new Event('change')); });
+  await page.waitForTimeout(300);
+  r = await page.evaluate(() => ({ fest: Logo.festeKlemmen(), inp: [...document.querySelectorAll('#zuordnung-modal input.zl-logo')].map(i => i.getAttribute('data-zl-logo') + '=' + i.value + (i.classList.contains('fest') ? '!' : '')), liste: document.querySelector('#logo-liste [data-logo-liste]').textContent, csv: window._zuordnungCsv(), stand: getFactoryStateObj().logo }));
+  ok('Geänderte Klemme ist fest, andere rücken nach', r.fest.START === 'I5' && r.inp.includes('START=I5!') && r.inp.includes('STOER=I1'), r.inp.join(' '));
+  ok('LOGO!-Plan folgt der festen Klemme', /AND · I5, NOT I1/.test(r.liste), r.liste.slice(0, 120));
+  ok('CSV hat die Spalte LOGO!', /;LOGO!;/.test(r.csv.split('\n')[0]) && /;START;%?[EI][^;]*;I5;/.test(r.csv), r.csv.split('\n').slice(0, 2).join(' / '));
+  ok('Feste Klemmen reisen im Anlagenzustand', r.stand && r.stand.klemmen && r.stand.klemmen.START === 'I5', JSON.stringify(r.stand));
+  await page.evaluate(() => { const i = document.querySelector('#zuordnung-modal input.zl-logo[data-zl-logo="START"]'); i.value = ''; i.dispatchEvent(new Event('change')); window._closeZuordnungsliste(); });
+  r = await page.evaluate(() => Logo.festeKlemmen());
+  ok('Leer = wieder Vorschlag', !r.START, JSON.stringify(r));
+  r = await page.evaluate(() => window._logoDruckHtml());
+  ok('Druckblatt: Passt, Bausteinliste, Zuordnungsliste, Fußnote', /Passt so nicht/.test(r) && /B001 AND/.test(r) && /Zuordnungsliste mit LOGO!-Klemmen/.test(r) && /<b>I1<\/b><\/td><td class="m">START/.test(r) && /Setzdominanter/.test(r), r.length);
+
+  await page.evaluate(() => window._toggleLogoAnsicht(false));
+  r = await page.evaluate(() => ({ h: document.getElementById('logo-host').style.display, plan: document.getElementById('custom-svg').style.visibility }));
+  ok('Ausschalten zeigt wieder den Logikplan', r.h === 'none' && r.plan === '', JSON.stringify(r));
+
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

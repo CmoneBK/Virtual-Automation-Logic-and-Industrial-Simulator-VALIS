@@ -9843,9 +9843,17 @@ You must output exactly this JSON format. The logic code goes as a single string
             role = window._spsAnalogRolle(name, role);
             const _have = spsAddresses[name];
             // Eigene Adresse behalten, außer eine andere Variable im Programm hat sie inzwischen
-            if (_have && (_SPS_ADDR_RE[role] || _SPS_ADDR_RE.out).test(_have)
-                && !((role === 'ain' || role === 'aout') ? false : _spsBelegt(window._spsAddrPrefix(role), name).has(_have))) return _have;
+            const _digital = !(role === 'ain' || role === 'aout');
+            const _ok = _have && (_SPS_ADDR_RE[role] || _SPS_ADDR_RE.out).test(_have)
+                && !(_digital && _spsBelegt(window._spsAddrPrefix(role), name).has(_have));
             const addr = window._nextFreeSpsAddress(role);
+            // E/A über Byte 1 hinaus (E2.5, A2.0 …) hat die SPS-Platine im Steckaufbau
+            // nicht (16 DI E0.0–E1.7, 16 DO A0.0–A1.7). Solche alten Adressen aus dem
+            // Browser-Speicher werden neu vergeben, sobald unten etwas frei ist
+            // (Christoph 23.11.2026). Merker und Analogwerte bleiben, wie sie sind.
+            const _byte = a => parseInt(String(a).replace(/^[A-Z]+/, ''), 10);
+            const _ausserhalb = _ok && (role === 'in' || role === 'out') && _byte(_have) > 1 && _byte(addr) <= 1;
+            if (_ok && !_ausserhalb) return _have;
             spsAddresses[name] = addr;
             try { localStorage.setItem('valisSpsAddresses', JSON.stringify(spsAddresses)); } catch(_) {}
             return addr;

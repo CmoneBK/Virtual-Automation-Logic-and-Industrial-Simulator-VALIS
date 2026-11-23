@@ -50,6 +50,31 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     ok(c.replace(/\n/g, ' / ') + ': Adressen ab E0.0/A0.0 und alle E/A gesteckt',
       adr.every(a => /^[EA][01]\.[0-7]$/.test(a || '')) && r.din === r.ein.length && r.dout === r.aus.length, JSON.stringify(r));
   }
+
+  // Alte Adressen aus dem Browser-Speicher (E2.5, A2.0 …), wie bei Christoph:
+  // neue Seite mit vorbelegtem localStorage, Programm in einem Zug eingefügt.
+  const alt = { IN: 'E2.5', CLK: 'E2.4', OUT: 'A2.0', START: 'E3.1', STOP: 'E3.2', BAND: 'A2.3', LED_BETRIEB: 'A2.4' };
+  const page2 = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+  page2.on('pageerror', e => fehler.push(String(e).slice(0, 300)));
+  page2.on('dialog', d => d.accept());
+  await page2.addInitScript(a => { try { localStorage.setItem('valisTourSeen', '1'); localStorage.setItem('valisLang', 'de'); if (!sessionStorage.getItem('gesetzt')) { localStorage.setItem('valisSpsAddresses', JSON.stringify(a)); sessionStorage.setItem('gesetzt', '1'); } } catch (e) {} }, alt);
+  await page2.goto(url); await page2.waitForTimeout(3500);
+  await page2.evaluate(async () => { try { closeHub(); } catch (e) {} if (window.epneuMode) toggleEpneuMode(); if (document.getElementById('festo-wrapper').style.display === 'none') toggleWorkspaceView('festo-wrapper'); });
+  await page2.waitForTimeout(800);
+  for (const c of ['OUT := TONOF(IN, 2.0, 5.0)', 'OUT := R_TRIG(CLK)', 'BAND := START AND NOT STOP\nLED_BETRIEB := BAND']) {
+    await page2.click('#code'); await page2.keyboard.press('Control+A'); await page2.keyboard.press('Delete');
+    await page2.keyboard.insertText(c);
+    await page2.waitForTimeout(1800);
+    const r = await page2.evaluate(() => {
+      let k = []; try { k = (window.valisBruecke.festo().kabel || []).map(k => [k.von, k.nach]); } catch (e) {}
+      const ein = (globalInputs || []).map(n => [n, window._getSpsAddresses()[n]]);
+      const aus = (globalOutputs || []).filter(n => !window._isMerkerVar(n)).map(n => [n, window._getSpsAddresses()[n]]);
+      return { ein, aus, din: k.filter(x => x.some(s => /ANS_DIN_/.test(s))).length, dout: k.filter(x => x.some(s => /ANS_DOUT_/.test(s))).length };
+    });
+    const adr = r.ein.concat(r.aus).map(x => x[1]);
+    ok('alte Adressen im Speicher, ' + c.replace(/\n/g, ' / ') + ': neu ab E0.0/A0.0 und gesteckt',
+      adr.every(a => /^[EA][01]\.[0-7]$/.test(a || '')) && r.din === r.ein.length && r.dout === r.aus.length, JSON.stringify(r));
+  }
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

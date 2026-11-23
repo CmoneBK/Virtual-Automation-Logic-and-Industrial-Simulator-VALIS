@@ -103,6 +103,32 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   });
   ok('Auto-Schaltplan: Spulen EW und AW', /EW/.test(sp.ew || '') && /AW/.test(sp.aw || ''), JSON.stringify(sp));
   ok('Auto-Schaltplan: Kontakt des Wischrelais ohne Verzögerungsbogen', sp.kontakt && sp.boegen === 0, JSON.stringify(sp));
+  // Christoph 23.11.: Der Kontakt muss sichtbar schließen, obwohl der Impuls nur einen Zyklus dauert
+  await page.evaluate(() => { const ta = document.getElementById('code'); ta.value = 'OUT := R_TRIG(CLK)'; ta.dispatchEvent(new Event('input', { bubbles: true })); });
+  await w(1200);
+  const anim = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const zu = document.getElementById('circuit-wrapper').style.display === 'none';
+    if (zu) toggleWorkspaceView('circuit-wrapper');
+    await warte(500);
+    if (!isSimulationActive) toggleSimulation();
+    await warte(300);
+    const k = () => _iecDoc().getElementById('circuit-content').querySelector('[data-iec-role="contact"][data-ctype="r_trig"] .circ-moving-contact');
+    const vorher = k() ? k().classList.contains('open') : null;
+    const cb = document.getElementById('sim_in_CLK'); const drueck = (v) => { if (cb) { cb.checked = v; window.toggleInput('CLK'); } else { spsState.CLK = v; runSimulationTick(); } };
+    drueck(true);
+    const proben = [];
+    for (let i = 0; i < 6; i++) { await warte(40); proben.push(k() ? !k().classList.contains('open') : null); }
+    await warte(600);
+    const nachher = k() ? k().classList.contains('open') : null;
+    drueck(false);
+    if (isSimulationActive) toggleSimulation();
+    if (zu) toggleWorkspaceView('circuit-wrapper');
+    const ta = document.getElementById('code'); ta.value = 'AUF := R_TRIG(TASTER)\nAB := F_TRIG(TASTER)\nM := SR(AUF, AB)\nLAMPE := M'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(1200);
+    return { vorher, proben, nachher, cb: !!cb };
+  });
+  ok('Auto-Schaltplan: Kontakt des Wischrelais schließt sichtbar und öffnet wieder', anim.vorher === true && anim.proben.some(Boolean) && anim.nachher === true, JSON.stringify(anim));
   await page.evaluate(() => toggleWorkspaceView('festo-wrapper'));
   await w(1500);
   const st = await page.evaluate(() => {

@@ -1087,6 +1087,51 @@
             if (!bild) el('rect', { class: 'fp-hand', x: -12, y: -12, width: 24, height: 20, 'data-t': t.id, 'data-seite': 'N' }, g);
         }
     };
+    // Aufbereitung (Schritt 3): Kältetrockner, Druckluftfilter, Kondensatableiter, Wartungseinheit am Abgang.
+    // Trockner, Filter und Wartungseinheit haben einen Nenndurchfluss mit Nenn-Druckverlust: Δp = Δp_N · (Q / Q_N)².
+    TYP.ktrockner = {
+        name: 'Kältetrockner', buchstabe: 'Z', netz: true,
+        optionen: { qN: 1000, dpN: 0.2, tp: 3, aus: false },
+        geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-42, -16, 42, 24] }; },
+        zeichne(t, g, bild) {
+            L16(g, -40, 0, -14, 0); L16(g, 14, 0, 40, 0);
+            // Kühler (Raute mit Pfeilen nach außen = Wärme wird abgeführt), dahinter Wasserabscheider mit Ablass
+            el('path', { class: 'fp-trockner', d: 'M0,-14 L14,0 L0,14 L-14,0 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.5 }, g);
+            L16(g, 0, -14, 0, -20, 1.1); el('path', { d: 'M-2.5,-19 L0,-24 L2.5,-19 Z', fill: 'currentColor' }, g);
+            L16(g, 0, 14, 0, 19, 1.1).setAttribute('stroke-dasharray', '2 1.5'); el('path', { d: 'M-2.5,18 L0,22 L2.5,18 Z', fill: 'currentColor' }, g);
+            el('text', { x: 0, y: 3.5, 'text-anchor': 'middle', 'font-size': 8, fill: 'currentColor' }, g).textContent = '❄';
+            if (!bild) el('rect', { class: 'fp-hand', x: -16, y: -16, width: 32, height: 32, 'data-t': t.id, 'data-seite': 'N' }, g);
+        }
+    };
+    TYP.nfilter = {
+        name: 'Druckluftfilter', buchstabe: 'Z', netz: true,
+        optionen: { qN: 1000, dpN: 0.05, schmutz: 0, dpMax: 0.35 },
+        geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-42, -14, 42, 22] }; },
+        zeichne(t, g) {
+            L16(g, -40, 0, -12, 0); L16(g, 12, 0, 40, 0);
+            el('path', { class: 'fp-nfilter', d: 'M0,-12 L12,0 L0,12 L-12,0 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.5 }, g);
+            L16(g, 0, -12, 0, 12, 1).setAttribute('stroke-dasharray', '2 1.5');
+            L16(g, 0, 12, 0, 17, 1.1).setAttribute('stroke-dasharray', '2 1.5'); el('path', { d: 'M-2.5,16 L0,20 L2.5,16 Z', fill: 'currentColor' }, g);
+        }
+    };
+    TYP.ableiter = {
+        name: 'Kondensatableiter', buchstabe: 'Z', netz: true,
+        optionen: { },
+        geometrie() { return { ports: [{ id: '1', x: 0, y: -20, dir: [0, -1], art: 'a', ohneNr: true }], box: [-12, -22, 12, 20] }; },
+        zeichne(t, g) {
+            L16(g, 0, -20, 0, -9);
+            // Wasserabscheider mit selbsttätigem Ablass
+            el('path', { class: 'fp-ableiter', d: 'M0,-9 L9,0 L0,9 L-9,0 Z', fill: 'var(--fp-papier)', stroke: 'currentColor', 'stroke-width': 1.4 }, g);
+            L16(g, -6.5, 2.5, 6.5, 2.5, 1);
+            L16(g, 0, 9, 0, 14, 1.1); el('path', { d: 'M-3,13 L0,18 L3,13 Z', fill: 'currentColor' }, g);
+        }
+    };
+    TYP.awartung = {
+        name: 'Wartungseinheit am Abgang', buchstabe: 'Z', netz: true,
+        optionen: { p: 6, qN: 1000, dpN: 0.3 },
+        geometrie() { return { ports: [{ id: '1', x: -40, y: 0, dir: [-1, 0], art: 'a', ohneNr: true }, { id: '2', x: 40, y: 0, dir: [1, 0], art: 'a', ohneNr: true }], box: [-42, -16, 42, 26] }; },
+        zeichne(t, g) { TYP.wartung.zeichne({ o: { kurz: true } }, g); }
+    };
     TYP.anlage = {
         name: 'Verbraucher', buchstabe: '', ohneBez: true, netz: true,
         // art 'diese': die 2D-Anlage dieses Standes. art 'baustein': eine weitere Anlage der Halle,
@@ -1172,6 +1217,10 @@
             { name: 'Rohrleitung (Länge, Innendurchmesser)', typ: 'rohr' },
             { name: 'Kugelhahn', typ: 'hahn' },
             { name: 'Abgang (Kugelhahn mit Kupplung)', typ: 'hahn', o: { abgang: true } },
+            { name: 'Kältetrockner', typ: 'ktrockner' },
+            { name: 'Druckluftfilter', typ: 'nfilter' },
+            { name: 'Kondensatableiter', typ: 'ableiter' },
+            { name: 'Wartungseinheit am Abgang', typ: 'awartung' },
             { name: 'Diese Anlage (2D-Anlage)', typ: 'anlage' },
             { name: 'Weitere Anlage (Verbraucher-Baustein)', typ: 'anlage', o: { art: 'baustein' } }
         ] }
@@ -1315,7 +1364,7 @@
         aggregat: 'GPA', tank: 'CLA', dbv: 'QNA', stromregel: 'RNA', speicher: 'CMA', entsperr: 'RMA', filter: 'HQ',
         rueck: 'RMB', wechsel: 'KH', zweidruck: 'KH', zeit: 'KH', folge: 'KH', schnell: 'QM', drossel: 'RNB', drv: 'RN', dschalter: 'BP',
         // Druckluftnetz: Kompressor wie die Druckluftquelle (-GQA), Behälter -CM, Rohrleitung -WP, Kugelhahn -QM
-        kompressor: 'GQA', behaelter: 'CM', rohr: 'WP', hahn: 'QM' };
+        kompressor: 'GQA', behaelter: 'CM', rohr: 'WP', hahn: 'QM', ktrockner: 'HQ', nfilter: 'HQ', ableiter: 'HQ', awartung: 'GQ' };
     // Hydraulik nach Tabellenbuch Metall, Hydraulikzylinder und hydraulische Grundschaltungen:
     // -MMA1 Zylinder, -QMA1 Wegeventil, -RNA1 Stromregelventil, -RMA1 Rückschlagventil (entsperrbar),
     // -QNA1 Druckbegrenzungsventil, -GPA1 Pumpe/Aggregat, -CLA1 Tank, -CMA1 Speicher, -BPB1 Druckschalter
@@ -2643,6 +2692,25 @@
             const k = fld('Abgang mit Schnellkupplung', h('input', { type: 'checkbox' })); k.checked = !!t.o.abgang; k.onchange = () => setze(() => { t.o.abgang = k.checked; });
             num('Leckage hinter dem Hahn (bei 6 bar)', 'leck', 0, 2000, 1, 'l/min');
             h('div', { class: 'fp-hinw', text: 'Beim Simulieren öffnet und schließt ein Klick den Hahn. Die Leckage sitzt am Ausgang (Kupplung, Schlauch, Verschraubung): Ist der Hahn zu, verliert das Netz dort nichts mehr.' }, box);
+        } else if (t.typ === 'ktrockner') {
+            num('Nenndurchfluss', 'qN', 50, 50000, 10, 'l/min');
+            num('Druckverlust bei Nenndurchfluss', 'dpN', 0.01, 1, 0.01, 'bar');
+            num('Drucktaupunkt', 'tp', 2, 15, 1, '°C');
+            const c = fld('Trockner aus', h('input', { type: 'checkbox' })); c.checked = !!t.o.aus; c.onchange = () => setze(() => { t.o.aus = c.checked; });
+            h('div', { class: 'fp-hinw', text: 'Der Kältetrockner kühlt die Druckluft auf den Drucktaupunkt, das Wasser fällt aus und wird abgeleitet. Dahinter fällt kein Kondensat mehr aus, solange die Leitung wärmer ist als der Drucktaupunkt. Ist der Trockner aus, strömt die Luft feucht durch: Das Wasser fällt dann im Netz und an den Verbrauchern aus. Der Druckverlust wächst mit dem Quadrat des Durchflusses. Beim Simulieren schaltet ein Klick den Trockner aus und ein.' }, box);
+        } else if (t.typ === 'nfilter') {
+            num('Nenndurchfluss', 'qN', 50, 50000, 10, 'l/min');
+            num('Druckverlust bei Nenndurchfluss (neues Element)', 'dpN', 0.01, 1, 0.01, 'bar');
+            num('Verschmutzung', 'schmutz', 0, 100, 5, '%');
+            num('Element wechseln ab Differenzdruck', 'dpMax', 0.1, 1, 0.05, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Der Filter hält Schmutz und Öltröpfchen zurück. Mit der Verschmutzung steigt sein Druckverlust (bei 100 % auf das Zehnfache). Die Differenzdruckanzeige meldet, wann das Element gewechselt wird. Jedes Zehntel Bar, das die Aufbereitung kostet, muss der Kompressor zusätzlich erzeugen.' }, box);
+        } else if (t.typ === 'ableiter') {
+            h('div', { class: 'fp-hinw', text: 'Der Kondensatableiter lässt das Wasser ab, das sich an seinem Anschluss sammelt, zum Beispiel am Behälter. Ohne Ableiter bleibt das Kondensat im Behälter stehen und muss von Hand abgelassen werden. Kondensat enthält Öl und gehört in den Öl-Wasser-Trenner, nicht in den Abfluss.' }, box);
+        } else if (t.typ === 'awartung') {
+            num('Ausgangsdruck', 'p', 0.5, 10, 0.5, 'bar');
+            num('Nenndurchfluss', 'qN', 50, 20000, 10, 'l/min');
+            num('Druckverlust bei Nenndurchfluss', 'dpN', 0.05, 1.5, 0.05, 'bar');
+            h('div', { class: 'fp-hinw', text: 'Die Wartungseinheit am Abgang filtert die Luft und regelt den Druck für die Anlage dahinter. Sie kann den Druck nur senken: Kommt am Eingang weniger an als eingestellt (plus ihr eigener Druckverlust), fällt auch der Ausgang.' }, box);
         } else if (istBaustein(t)) {
             const nm = fld('Name der Anlage', h('input', { value: t.o.name || '' })); nm.onchange = () => setze(() => { t.o.name = nm.value.trim() || 'Anlage'; });
             num('Luftbedarf je Takt (angesaugte Luft)', 'bedarf', 0, 100000, 0.1, 'l');
@@ -2749,7 +2817,8 @@
             for (const p of geo(t).ports) {
                 if (belegt.has(t.id + ':' + p.id)) continue;
                 if (p.art === 'r' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
-                if (t.typ === 'behaelter' || (t.typ === 'hahn' && t.o.abgang && p.id === '2')) continue;   // freier Stutzen am Behälter ist verschlossen, eine Kupplung ohne Stecker dicht
+                if (t.typ === 'behaelter' || (t.typ === 'hahn' && t.o.abgang && p.id === '2')) continue;
+                if (t.typ === 'ableiter') { meld.push(`${n}: nicht angeschlossen.`); continue; }   // freier Stutzen am Behälter ist verschlossen, eine Kupplung ohne Stecker dicht
                 if (t.typ === 'kompressor' || t.typ === 'anlage') { meld.push(`${n}: nicht ans Netz angeschlossen.`); continue; }
                 if (t.typ === 'knoten') { meld.push(`Verbindungspunkt ohne Leitung`); continue; }
                 if (p.art === 's') meld.push(`${n}: Steueranschluss ${p.id} ist frei – das Ventil bekommt nie Steuerdruck.`);
@@ -2768,6 +2837,7 @@
         }
         const pneuTeile = plan.teile.filter(t => !istHyd(t) && t.typ !== 'knoten'), hydTeile = plan.teile.filter(istHyd);
         if (pneuTeile.length && !plan.teile.some(t => t.typ === 'quelle' || t.typ === 'kompressor')) meld.push('Es gibt keine Druckluftquelle.');
+        if (plan.teile.some(t => t.typ === 'kompressor') && plan.teile.some(t => t.typ === 'behaelter') && !plan.teile.some(t => t.typ === 'ableiter') && plan.teile.some(t => istNetz(t) && !t.o.auto)) meld.push('Am Behälter fehlt ein Kondensatableiter: Das Kondensat bleibt im Behälter stehen.');
         for (const t of plan.teile) if (istBaustein(t) && plan.teile.some(k => k.typ === 'kompressor' && zahl(k.o.pEin, 6) < zahl(t.o.pMin, 5))) meld.push(`${t.o.name || 'Anlage'}: Der Einschaltdruck des Kompressors liegt unter dem Mindestdruck dieser Anlage.`);
         { const qk = plan.teile.filter(t => t.typ === 'kompressor').reduce((m, t) => m + zahl(t.o.q, 0), 0), qv = plan.teile.filter(t => istBaustein(t) && !t.o.aus).reduce((m, t) => m + bausteinBedarf(t.o), 0) + plan.teile.filter(t => t.typ === 'hahn').reduce((m, t) => m + zahl(t.o.leck, 0), 0);
           if (qk > 0 && qv > qk) meld.push(`Luftbedarf und Leckage (${zf(qv, 0)} l/min) sind größer als die Liefermenge der Kompressoren (${zf(qk, 0)} l/min): Der Druck im Netz fällt.`); }
@@ -2852,6 +2922,9 @@
             case 'behaelter': d.push('V = ' + zf(o.V) + ' l', 'Sicherheitsventil ' + zf(o.pSV) + ' bar'); break;
             case 'rohr': d.push('L = ' + zf(o.L) + ' m', 'Innen-Ø ' + zf(o.d) + ' mm'); break;
             case 'hahn': if (o.abgang) d.push('Abgang mit Kupplung'); if (o.zu) d.push('geschlossen'); if (zahl(o.leck, 0) > 0) d.push('Leckage ' + zf(o.leck) + ' l/min'); break;
+            case 'ktrockner': d.push('Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar', 'Drucktaupunkt ' + zf(o.tp) + ' °C'); break;
+            case 'nfilter': d.push('Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar'); if (zahl(o.schmutz, 0) > 0) d.push('Verschmutzung ' + zf(o.schmutz, 0) + ' %'); break;
+            case 'awartung': d.push('p = ' + zf(o.p) + ' bar', 'Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar'); break;
             case 'anlage': if (istBaustein(t)) d.push(zf(o.bedarf) + ' l je Takt', zf(o.takte) + ' Takte/min', 'Gleichzeitigkeit ' + zf(o.gleich, 0) + ' %', 'Mindestdruck ' + zf(o.pMin) + ' bar'); else d.push('2D-Anlage dieses Standes'); break;
             case 'stromregel': d.push('Q = ' + zf(o.q) + ' l/min'); break;
             case 'drossel': case 'drv': d.push('Öffnung ' + zf(o.offen, 0) + ' %'); break;
@@ -3298,7 +3371,7 @@
             if (t.typ === 'knoten' || t.typ === 'daempfer' || t.typ === 'stopfen') continue;
             if (t.typ === 'quelle' || t.typ === 'manometer' || t.typ === 'dschalter') continue;
             if (t.typ === 'tank' || t.typ === 'speicher') continue;
-            if (t.typ === 'kompressor' || t.typ === 'behaelter' || t.typ === 'anlage') continue;
+            if (t.typ === 'kompressor' || t.typ === 'behaelter' || t.typ === 'anlage' || t.typ === 'ableiter') continue;
             if (t.typ === 'hahn' && t.o.abgang && p.id === '2') continue;   // Schnellkupplung ohne Stecker ist dicht
             if (p.art === 's') continue; // freier Steueranschluss: kein Druck
             const G0 = netze[netzVon[k]].hyd ? G_HV : G_VENTIL;   // Öl tritt aus (in die Wanne)
@@ -3325,10 +3398,13 @@
             if (t.typ === 'folge' || t.typ === 'dschalter') z.an = false;
             if (t.typ === 'wechsel') z.seite = 'X';
             if (t.typ === 'speicher') z.voil = 0;
-            if (t.typ === 'kompressor') { z.lauf = false; z.aus = !!t.o.aus; z.schalt = 0; z.laufS = 0; z.simS = 0; z.ein = []; z.p = pStart; }
+            if (t.typ === 'kompressor') { z.lauf = false; z.aus = !!t.o.aus; z.schalt = 0; z.laufS = 0; z.simS = 0; z.ein = []; z.p = pStart; z.luft = 0; }
             if (t.typ === 'hahn') { z.zu = !!t.o.zu; z.qSum = 0; z.q = 0; z.qLeck = 0; }
             if (t.typ === 'rohr') { z.qSum = 0; z.q = 0; z.dp = 0; }
-            if (t.typ === 'behaelter') { z.sv = false; z.p = pStart; }
+            if (t.typ === 'behaelter') { z.sv = false; z.p = pStart; z.kond = 0; z.ableiter = false; }
+            if (t.typ === 'ktrockner') { z.aus = !!t.o.aus; z.qSum = 0; z.q = 0; z.dp = 0; z.kond = 0; z.nass = 0; z.feucht = false; }
+            if (t.typ === 'nfilter' || t.typ === 'awartung') { z.qSum = 0; z.q = 0; z.dp = 0; z.p = pStart; }
+            if (t.typ === 'ableiter') { z.kond = 0; z.qLeck = 0; }
             if (t.typ === 'anlage') { z.ent = 0; z.q = 0; z.qSum = 0; z.p = pStart; z.aus = !!t.o.aus; z.ph = 0; z.takte = 0; z.taktIst = 0; z.zuNiedrig = false; z.fSum = 0; z.luft = 0; }
             if (istPropW(t)) { z.soll = 0; z.h = 0; z.u = 0; z.wert = propWVon(t); }
             zust[t.id] = z;
@@ -3771,12 +3847,35 @@
         }
         return { nl, zyl, p, leck };
     }
+    // Bauteil mit Nenndurchfluss qN (l/min) bei Nenn-Druckverlust dpN (bar): Q = Q_N · √(Δp / Δp_N).
+    // Gibt die verschobene Menge (Normliter, mit Vorzeichen von 1 nach 2) zurück. hoechstens: nicht mehr als diese Menge, nur12: nur von 1 nach 2
+    function widerstand(na, nb, qN, dpN, dt, hoechstens, nur12) {
+        if (na == null || nb == null || na === nb) return 0;
+        const N = sim.netze, A = N[na], B = N[nb], dp = A.M / A.V - B.M / B.V;
+        if (Math.abs(dp) < 1e-9 || (nur12 && dp <= 0)) return 0;
+        const a = Math.abs(dp), q0 = Math.max(1, qN) * (a < 1e-3 ? a / Math.sqrt(1e-3 * dpN) : Math.sqrt(a / dpN));
+        let q = Math.sign(dp) * q0 / 60 * dt;
+        const gl = dp / (1 / A.V + 1 / B.V);
+        if (Math.abs(q) > Math.abs(gl)) q = gl;
+        if (hoechstens != null && Math.abs(q) > hoechstens) q = Math.sign(q) * hoechstens;
+        A.M -= q; B.M += q;
+        return q;
+    }
+    // Wasser in der Luft: Sättigungsmenge in g/m³ bei der Temperatur T (°C), Magnus-Formel
+    const wasserSatt = (T) => 216.7 * 6.112 * Math.exp(17.62 * T / (243.12 + T)) / (273.15 + T);
+    const LUFT_T = 20, LUFT_RF = 0.6;   // angesaugte Luft: 20 °C, 60 % relative Feuchte; das Netz hat ebenfalls 20 °C
+    // Kondensat in g je m³ angesaugter Luft: am Behälter (verdichtet auf p, abgekühlt auf 20 °C) und zusätzlich im Trockner (Drucktaupunkt tp)
+    const kondBehaelter = (p) => Math.max(0, LUFT_RF * wasserSatt(LUFT_T) - wasserSatt(LUFT_T) / (Math.max(0, p) + 1));
+    const kondTrockner = (p, tp) => Math.max(0, (Math.min(LUFT_RF * wasserSatt(LUFT_T) * (Math.max(0, p) + 1), wasserSatt(LUFT_T)) - wasserSatt(Math.min(LUFT_T, tp))) / (Math.max(0, p) + 1));
     function netzText(t) {
         const o = t.o;
         if (t.typ === 'kompressor') return zf(o.q, 0) + ' l/min · ' + zf(o.pEin) + ' … ' + zf(o.pAus) + ' bar';
         if (t.typ === 'behaelter') return zf(o.V, 0) + ' l';
         if (t.typ === 'rohr') return zf(o.L) + ' m · Ø ' + zf(o.d, 0) + ' mm';
         if (t.typ === 'hahn') return zahl(o.leck, 0) > 0 ? (window.currentLang === 'en' ? 'Leakage ' : 'Leckage ') + zf(o.leck, 0) + ' l/min' : '';
+        if (t.typ === 'ktrockner') return (window.currentLang === 'en' ? 'PDP ' : 'DTP ') + zf(o.tp, 0) + ' °C · ' + zf(o.qN, 0) + ' l/min';
+        if (t.typ === 'nfilter') return zf(o.qN, 0) + ' l/min' + (zahl(o.schmutz, 0) > 0 ? ' · ' + zf(o.schmutz, 0) + ' %' : '');
+        if (t.typ === 'awartung') return zf(o.p) + ' bar';
         return '';
     }
     // Ein Netzschritt (dt in s): Kompressoren, Leitungen, Hähne, Leckagen, Sicherheitsventile
@@ -3794,7 +3893,12 @@
                         if (z.aus || fe === 'aus') z.lauf = false;
                         else if (!z.lauf && p <= pEin) { z.lauf = true; z.schalt++; z.ein.push(S.netzZeit); if (z.ein.length > 400) z.ein.shift(); }
                         else if (z.lauf && p >= pAus) z.lauf = false;
-                        if (z.lauf) { N[n1].M += Math.max(0, zahl(o.q, 400)) / 60 * dt * (fe === 'verschleiss' ? 0.5 : 1); z.laufS += dt; }
+                        if (z.lauf) {
+                            const m = Math.max(0, zahl(o.q, 400)) / 60 * dt * (fe === 'verschleiss' ? 0.5 : 1);
+                            N[n1].M += m; z.laufS += dt; z.luft += m;
+                            // Kondensat: Die verdichtete Luft kühlt im Behälter ab und kann nur noch einen Bruchteil des Wassers halten
+                            S.kondOffen = (S.kondOffen || 0) + m / 1000 * kondBehaelter(p);
+                        }
                         z.simS += dt;
                         break;
                     }
@@ -3819,6 +3923,30 @@
                             const B = N[n2], p2 = B.M / B.V - 1;
                             if (p2 > 0) { const m = Math.min(leck / 60 * p2 / LECK_P * dt, B.M - B.V); B.M -= m; z.qLeck = leck * p2 / LECK_P; z.leckSum = (z.leckSum || 0) + m; }
                         }
+                        break;
+                    }
+                    case 'ktrockner': case 'nfilter': {
+                        const na = netz(t, '1'), nb = netz(t, '2'), fe = fehlerAktiv(t.id);
+                        let dpN = Math.max(0.005, zahl(o.dpN, 0.1));
+                        if (t.typ === 'nfilter') dpN *= fe === 'zu' ? 60 : 1 + 9 * Math.max(0, Math.min(100, zahl(o.schmutz, 0))) / 100;
+                        const q = widerstand(na, nb, zahl(o.qN, 1000), dpN, dt);
+                        z.qSum += q; z.dpN = dpN;
+                        if (t.typ === 'ktrockner') {
+                            const an = !z.aus && fe !== 'aus', A = N[na], w = Math.abs(q) / 1000 * kondTrockner(A ? A.M / A.V - 1 : 7, zahl(o.tp, 3));
+                            z.feucht = !an;
+                            if (an) z.kond += w; else z.nass += w;
+                        }
+                        break;
+                    }
+                    case 'awartung': {
+                        const na = netz(t, '1'), nb = netz(t, '2'), fe = fehlerAktiv(t.id); if (na == null || nb == null || na === nb) break;
+                        const B = N[nb], soll = fe === 'druck' ? 2.5 : zahl(o.p, 6), fehlt = (soll + 1) * B.V - B.M;
+                        if (fehlt > 0) z.qSum += widerstand(na, nb, zahl(o.qN, 1000), Math.max(0.01, zahl(o.dpN, 0.3)) * (fe === 'zu' ? 60 : 1), dt, fehlt, true);
+                        break;
+                    }
+                    case 'ableiter': {
+                        const n1 = netz(t, '1'), fe = fehlerAktiv(t.id); z.qLeck = 0;
+                        if (n1 != null && fe === 'offen') { const B = N[n1], p1 = B.M / B.V - 1; if (p1 > 0) { const m = Math.min(50 / 60 * p1 / LECK_P * dt, B.M - B.V); B.M -= m; z.qLeck = 50 * p1 / LECK_P; } }
                         break;
                     }
                     case 'anlage': {
@@ -3847,6 +3975,16 @@
                     }
                 }
             }
+            // Kondensat des Kompressors fällt im Behälter aus (ohne Behälter in der Leitung); ein Ableiter am Behälter lässt es ab
+            if (S.kondOffen > 0) {
+                const b = S.netzTeile.find(t => t.typ === 'behaelter'), zb = b && S.zust[b.id];
+                if (zb) {
+                    const nB = netz(b, '1'), ab = S.netzTeile.find(t => t.typ === 'ableiter' && netz(t, '1') === nB), fa = ab && fehlerAktiv(ab.id);
+                    zb.ableiter = !!ab && fa !== 'zu';
+                    if (zb.ableiter) S.zust[ab.id].kond += S.kondOffen; else zb.kond += S.kondOffen;
+                } else S.kondNetz = (S.kondNetz || 0) + S.kondOffen;
+                S.kondOffen = 0;
+            }
             S.netzZeit += dt;
         } finally { DT = DT0; }
     }
@@ -3867,7 +4005,15 @@
                     z.taktIst = dtN > 0 ? zahl(t.o.takte, 10) * z.fSum / dtN : 0; z.fSum = 0;
                     if (t.o.var && S.schreib) S.schreib[t.o.var] = !z.zuNiedrig && !z.aus;
                 }
+            } else if (t.typ === 'ktrockner' || t.typ === 'nfilter' || t.typ === 'awartung') {
+                const q = dtN > 0 ? z.qSum / dtN * 60 : 0; z.qSum = 0; z.q += (q - z.q) * 0.2;
+                // Druckverlust beim mittleren Durchfluss (die Verbraucher nehmen stoßweise ab)
+                if (t.typ === 'awartung') z.dp += (Math.max(0, pPort(t, '1') - pPort(t, '2')) - z.dp) * 0.2;
+                else { const x = z.q / Math.max(1, zahl(t.o.qN, 1000)); z.dp = Math.min(Math.max(0, pPort(t, '1')) + 1, (z.dpN || zahl(t.o.dpN, 0.1)) * x * x); }
+                z.p = pPort(t, '2');
             } else if (t.typ === 'kompressor' || t.typ === 'behaelter') z.p = pPort(t, '1');
+            // Druckverlust der Kette: höchster Kompressordruck minus Druck am Verbraucher
+            if (t.typ === 'anlage') { z.feucht = S.netzTeile.some(k => k.typ === 'ktrockner' && S.zust[k.id].feucht); let pk = null; for (const k of S.netzTeile) if (k.typ === 'kompressor') { const pp = pPort(k, '1'); if (pk == null || pp > pk) pk = pp; } z.dpKette = pk == null ? 0 : Math.max(0, pk - z.p); }
         }
     }
     // Schaltspiele je Stunde aus den Einschaltzeiten (Mittel über die letzten Spiele)
@@ -4035,7 +4181,7 @@
         const z = sim.zust[id];
         // Druckluftnetz: Klick schließt/öffnet den Hahn, schaltet den Kompressor aus/ein
         if (t.typ === 'hahn') { if (an) { z.zu = !z.zu; klick(); } return; }
-        if (t.typ === 'kompressor' || istBaustein(t)) { if (an) { z.aus = !z.aus; klick(); } return; }
+        if (t.typ === 'kompressor' || t.typ === 'ktrockner' || istBaustein(t)) { if (an) { z.aus = !z.aus; klick(); } return; }
         if (b === 'hebel') { if (an) { if (seite === 'L') { z.rasteL = !z.rasteL; if (z.rasteL) z.rasteR = false; } else { z.rasteR = !z.rasteR; if (z.rasteR) z.rasteL = false; } } return; }   // ein Hebel: Einrasten auf einer Seite löst die andere
         const key = id + ':' + seite;
         if (an) gedrueckt.add(key); else gedrueckt.delete(key);
@@ -4139,6 +4285,8 @@
         }
     }
     // Live-Anzeige der Netzteile: Druck, Durchfluss, Druckverlust, Schaltspiele
+    const wasserText = (g) => g >= 1000 ? zf(g / 1000, 2) + ' l' : zf(g, 0) + ' ml';
+    const ketteText = (z) => (z && z.dpKette >= 0.05 ? ' (−' + zf(z.dpKette, 2) + ')' : '') + (z && z.feucht ? (window.currentLang === 'en' ? ' · wet air' : ' · feuchte Luft') : '');
     function netzDarstellen(t, r, z) {
         let txt = '';
         const en = window.currentLang === 'en', W2 = (de, e) => en ? e : de;
@@ -4151,7 +4299,19 @@
                 txt = (z.aus ? W2('AUS', 'OFF') : z.lauf ? W2('fördert', 'delivering') : W2('steht', 'idle')) + ' · ' + zf(z.p, 2) + ' bar · ' + W2('ED ', 'duty ') + ed + ' % · ' + z.schalt + W2('× ein', '× on') + (sp > 0 ? ' (' + zf(sp, 0) + '/h)' : '');
             }
         } else if (t.typ === 'behaelter') {
-            if (z) txt = zf(z.p, 2) + ' bar' + (z.sv ? W2(' · Sicherheitsventil bläst ab', ' · safety valve blowing off') : '');
+            if (z) txt = zf(z.p, 2) + ' bar' + (z.sv ? W2(' · Sicherheitsventil bläst ab', ' · safety valve blowing off') : '') + (z.kond >= 1 ? W2(' · Kondensat ', ' · condensate ') + wasserText(z.kond) : '');
+        } else if (t.typ === 'ktrockner') {
+            const aus = z ? (z.aus || z.feucht) : !!t.o.aus, k = r.g.querySelector('.fp-trockner');
+            if (k) k.setAttribute('stroke', aus ? '#d32f2f' : 'currentColor');
+            if (z) txt = (aus ? W2('AUS · ', 'OFF · ') : '') + zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, 2) + ' bar · ' + (aus ? W2('feucht ins Netz: ', 'wet into the network: ') + wasserText(z.nass) : W2('Kondensat ', 'condensate ') + wasserText(z.kond));
+        } else if (t.typ === 'nfilter') {
+            const k = r.g.querySelector('.fp-nfilter'), rot = !!(z && z.dp > zahl(t.o.dpMax, 0.35));
+            if (k) k.setAttribute('stroke', rot ? '#d32f2f' : 'currentColor');
+            if (z) txt = zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, 2) + ' bar' + (rot ? W2(' · Element wechseln', ' · change element') : '');
+        } else if (t.typ === 'ableiter') {
+            if (z) txt = (fehlerAktiv(t.id) === 'zu' ? W2('verstopft', 'blocked') : W2('abgeleitet ', 'drained ') + wasserText(z.kond)) + (z.qLeck > 0.05 ? W2(' · bläst ab ', ' · blowing off ') + zf(z.qLeck, 0) + ' l/min' : '');
+        } else if (t.typ === 'awartung') {
+            if (z) txt = zf(z.p, 2) + ' bar · ' + zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, 2) + ' bar';
         } else if (t.typ === 'rohr') {
             const pf = r.g.querySelector('.fp-rohr-pfeil');
             if (pf) { const q = z ? z.q : 0; pf.setAttribute('opacity', Math.abs(q) > 0.5 ? 1 : 0); pf.setAttribute('transform', q < 0 ? 'scale(-1,1)' : ''); }
@@ -4163,9 +4323,9 @@
         } else if (istBaustein(t)) {
             const rk = r.g.querySelector('.fp-anlage'), rot = !!(z && z.zuNiedrig && !z.aus);
             if (rk) { rk.setAttribute('stroke', rot ? '#d32f2f' : 'currentColor'); rk.setAttribute('stroke-width', rot ? 2.2 : 1.2); }
-            if (z) txt = zf(z.p, 2) + ' bar · ' + (z.aus ? W2('steht', 'stopped') : zf(z.q, 0) + ' l/min · ' + zf(z.taktIst, 1) + W2(' Takte/min', ' cycles/min')) + (rot ? W2(' · Druck zu niedrig', ' · pressure too low') : '');
+            if (z) txt = zf(z.p, 2) + ' bar' + ketteText(z) + ' · ' + (z.aus ? W2('steht', 'stopped') : zf(z.q, 0) + ' l/min · ' + zf(z.taktIst, 1) + W2(' Takte/min', ' cycles/min')) + (rot ? W2(' · Druck zu niedrig', ' · pressure too low') : '');
         } else if (t.typ === 'anlage') {
-            if (z) txt = zf(z.p, 2) + ' bar · ' + zf(z.q, 0) + ' l/min';
+            if (z) txt = zf(z.p, 2) + ' bar' + ketteText(z) + ' · ' + zf(z.q, 0) + ' l/min';
         }
         if (r.nw && r.nw.textContent !== txt) r.nw.textContent = txt;
     }
@@ -4436,6 +4596,10 @@
         kompressor: [['aus', 'Kompressor läuft nicht an'], ['verschleiss', 'Liefermenge halbiert (Verschleiß)']],
         rohr: [['zu', 'Leitung zugesetzt (kaum Durchgang)']],
         hahn: [['leck', 'Kupplung undicht (60 l/min bei 6 bar)']],
+        ktrockner: [['aus', 'Trockner aus (Kältekreis ausgefallen)']],
+        nfilter: [['zu', 'Filter zugesetzt']],
+        ableiter: [['zu', 'Kondensatableiter verstopft'], ['offen', 'Kondensatableiter hängt offen (bläst ab)']],
+        awartung: [['druck', 'Druckregler verstellt (2,5 bar)'], ['zu', 'Filter verstopft']],
         wartung: [['druck', 'Druckregler verstellt (2,5 bar)'], ['zu', 'Filter verstopft']],
         druckregel: [['druck', 'Druckregler verstellt (2,5 bar)']],
         drossel: [['zu', 'Drossel verstopft']],
@@ -8785,7 +8949,7 @@ function versorgungMerken(F) {
                 if (z.wert != null) { r.wert = z.wert; r.soll = z.soll; r.u = z.u; }
                 if (z.auf === true || z.auf === false) r.offen = z.auf;
                 if (z.an != null) r.an = z.an;
-                if (istNetz(t)) Object.assign(r, { lauf: z.lauf, aus: z.aus, schalt: z.schalt, zu: z.zu, q: z.q, dp: z.dp, pNetz: z.p, sv: z.sv, qLeck: z.qLeck, takte: z.takte, taktIst: z.taktIst, zuNiedrig: z.zuNiedrig, luft: z.luft, laufS: z.laufS, simS: z.simS, spiele: z.ein ? schaltspiele(z) : undefined });
+                if (istNetz(t)) Object.assign(r, { lauf: z.lauf, aus: z.aus, schalt: z.schalt, zu: z.zu, q: z.q, dp: z.dp, pNetz: z.p, sv: z.sv, qLeck: z.qLeck, kond: z.kond, nass: z.nass, feucht: z.feucht, dpKette: z.dpKette, ableiter: z.ableiter, takte: z.takte, taktIst: z.taktIst, zuNiedrig: z.zuNiedrig, luft: z.luft, laufS: z.laufS, simS: z.simS, spiele: z.ein ? schaltspiele(z) : undefined });
                 const ports = {};
                 for (const p of geo(t).ports) ports[p.id] = +pPort(t, p.id).toFixed(3);
                 r.p = ports;
@@ -8843,6 +9007,7 @@ function versorgungMerken(F) {
         beispielLaden: (i, mitCode) => { const c = window.confirm; window.confirm = () => true; try { beispielLaden(i, mitCode === true); } finally { window.confirm = c; } },
         beispielCode: (i) => (BEISPIELE[i] || {}).code || '',
         _leeren: () => { planImport(null); gedrueckt.clear(); },
+        fehlerSetzen: (key, art) => aendern(() => { plan.fehler = plan.fehler || {}; if (art) plan.fehler[key] = art; else delete plan.fehler[key]; }),
         _waehlen: (id) => { fensterBauen(); auswahl = new Set([id]); zeichnen(); },
         _schreib: () => Object.assign({}, sim ? sim.schreib : {}),
         _wege: () => { const W = alleWege(); return { wege: Object.fromEntries(W.wege), netz: Object.fromEntries(W.netz), punkte: abzweigPunkte() }; },
@@ -8855,6 +9020,7 @@ function versorgungMerken(F) {
             raffer: (n) => { if (n != null) netzRaffer = Math.max(1, Math.min(600, +n || 1)); return netzRaffer; },
             // rechnet sek Sekunden Netzzeit in Bildern von `bild` Sekunden (Prüfungen)
             rechnen: (sek, bild) => { if (!sim) simInit(); const b = bild || 0.05, n = Math.round(sek / b); for (let i = 0; i < n; i++) { sim.schreib = {}; sim.schreibA = {}; simSchritt(b); } },
+            kondensat: (p, tp) => ({ behaelter: kondBehaelter(p), trockner: kondTrockner(p, tp == null ? 3 : tp), satt: wasserSatt(tp == null ? LUFT_T : tp) }),
             luftbedarf: (stand) => luftbedarfAus(stand), bedarf: (o) => bausteinBedarf(o),
             druckverlust: (o, q, p) => rohrDruckverlust(o, q, p), durchfluss: (o, dp, p) => rohrDurchfluss(o, dp, p), volumen: (o) => rohrVolumen(o)
         },

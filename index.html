@@ -64284,6 +64284,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // mehr zurück auf 'led' geändert, auch wenn sie nicht mehr als Source
                 // verwendet werden. Eigene Berechnung ist deterministisch.
                 const _usedAsSource = new Set();
+                let _lastHinterZeit = null;
                 function _walkAst(n) {
                     if (!n) return;
                     if (n.type === 'IDENT') _usedAsSource.add(n.name);
@@ -64380,6 +64381,16 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     return isNeg ? 'relay_nc' : 'relay_no';
                 }
                 function coilTypeFor(name) {
+                    // Lastzweig hinter einem Zeitrelais (wie im Auto-Schaltplan): die
+                    // Last trägt den Namen des Zeitrelais, ihre Art kommt vom Ausgang.
+                    if (name === _lastHinterZeit) {
+                        const ct = _ct(name);
+                        if (ct === 'motor' || ct === 'fan') return 'motor';
+                        if (ct === 'siren') return 'siren';
+                        if (ct === 'heater') return 'heater';
+                        if (ct === 'valve' || ct === 'valve_pneu') return 'valve';
+                        return 'led';
+                    }
                     // 0) Zeitrelais (Zeile war VAR := TON/TOF/TP(...)) → Timer-Spule
                     if (_timerForAssign[name]) return 'timer_' + _timerForAssign[name].fn.toLowerCase();
                     // 0b) Zähler (Zeile war VAR := CTU(...)) → Zählrelais
@@ -65136,6 +65147,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 assigns.forEach(a => {
                     const _nC = ST.components.length, _nW = ST.wires.length;
                     try { _strangBauen(a); } finally { _strangMarkieren(a, _nC, _nW); }
+                    // Zeitrelais auf einem echten Ausgang: wie im Auto-Schaltplan ein
+                    // zweiter Strang, verzögerter Kontakt des Zeitrelais → Last (LED …).
+                    // Im Code entsteht daraus nichts Neues (die Last hat denselben Namen).
+                    if (!a.kette && _timerForAssign[a.lhs] && !_usedAsSource.has(a.lhs)) {
+                        _lastHinterZeit = a.lhs;
+                        try { if (buildRung(a.lhs, { type: 'IDENT', name: a.lhs }, colX)) colX += 120; }
+                        finally { _lastHinterZeit = null; }
+                    }
                 });
                 function _strangBauen(a) {
                     // Erst RS-Pattern (set-dominant) prüfen — typische Form
@@ -67595,6 +67614,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     if (!coilGroups[c.varName]) coilGroups[c.varName] = [];
                     coilGroups[c.varName].push(c);
                 });
+                // Zeitrelais und seine Last tragen denselben Namen: das Zeitrelais
+                // erzeugt den Code, die Last ist nur seine Anzeige.
+                Object.values(coilGroups).forEach(g => g.sort((a, b) => (CTYPES[b.type].timer ? 1 : 0) - (CTYPES[a.type].timer ? 1 : 0)));
                 // usedAsAux: jede Variable, deren Aux-Kontakt einen Strang nutzt.
                 // Wird sowohl über refNormPrefix (neu) als auch über varName (Legacy)
                 // ermittelt — Aux-Kontakte mit aufgelöstem Ref nehmen die varName

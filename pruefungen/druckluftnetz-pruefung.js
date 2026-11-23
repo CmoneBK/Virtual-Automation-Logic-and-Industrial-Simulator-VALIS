@@ -274,6 +274,114 @@ const FAELLE = {
     R.push(['Speichern und Laden: genau ein Netz', F.plan().teile.filter(t => t.typ === 'kompressor').length === 1 && F.plan().teile.filter(t => t.typ === 'anlage').length === 1, '']);
     return R;
   },
+  'Verbraucher-Baustein: Luftbedarf je Takt, Gleichzeitigkeit, Klick hält an': () => {
+    const F = Fluidplan, R = [];
+    const k = F.setzen('kompressor', 0, 100, { q: 600, pEin: 6.5, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 500 });
+    const a = F.setzen('anlage', 300, 140, { art: 'baustein', name: 'Presse 2', bedarf: 20, takte: 12, gleich: 50, pMin: 5 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', a, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    R.push(['Mittlerer Luftbedarf 20 l · 12/min · 50 % = 120 l/min', Math.abs(F.netz.bedarf(F.plan().teile.find(t => t.id === a).o) - 120) < 1e-9, '']);
+    F.netz.raffer(10); F.netz.rechnen(30, 0.05);   // 300 s = 60 Takte
+    const z = Z(a);
+    R.push(['60 Takte in 5 Minuten', Math.abs(z.takte - 60) <= 1, String(z.takte)]);
+    R.push(['Abgenommene Luft 60 · 10 l = 600 l', Math.abs(z.luft - 600) < 12, z.luft.toFixed(1)]);
+    R.push(['Takt läuft voll, keine Meldung', Math.abs(z.taktIst - 12) < 0.01 && !z.zuNiedrig, z.taktIst.toFixed(2)]);
+    R.push(['Kompressor hat nachgefüllt', Z(k).schalt >= 1 && Z(b).pNetz > 6.4, Z(k).schalt + '× ein, ' + Z(b).pNetz.toFixed(2) + ' bar']);
+    R.push(['Baustein braucht kein Kennzeichen und meldet keinen offenen Anschluss', !F.pruefen().some(m => /Presse 2|offen/.test(m)), F.pruefen().join(' | ')]);
+    // anhalten durch Klick
+    F.druecken(a, 'N', true); F.druecken(a, 'N', false);
+    const l0 = Z(a).luft; F.netz.rechnen(5, 0.05);
+    R.push(['Klick hält die Anlage an: keine Luft mehr', Z(a).aus === true && Math.abs(Z(a).luft - l0) < 1e-9, '']);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Mehrere Anlagen: Druck zu niedrig, Takt wird langsamer, Eingang meldet': () => {
+    const F = Fluidplan, R = [];
+    // Kompressor 400 l/min, zwei Anlagen mit zusammen 520 l/min: Die Luft reicht nicht
+    const k = F.setzen('kompressor', 0, 100, { q: 400, pEin: 6.5, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 500 });
+    const t = F.setzen('knoten', 260, 60);
+    const a1 = F.setzen('anlage', 220, 160, { art: 'baustein', name: 'Halle A', bedarf: 26, takte: 10, gleich: 100, pMin: 5.5, var: 'B_DRUCK_OK' });
+    const a2 = F.setzen('anlage', 340, 160, { art: 'baustein', name: 'Halle B', bedarf: 13, takte: 20, gleich: 100, pMin: 3.5 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', t, 'P'); F.verbinden(t, 'P', a1, '1'); F.verbinden(t, 'P', a2, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    R.push(['Prüfung warnt: Bedarf größer als Liefermenge', F.pruefen().some(m => /größer als die Liefermenge/.test(m)), '']);
+    F.netz.raffer(10); F.netz.rechnen(2, 0.05);
+    R.push(['Am Anfang reicht der Druck, Eingang B_DRUCK_OK = 1', !Z(a1).zuNiedrig && F._schreib().B_DRUCK_OK === true, Z(a1).pNetz.toFixed(2)]);
+    F.netz.rechnen(360, 0.05);   // 60 min
+    const z1 = Z(a1), z2 = Z(a2);
+    R.push(['Halle A meldet „Druck zu niedrig“', z1.zuNiedrig === true && z1.pNetz < 5.5, z1.pNetz.toFixed(2) + ' bar']);
+    R.push(['Takt von Halle A ist langsamer als 10/min', z1.taktIst < 9.6 && z1.taktIst > 4, z1.taktIst.toFixed(2)]);
+    R.push(['Halle B (Mindestdruck 3,5 bar) läuft im vollen Takt', !z2.zuNiedrig && Math.abs(z2.taktIst - 20) < 0.01, z2.taktIst.toFixed(2)]);
+    R.push(['Eingang B_DRUCK_OK = 0', F._schreib().B_DRUCK_OK === false, '']);
+    // Gleichgewicht: 260·f + 260 = 400 → f = 0,538 → p = 5,5·√0,538 = 4,03 bar
+    R.push(['Druck pendelt sich dort ein, wo Bedarf und Liefermenge gleich sind (rund 4,0 bar)', Math.abs(z1.pNetz - 4.03) < 0.15, z1.pNetz.toFixed(2)]);
+    R.push(['Kompressor läuft durch', Z(k).lauf === true && Z(k).laufS / Z(k).simS > 0.9, (100 * Z(k).laufS / Z(k).simS).toFixed(0) + ' %']);
+    // Halle B steht: Luft reicht wieder
+    F.druecken(a2, 'N', true); F.druecken(a2, 'N', false);
+    F.netz.rechnen(60, 0.05);
+    R.push(['Steht Halle B, reicht die Luft wieder: Meldung weg, voller Takt', !Z(a1).zuNiedrig && Math.abs(Z(a1).taktIst - 10) < 0.01 && F._schreib().B_DRUCK_OK === true, Z(a1).pNetz.toFixed(2) + ' bar']);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Leckage je Abgang und langer Stich: der hintere Abgang hat weniger Druck': () => {
+    const F = Fluidplan, R = [];
+    const k = F.setzen('kompressor', 0, 100, { q: 2000, pEin: 6.8, pAus: 7 });
+    const b = F.setzen('behaelter', 120, 60, { V: 1000 });
+    const t = F.setzen('knoten', 260, 60);
+    const h1 = F.setzen('hahn', 260, 120, { abgang: true, leck: 60 });
+    const a1 = F.setzen('anlage', 260, 220, { art: 'baustein', name: 'vorn', bedarf: 30, takte: 10, pMin: 6 });
+    const r = F.setzen('rohr', 400, 60, { L: 150, d: 13 });
+    const h2 = F.setzen('hahn', 540, 120, { abgang: true, leck: 0 });
+    const a2 = F.setzen('anlage', 540, 220, { art: 'baustein', name: 'hinten', bedarf: 30, takte: 10, pMin: 6 });
+    F.verbinden(k, '1', b, '1'); F.verbinden(b, '2', t, 'P'); F.verbinden(t, 'P', h1, '1'); F.verbinden(h1, '2', a1, '1');
+    F.verbinden(t, 'P', r, '1'); F.verbinden(r, '2', h2, '1'); F.verbinden(h2, '2', a2, '1');
+    F._neu();
+    const Z = id => F.zustand().teile[id];
+    F.netz.raffer(5); F.netz.rechnen(24, 0.05);
+    R.push(['Leckage am vorderen Abgang rund 60 l/min · p/6', Z(h1).qLeck > 60 && Z(h1).qLeck < 72, Z(h1).qLeck.toFixed(1)]);
+    R.push(['Hinterer Abgang liegt im Mittel tiefer als der vordere', Z(a2).pNetz < Z(a1).pNetz + 0.001, Z(a1).pNetz.toFixed(2) + ' / ' + Z(a2).pNetz.toFixed(2)]);
+    // schließt man den vorderen Hahn, fällt dort die Leckage weg und die Anlage dahinter verhungert
+    F.druecken(h1, 'N', true); F.druecken(h1, 'N', false);
+    F.netz.rechnen(24, 0.05);
+    R.push(['Hahn zu: Anlage dahinter bekommt keine Luft und steht', Z(a1).pNetz < 0.5 && Z(a1).taktIst === 0 && Z(a1).zuNiedrig, Z(a1).pNetz.toFixed(2)]);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Luftbedarf aus einem gespeicherten Stand': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    // Stand von Hand: ein doppelt wirkender Zylinder Ø 50/20, Hub 200 und ein einfach wirkender Ø 32, Hub 50 bei 6 bar
+    const stand = { code: '', factory: JSON.stringify({ objects: [
+      { id: 'a', type: 'compressor', pressure: 6 },
+      { id: 'b', type: 'zylinder_double', hasPneumatics: true, pistonD: 50, rodD: 20, stroke: 200 },
+      { id: 'c', type: 'zylinder_single', hasPneumatics: true, pistonD: 32, rodD: 12, stroke: 50 },
+      { id: 'd', type: 'zylinder_double', hasHydraulics: true, pistonD: 63, rodD: 28, stroke: 300 } ] }) };
+    const AK = Math.PI * 50 * 50 / 4, AR = AK - Math.PI * 20 * 20 / 4, A2 = Math.PI * 32 * 32 / 4;
+    const soll = ((AK + AR) * 200 + A2 * 50) * 7 / 1e6;   // 5,34 l
+    const r = F.netz.luftbedarf(JSON.stringify(stand));
+    R.push(['Zwei pneumatische Zylinder gezählt, der hydraulische nicht', r && r.zyl === 2, r && String(r.zyl)]);
+    R.push(['Luftbedarf je Takt = (A_K + A_R) · h · (p + 1) + A · h · (p + 1)', r && Math.abs(r.nl - soll) < 1e-6, r && r.nl.toFixed(3) + ' / ' + soll.toFixed(3) + ' l']);
+    R.push(['Kein VALIS-Stand: nichts', F.netz.luftbedarf({ irgendwas: 1 }) === null, '']);
+    // aus der eigenen 2D-Anlage über den Knopf im Eigenschaften-Feld
+    clearFactory(true); F._leeren(); await warte(300);
+    const c = createFactoryObject('zylinder_double', 'Y1'); c.x = 300; c.y = 200; c.pistonD = 40; c.rodD = 16; c.stroke = 100; updateObjTransform(c);
+    generatePneumaticSetup(c, 'single'); await warte(300);
+    const a = F.setzen('anlage', 300, 140, { art: 'baustein' });
+    F._waehlen(a); await warte(200);
+    const kn = [...document.querySelectorAll('.fp-eigen button')].find(x => /dieser 2D-Anlage/.test(x.textContent));
+    R.push(['Knopf „Luftbedarf aus dieser 2D-Anlage“ ist da', !!kn, '']);
+    if (kn) kn.click(); await warte(300);
+    const comp = factoryObjects.find(o => o.type === 'compressor'), p = comp ? comp.pressure || 6 : 6;
+    const s2 = (Math.PI * 40 * 40 / 4 * 2 - Math.PI * 16 * 16 / 4) * 100 * (p + 1) / 1e6;
+    const o = F.plan().teile.find(t => t.id === a).o;
+    R.push(['Bedarf des Bausteins übernommen', Math.abs(o.bedarf - s2) < 0.01, o.bedarf + ' / ' + s2.toFixed(2) + ' l']);
+    clearFactory(true); F._leeren();
+    return R;
+  },
   'Verbundener Plan: Netz bleibt beim Übernehmen, Quelle hängt am Abgang': async () => {
     const F = Fluidplan, R = [];
     const warte = ms => new Promise(r => setTimeout(r, ms));

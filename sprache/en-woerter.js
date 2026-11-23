@@ -10312,3 +10312,27 @@ VALIS_EN.vorlagen({
 "⟦0⟧ wirkt erst mit 24 V am Eingang ⟦1⟧ (hier nicht belegt)": "⟦0⟧ only acts with 24 V at input ⟦1⟧ (not wired here)",
 "⟦0⟧ ist nur Anzeige": "⟦0⟧ is display only"
 });
+// Ein-/Ausschaltverzögerung TONOF (erster Baustein hinter „Weitere“)
+VALIS_EN.dazu({
+"Ein-/Ausschaltverzögerung": "On-/off-delay",
+"Timer: Ein-/Ausschaltverzögerung": "Timer: on-/off-delay",
+"Wie die Ein-/Ausschaltverzögerung der LOGO!: OUT wird wahr, wenn IN ununterbrochen T_EIN Sekunden wahr war, und bleibt nach Abfall von IN noch T_AUS Sekunden wahr. Fällt IN vor Ablauf von T_EIN ab, beginnt T_EIN beim nächsten Mal neu. Kommt IN während T_AUS wieder, bleibt OUT wahr. Ein Steckmodul dafür gibt es nicht.": "Like the on-/off-delay of the LOGO!: OUT becomes true when IN has been true for T_EIN seconds without interruption, and stays true for another T_AUS seconds after IN drops. If IN drops before T_EIN has elapsed, T_EIN starts again next time. If IN returns during T_AUS, OUT stays true. There is no plug-in module for it.",
+"Der Ausgang schaltet ein, wenn der Eingang die Einschaltzeit lang anliegt, und bleibt nach dem Abfall des Eingangs noch die Ausschaltzeit aktiv.": "The output switches on when the input has been present for the on-delay time and stays active for the off-delay time after the input drops.",
+". Sonderfunktion der LOGO!; als Bauteil: Relais mit Ansprech- und Rückfallverzögerung, die verzögerten Kontakte tragen einen Bogen auf beiden Seiten.": ". Special function of the LOGO!; as a component: relay with on- and off-delay, the delayed contacts carry an arc on both sides.",
+"Ansprech- und Rückfallverzögerung": "On- and off-delay",
+"ansprech- und rückfallverzögert": "on- and off-delayed",
+"Falsche Anzahl an Argumenten für TONOF": "Wrong number of arguments for TONOF",
+"`TONOF` (Ein-/Ausschaltverzögerung) braucht GENAU drei Argumente: das Eingangssignal, die Einschaltverzögerung und die Ausschaltverzögerung, beide in Sekunden.": "`TONOF` (on-/off-delay) needs EXACTLY three arguments: the input signal, the on-delay and the off-delay, both in seconds.",
+"Schreibe `TONOF(IN, T_EIN, T_AUS)` — z.B. `TONOF(TASTER, 2.0, 5.0)`.": "Write `TONOF(IN, T_EIN, T_AUS)` — e.g. `TONOF(TASTER, 2.0, 5.0)`.",
+"Zeit-Argument von TONOF ist keine gültige Zeit": "Time argument of TONOF is not a valid time",
+"Weitere Bausteine (nach dem Vorbild der LOGO!-Sonderfunktionen)": "More blocks (modelled on the LOGO! special functions)",
+"Funktion TONOF": "Function TONOF",
+"Ein-/Ausschaltverzögerung (TONOF): Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. Am Original baut man sie aus einem ansprechverzögerten und einem rückfallverzögerten Zeitrelais in Reihe; das verhält sich anders, wenn das Signal während der Ausschaltzeit wiederkommt.": "On-/off-delay (TONOF): the FESTO timer relay 162243 has no such function. On the original it is built from an on-delayed and an off-delayed timer relay in series; that behaves differently if the signal returns during the off-delay time.",
+"Impuls (TP): Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. VALIS ergänzt sie.": "Pulse (TP): the FESTO timer relay 162243 has no such function. VALIS adds it."
+});
+VALIS_EN.vorlagen({
+"Das ⟦0⟧ Argument von `TONOF` ist eine Zeit in Sekunden (0 oder mehr), nicht `⟦1⟧`.": "The ⟦0⟧ argument of `TONOF` is a time in seconds (0 or more), not `⟦1⟧`.",
+"⟦0⟧ seit mindestens ⟦1⟧ ununterbrochen aktiv war und danach noch nicht länger als ⟦2⟧ inaktiv ist": "⟦0⟧ has been active continuously for at least ⟦1⟧ and has not been inactive for longer than ⟦2⟧ since",
+"ein ⟦0⟧ s · aus ⟦1⟧ s": "on ⟦0⟧ s · off ⟦1⟧ s",
+"TONOF ⟦0⟧ / ⟦1⟧": "TONOF ⟦0⟧ / ⟦1⟧"
+});

@@ -14,6 +14,7 @@
  * LOGO!-Sonderfunktionen, in eigenen Worten):
  *   TON  → Einschaltverzögerung (Trg, T)
  *   TOF  → Ausschaltverzögerung (Trg, T)
+ *   TONOF → Ein-/Ausschaltverzögerung (Trg, Ta, Tb), dieselbe Sonderfunktion
  *   TP   → Flankengetriggertes Wischrelais (Trg, TH = T, TL = 0, N = 1).
  *          Das einfache „Wischrelais (Impulsausgabe)“ der LOGO! bricht den
  *          Impuls ab, sobald Trg vor Ablauf auf 0 geht; TP hält ihn. Ein
@@ -55,14 +56,14 @@
   const AI_AUF = { 1: 'I7', 2: 'I8', 3: 'I1', 4: 'I2' };
   const NAME = {
     AND: 'AND', OR: 'OR', NOT: 'NOT',
-    TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TP: 'Flankengetriggertes Wischrelais',
+    TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TONOF: 'Ein-/Ausschaltverzögerung', TP: 'Flankengetriggertes Wischrelais',
     CTU: 'Vor-/Rückwärtszähler', SHR: 'Selbsthalterelais',
     ASW: 'Analoger Schwellwertschalter', AKOMP: 'Analogkomparator',
     ARITH: 'Arithmetikanweisung', PI: 'PI-Regler'
   };
   const NAME_EN = {
     AND: 'AND', OR: 'OR', NOT: 'NOT',
-    TON: 'On-delay', TOF: 'Off-delay', TP: 'Edge triggered wiping relay',
+    TON: 'On-delay', TOF: 'Off-delay', TONOF: 'On-/Off-delay', TP: 'Edge triggered wiping relay',
     CTU: 'Up/down counter', SHR: 'Latching relay',
     ASW: 'Analog threshold trigger', AKOMP: 'Analog comparator',
     ARITH: 'Math instruction', PI: 'PI controller'
@@ -70,7 +71,7 @@
   // Texte deutsch oder englisch (VALIS-Sprache beim Abbilden)
   const EN = () => window.currentLang === 'en';
   const L = (de, en) => (EN() ? en : de);
-  const SF = new Set(['TON', 'TOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SF = new Set(['TON', 'TOF', 'TONOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
   const ID = /^[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*$/;
   const ZAHL = /^-?\d+(?:[.,]\d+)?$/;
   const LS = 'valisLogoKlemmen';
@@ -270,6 +271,21 @@
         const ein = ie.map(e => ({ pin: '', ref: quelle(e.sourceId), neg: !!e.inverted }));
         b = gatter(typ, ein, id, zeile);
         const r = ablegen(b); platz.b = r.b; return platz;
+      }
+      if (n.type === 'TONOF') {
+        b = neuerBaustein('TONOF', id, zeile);
+        const platz = { art: 'b', b };
+        memo.set(id, platz);
+        sfEingang(b, 'Trg', pin('IN') || ie[0]);
+        const zeiten = [['Ta', +n.pt || 0], ['Tb', +n.pt2 || 0]].map(([nm, sek]) => {
+          const z = zeit(sek);
+          b.par.push({ n: nm, w: z.text });
+          if (!z.genau) grund(L('Zeit ' + nm + ' = ' + komma(sek) + ' s passt nicht genau in die Zeitbasis der LOGO! (' + z.text + ').', 'Time ' + nm + ' = ' + sek + ' s does not fit the LOGO! time base exactly (' + z.text + ').'), zeile, 'hinweis');
+          if (z.ausserhalb) grund(L('Zeit ' + nm + ' = ' + komma(sek) + ' s ist länger als 99:59 h.', 'Time ' + nm + ' = ' + sek + ' s is longer than 99:59 h.'), zeile, 'nicht');
+          return z.wert;
+        });
+        b.sek = zeiten[0]; b.sek2 = zeiten[1];
+        ablegen(b); return platz;
       }
       if (n.type === 'TON' || n.type === 'TOF' || n.type === 'TP') {
         b = neuerBaustein(n.type, id, zeile);
@@ -547,6 +563,14 @@
           if (trg) { st.ta = 0; st.q = true; } else if (st.q) { st.ta += dtMs; if (st.ta >= b.sek * 1000 - 1e-6) st.q = false; }
           break;
         }
+        case 'TONOF': {
+          // Ta läuft, solange Trg = 1 und Q = 0; Tb läuft, solange Trg = 0 und Q = 1
+          const trg = bit(ein(b, 'Trg'));
+          if (trg) { if (st.q) st.ta = 0; else { st.ta += dtMs; if (st.ta >= b.sek * 1000 - 1e-6) { st.q = true; st.ta = 0; } } }
+          else if (st.q) { st.ta += dtMs; if (st.ta >= b.sek2 * 1000 - 1e-6) { st.q = false; st.ta = 0; } }
+          else st.ta = 0;
+          break;
+        }
         case 'TP': {
           const trg = bit(ein(b, 'Trg'));
           if (trg && !st.alt) { st.q = true; st.ta = 0; } // Flanke 0 → 1 startet (auch neu)
@@ -821,8 +845,8 @@
     it.h = h;
     return it;
   }
-  const SF_TYP = new Set(['TON', 'TOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
-  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', TON: '⊓→', TOF: '→⊓', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
+  const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
   function breite(it) {
     if (it.kind !== 'box') return 0;
     let m = 0;
@@ -997,7 +1021,7 @@
       case 'AND': return bits().every(Boolean);
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
-      case 'TON': case 'TOF': case 'TP': case 'CTU': return !!(tm[b.src] && tm[b.src].q);
+      case 'TON': case 'TOF': case 'TONOF': case 'TP': case 'CTU': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

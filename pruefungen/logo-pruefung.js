@@ -130,7 +130,9 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     'Z := CTU(TON(TAKT, 0.5), RESET, 3)\nL := NOT Z',
     'LUEFTER := TONOF(TASTER, 1.5, 0.85)\nH := LUEFTER AND NOT B\nK := TONOF(LUEFTER, 0, 2.35)',
     'AUF := R_TRIG(TASTER)\nAB := F_TRIG(A AND NOT B)\nZ := CTU(AUF, RESET, 3)\nM := SR(AB, AUF)\nH := Z OR M',
-    'BETRIEB := TONR(MOTOR AND NOT STOER, QUITT, 2.35)\nH := BETRIEB OR (A AND NOT B)\nW := TONR(BETRIEB, NOT A, 0.85)'
+    'BETRIEB := TONR(MOTOR AND NOT STOER, QUITT, 2.35)\nH := BETRIEB OR (A AND NOT B)\nW := TONR(BETRIEB, NOT A, 0.85)',
+    // CTD: LD liegt beim Einschalten an (NOT …), sonst weicht nur der Startwert ab (Hinweis in logo.js)
+    'LEER := CTD(TEIL, NOT VOLL, 3)\nH := LEER OR (A AND NOT B)\nM := CTD(R_TRIG(A), NOT B, 2)'
   ];
   const ana = [['LUEFTER := TEMP > 50\nWARN := TEMP <= DRUCK\nGLEICH := TEMP == 30\nUNGL := DRUCK <> 20\nSUMME := TEMP + DRUCK * 2\nK := 40 >= TEMP', { TEMP: 'analog_in', DRUCK: 'analog_in' }],
     ['HEIZ := ZWEIPUNKT(T, 20, 4, HEIZEN)\nKUEHL := ZWEIPUNKT(T, 30, 2, KUEHLEN)', { T: 'analog_in' }]];

@@ -10391,3 +10391,30 @@ VALIS_EN.vorlagen({
 "⟦0⟧ insgesamt (auch mit Pausen) mindestens ⟦1⟧ aktiv war, seit ⟦2⟧ zuletzt zurückgesetzt hat": "⟦0⟧ has been active for at least ⟦1⟧ in total (pauses included) since ⟦2⟧ last reset it",
 "Das dritte Argument von `TONR` ist die Zeit PT in Sekunden (größer als 0), nicht `⟦0⟧`. An zweiter Stelle steht das Rücksetzsignal R.": "The third argument of `TONR` is the time PT in seconds (greater than 0), not `⟦0⟧`. The second place holds the reset signal R."
 });
+// Rückwärtszähler CTD (TIA: CD, LD, PV)
+VALIS_EN.dazu({
+"Rückwärtszähler": "Down counter",
+"Rückwärtszähler (CTD)": "Down counter (CTD)",
+"<b>Rückwärtszähler:</b> LD lädt 10, jede steigende Flanke an CD zählt 1 ab. Bei 0 schaltet OUT ein.": "<b>Down counter:</b> LD loads 10, every rising edge at CD counts down 1. At 0, OUT switches on.",
+"OUT := CTD(Zähl_Signal, Laden, Vorwahl)": "OUT := CTD(Count_signal, Load, Preset)",
+"LD (Laden) setzt den Zählerstand auf die Vorwahl. Jede steigende Flanke (0→1) des Zähl-Signals zählt 1 ab. OUT ist wahr, solange der Zählerstand 0 oder kleiner ist. Wie im TIA Portal beginnt der Zähler bei 0, OUT ist also vor dem ersten Laden wahr. Reihenfolge der Eingänge wie dort: CD, LD, PV.": "LD (load) sets the count to the preset. Every rising edge (0→1) of the count signal counts down 1. OUT is true as long as the count is 0 or less. As in the TIA Portal, the counter starts at 0, so OUT is true before the first load. Inputs in the same order as there: CD, LD, PV.",
+"abwärts zählen": "count down",
+"Restmenge": "remaining quantity",
+"Das Laden (LD) setzt den Zählerstand auf die Vorwahl, jeder Impuls zählt 1 ab. Bei 0 schaltet der Ausgang. <code>OUT := CTD(CD, LD, 20)</code>. Baustein im TIA Portal; typisch für Restmengen wie „Magazin leer“.": "Loading (LD) sets the count to the preset, every pulse counts down 1. At 0 the output switches. <code>OUT := CTD(CD, LD, 20)</code>. Block in the TIA Portal; typical for remaining quantities such as \"magazine empty\".",
+"Falsche Anzahl an Argumenten für CTD": "Wrong number of arguments for CTD",
+"`CTD` (Rückwärtszähler) braucht GENAU drei Argumente wie im TIA Portal: das Zählsignal CD, das Ladesignal LD und die Vorwahl PV. LD setzt den Zählerstand auf PV, jede steigende Flanke an CD zählt 1 ab, bei 0 wird der Ausgang wahr.": "`CTD` (down counter) needs EXACTLY three arguments as in the TIA Portal: the count signal CD, the load signal LD and the preset PV. LD sets the count to PV, every rising edge at CD counts down 1, at 0 the output becomes true.",
+"Schreibe `CTD(ZAEHL_SIGNAL, LADEN, VORWAHL)` — z.B. `CTD(TEIL_RAUS, MAGAZIN_VOLL, 20)`.": "Write `CTD(COUNT_SIGNAL, LOAD, PRESET)` — e.g. `CTD(PART_OUT, MAGAZINE_FULL, 20)`.",
+"CTD-Vorwahl ist keine ganze Zahl": "CTD preset is not a whole number",
+"Rechnungen vorher in eine eigene Zeile schreiben. Die Vorwahl ist die Zahl, die LD in den Zähler lädt.": "Write calculations in a separate line first. The preset is the number that LD loads into the counter.",
+"Zählrelais rückwärts (CTD)": "Counter relay, down (CTD)",
+"Zählrelais rückwärts (CTD): die Ladebedingung setzt den Zähler auf die Vorwahl, jede steigende Flanke im Strang zählt einen Schritt ab, bei 0 schalten seine Hilfskontakte. Doppelklick: Vorwahl und Laden. Im Code: CTD(Strang, Laden, Vorwahl).": "Down counter relay (CTD): the load condition sets the counter to the preset, every rising edge in the path counts down one step, at 0 its auxiliary contacts switch. Double-click: preset and load. In code: CTD(path, load, preset).",
+"Vorwahl (wird beim Laden gesetzt, schaltet bei 0):": "Preset (set on load, switches at 0):",
+"Laden (LD) durch (Variable oder Ausdruck, leer = nie):": "Load (LD) by (variable or expression, empty = never):",
+"rückwärts (CTD) · gibt es so nicht": "down (CTD) · does not exist like this",
+"Rückwärtszähler (CTD): Der FESTO-Vorwahlzähler 162355 zählt vorwärts und stellt mit R1/R2 auf 0 zurück. VALIS lässt ihn hier rückwärts zählen: R1/R2 lädt die Vorwahl, jeder Impuls an A1/A2 zählt 1 ab, bei 0 schaltet der Wechsler.": "Down counter (CTD): the FESTO preset counter 162355 counts up and resets to 0 via R1/R2. Here VALIS lets it count down: R1/R2 loads the preset, every pulse at A1/A2 counts down 1, at 0 the changeover contact switches.",
+"Counter (CTD)": "Counter (CTD)"
+});
+VALIS_EN.vorlagen({
+"⟦0⟧ seit dem letzten Laden durch ⟦1⟧ mindestens ⟦2⟧-mal aktiv geworden ist (oder noch nie geladen wurde)": "⟦0⟧ has become active at least ⟦2⟧ times since the last load by ⟦1⟧ (or has never been loaded)",
+"Das dritte Argument von `CTD` ist die Vorwahl PV. Es muss eine ganze Zahl sein (z.B. `10`, nicht `⟦0⟧`).": "The third argument of `CTD` is the preset PV. It must be a whole number (e.g. `10`, not `⟦0⟧`)."
+});

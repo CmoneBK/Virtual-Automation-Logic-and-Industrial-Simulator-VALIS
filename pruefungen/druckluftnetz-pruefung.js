@@ -211,6 +211,14 @@ const FAELLE = {
     R.push(['Kompressor aus: Druck fällt, Anzeige AUS', comp._pNetz < pVor - 0.15 && /^AUS/.test(comp.el.querySelector('.f2d-comp-info').textContent) && comp._netzAus === true, comp._pNetz.toFixed(2)]);
     F.netz.setzen({ aus: false }); comp.leakRate = 0; await warte(2500);
     R.push(['Wieder ein, dicht: Druck steht am Ausschaltdruck', Math.abs(comp._pNetz - 6) < 0.08, comp._pNetz.toFixed(2)]);
+    // Alle vier Darstellungen der 2D-Anlage: der Kompressor zeigt den Netzdruck vom Abgang
+    const bilder = [];
+    for (const bild of ['symbol', 'schnitt', 'aussen', 'gehaeuse']) {
+      window._fpAlleVentile(bild); await warte(700);
+      const sp = comp.el.querySelector('span'), inf = comp.el.querySelector('.f2d-comp-info');
+      bilder.push(bild + ': ' + (sp ? sp.textContent : 'kein Text') + (inf ? ' | ' + inf.textContent.slice(0, 30) : ' | keine Anzeige'));
+    }
+    R.push(['Alle vier Darstellungen: Kompressor der Anlage zeigt Netzdruck und Netz-Anzeige', bilder.every(b => /: \d[.,]\d+ bar \| \S/.test(b)) && Math.abs(comp._pNetz - 6) < 0.08, bilder.join(' ; ')]);
     // Zylinder nimmt Luft ab
     const vor = F.netz.stand().p;
     spsState.Y1 = true; await warte(600); spsState.Y1 = false; await warte(600); spsState.Y1 = true; await warte(600);
@@ -564,6 +572,88 @@ const FAELLE = {
     toggleSimulation(); await warte(200);
     F.netz.raffer(1);
     document.getElementById('fp-d-zu').click();
+    return R;
+  },
+  'Beispiele: Ringleitung, „Der Kompressor schaltet zu oft“, „Die Druckluft reicht nicht mehr“': () => {
+    const F = Fluidplan, R = [];
+    const N = F.beispiele(), idx = n => N.findIndex(x => x.includes(n));
+    const Z = id => F.zustand().teile[id], T = typ => F.plan().teile.filter(t => t.typ === typ);
+    const bau = n => { F.beispielLaden(idx(n), false); F._neu(); };
+    R.push(['Drei Netz-Beispiele in der Liste', idx('Ringleitung in der Halle') >= 0 && idx('Der Kompressor schaltet zu oft') >= 0 && idx('Die Druckluft reicht nicht mehr') >= 0, '']);
+    // --- Ringleitung
+    bau('Ringleitung in der Halle');
+    R.push(['Ringleitung: Plan ohne Meldung, alle Teile haben ein Kennzeichen', F.pruefen().length === 0 && F.plan().teile.every(t => t.typ === 'knoten' || t.typ === 'anlage' || /^-[A-Z]+\d+$/.test(t.bez)), F.pruefen().join(' | ')]);
+    const mo = T('anlage').find(t => t.o.name === 'Montage'), hr = T('hahn').find(t => !t.o.abgang), rohre = T('rohr');
+    F.netz.raffer(10); F.netz.rechnen(18, 0.05);   // 3 min
+    const dpRing = Math.max(Z(rohre[0].id).dp, Z(rohre[1].id).dp);
+    R.push(['Ring offen: beide Leitungen tragen, Montage hat genug Druck', Math.abs(Z(rohre[0].id).q) > 150 && Math.abs(Z(rohre[1].id).q) > 150 && !Z(mo.id).zuNiedrig, Z(rohre[0].id).q.toFixed(0) + ' / ' + Z(rohre[1].id).q.toFixed(0) + ' l/min, Δp ' + dpRing.toFixed(3) + ' bar']);
+    F.druecken(hr.id, 'N', true); F.druecken(hr.id, 'N', false);
+    let niedrig = false, dpStich = 0;
+    for (let i = 0; i < 36; i++) { F.netz.rechnen(0.5, 0.05); if (Z(mo.id).zuNiedrig) niedrig = true; dpStich = Math.max(dpStich, Z(rohre[0].id).dp, Z(rohre[1].id).dp); }
+    R.push(['Hahn im Ring zu: eine Leitung allein, Druckverlust auf ein Mehrfaches', dpStich > 2.5 * dpRing, dpStich.toFixed(3) + ' gegen ' + dpRing.toFixed(3) + ' bar']);
+    R.push(['Montage meldet dann „Druck zu niedrig“', niedrig, '']);
+    // --- Der Kompressor schaltet zu oft: z = 3000 · 0,633 · 0,367 · 60 / (3000 · 0,2) ≈ 70 /h
+    F.netz.raffer(1); bau('Der Kompressor schaltet zu oft');
+    const k2 = T('kompressor')[0], b2 = T('behaelter')[0];
+    R.push(['Kompressor: Speicher rund 3000 l (Behälter 2000 l, Netz rund 1000 l)', Math.abs(F.netz.kennzahlen().volumen - 3000) < 10, F.netz.kennzahlen().volumen.toFixed(0)]);
+    F.netz.raffer(20); F.netz.rechnen(60, 0.05);   // 20 min
+    let K = F.netz.kennzahlen();
+    R.push(['Ist-Zustand: Bedarf rund 1,9 m³/min, davon Leckage rund 1,1 m³/min', Math.abs(K.qv - 1900) < 60 && Math.abs(K.leck - 1100) < 30, K.qv.toFixed(0) + ' / ' + K.leck.toFixed(0) + ' l/min']);
+    R.push(['Ist-Zustand: rund 70 Schaltspiele je Stunde (Grenze 20)', Math.abs(K.kompressoren[0].spiele - 70) < 6, K.kompressoren[0].spiele.toFixed(1)]);
+    // Weg A: Druckschalter 6,6 / 7,4 bar → rund 17 /h
+    F.netz.raffer(1); F.aendern(k2.id, { pEin: 6.6, pAus: 7.4 }); F._neu(); F.netz.raffer(20); F.netz.rechnen(90, 0.05);
+    K = F.netz.kennzahlen();
+    R.push(['Weg A (6,6 / 7,4 bar): unter 20 Schaltspiele je Stunde, Druck bleibt über 6,5 bar', K.kompressoren[0].spiele < 20 && K.kompressoren[0].spiele > 13 && Math.min(...F.netz.aufzeichnung().p[b2.id]) > 6.5, K.kompressoren[0].spiele.toFixed(1)]);
+    // Weg A und C: Leckagen dicht → rund 15 /h
+    F.netz.raffer(1); F.plan().teile.forEach(t => { if (t.typ === 'hahn' || t.typ === 'ableiter') F.aendern(t.id, { leck: 0 }); }); F._neu(); F.netz.raffer(20); F.netz.rechnen(90, 0.05);
+    K = F.netz.kennzahlen();
+    R.push(['Weg A und C (Leckagen dicht): rund 15 Schaltspiele je Stunde, Leckage 0', Math.abs(K.kompressoren[0].spiele - 14.7) < 2.5 && K.leck < 1, K.kompressoren[0].spiele.toFixed(1)]);
+    // --- Die Druckluft reicht nicht mehr
+    F.netz.raffer(1); bau('Die Druckluft reicht nicht mehr');
+    const neu = T('anlage').find(t => t.o.name === 'Neue Geräte'), fe = T('anlage').find(t => t.o.name === 'Fertigung'), k3 = T('kompressor')[0], b3 = T('behaelter')[0];
+    R.push(['Druckluft: Speicher 1500 l, neue Geräte stehen zuerst', Math.abs(F.netz.kennzahlen().volumen - 1500) < 3 && Z(neu.id).aus === true, F.netz.kennzahlen().volumen.toFixed(1)]);
+    F.netz.raffer(20); F.netz.rechnen(90, 0.05);   // 30 min
+    K = F.netz.kennzahlen();
+    R.push(['Bestand: rund 310 l/min, davon rund 120 l/min Leckage, die Luft reicht', Math.abs(K.qv - 311) < 12 && Math.abs(K.leck - 121) < 6 && !Z(fe.id).zuNiedrig && Z(b3.id).pNetz >= 6.45, K.qv.toFixed(0) + ' / ' + K.leck.toFixed(0)]);
+    // neue Geräte starten: 190 + 118 + Leckage > 400
+    F.druecken(neu.id, 'N', true); F.druecken(neu.id, 'N', false);
+    F.netz.rechnen(180, 0.05);   // 60 min
+    R.push(['Neue Geräte dazu: Kompressor läuft durch, Druck fällt unter 6 bar, Anlagen melden „Druck zu niedrig“', Z(k3.id).lauf && Z(b3.id).pNetz < 6 && Z(neu.id).zuNiedrig && Z(fe.id).zuNiedrig, Z(b3.id).pNetz.toFixed(2) + ' bar']);
+    // Druckabfallprüfung wie in der Lernsituation: 7,0 → 6,2 bar in 10 min
+    F.netz.raffer(1); bau('Die Druckluft reicht nicht mehr');
+    F.druecken(k3.id, 'N', true); F.druecken(k3.id, 'N', false);
+    const fe2 = T('anlage').find(t => t.o.name === 'Fertigung'), k4 = T('kompressor')[0];
+    F.druecken(k4.id, 'N', true); F.druecken(k4.id, 'N', false); F.druecken(fe2.id, 'N', true); F.druecken(fe2.id, 'N', false);
+    F.netz.pruefStart(); F.netz.raffer(20); F.netz.rechnen(30, 0.05);
+    const e = F.netz.pruefStopp();
+    R.push(['Druckabfallprüfung: 7,0 auf rund 6,2 bar in 10 min, also rund 120 l/min', e && Math.abs(e.p1 - 6.2) < 0.05 && Math.abs(e.leck - 120) < 6 && Math.abs(e.V - 1500) < 3, e && e.p1.toFixed(2) + ' bar, ' + e.leck.toFixed(0) + ' l/min']);
+    // Leckagen behoben: Luft reicht für die neuen Geräte
+    F.netz.raffer(1); F.plan().teile.forEach(t => { if (t.typ === 'hahn') F.aendern(t.id, { leck: 0 }); }); F.aendern(T('anlage').find(t => t.o.name === 'Neue Geräte').id, { aus: false }); F._neu(); F.netz.raffer(20); F.netz.rechnen(90, 0.05);
+    K = F.netz.kennzahlen();
+    R.push(['Leckagen behoben: 190 + 118 = 308 l/min, die Luft reicht für die neuen Geräte', Math.abs(K.qv - 304) < 15 && T('anlage').every(t => !Z(t.id).zuNiedrig) && Z(T('behaelter')[0].id).pNetz >= 6.45, K.qv.toFixed(0) + ' l/min']);
+    F.netz.raffer(1);
+    return R;
+  },
+  'Netz im Auto-Schaltplan: nicht verbundener Plan zeigt das Netz neben der Pneumatik': async () => {
+    const F = Fluidplan, R = [];
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    clearFactory(true); F._leeren(); await warte(300);
+    const c = createFactoryObject('zylinder_double', 'Y1'); c.x = 300; c.y = 200; updateObjTransform(c);
+    generatePneumaticSetup(c, 'single'); await warte(300);
+    const comp = factoryObjects.find(o => o.type === 'compressor');
+    const ziel = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); document.body.appendChild(ziel);
+    const ohne = F._schaltbild(ziel, {});
+    const nOhne = ohne && ohne.g ? ohne.g.querySelectorAll('[data-obj-id]').length : 0;
+    F.netz.sichern(comp, false); await warte(300);
+    const b = F.setzen('anlage', 600, 600, { art: 'baustein', name: 'Nachbaranlage', bedarf: 10, takte: 10 });
+    const kn = F.plan().teile.find(t => t.typ === 'behaelter'); F.verbinden(kn.id, '2', b, '1');
+    R.push(['Plan ist nicht verbunden und trägt das Netz', F.plan().anlage !== true && F.netz.aktiv(), '']);
+    const mit = F._schaltbild(ziel, {});
+    const g = mit && (mit.g || mit), txt = g && g.textContent || '';
+    R.push(['Auto-Schaltplan zeigt Kompressor, Behälter und Baustein des Netzes', !!g && /-GQA\d/.test(txt) && /-CM\d/.test(txt) && /Nachbaranlage/.test(txt) && /diese Anlage/.test(txt), txt.replace(/\s+/g, ' ').slice(0, 160)]);
+    R.push(['„diese Anlage“ im Bild gehört zum Kompressor der 2D-Anlage (Klick führt dorthin)', !!g && !!g.querySelector('[data-obj-id="' + comp.id + '"]'), '']);
+    ziel.remove();
+    F.netz.entfernen(); clearFactory(true); F._leeren();
     return R;
   },
   'Verbundener Plan: Netz bleibt beim Übernehmen, Quelle hängt am Abgang': async () => {

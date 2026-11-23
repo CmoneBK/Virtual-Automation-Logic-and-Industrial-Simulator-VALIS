@@ -1116,7 +1116,7 @@
     };
     TYP.ableiter = {
         name: 'Kondensatableiter', buchstabe: 'Z', netz: true,
-        optionen: { },
+        optionen: { leck: 0 },
         geometrie() { return { ports: [{ id: '1', x: 0, y: -20, dir: [0, -1], art: 'a', ohneNr: true }], box: [-12, -22, 12, 20] }; },
         zeichne(t, g) {
             L16(g, 0, -20, 0, -9);
@@ -2732,6 +2732,7 @@
             num('Schaltpunkt', 'schaltpunkt', 0, 100000, 10, 'l/min');
             h('div', { class: 'fp-hinw', text: 'Der Durchflusssensor in der Hauptleitung misst, wie viel Luft die Halle abnimmt, und zählt die Menge. Steht die Fertigung, zeigt er die Leckage des Netzes. Oberhalb des Messbereichs bleibt der Wert am Endwert stehen. Im Oszilloskop erscheinen Durchfluss und Druck als Kanäle.' }, box);
         } else if (t.typ === 'ableiter') {
+            num('Hängt offen: Leckage (bei 6 bar)', 'leck', 0, 5000, 1, 'l/min');
             h('div', { class: 'fp-hinw', text: 'Der Kondensatableiter lässt das Wasser ab, das sich an seinem Anschluss sammelt, zum Beispiel am Behälter. Ohne Ableiter bleibt das Kondensat im Behälter stehen und muss von Hand abgelassen werden. Kondensat enthält Öl und gehört in den Öl-Wasser-Trenner, nicht in den Abfluss.' }, box);
         } else if (t.typ === 'awartung') {
             num('Ausgangsdruck', 'p', 0.5, 10, 0.5, 'bar');
@@ -2951,6 +2952,7 @@
             case 'hahn': if (o.abgang) d.push('Abgang mit Kupplung'); if (o.zu) d.push('geschlossen'); if (zahl(o.leck, 0) > 0) d.push('Leckage ' + zf(o.leck) + ' l/min'); break;
             case 'ktrockner': d.push('Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar', 'Drucktaupunkt ' + zf(o.tp) + ' °C'); break;
             case 'nfilter': d.push('Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar'); if (zahl(o.schmutz, 0) > 0) d.push('Verschmutzung ' + zf(o.schmutz, 0) + ' %'); break;
+            case 'ableiter': if (zahl(o.leck, 0) > 0) d.push('hängt offen: Leckage ' + zf(o.leck) + ' l/min'); break;
             case 'nmess': d.push('Messbereich ' + zf(o.bereich, 0) + ' l/min'); if (o.var) d.push('Eingang ' + o.var); break;
             case 'awartung': d.push('p = ' + zf(o.p) + ' bar', 'Q_N = ' + zf(o.qN) + ' l/min', 'Δp_N = ' + zf(o.dpN) + ' bar'); break;
             case 'anlage': if (istBaustein(t)) d.push(zf(o.bedarf) + ' l je Takt', zf(o.takte) + ' Takte/min', 'Gleichzeitigkeit ' + zf(o.gleich, 0) + ' %', 'Mindestdruck ' + zf(o.pMin) + ' bar'); else d.push('2D-Anlage dieses Standes'); break;
@@ -3214,7 +3216,36 @@
             const ag = T('aggregat', 60, 460, '0P1'), z = T('zyl_dw', 40, -240, '1M1', H({ d: 40, dStange: 20, hub: 200, last: 3000 })),
             v = T('ventil', 40, 160, '1Q1', H({ wege: '4/3', links: 'magnet', rechts: 'magnet', mitte: 'umlauf', varL: 'Y1', varR: 'Y2' })),
             sr = T('stromregel', 50, 0, '1R1', Object.assign(H(), PROP_W_STD('stromregel'), { varS: 'YQ', von: 0, bis: 6 })), m = T('manometer', -80, 300, '0P2', H());
-            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(m, '1', ag, 'P'); L(v, '4', sr, '1'); L(sr, '2', z, 'K'); L(v, '2', z, 'S'); } }
+            L(ag, 'P', v, '1'); L(ag, 'T', v, '3'); L(m, '1', ag, 'P'); L(v, '4', sr, '1'); L(sr, '2', z, 'K'); L(v, '2', z, 'S'); } },
+        { name: 'Druckluftnetz: Ringleitung in der Halle', netz: true, text: 'Kompressor, Behälter, Trockner und Filter speisen einen Ring aus zwei Leitungen von je 120 m. Die Montage hängt am fernen Ende. Simulation starten und im Diagramm „Netz“ zusehen. Dann den Hahn im Ring anklicken: Jetzt trägt eine Leitung allein den ganzen Strom, der Druckverlust steigt auf ein Mehrfaches und die Montage meldet „Druck zu niedrig“.',
+          bau(T, L) {
+            const k = T('kompressor', 0, 120, '', { q: 1500, pEin: 6.8, pAus: 7.3 }), b = T('behaelter', 140, 80, '', { V: 1000 }), ab = T('ableiter', 200, 160, ''),
+            tr = T('ktrockner', 340, 80, '', { qN: 1500, dpN: 0.15 }), fi = T('nfilter', 540, 80, '', { qN: 1500, dpN: 0.05 }), m = T('nmess', 700, 80, '', { bereich: 3000 }),
+            t1 = T('knoten', 860, 80, ''), r1 = T('rohr', 1060, -20, '', { L: 120, d: 16 }), hr = T('hahn', 960, 200, ''), r2 = T('rohr', 1140, 200, '', { L: 120, d: 16 }), t2 = T('knoten', 1280, 80, ''),
+            a1 = T('hahn', 860, 300, '', { abgang: true }), f = T('anlage', 860, 420, '', { art: 'baustein', name: 'Fräszelle', bedarf: 15, takte: 20, pMin: 6 }),
+            a2 = T('hahn', 1400, 80, '', { abgang: true, leck: 20 }), w = T('awartung', 1400, 200, '', { p: 6.3, qN: 1500, dpN: 0.2 }), mo = T('anlage', 1400, 340, '', { art: 'baustein', name: 'Montage', bedarf: 30, takte: 20, pMin: 6.2 });
+            a1.rot = 90; a2.rot = 0;
+            L(k, '1', b, '1'); L(b, '1', ab, '1'); L(b, '2', tr, '1'); L(tr, '2', fi, '1'); L(fi, '2', m, '1'); L(m, '2', t1, 'P');
+            L(t1, 'P', r1, '1'); L(r1, '2', t2, 'P'); L(t1, 'P', hr, '1'); L(hr, '2', r2, '1'); L(r2, '2', t2, 'P');
+            L(t1, 'P', a1, '1'); L(a1, '2', f, '1'); L(t2, 'P', a2, '1'); L(a2, '2', w, '1'); L(w, '2', mo, '1'); } },
+        { name: 'Druckluftnetz: Der Kompressor schaltet zu oft', netz: true, text: 'Zahlen der Lernsituation: K1 liefert 3,0 m³/min, Behälter 2000 l, Netz rund 1000 l, die Halle braucht 0,8 m³/min, die Leckagen blasen 1,1 m³/min ab (die größte am Kondensatableiter, der offen hängt). Der neue Druckschalter steht auf 6,9 / 7,1 bar: Der Kompressor schaltet rund 70-mal je Stunde. Im Diagramm „Netz“ mit Zeitraffer ablesen, dann die Wege vergleichen: Druckschalter wieder auf 6,6 / 7,4 bar, Behälter 4000 l, Leckagen auf 0.',
+          bau(T, L) {
+            const k = T('kompressor', 0, 120, '', { q: 3000, pEin: 6.9, pAus: 7.1 }), b = T('behaelter', 140, 80, '', { V: 2000 }), ab = T('ableiter', 200, 160, '', { leck: 515 }),
+            m = T('nmess', 380, 80, '', { bereich: 5000 }), r = T('rohr', 600, 80, '', { L: 127, d: 100 }), t1 = T('knoten', 760, 80, ''), t2 = T('knoten', 1000, 80, ''), t3 = T('knoten', 1240, 80, ''),
+            a1 = T('hahn', 760, 180, '', { abgang: true, leck: 170 }), a2 = T('hahn', 1000, 180, '', { abgang: true, leck: 130 }), a3 = T('hahn', 1240, 180, '', { abgang: true, leck: 128 }),
+            h = T('anlage', 1420, 200, '', { art: 'baustein', name: 'Halle (Spätschicht)', bedarf: 8, takte: 100, pMin: 6.5 });
+            a1.rot = 90; a2.rot = 90; a3.rot = 90;
+            L(k, '1', b, '1'); L(b, '1', ab, '1'); L(b, '2', m, '1'); L(m, '2', r, '1'); L(r, '2', t1, 'P'); L(t1, 'P', t2, 'P'); L(t2, 'P', t3, 'P');
+            L(t1, 'P', a1, '1'); L(t2, 'P', a2, '1'); L(t3, 'P', a3, '1'); L(t3, 'P', h, '1'); } },
+        { name: 'Druckluftnetz: Die Druckluft reicht nicht mehr', netz: true, text: 'Zahlen der Lernsituation: Der Kompressor liefert 400 l/min, das Netz mit Behälter fasst 1500 l bei 7 bar. Der Bestand braucht 310 l/min, davon sind 120 l/min Leckage. Klick auf „Neue Geräte“ startet sie (118 l/min): Die Luft reicht nicht mehr, der Druck fällt, die Anlagen melden „Druck zu niedrig“. Druckabfallprüfung im Diagramm „Netz“: Kompressor und Anlagen anklicken (aus), Messung starten und nach 10 Minuten Netzzeit beenden (7,0 auf 6,2 bar, also 120 l/min, rund 720 € im Jahr). Leckagen an den Abgängen auf 0 stellen: Dann reicht die Luft für die neuen Geräte.',
+          bau(T, L) {
+            const k = T('kompressor', 0, 120, '', { q: 400, pEin: 6.5, pAus: 7 }), b = T('behaelter', 140, 80, '', { V: 1000 }), ab = T('ableiter', 200, 160, ''), m = T('nmess', 300, 80, '', { bereich: 1000 }),
+            t1 = T('knoten', 420, 80, ''), r1 = T('rohr', 600, 0, '', { L: 127.3, d: 50 }), r2 = T('rohr', 600, 160, '', { L: 127.3, d: 50 }), t2 = T('knoten', 780, 80, ''),
+            a1 = T('hahn', 420, 260, '', { abgang: true, leck: 75 }), f = T('anlage', 420, 380, '', { art: 'baustein', name: 'Fertigung', bedarf: 19, takte: 10, pMin: 6 }),
+            a2 = T('hahn', 880, 80, '', { abgang: true, leck: 35.5 }), n = T('anlage', 880, 220, '', { art: 'baustein', name: 'Neue Geräte', bedarf: 11.81, takte: 10, pMin: 6, aus: true });
+            a1.rot = 90;
+            L(k, '1', b, '1'); L(b, '1', ab, '1'); L(b, '2', m, '1'); L(m, '2', t1, 'P'); L(t1, 'P', r1, '1'); L(r1, '2', t2, 'P'); L(t1, 'P', r2, '1'); L(r2, '2', t2, 'P');
+            L(t1, 'P', a1, '1'); L(a1, '2', f, '1'); L(t2, 'P', a2, '1'); L(a2, '2', n, '1'); } }
     ];
     function beispielBauen(b) {
         const neu = { v: 2, teile: [], leitungen: [] };
@@ -3231,6 +3262,7 @@
         const { neu, map } = beispielBauen(b);
         aendern(() => { plan = neu; auswahl.clear(); geoCache.clear(); });
         sim = null; einpassen(); status('Beispiel: ' + b.name + '. ' + kennTextNeu(b.text, map));
+        if (b.netz && diagBox) { diagBox.classList.add('offen'); const dkn = D().getElementById('fp-diagk'); if (dkn) dkn.classList.add('an'); diagArt = 'netz'; diagZeichnen(true); }
         if (b.code && mitCode !== false) {
             const ta = document.getElementById('code');
             if (ta && ta.value.trim() !== b.code.trim() && (mitCode === true || !ta.value.trim() || W().confirm('Das Beispiel bringt ein kleines Programm mit:\n\n' + b.code + '\n\nSoll es das Programm im Editor ersetzen?'))) {
@@ -3906,6 +3938,7 @@
         if (t.typ === 'nfilter') return zf(o.qN, 0) + ' l/min' + (zahl(o.schmutz, 0) > 0 ? ' · ' + zf(o.schmutz, 0) + ' %' : '');
         if (t.typ === 'awartung') return zf(o.p) + ' bar';
         if (t.typ === 'nmess') return '0 … ' + zf(o.bereich, 0) + ' l/min';
+        if (t.typ === 'ableiter') return zahl(o.leck, 0) > 0 ? (window.currentLang === 'en' ? 'Leakage ' : 'Leckage ') + zf(o.leck, 0) + ' l/min' : '';
         return '';
     }
     // Ein Netzschritt (dt in s): Kompressoren, Leitungen, Hähne, Leckagen, Sicherheitsventile
@@ -3977,7 +4010,8 @@
                     case 'nmess': { const q = fluss(netz(t, '1'), netz(t, '2'), G_HAHN, 0); z.qSum += q; z.summe += Math.abs(q); break; }
                     case 'ableiter': {
                         const n1 = netz(t, '1'), fe = fehlerAktiv(t.id); z.qLeck = 0;
-                        if (n1 != null && fe === 'offen') { const B = N[n1], p1 = B.M / B.V - 1; if (p1 > 0) { const m = Math.min(50 / 60 * p1 / LECK_P * dt, B.M - B.V); B.M -= m; z.qLeck = 50 * p1 / LECK_P; z.leckSum = (z.leckSum || 0) + m; } }
+                        const leck = zahl(o.leck, 0) + (fe === 'offen' ? 50 : 0);
+                        if (n1 != null && leck > 0) { const B = N[n1], p1 = B.M / B.V - 1; if (p1 > 0) { const m = Math.min(leck / 60 * p1 / LECK_P * dt, B.M - B.V); B.M -= m; z.qLeck = leck * p1 / LECK_P; z.leckSum = (z.leckSum || 0) + m; } }
                         break;
                     }
                     case 'anlage': {
@@ -4346,7 +4380,7 @@
     }
     const netzVolumen = () => plan.teile.reduce((m, t) => m + (t.typ === 'behaelter' ? Math.max(1, zahl(t.o.V, 500)) : t.typ === 'rohr' ? rohrVolumen(t.o) : 0), 0);
     // Luftbedarf nach den Angaben im Plan (ohne Messung): Bausteine und Leckagen der Abgänge
-    const netzBedarfPlan = () => plan.teile.reduce((m, t) => m + (istBaustein(t) && !t.o.aus ? bausteinBedarf(t.o) : t.typ === 'hahn' ? zahl(t.o.leck, 0) * 7 / LECK_P : 0), 0);
+    const netzBedarfPlan = () => plan.teile.reduce((m, t) => m + (istBaustein(t) && !t.o.aus ? bausteinBedarf(t.o) : t.typ === 'hahn' || t.typ === 'ableiter' ? zahl(t.o.leck, 0) * 7 / LECK_P : 0), 0);
     function netzKennzahlen() {
         const K = netzKosten(), S = sim && sim.netzTeile ? sim : null, teile = S ? S.netzTeile : plan.teile.filter(istNetz);
         const r = { kosten: K, euroM3: K.spez / 60 * K.strom, zeit: S ? S.netzZeit : 0, kompressoren: [], qk: 0, qv: 0, leck: 0, kW: 0, volumen: netzVolumen() };
@@ -4562,7 +4596,7 @@
         } else if (t.typ === 'ktrockner') {
             const aus = z ? (z.aus || z.feucht) : !!t.o.aus, k = r.g.querySelector('.fp-trockner');
             if (k) k.setAttribute('stroke', aus ? '#d32f2f' : 'currentColor');
-            if (z) txt = (aus ? W2('AUS · ', 'OFF · ') : '') + zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, 2) + ' bar · ' + (aus ? W2('feucht ins Netz: ', 'wet into the network: ') + wasserText(z.nass) : W2('Kondensat ', 'condensate ') + wasserText(z.kond));
+            if (z) txt = (aus ? W2('AUS · ', 'OFF · ') : '') + zf(Math.abs(z.q), 0) + ' l/min · Δp ' + zf(z.dp, 2) + ' bar · ' + (aus ? W2('feucht', 'wet') : 'H₂O ' + wasserText(z.kond));
         } else if (t.typ === 'nfilter') {
             const k = r.g.querySelector('.fp-nfilter'), rot = !!(z && z.dp > zahl(t.o.dpMax, 0.35));
             if (k) k.setAttribute('stroke', rot ? '#d32f2f' : 'currentColor');
@@ -4580,7 +4614,7 @@
         } else if (t.typ === 'hahn') {
             const k = r.g.querySelector('.fp-hahn'), zu = z ? z.zu : !!t.o.zu;
             if (k) k.setAttribute('fill', zu ? 'currentColor' : 'var(--fp-papier)');
-            if (z) txt = (zu ? W2('zu', 'closed') : zf(Math.abs(z.q), 0) + ' l/min') + ' · ' + zf(z.p, 2) + ' bar' + (z.qLeck > 0.05 ? W2(' · Leck ', ' · leak ') + zf(z.qLeck, 0) + ' l/min' : '');
+            if (z) txt = (zu ? W2('zu · ', 'closed · ') : Math.abs(Math.abs(z.q) - z.qLeck) < 1 ? '' : zf(Math.abs(z.q), 0) + ' l/min · ') + zf(z.p, 2) + ' bar' + (z.qLeck > 0.05 ? W2(' · Leck ', ' · leak ') + zf(z.qLeck, 0) + ' l/min' : '');
         } else if (istBaustein(t)) {
             const rk = r.g.querySelector('.fp-anlage'), rot = !!(z && z.zuNiedrig && !z.aus);
             if (rk) { rk.setAttribute('stroke', rot ? '#d32f2f' : 'currentColor'); rk.setAttribute('stroke-width', rot ? 2.2 : 1.2); }
@@ -7103,6 +7137,14 @@ function versorgungMerken(F) {
             plan.teile.forEach(t => { if (t.o && t.o.anlage) map[t.id] = t.o.anlage; });
             for (const [id, w] of kennSpiegel) if (F.some(o => o.id === id)) map[w.teil] = id;
             quellen.push({ p: plan, s: sim, map });
+        }
+        // Druckluftnetz im Plan (nicht verbunden): Das Netz erscheint neben der Pneumatik der 2D-Anlage,
+        // der Verbraucher „diese Anlage“ und der Kompressor zeigen auf den Kompressor der 2D-Anlage
+        if (!(plan.anlage && plan.teile.length) && plan.teile.some(t => t.typ === 'kompressor')) {
+            const nt = plan.teile.filter(istNetz), ids = new Set(nt.map(t => t.id)), map = {};
+            const comp = F.find(o => o.type === 'compressor');
+            if (comp) nt.forEach(t => { if (t.typ === 'anlage' && t.o.art === 'diese') map[t.id] = comp.id; });
+            quellen.push({ p: Object.assign({}, plan, { teile: nt, leitungen: plan.leitungen.filter(l => ids.has(l.a.t) && ids.has(l.b.t)) }), s: sim && sim.netzTeile ? sim : null, map, netz: true });
         }
         const sch = schattenFuerBild(F);
         if (sch) {

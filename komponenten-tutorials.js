@@ -48,7 +48,7 @@
         '</div>').join('') + '</div>';
 
     // Code mit Hervorhebung wie in den bestehenden Tutorials, Knöpfe Hinzufügen/Ersetzen
-    const FUNK = /^(TON|TOF|TP|CTU|PID|ZWEIPUNKT)$/;
+    const FUNK = /^(TONOF|TON|TOF|TP|CTU|PID|ZWEIPUNKT)$/;
     function hl(code) {
         return code.split('\n').map(z => {
             const k = z.indexOf('//');

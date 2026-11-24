@@ -3294,6 +3294,7 @@
                                 <li><code data-glossary="TONR" title="Klicken zum Einfügen" onclick="insertSymbol('TONR(SIGNAL, RESET, 10.0)')" style="cursor:pointer">OUT := TONR(IN, R, 10.0)</code> ➔ <span data-i18n="leg_tonr"><b>Speichernde Einschaltverzögerung:</b> Die Zeit läuft, solange IN anliegt, und bleibt stehen, wenn IN abfällt. Sind 10.0s zusammengekommen, schaltet OUT ein. R setzt Zeit und OUT zurück.</span></li>
                                 <li><code data-glossary="CTD" title="Klicken zum Einfügen" onclick="insertSymbol('CTD(SIGNAL, LADEN, 10)')" style="cursor:pointer">OUT := CTD(CD, LD, 10)</code> ➔ <span data-i18n="leg_ctd"><b>Rückwärtszähler:</b> LD lädt 10, jede steigende Flanke an CD zählt 1 ab. Bei 0 schaltet OUT ein.</span></li>
                                 <li><code data-glossary="CTUD" title="Klicken zum Einfügen" onclick="insertSymbol('CTUD(HOCH, RUNTER, RESET, LADEN, 10)')" style="cursor:pointer">Z := CTUD(CU, CD, R, LD, 10)</code> ➔ <span data-i18n="leg_ctud"><b>Vor-/Rückwärtszähler:</b> CU zählt 1 hoch, CD 1 ab, R setzt auf 0, LD lädt 10. Z ist wahr ab 10, <code>Z_QD</code> bei 0 oder weniger, <code>Z_CV</code> ist der Zählerstand.</span></li>
+                                <li><code title="Klicken zum Einfügen" onclick="insertSymbol('SR(SETZEN, RUECKSETZEN; SPEICHER)')" style="cursor:pointer">G := SR(A, B; SPEICHER)</code> ➔ <span data-i18n="leg_sr_merker"><b>Speicher mit Merker:</b> Ohne Namen speichert G selbst. Mit <code>; SPEICHER</code> liegt der Zustand im Merker SPEICHER, G wird daraus geschaltet. In der Langform: <code>G := (Q1; SPEICHER)</code>, die Klammer geht auch an S1 oder R1, z. B. <code>S1 := (A; SPEICHER)</code>.</span></li>
                             </ul>
                 </div>
                 <div class="leg-ext-panel" data-leg-ext-panel="regler" hidden>
@@ -6498,6 +6499,7 @@ const aktiv = resolveLinked(obj, spsState);
                 "leg_rtrig": "<b>Flanke steigend:</b> OUT ist einen Zyklus lang wahr, wenn CLK von 0 auf 1 wechselt.",
                 "leg_ftrig": "<b>Flanke fallend:</b> OUT ist einen Zyklus lang wahr, wenn CLK von 1 auf 0 wechselt.",
                 "leg_ctd": "<b>Rückwärtszähler:</b> LD lädt 10, jede steigende Flanke an CD zählt 1 ab. Bei 0 schaltet OUT ein.",
+                "leg_sr_merker": "<b>Speicher mit Merker:</b> Ohne Namen speichert G selbst. Mit <code>; SPEICHER</code> liegt der Zustand im Merker SPEICHER, G wird daraus geschaltet. In der Langform: <code>G := (Q1; SPEICHER)</code>, die Klammer geht auch an S1 oder R1, z. B. <code>S1 := (A; SPEICHER)</code>.",
                 "leg_ctud": "<b>Vor-/Rückwärtszähler:</b> CU zählt 1 hoch, CD 1 ab, R setzt auf 0, LD lädt 10. Z ist wahr ab 10, <code>Z_QD</code> bei 0 oder weniger, <code>Z_CV</code> ist der Zählerstand.",
                 "leg_tonr": "<b>Speichernde Einschaltverzögerung:</b> Die Zeit läuft, solange IN anliegt, und bleibt stehen, wenn IN abfällt. Sind 10.0s zusammengekommen, schaltet OUT ein. R setzt Zeit und OUT zurück.",
                 "leg_tonof": "<b>Ein-/Ausschaltverzögerung:</b> Schaltet ein, wenn IN 2.0s anliegt, und bleibt nach Abfall von IN noch 5.0s aktiv. Kommt IN in dieser Zeit wieder, bleibt OUT an.",
@@ -6941,6 +6943,7 @@ Du musst exakt dieses JSON-Format ausgeben. Der Logik-Code kommt als einzelner S
                 "leg_rtrig": "<b>Rising edge:</b> OUT is true for one cycle when CLK changes from 0 to 1.",
                 "leg_ftrig": "<b>Falling edge:</b> OUT is true for one cycle when CLK changes from 1 to 0.",
                 "leg_ctd": "<b>Down counter:</b> LD loads 10, every rising edge at CD counts 1 down. At 0 OUT switches on.",
+                "leg_sr_merker": "<b>Latch with marker:</b> Without a name, G stores the state itself. With <code>; SPEICHER</code> the state lives in the marker SPEICHER and G is switched from it. Long form: <code>G := (Q1; SPEICHER)</code>; the bracket can also go on S1 or R1, e.g. <code>S1 := (A; SPEICHER)</code>.",
                 "leg_ctud": "<b>Up/down counter:</b> CU counts 1 up, CD 1 down, R resets to 0, LD loads 10. Z is true from 10, <code>Z_QD</code> at 0 or less, <code>Z_CV</code> is the count.",
                 "leg_tonr": "<b>Retentive on-delay:</b> The time runs while IN is present and holds when IN drops. Once 10.0s have added up, OUT switches on. R resets the time and OUT.",
                 "leg_tonof": "<b>On-/off-delay:</b> Switches on when IN has been present for 2.0s and stays on for another 5.0s after IN drops. If IN returns during that time, OUT stays on.",
@@ -9810,7 +9813,8 @@ You must output exactly this JSON format. The logic code goes as a single string
         // SPS-Platine im Steckaufbau keine Buchse hat (Christoph 23.11.2026).
         // Ohne Programm (Laden, Tests) gilt wie bisher die ganze Tabelle.
         const _spsAktiv = function() {
-            const n = (globalInputs || []).concat(globalOutputs || []);
+            const _gq = window._generatedQ || new Set();
+            const n = (globalInputs || []).concat(globalOutputs || []).filter(x => !_gq.has(x));
             return n.length ? new Set(n) : null;
         };
         const _spsBelegt = function(prefix, ausser) {
@@ -9969,9 +9973,15 @@ You must output exactly this JSON format. The logic code goes as a single string
             const clean = String(line || '').split('//')[0].trim();
             const m = clean.match(/^([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*:=\s*(SR|RS)\s*\((.*)\)\s*$/i);
             if (!m) return null;
-            const args = _splitTopLevelArgs(m[3]);
+            // Optional benannter Merker: `G := SR(A, B; SPEICHER)` (Christoph 24.11.2026)
+            let innen = m[3], merker = null;
+            const mm = innen.match(/^(.*);\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*$/);
+            if (mm) { innen = mm[1]; merker = mm[2]; }
+            if (innen.includes(';')) return null;
+            const args = _splitTopLevelArgs(innen);
             if (args.length !== 2 || !args[0] || !args[1]) return null;
-            return { lhs: m[1], type: m[2].toUpperCase(), setExpr: args[0], resetExpr: args[1] };
+            if (merker && merker.toUpperCase() === m[1].toUpperCase()) return null;
+            return { lhs: m[1], type: m[2].toUpperCase(), setExpr: args[0], resetExpr: args[1], merker };
         }
         // CTUD (Vor-/Rückwärtszähler wie im TIA Portal) hat drei Ausgänge: der Name
         // links ist QU (CV >= PV), dazu kann man NAME_QD (CV <= 0) und NAME_CV
@@ -9998,7 +10008,58 @@ You must output exactly this JSON format. The logic code goes as a single string
             return res;
         }
         function _expandSpeicherKurzform(lines) { return _expandCtudAusgaenge(_expandSpeicherKurzformSR(lines)); }
-        function _expandSpeicherKurzformSR(lines) {
+        // Benannter Merker in der Langform (Christoph 24.11.2026):
+        //   S1 := A / R1 := B / Z := (Q1; SPEICHER)
+        // oder die Klammer an der S- bzw. R-Zeile: `S1 := (A; SPEICHER)` bzw.
+        // `S1 := A (; SPEICHER)`. Der Speicher heißt dann SPEICHER statt Q1: hinter
+        // der späteren S/R-Zeile entsteht `SPEICHER := Q1`, jedes Q1 im Programm
+        // wird zu SPEICHER, Q1 selbst wird ausgeblendet wie bei der Kurzform.
+        const _SP_ID = '[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*';
+        function _speicherNamenLangform(lines) {
+            const namen = new Map(); // 'n' + Suffix → Name
+            const neu = lines.map(text => {
+                const [code, kom] = _spGeteilt(text);
+                let c = code;
+                const sr = c.match(/^(\s*)([SR])(\d+)(_RS|_SR)?(\s*:=\s*)(.*?)\s*$/i);
+                if (sr) {
+                    const key = sr[3] + (sr[4] ? sr[4].toUpperCase() : '');
+                    let rhs = sr[6], t;
+                    if ((t = rhs.match(new RegExp('^\\((.+);\\s*(' + _SP_ID + ')\\s*\\)$')))) { rhs = t[1].trim(); namen.set(key, t[2]); }
+                    else if ((t = rhs.match(new RegExp('^(.+?)\\s*\\(\\s*;\\s*(' + _SP_ID + ')\\s*\\)$')))) { rhs = t[1].trim(); namen.set(key, t[2]); }
+                    c = sr[1] + sr[2] + sr[3] + (sr[4] || '') + sr[5] + rhs;
+                }
+                c = c.replace(new RegExp('\\(\\s*Q(\\d+)(_RS|_SR)?\\s*;\\s*(' + _SP_ID + ')\\s*\\)', 'gi'), (all, n, suf, name) => {
+                    namen.set(n + (suf ? suf.toUpperCase() : ''), name); return name;
+                });
+                return c === code ? text : c + kom;
+            });
+            return { lines: neu, namen };
+        }
+        function _speicherNamenEinsetzen(res, namen) {
+            if (!namen.size) return res;
+            const qRe = (key) => new RegExp('(?<![A-Za-z0-9_ÄÖÜäöüß])Q' + key.replace(/_(RS|SR)$/, '_$1') + '(?![A-Za-z0-9_ÄÖÜäöüß])', 'gi');
+            const out = res.lines.map(l => {
+                let [c, k] = _spGeteilt(l.text);
+                namen.forEach((name, key) => { c = c.replace(qRe(key), name); });
+                return Object.assign({}, l, { text: c + k });
+            });
+            // `NAME := Q<n>` hinter der letzten S/R-Zeile des Glieds
+            namen.forEach((name, key) => {
+                const pinRe = new RegExp('^\\s*[SR]' + key + '\\s*:=', 'i');
+                let letzte = -1;
+                out.forEach((l, i) => { if (pinRe.test(_spGeteilt(l.text)[0])) letzte = i; });
+                if (letzte < 0) return;
+                out.splice(letzte + 1, 0, { text: `${name} := Q${key}`, idx: out[letzte].idx, speicherName: true });
+                res.generatedQ.add('Q' + key);
+            });
+            res.lines = out;
+            return res;
+        }
+        function _expandSpeicherKurzformSR(lines0) {
+            const _benannt = _speicherNamenLangform(lines0);
+            return _speicherNamenEinsetzen(_expandSpeicherKurzformSRohne(_benannt.lines), _benannt.namen);
+        }
+        function _expandSpeicherKurzformSRohne(lines) {
             const hits = lines.map(_matchSpeicherKurzform);
             if (!hits.some(Boolean)) return { lines: lines.map((text, idx) => ({ text, idx })), generatedQ: new Set() };
             const taken = new Set();
@@ -10018,7 +10079,10 @@ You must output exactly this JSON format. The logic code goes as a single string
                 const suf = h.type === 'RS' ? '_RS' : '';
                 out.push({ text: `S${n}${suf} := ${h.setExpr}`, idx });
                 out.push({ text: `R${n}${suf} := ${h.resetExpr}`, idx });
-                out.push({ text: `${h.lhs} := Q${n}${suf}`, idx });
+                if (h.merker) {
+                    out.push({ text: `${h.merker} := Q${n}${suf}`, idx, speicherName: true });
+                    out.push({ text: `${h.lhs} := ${h.merker}`, idx });
+                } else out.push({ text: `${h.lhs} := Q${n}${suf}`, idx });
                 generatedQ.add(`Q${n}${suf}`);
             });
             return { lines: out, generatedQ };
@@ -10039,17 +10103,24 @@ You must output exactly this JSON format. The logic code goes as a single string
             const reS = new RegExp('^\\s*S' + n + suf + '\\s*:=\\s*(.*)$', 'i');
             const reR = new RegExp('^\\s*R' + n + suf + '\\s*:=\\s*(.*)$', 'i');
             const reQ = new RegExp('\\bQ' + n + suf + '(?![A-Za-z0-9_])', 'gi');
-            const reAlias = new RegExp('^\\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\\s*:=\\s*Q' + n + suf + '\\s*$', 'i');
+            const reAlias = new RegExp('^\\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\\s*:=\\s*(?:Q' + n + suf + '|\\(\\s*Q' + n + suf + '\\s*;\\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\\s*\\))\\s*$', 'i');
+            // Merkername an der S- oder R-Zeile: `(A; NAME)` oder `A (; NAME)`
+            let merker = null;
+            const nameAb = (a) => {
+                let t = a.match(/^\((.+);\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*\)$/) || a.match(/^(.+?)\s*\(\s*;\s*([A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*)\s*\)$/);
+                if (!t) return a;
+                merker = merker || t[2]; return t[1].trim();
+            };
             let sZ = [], rZ = [], alias = null;
             zeilen.forEach((z, i) => {
                 const c = _spGeteilt(z)[0];
                 let t;
-                if ((t = c.match(reS))) sZ.push({ i, ausdruck: t[1].trim() });
-                else if ((t = c.match(reR))) rZ.push({ i, ausdruck: t[1].trim() });
-                else if (!alias && (t = c.match(reAlias))) alias = { i, name: t[1] };
+                if ((t = c.match(reS))) sZ.push({ i, ausdruck: nameAb(t[1].trim()) });
+                else if ((t = c.match(reR))) rZ.push({ i, ausdruck: nameAb(t[1].trim()) });
+                else if (!alias && (t = c.match(reAlias))) { alias = { i, name: t[1] }; if (t[2]) merker = merker || t[2]; }
             });
             if (sZ.length !== 1 || rZ.length !== 1 || !sZ[0].ausdruck || !rZ[0].ausdruck) return null;
-            return { n, typ, s: sZ[0], r: rZ[0], alias, reQ, anzeige: typ === 'RS' ? `S${n}_RS / R${n}_RS / Q${n}_RS` : `S${n}_SR / R${n}_SR / Q${n}_SR` };
+            return { n, typ, s: sZ[0], r: rZ[0], alias, reQ, merker, anzeige: typ === 'RS' ? `S${n}_RS / R${n}_RS / Q${n}_RS` : `S${n}_SR / R${n}_SR / Q${n}_SR` };
         }
         function _speicherZuKurzform(text, idx, name) {
             const f = _speicherLangformFinden(text, idx);
@@ -10058,10 +10129,11 @@ You must output exactly this JSON format. The logic code goes as a single string
             name = name || (f.alias && f.alias.name);
             if (!name) return null;
             const kommentare = [f.s.i, f.r.i].concat(f.alias ? [f.alias.i] : []).map(i => _spGeteilt(zeilen[i])[1].replace(/^\/\/\s*/, '').trim()).filter(Boolean);
-            const ersetzeQ = (z) => { const [c, k] = _spGeteilt(z); return c.replace(f.reQ, name) + k; };
-            const setz = f.s.ausdruck.replace(f.reQ, name), rueck = f.r.ausdruck.replace(f.reQ, name);
+            const qName = f.merker || name;
+            const ersetzeQ = (z) => { const [c, k] = _spGeteilt(z); return c.replace(f.reQ, qName) + k; };
+            const setz = f.s.ausdruck.replace(f.reQ, qName), rueck = f.r.ausdruck.replace(f.reQ, qName);
             const einzug = (zeilen[Math.min(f.s.i, f.r.i)].match(/^\s*/) || [''])[0];
-            const neu = einzug + name + ' := ' + f.typ + '(' + setz + ', ' + rueck + ')' + (kommentare.length ? '  // ' + kommentare.join(' · ') : '');
+            const neu = einzug + name + ' := ' + f.typ + '(' + setz + ', ' + rueck + (f.merker ? '; ' + f.merker : '') + ')' + (kommentare.length ? '  // ' + kommentare.join(' · ') : '');
             const weg = new Set([f.s.i, f.r.i].concat(f.alias ? [f.alias.i] : []));
             const ziel = Math.min(f.s.i, f.r.i);
             const out = [];
@@ -10086,7 +10158,8 @@ You must output exactly this JSON format. The logic code goes as a single string
             const suf = h.type === 'RS' ? '_RS' : '_SR';
             const [, kom] = _spGeteilt(zeilen[idx]);
             const einzug = (zeilen[idx].match(/^\s*/) || [''])[0];
-            const neu = [einzug + 'S' + n + suf + ' := ' + h.setExpr + (kom ? '  ' + kom : ''), einzug + 'R' + n + suf + ' := ' + h.resetExpr, einzug + h.lhs + ' := Q' + n + suf];
+            const _q = h.merker ? '(Q' + n + suf + '; ' + h.merker + ')' : 'Q' + n + suf;
+            const neu = [einzug + 'S' + n + suf + ' := ' + h.setExpr + (kom ? '  ' + kom : ''), einzug + 'R' + n + suf + ' := ' + h.resetExpr, einzug + h.lhs + ' := ' + _q];
             zeilen.splice(idx, 1, ...neu);
             return zeilen.join('\n');
         }
@@ -47701,7 +47774,17 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window.exportSCL = function() {
             const code = textarea.value;
             // Speicher-Kurzform `X := SR(a, b)` in die gewohnten S/R/Q-Zeilen auflösen.
-            const lines = window._expandSpeicherKurzform(code.split('\n')).lines.map(l => l.text);
+            // Benannter Merker (`G := SR(A, B; SPEICHER)`, `(Q1; SPEICHER)`): in SCL ist
+            // SPEICHER selbst die Speichervariable des Glieds, wie der Operand über der
+            // SR-Box in TIA. Die Hilfszeile `SPEICHER := Q1` entfällt.
+            const _spNamen = new Map();
+            const _expL = window._expandSpeicherKurzform(code.split('\n')).lines;
+            _expL.forEach(l => { if (!l.speicherName) return; const m = l.text.match(/^\s*(\S+)\s*:=\s*Q(\d+)(_RS|_SR)?\s*$/i); if (m) _spNamen.set(m[2] + ((m[3] || '').toUpperCase() === '_RS' ? '_RS' : ''), m[1]); });
+            const lines = _expL.filter(l => !l.speicherName).map(l => {
+                let t = l.text;
+                _spNamen.forEach((name, key) => { t = t.replace(new RegExp('(?<![A-Za-z0-9_ÄÖÜäöüß])Q' + key + (/_RS$/.test(key) ? '' : '(?:_SR)?') + '(?![A-Za-z0-9_ÄÖÜäöüß])', 'gi'), name); });
+                return t;
+            });
 
             // Identifier-Pattern: lateinische Buchstaben, ASCII-Ziffern, Underscore
             // UND Umlaute/ß (Variablen wie TOR_ÖFFNEN, MOTOR_GRÖSSE müssen erkannt
@@ -47908,7 +47991,9 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             flipFlops.forEach((ff, num) => {
                 const outVarRS  = `Q${num}_RS`;
                 const outVarNorm = `Q${num}`;
-                if (allLHS.has(outVarRS) || assigns.some(a => extractVars(a.rhs).includes(outVarRS))) {
+                if (_spNamen.has(num + (ff.isRS ? '_RS' : ''))) {
+                    ff.outVar = _spNamen.get(num + (ff.isRS ? '_RS' : ''));
+                } else if (allLHS.has(outVarRS) || assigns.some(a => extractVars(a.rhs).includes(outVarRS))) {
                     ff.outVar = outVarRS;
                 } else {
                     ff.outVar = outVarNorm;

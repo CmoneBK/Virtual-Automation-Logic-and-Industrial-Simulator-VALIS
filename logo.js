@@ -33,6 +33,8 @@
  *          Dir = lo; ist CU fest 0: Cnt ← CD, Dir = hi; sonst Cnt ← Flanke CU
  *          ODER Flanke CD, Dir ← Flanke CD (Hinweis). R ← R (StartVal 0) oder
  *          R ← LD (StartVal = PV); R und LD zugleich gibt es nicht.
+ *   STROMSTOSS → Stromstoßrelais (Trg, R, S frei, Sel = RS): jede Flanke an Trg
+ *          schaltet um, R hat Vorrang.
  *   SR   → Selbsthalterelais (Rücksetzen dominant, wie die LOGO!)
  *   RS   → Selbsthalterelais mit R UND NICHT S davor, weil die LOGO! kein
  *          setzdominantes Speicherglied hat (Fußnote).
@@ -69,21 +71,21 @@
   const NAME = {
     AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND mit Flankenauswertung', NANDF: 'NAND mit Flankenauswertung',
     TON: 'Einschaltverzögerung', TOF: 'Ausschaltverzögerung', TONOF: 'Ein-/Ausschaltverzögerung', BSZ: 'Betriebsstundenzähler', TP: 'Flankengetriggertes Wischrelais',
-    CTU: 'Vor-/Rückwärtszähler', SHR: 'Selbsthalterelais',
+    CTU: 'Vor-/Rückwärtszähler', SHR: 'Selbsthalterelais', SSR: 'Stromstoßrelais',
     ASW: 'Analoger Schwellwertschalter', AKOMP: 'Analogkomparator',
     ARITH: 'Arithmetikanweisung', PI: 'PI-Regler'
   };
   const NAME_EN = {
     AND: 'AND', OR: 'OR', NOT: 'NOT', ANDF: 'AND with edge evaluation', NANDF: 'NAND with edge evaluation',
     TON: 'On-delay', TOF: 'Off-delay', TONOF: 'On-/Off-delay', BSZ: 'Hours counter', TP: 'Edge triggered wiping relay',
-    CTU: 'Up/down counter', SHR: 'Latching relay',
+    CTU: 'Up/down counter', SHR: 'Latching relay', SSR: 'Pulse relay',
     ASW: 'Analog threshold trigger', AKOMP: 'Analog comparator',
     ARITH: 'Math instruction', PI: 'PI controller'
   };
   // Texte deutsch oder englisch (VALIS-Sprache beim Abbilden)
   const EN = () => window.currentLang === 'en';
   const L = (de, en) => (EN() ? en : de);
-  const SF = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SF = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'SSR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
   const ID = /^[A-Za-zÄÖÜäöüß_][A-Za-z0-9_ÄÖÜäöüß]*$/;
   const ZAHL = /^-?\d+(?:[.,]\d+)?$/;
   const LS = 'valisLogoKlemmen';
@@ -415,6 +417,17 @@
         if (pv === 0) grund(L('Zähler mit Vorwahl 0: die LOGO! schaltet Q schon vor dem ersten Impuls.', 'Counter with preset 0: the LOGO! switches Q on before the first pulse.'), zeile, 'hinweis');
         ablegen(b); return platz;
       }
+      if (n.type === 'STROMSTOSS') {
+        // Stromstoßrelais: jede steigende Flanke an Trg schaltet um, R setzt zurück
+        // und hat Vorrang (Sel = RS). Der Setzeingang S bleibt frei.
+        b = neuerBaustein('SSR', id, zeile);
+        const platz = { art: 'b', b };
+        memo.set(id, platz);
+        sfEingang(b, 'Trg', pin('TRG') || ie[0]);
+        sfEingang(b, 'R', pin('R'));
+        b.par.push({ n: 'Sel', w: 'RS' });
+        ablegen(b); return platz;
+      }
       if (n.type === 'SR' || n.type === 'RS') {
         b = neuerBaustein('SHR', id, zeile);
         const platz = { art: 'b', b };
@@ -704,6 +717,12 @@
           if (bit(ein(b, 'R'))) st.q = false; else if (bit(ein(b, 'S'))) st.q = true;
           break;
         }
+        case 'SSR': {
+          const trg = bit(ein(b, 'Trg'));
+          if (bit(ein(b, 'R'))) st.q = false; else if (trg && !st.alt) st.q = !st.q;
+          st.alt = trg;
+          break;
+        }
         case 'ASW': case 'AKOMP': {
           const x = num(ein(b, 'Ax')) - (b.typ === 'AKOMP' ? num(ein(b, 'Ay')) : 0);
           if (x > b.ein_) st.q = true; else if (x <= b.aus_) st.q = false;
@@ -960,8 +979,8 @@
     it.h = h;
     return it;
   }
-  const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
-  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', ANDF: '&↑', NANDF: '&↓', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', BSZ: 'Σh', TP: '⊓', CTU: '+/−', SHR: 'RS', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
+  const SF_TYP = new Set(['TON', 'TOF', 'TONOF', 'BSZ', 'TP', 'CTU', 'SHR', 'SSR', 'ASW', 'AKOMP', 'ARITH', 'PI']);
+  const SYMBOL = { AND: '&', OR: '≥1', NOT: '1', ANDF: '&↑', NANDF: '&↓', TON: '⊓→', TOF: '→⊓', TONOF: '→⊓→', BSZ: 'Σh', TP: '⊓', CTU: '+/−', SHR: 'RS', SSR: '⇅', ASW: 'A→', AKOMP: 'ΔA', ARITH: '+−×÷', PI: 'PI' };
   function breite(it) {
     if (it.kind !== 'box') return 0;
     let m = 0;
@@ -1137,7 +1156,7 @@
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
       case 'CTU': if (b.ctd) return !(tm[b.src] && tm[b.src].q); return !!(tm[b.src] && tm[b.src].q); // CTD: Zähler-Q ist das Gegenteil
-      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'ANDF': case 'NANDF': return !!(tm[b.src] && tm[b.src].q);
+      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'ANDF': case 'NANDF': case 'SSR': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

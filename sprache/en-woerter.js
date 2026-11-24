@@ -10446,3 +10446,28 @@ VALIS_EN.vorlagen({
 "⟦0⟧ mindestens ⟦1⟧-mal öfter aktiv geworden ist als ⟦2⟧ (Zählerstand ab ⟦3⟧)": "⟦0⟧ has become active at least ⟦1⟧ times more often than ⟦2⟧ (count from ⟦3⟧)",
 "Das fünfte Argument von `CTUD` ist die Vorwahl PV. Es muss eine ganze Zahl sein (z.B. `10`, nicht `⟦0⟧`).": "The fifth argument of `CTUD` is the preset PV. It must be a whole number (e.g. `10`, not `⟦0⟧`)."
 });
+// Stromstoßrelais STROMSTOSS (TRG, R), LOGO!-Sonderfunktion, in TIA aus R_TRIG und XOR
+VALIS_EN.dazu({
+"Stromstoßrelais": "Pulse relay",
+"Stromstoßrelais (STROMSTOSS)": "Pulse relay (STROMSTOSS)",
+"Stromstoß": "Pulse relay",
+"Funktion Stromstoß": "Function pulse relay",
+"Stromstoßschalter": "Impulse switch",
+"Fernschalter": "Remote switch",
+"Licht an und aus mit einem Taster": "Light on and off with one push button",
+"Jeder Tastendruck schaltet um: einmal an, nochmal aus. Typisch für Treppenhaus- und Flurlicht mit mehreren Tastern. Das Zentral-Aus R schaltet aus und hat Vorrang. <code>OUT := STROMSTOSS(TRG, R)</code>. Sonderfunktion der LOGO!; im TIA Portal aus R_TRIG und XOR gebaut. Ein FESTO-Steckmodul dafür gibt es nicht.": "Every push of the button toggles: once on, once more off. Typical for staircase and corridor lighting with several push buttons. The central off R switches off and has priority. <code>OUT := STROMSTOSS(TRG, R)</code>. Special function of the LOGO!; in the TIA Portal built from R_TRIG and XOR. There is no FESTO plug-in module for it.",
+"Jede steigende Flanke an TRG schaltet OUT um: einmal drücken an, nochmal drücken aus. R (Zentral-Aus, darf fehlen) schaltet OUT aus und hat Vorrang. Sonderfunktion der LOGO!; im TIA Portal baut man es aus R_TRIG und XOR.": "Every rising edge at TRG toggles OUT: press once for on, press again for off. R (central off, may be left out) switches OUT off and has priority. Special function of the LOGO!; in the TIA Portal you build it from R_TRIG and XOR.",
+"Stromstoßrelais (Eltako): Jeder Impuls im Strang (Taster) schaltet seine Kontakte um, einmal drücken an, noch einmal aus. Rücksetzen (Zentral-Aus) schaltet aus und hat Vorrang. Doppelklick: Rücksetzen. Im Code: STROMSTOSS(Strang, Reset).": "Pulse relay (impulse switch): every pulse in the path (push button) toggles its contacts, press once for on, once more for off. Reset (central off) switches off and has priority. Double-click: reset. In code: STROMSTOSS(path, reset).",
+"Falsche Anzahl an Argumenten für STROMSTOSS": "Wrong number of arguments for STROMSTOSS",
+"`STROMSTOSS` (Stromstoßrelais) braucht den Taster TRG und optional das Zentral-Aus R. Jede steigende Flanke an TRG schaltet den Ausgang um, R schaltet ihn aus und hat Vorrang.": "`STROMSTOSS` (pulse relay) needs the push button TRG and optionally the central off R. Every rising edge at TRG toggles the output, R switches it off and has priority.",
+"Schreibe `STROMSTOSS(TRG)` oder `STROMSTOSS(TRG, R)` — z.B. `LICHT := STROMSTOSS(TASTER, ZENTRAL_AUS)`.": "Write `STROMSTOSS(TRG)` or `STROMSTOSS(TRG, R)` — e.g. `LIGHT := STROMSTOSS(BUTTON, CENTRAL_OFF)`.",
+"Stromstoßrelais: jeder Impuls im Strang schaltet um.": "Pulse relay: every pulse in the path toggles.",
+"Rücksetzen / Zentral-Aus durch (Variable oder Ausdruck, leer = keins):": "Reset / central off by (variable or expression, empty = none):",
+"Stromstoßrelais: Am FESTO-Zeitrelais 162243 gibt es diese Funktion so nicht. Jeder Impuls auf A1/A2 schaltet die Kontakte um, der nächste wieder zurück (wie ein Stromstoßschalter in der Elektroinstallation).": "Pulse relay: the FESTO timer relay 162243 does not have this function. Every pulse on A1/A2 toggles the contacts, the next one switches them back (like an impulse switch in building wiring).",
+"R1/R2 schaltet aus (Zentral-Aus).": "R1/R2 switches off (central off).",
+"Zentral-Aus R1/R2 des Stromstoßrelais: schaltet das Relais aus und hat Vorrang. Diese Buchsen gibt es am FESTO 162243 nicht.": "Central off R1/R2 of the pulse relay: switches the relay off and has priority. The FESTO 162243 does not have these sockets."
+});
+VALIS_EN.vorlagen({
+"⟦0⟧ seit dem letzten Einschalten ungerade oft gedrückt wurde und ⟦1⟧ nicht ausgeschaltet hat": "⟦0⟧ has been pressed an odd number of times since it was last switched on and ⟦1⟧ has not switched it off",
+"⟦0⟧ seit dem letzten Einschalten ungerade oft gedrückt wurde": "⟦0⟧ has been pressed an odd number of times since it was last switched on"
+});

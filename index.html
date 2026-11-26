@@ -28618,6 +28618,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             _taskCheckThrottle = 0;
             // Tipp-Counter zurücksetzen + Lösungs-Check-Ergebnis leeren
             window._taskHintsUsed = 0;
+            window._taskHilfe = false;   // Tipp, Lösung angesehen/geladen (valisBruecke.aufgabe)
             window._codeCheckResult = null;
             const _mb = document.getElementById('editor-missing-badge'); if (_mb) _mb.style.display = 'none';
             const _lg = document.getElementById('check-result-legend'); if (_lg) { _lg.classList.remove('active'); _lg.innerHTML = ''; }
@@ -29170,6 +29171,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         window._taskShowSolution = function() {
             if (!_isSolutionAvailable()) return;
+            window._taskHilfe = true;
             let codeEl = document.getElementById('task-solution-code');
             if (codeEl) codeEl.value = (activeTask.solution && activeTask.solution.code) || '';
             document.getElementById('task-solution-modal').style.display = 'flex';
@@ -29177,6 +29179,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
         window._taskLoadSolution = function() {
             if (!activeTask || !activeTask.solution) return;
+            window._taskHilfe = true;
             let sol = activeTask.solution;
             let payload = { rssr: window.VALIS_RSSR, code: sol.code || '', factory: sol.factory || null, types: sol.types || {}, addresses: sol.addresses || {}, layout: sol.layout || 'flex-row' };
             let saveloadText = document.getElementById('saveload-text');
@@ -29363,6 +29366,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             taskSolved = false;
             // Tipp-/Check-State zurücksetzen
             window._taskHintsUsed = 0;
+            window._taskHilfe = false;
             window._codeCheckResult = null;
             const _mb = document.getElementById('editor-missing-badge'); if (_mb) _mb.style.display = 'none';
             if (typeof _hideCheckLegend === 'function') _hideCheckLegend();
@@ -29400,6 +29404,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (st && st.hint) hint = st.hint;
             }
             if (!hint) return;
+            window._taskHilfe = true;
             document.getElementById('task-hint-content').innerHTML = _taskMarkdownToHtml(hint);
             document.getElementById('task-hint-modal').style.display = 'flex';
         };
@@ -78282,7 +78287,25 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         window._valis3dWerte = window._valis3dWerte || {};
         window._valis3dHat = function(o) { return !!o && Object.prototype.hasOwnProperty.call(window._valis3dWerte, o.id); };
         window.valisBruecke = {
-            version: 17,
+            version: 18,
+            /* v18 (Können in der Werkstatt): eine .valitask als Aufgabe starten
+               und lesen, ob sie gelöst ist und ob Tipp oder Lösung genutzt wurden */
+            aufgabeStarten: function(task) {
+                if (!task || task.type !== 'valitask' || typeof window._startTask !== 'function') return false;
+                const t = JSON.parse(JSON.stringify(task));
+                if (!t.id) t.id = 'task-' + Date.now();
+                window._startTask(t);
+                return typeof activeTask !== 'undefined' && !!activeTask && activeTask.id === t.id;
+            },
+            aufgabe: function() {
+                if (typeof activeTask === 'undefined' || !activeTask) return null;
+                const bed = [];
+                const nimm = (l) => (l || []).forEach(c => { if (c && c.type && bed.indexOf(c.type) < 0) bed.push(c.type); });
+                nimm(activeTask.conditions);
+                (activeTask.stages || []).forEach(st => nimm(st && st.conditions));
+                return { id: activeTask.id, name: activeTask.name || '', geloest: !!taskSolved,
+                    hilfe: !!window._taskHilfe || (window._taskHintsUsed || 0) > 0, bedingungen: bed };
+            },
             fpBetaetigen: function(id, seite, an) {
                 return typeof window._fpHand3D === 'function' ? window._fpHand3D(id, seite, an) : false;
             },

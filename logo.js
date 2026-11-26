@@ -183,9 +183,13 @@
     graph.edges.forEach(e => { if (!inEdges.has(e.targetId)) inEdges.set(e.targetId, []); inEdges.get(e.targetId).push(e); });
     const quellen = new Set(graph.edges.map(e => e.sourceId));
     const genQ = opt.generatedQ || window._generatedQ || new Set();
+    const fmSet = opt.flankenMerker || window._flankenMerker || new Set();
     const einRoh = (opt.eingaenge || (typeof globalInputs !== 'undefined' ? globalInputs : [])).filter(n => !/^(TRUE|FALSE)$/.test(n)); // eslint-disable-line no-undef
     const ausRoh = (opt.ausgaenge || (typeof globalOutputs !== 'undefined' ? globalOutputs : [])) // eslint-disable-line no-undef
-      .filter(n => !/^[QRS]\d+(_(?:RS|SR))?$/i.test(n) && !genQ.has(n));
+      .filter(n => !/^[QRS]\d+(_(?:RS|SR))?$/i.test(n) && !genQ.has(n))
+      // Flankenmerker (R_TRIG/F_TRIG(CLK; FM)): die LOGO!-Flanke merkt sich den alten Zustand
+      // selbst. FM fällt weg, außer das Programm liest ihn, dann ist er ein Merker M.
+      .filter(n => !(fmSet.has(n) && !quellen.has(n)));
     // ARITH-Knoten: numerisch (Rechnung, PID) oder boolesch (Vergleich, ZWEIPUNKT)
     const arithBool = (n) => n.regler === 'ZWEIPUNKT' || (!n.regler && !!zerlegeVergleich(String(n.label || '').replace(/^\s*[^=]+?=\s*/, '')));
     // Analoge Eingänge: Bauteiltyp oder Eingang einer Rechnung/eines Vergleichs
@@ -193,7 +197,7 @@
     einRoh.forEach(n => { if (typen[n] === 'analog_in') anaEin.add(n); });
     nodes.forEach(n => { if (n.type === 'ARITH') (inEdges.get(n.id) || []).forEach(e => { if (einRoh.includes(e.sourceId)) anaEin.add(e.sourceId); }); });
     const numerisch = (name) => { const n = nodes.get(name); return (n && n.type === 'ARITH' && !arithBool(n)) || typen[name] === 'analog_out'; };
-    const physAus = ausRoh.filter(n => !quellen.has(n) || typen[n] === 'analog_out');
+    const physAus = ausRoh.filter(n => (!quellen.has(n) || typen[n] === 'analog_out') && !fmSet.has(n));
     const merker = ausRoh.filter(n => !physAus.includes(n));
     const liste = [];
     einRoh.forEach(n => liste.push({ name: n, art: anaEin.has(n) ? 'AI' : 'I', rolle: 'ein' }));

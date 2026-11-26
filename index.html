@@ -10066,7 +10066,7 @@ You must output exactly this JSON format. The logic code goes as a single string
                 if (!h) { out.push(l); return; }
                 const kom = _spGeteilt(l.text)[1];
                 if (h.fn === 'R_TRIG' || h.fn === 'F_TRIG') {
-                    out.push(Object.assign({}, l, { text: `${h.einzug}${h.lhs} := ${h.fn}(${h.args})${kom}` }));
+                    out.push(Object.assign({}, l, { text: `${h.einzug}${h.lhs} := ${h.fn}(${h.args})${kom}`, flankeMit: [h.fn + '_' + h.lhs, h.name] }));
                     out.push({ text: `${h.name} := ${h.args}`, idx: l.idx, flankenMerker: h.name });
                     return;
                 }
@@ -11040,7 +11040,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Marker-Erkennung (// NETZWERK n: Titel) gebraucht.
             graph._sourceText = text;
             // FIX: Filtere die neuen GATE_ Variablen aus der UI-Liste heraus!
-            return { graph, jsCompiledCode, generatedQ: _kurz.generatedQ, flankenMerker: new Set(_kurz.lines.filter(l => l.flankenMerker).map(l => l.flankenMerker)), inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
+            return { graph, jsCompiledCode, generatedQ: _kurz.generatedQ, flankenMerker: new Set(_kurz.lines.filter(l => l.flankenMerker).map(l => l.flankenMerker)), flankenMerkerVon: new Map(_kurz.lines.filter(l => l.flankeMit).map(l => l.flankeMit)), inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
         }
 
         // ==========================================================
@@ -23988,6 +23988,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 _saveViewState();
             }
         });
+        // Anzeige-Stand: wie spsState, aber ein Signal, das kürzer als 300 ms an war,
+        // bleibt bis 300 ms nach dem Einschalten an. Lange Signale gehen sofort aus.
+        const _anzeigeAn = {};
+        window._anzeigeState = null;
+        function _anzeigeHalten() {
+            if (!isSimulationActive) { window._anzeigeState = null; for (const k in _anzeigeAn) delete _anzeigeAn[k]; return; }
+            const jetzt = performance.now(), a = Object.assign({}, spsState);
+            for (const k in spsState) {
+                const v = spsState[k];
+                if (v === true) { if (_anzeigeAn[k] == null) _anzeigeAn[k] = jetzt; }
+                else if (_anzeigeAn[k] != null) {
+                    if (!v && jetzt - _anzeigeAn[k] < 300) a[k] = true;
+                    else delete _anzeigeAn[k];
+                }
+            }
+            window._anzeigeState = a;
+        }
+        window._anzeigeWert = (k) => (window._anzeigeState || spsState)[k];
         function runSimulationTick() {
             let now = performance.now();
             // FIX 2: Timer und Zeiten dürfen NUR laufen, wenn die Anlage wirklich eingeschaltet ist!
@@ -24028,6 +24046,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     }
                 }
             }
+            // Anzeige: kurze Impulse (Flanken R_TRIG/F_TRIG, ein SPS-Zyklus) bleiben 300 ms
+            // sichtbar, wie der Wischrelais-Kontakt im Auto-Schaltplan. Nur für die Ansichten,
+            // die Logik rechnet weiter mit spsState.
+            _anzeigeHalten();
             if (window.fbsFupMode && typeof window._fupLive === 'function') { try { window._fupLive(); } catch (_) {} }
             if (window.logoAnsicht && typeof window._logoLive === 'function') { try { window._logoLive(); } catch (_) {} }
             // Live-Update für Schrittketten-Panel: aktive Schritte hervorheben.
@@ -24085,7 +24107,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 lastSoundState[key] = value;
                 // 1. Ausgänge (LEDs) aktualisieren
                 const led = document.getElementById(`sim_out_${key}`);
-                if (led) { if (value) led.classList.add('on'); else led.classList.remove('on'); }
+                if (led) { if (window._anzeigeWert(key)) led.classList.add('on'); else led.classList.remove('on'); }
                 // 2. Eingänge (Schalter & Taster) bidirektional synchronisieren
                 let cType = componentTypes[key] || 'taster';
                 let isNC = window._variableIsNCInverted(cType);
@@ -24106,7 +24128,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // lesen ihren Live-Wert von der ECHTEN Quelle ab — die Sim-
                 // Engine kennt sie nicht, sie sind nur visuell.
                 const stateKey = node._isGhost ? node._ghostSourceId : node.id;
-                const val = !!spsState[stateKey];
+                const val = !!window._anzeigeWert(stateKey);
                 // 🌟 MULTI-WINDOW FIX: Wir MÜSSEN im 'customSvg' suchen, nicht im globalen 'document'!
                 const block = customSvg.querySelector(`#node-block-${CSS.escape(node.id)}`);
                 if (block) {
@@ -31635,6 +31657,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 globalOutputs = parsed.outputs;
                 window._generatedQ = parsed.generatedQ || new Set();
                 window._flankenMerker = parsed.flankenMerker || new Set();
+                window._flankenMerkerVon = parsed.flankenMerkerVon || new Map(); // Flankenbaustein-ID → Flankenmerker (M_BIT)
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
@@ -71570,6 +71593,10 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         // Magnetventil: Signal an 24V-Pin der Spule + X2 (0V) zur Verteilung
                         cables.push({ fromKey: 'ANS_DOUT_' + addr, toKey: `${slot}_24V_a`, color: 'black', strand: varName });
                         cables.push({ fromKey: `${slot}_X2`,        toKey: '__ANS_BUS_0V__', color: 'blue', strand: varName });
+                    } else if (/^R\d+_S\d+$/.test(slot)) {
+                        // Ausgang als Relais (Koppelrelais, -KF): Spule A1 vom 16DOUT, A2 an 0V
+                        cables.push({ fromKey: 'ANS_DOUT_' + addr, toKey: `${slot}_A1`, color: 'black', strand: varName });
+                        cables.push({ fromKey: `${slot}_A2`,        toKey: '__ANS_BUS_0V__', color: 'blue', strand: varName });
                     }
                 });
 
@@ -74954,12 +74981,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!svg) return;
                 const assignments = window._festoLastAssignments || {};
                 const hasState = (typeof spsState !== 'undefined' && spsState);
+                const _anz = window._anzeigeState || spsState; // Anzeige: kurze Impulse 300 ms sichtbar
                 // --- Interaktive Aktuatoren (runder Taster / rastender Schalter) ---
                 svg.querySelectorAll('[data-festo-actuator]').forEach(act => {
                     const slotKey = act.getAttribute('data-festo-slot');
                     const kind = act.getAttribute('data-festo-actuator');
                     const varName = assignments[slotKey];
-                    const sig = (varName && hasState) ? !!spsState[varName] : false;
+                    const sig = (varName && hasState) ? !!_anz[varName] : false;
                     const cType = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || (kind === 'switch' ? 'schalter' : 'taster');
                     const isNC = (typeof window._variableIsNCInverted === 'function') ? window._variableIsNCInverted(cType) : false;
                     const pressed = varName ? (isNC ? !sig : sig) : false;
@@ -74981,7 +75009,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     // Der Wechsler kippt, wenn der Taster BETÄTIGT ist — nicht, wenn das
                     // Signal 1 ist. Im SPS-Modus liefert ein Öffner (Not-Halt) in Ruhe 1,
                     // daher hier wie bei den Aktuatoren über die Variable-Semantik gehen.
-                    const _sig = (varName && hasState) ? !!spsState[varName] : false;
+                    const _sig = (varName && hasState) ? !!_anz[varName] : false;
                     const _ct = (typeof componentTypes !== 'undefined' && componentTypes[varName]) || 'taster';
                     const _inv = (typeof window._variableIsNCInverted === 'function') ? window._variableIsNCInverted(_ct) : false;
                     const isActive = varName ? (_inv ? !_sig : _sig) : false;
@@ -75005,7 +75033,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-relais-lever]').forEach(lever => {
                     const slotKey = lever.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     const cx = parseFloat(lever.getAttribute('data-festo-cx'));
                     const mechY = parseFloat(lever.getAttribute('data-festo-mech-y'));
                     if (isActive) {
@@ -75024,7 +75052,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-zr-lever]').forEach(lever => {
                     const slotKey = lever.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     const cx = parseFloat(lever.getAttribute('data-festo-cx'));
                     const mechY = parseFloat(lever.getAttribute('data-festo-mech-y'));
                     const mode = lever.getAttribute('data-festo-zr-mode');
@@ -75043,7 +75071,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 const _zlTimer = (v) => { try { const t = window.simTimers || {}; return t[v] || t['CTU_' + v] || t['CTD_' + v] || t['CTUD_' + v] || null; } catch (_) { return null; } };
                 const _zlSpule = (v, rolle) => {
                     if (!v || !hasState) return false;
-                    if (rolle === 'q') return !!spsState[v];
+                    if (rolle === 'q') return !!_anz[v];
                     const t = _zlTimer(v);
                     if (rolle === 'zaehl' && t && t.lastCu !== undefined) return !!t.lastCu;
                     if (rolle === 'zaehl' && t && t.lastCd !== undefined) return !!t.lastCd;
@@ -75053,7 +75081,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const e = sp.find(x => rolle === 'zaehl' ? (x.getAttribute('data-ctype') === 'ctu' || x.getAttribute('data-ctype') === 'ctd') : x.getAttribute('data-ctype') === 'relais');
                         if (e && typeof e._checkPower === 'function') return !!e._checkPower(spsState);
                     } catch (_) {}
-                    return rolle === 'reset' ? !!spsState[v + '_R'] : false;
+                    return rolle === 'reset' ? !!_anz[v + '_R'] : false;
                 };
                 const _zl3 = n => String(Math.max(0, Math.min(999, n | 0))).padStart(3, '0');
                 svg.querySelectorAll('[data-festo-zaehler-ist]').forEach(t => {
@@ -75080,7 +75108,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-relais-led]').forEach(led => {
                     const slotKey = led.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     if (isActive) {
                         led.setAttribute('fill', '#76ff03');         // hellgrün leuchtend
                         led.setAttribute('stroke', '#aeea00');
@@ -75095,7 +75123,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-led-bulb]').forEach(bulb => {
                     const slotKey = bulb.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     if (isActive) {
                         bulb.setAttribute('fill', '#fff59d');       // helles Gelb (LED leuchtet)
                         bulb.setAttribute('stroke', '#fbc02d');
@@ -75110,14 +75138,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-horn]').forEach(horn => {
                     const slotKey = horn.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     horn.classList.toggle('festo-horn-active', isActive);
                 });
                 // --- Magnetventil-Spulen-LED (leuchtet wenn Spule angezogen) ---
                 svg.querySelectorAll('[data-festo-magnet-led]').forEach(led => {
                     const slotKey = led.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     if (isActive) {
                         led.setAttribute('fill', '#ffeb3b');
                         led.setAttribute('stroke', '#fbc02d');
@@ -75132,7 +75160,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-magnet-slider]').forEach(slider => {
                     const slotKey = slider.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     const xRest   = slider.getAttribute('data-festo-slider-x-rest');
                     const xActive = slider.getAttribute('data-festo-slider-x-active');
                     slider.setAttribute('x', isActive ? xActive : xRest);
@@ -75146,8 +75174,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const slotM2 = slider.getAttribute('data-festo-slot-m2');
                     const v1 = assignments[slotM1];
                     const v2 = assignments[slotM2];
-                    const a1 = (v1 && hasState) ? !!spsState[v1] : false;
-                    const a2 = (v2 && hasState) ? !!spsState[v2] : false;
+                    const a1 = (v1 && hasState) ? !!_anz[v1] : false;
+                    const a2 = (v2 && hasState) ? !!_anz[v2] : false;
                     const xM1   = slider.getAttribute('data-festo-slider-x-m1');
                     const xM2   = slider.getAttribute('data-festo-slider-x-m2');
                     const xRest = slider.getAttribute('data-festo-slider-x-rest');
@@ -75171,7 +75199,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 svg.querySelectorAll('[data-festo-sensor-led]').forEach(led => {
                     const slotKey = led.getAttribute('data-festo-slot');
                     const varName = assignments[slotKey];
-                    const isActive = (varName && hasState) ? !!spsState[varName] : false;
+                    const isActive = (varName && hasState) ? !!_anz[varName] : false;
                     if (isActive) {
                         led.setAttribute('fill', '#ff9100');         // orange leuchtend
                         led.setAttribute('stroke', '#ffb74d');
@@ -75198,6 +75226,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (!svg) return;
                 const enabled = !!window._festoFlowAnimEnabled;
                 const hasState = (typeof spsState !== 'undefined' && spsState);
+                const _anz = window._anzeigeState || spsState; // Anzeige: kurze Impulse 300 ms sichtbar
                 // Analogkabel: kein Ein/Aus, sondern eine Spannung. Leuchtpunkte
                 // wandern umso schneller, je höher die Spannung ist (0 V = Stillstand,
                 // negative Spannung = Gegenrichtung); die Masse führt den Rückstrom.
@@ -75263,7 +75292,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         return;
                     }
                     const strand = path.getAttribute('data-cable-strand');
-                    const isActive = (strand && hasState) ? !!spsState[strand] : false;
+                    const isActive = (strand && hasState) ? !!_anz[strand] : false;
                     path.classList.toggle('festo-cable-active', isActive);
                 });
                 // Freier Aufbau: eigene Kabel über den Stromfluss-Trace animieren.
@@ -82242,8 +82271,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             };
             // Wurzeln = jede Zuweisung (OUTPUT) und jeder Rechen-/Vergleichsbaustein (ARITH)
             const roots = [];
+            const fmVon = window._flankenMerkerVon instanceof Map && window._flankenMerkerVon.size ? window._flankenMerkerVon : null;
             nodes.forEach(n => {
                 if (n._fbsHidden && window.fbsHideHelpers) return;
+                // Flankenmerker (… ; FM): steht als M_BIT am P_TRIG/N_TRIG, kein eigenes Netzwerk
+                if (n.type === 'OUTPUT' && fmVon && [...fmVon.values()].includes(n.id)) return;
                 if (n.type === 'OUTPUT' || n.type === 'ARITH') roots.push({ id: n.id, line: lineOf(n.id) });
             });
             roots.sort((a, b) => (a.line - b.line) || a.id.localeCompare(b.id));
@@ -82282,6 +82314,11 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 // RS (setzdominant): R oben, S1 unten — wie im Tabellenbuch.
                 const ord = (pin) => (n.type === 'RS' && (pin === 'S' || pin === 'R')) ? (pin === 'R' ? 0 : 1) : n.type === 'CTUD' ? ({ CU: 0, CD: 1, R: 2, LD: 3, PV: 4 }[pin] ?? 0) : (pinOrder[pin] ?? 0);
                 ie.sort((a, b) => ord(a.targetPin) - ord(b.targetPin));
+                // Flanke mit Flankenmerker: in TIA P_TRIG/N_TRIG, der Merker (M_BIT) steht über dem Kasten
+                if (fmVon && fmVon.has(n.id) && (n.type === 'R_TRIG' || n.type === 'F_TRIG')) return {
+                    kind: 'box', node: Object.assign({}, n, { type: n.type === 'R_TRIG' ? 'P_TRIG' : 'N_TRIG' }), src: n.id, ownerName: fmVon.get(n.id),
+                    ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1, (path || []).concat(n.id)) }))
+                };
                 return {
                     kind: 'box', node: n, src: n.id,
                     ins: ie.map(e => ({ pin: e.targetPin || '', inv: !!e.inverted, child: tree(e.sourceId, rootId, depth + 1, (path || []).concat(n.id)) }))
@@ -82396,7 +82433,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
             if (t === 'RS') return { w: BOX_W_FB, sym: 'RS', pinNames: { S: 'S1', R: 'R' }, outs: ['Q'] };
             if (t === 'TON' || t === 'TOF' || t === 'TP' || t === 'TONR') return { w: BOX_W_FB, sym: t, timer: true, outs: ['Q', 'ET'] };
             // Flanken (IEC 61131-3): Eingang CLK, Ausgang Q
-            if (t === 'R_TRIG' || t === 'F_TRIG') return { w: BOX_W_FB, sym: t, pinNames: { IN: 'CLK' }, outs: ['Q'] };
+            if (t === 'R_TRIG' || t === 'F_TRIG' || t === 'P_TRIG' || t === 'N_TRIG') return { w: BOX_W_FB, sym: t, pinNames: { IN: 'CLK' }, outs: ['Q'] };
             if (t === 'CTU' || t === 'CTD') return { w: BOX_W_FB, sym: t, counter: true, outs: ['Q', 'CV'] };
             if (t === 'CTUD') return { w: BOX_W_FB, sym: t, counter: true, outs: ['QU', 'QD', 'CV'] };
             return { w: BOX_W_FB + 20, sym: t, outs: ['OUT'] };
@@ -82797,7 +82834,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
         function live() {
             if (!lastLayout || !window.fbsFupMode) return;
             const active = (typeof isSimulationActive !== 'undefined') && isSimulationActive;
-            const st = (typeof spsState !== 'undefined') ? spsState : {};
+            const st = window._anzeigeState || ((typeof spsState !== 'undefined') ? spsState : {});
             lastLayout.wires.forEach(w => {
                 if (!active) { w.el.setAttribute('stroke', '#111'); w.el.removeAttribute('stroke-dasharray'); return; }
                 let on = !!st[w.src];

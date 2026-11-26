@@ -163,6 +163,66 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
   ok('Elektroplan: Flanke auf Ausgang mit zweitem Strang zur LED', /relay_no:OUT/.test(c2.teile) && /led:OUT/.test(c2.teile) && c2.code === 'OUT := R_TRIG(IN)', JSON.stringify(c2));
   ok('Elektroplan: Palette hat EW und AW', ced.palette);
 
+  // Christoph 26.11.: Der Impuls dauert einen SPS-Zyklus, die Ansichten zeigen ihn 300 ms lang
+  console.log('Anzeige des Impulses (Logikplan, FUP, LOGO!, Sim-Panel)');
+  const puls = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fbs-wrapper'); if (fw && fw.style.display === 'none') toggleWorkspaceView('fbs-wrapper');
+    const ta = document.getElementById('code'); ta.value = 'A := F_TRIG(SIGNAL)'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(1200);
+    const out = {};
+    for (const ansicht of ['plan', 'fup', 'logo']) {
+      if (ansicht === 'fup' && !window.fbsFupMode) window._toggleFbsFup();
+      if (ansicht === 'logo') { if (window.fbsFupMode) window._toggleFbsFup(); window._toggleLogoAnsicht(true); }
+      await warte(500);
+      if (!isSimulationActive) toggleSimulation();
+      await warte(300);
+      const d = _fbsDoc();
+      const sicht = () => {
+        if (ansicht === 'plan') { const bl = d.getElementById('custom-svg').querySelector('#node-block-A'); return !!bl && bl.classList.contains('active'); }
+        const sel = ansicht === 'fup' ? '#fup-norm-svg line, #fup-norm-svg path, #fup-norm-svg polyline' : '#logo-svg line';
+        return [...d.querySelectorAll(sel)].some(l => l.getAttribute('stroke') === '#2e7d32');
+      };
+      const led = () => { const l = document.getElementById('sim_out_A'); return !!l && l.classList.contains('on'); };
+      spsState.SIGNAL = true; await warte(400);
+      spsState.SIGNAL = false; await warte(80);
+      const mitte = [sicht(), led()];
+      await warte(600);
+      out[ansicht] = { mitte, danach: [sicht(), led()] };
+      toggleSimulation(); await warte(200);
+    }
+    window._toggleLogoAnsicht(false);
+    return out;
+  });
+  ['plan', 'fup', 'logo'].forEach(a => ok(`${a}: A nach dem Loslassen sichtbar an, danach wieder aus`, puls[a].mitte[0] && !puls[a].danach[0], JSON.stringify(puls[a])));
+  ok('Sim-Panel: Ausgang A leuchtet sichtbar', puls.plan.mitte[1] && !puls.plan.danach[1], JSON.stringify(puls.plan));
+
+  console.log('FUP mit Flankenmerker (P_TRIG/N_TRIG)');
+  const pn = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    if (!window.fbsFupMode) window._toggleFbsFup();
+    const ta = document.getElementById('code'); ta.value = 'A := F_TRIG(SIGNAL; FM)\nB := R_TRIG(SIGNAL; FM2)'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(1500);
+    const t = [...(_fbsDoc().querySelectorAll('#fup-norm-svg text'))].map(x => x.textContent);
+    window._toggleFbsFup();
+    return t;
+  });
+  ok('FUP: N_TRIG/P_TRIG mit FM als M_BIT, kein eigenes Netzwerk für FM', pn.includes('N_TRIG') && pn.includes('P_TRIG') && pn.includes('FM') && pn.filter(x => /^Netzwerk/.test(x)).length === 2, pn.join('|'));
+
+  console.log('Steckaufbau (SPS): Ausgang als Relais');
+  const sr = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    if (window.epneuMode) { toggleEpneuMode(); await warte(800); }
+    const ta = document.getElementById('code'); ta.value = 'A := F_TRIG(SIGNAL)'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await warte(800); componentTypes['A'] = 'relais'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(1000);
+    const fw = document.getElementById('festo-wrapper'); if (fw.style.display === 'none') toggleWorkspaceView('festo-wrapper');
+    await warte(1500);
+    const k = (window._festoCablesList || []).map(c => c.fromKey + '>' + c.toKey);
+    toggleWorkspaceView('festo-wrapper');
+    return { epneu: !!window.epneuMode, k };
+  });
+  ok('Steckaufbau: A0.0 auf A1 des Relais, A2 an 0V', !sr.epneu && sr.k.some(x => /^ANS_DOUT_A0\.0>R\d+_S\d+_A1$/.test(x)) && sr.k.some(x => /^R\d+_S\d+_A2>__ANS_BUS_0V__$/.test(x)), JSON.stringify(sr));
+
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

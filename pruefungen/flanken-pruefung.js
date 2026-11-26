@@ -214,7 +214,7 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     const warte = ms => new Promise(r => setTimeout(r, ms));
     if (window.epneuMode) { toggleEpneuMode(); await warte(800); }
     const ta = document.getElementById('code'); ta.value = 'A := F_TRIG(SIGNAL)'; ta.dispatchEvent(new Event('input', { bubbles: true }));
-    await warte(800); componentTypes['A'] = 'relais'; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(1000);
+    await warte(1200); componentTypes['A'] = 'relais'; // z. B. aus einem älteren Stand
     const fw = document.getElementById('festo-wrapper'); if (fw.style.display === 'none') toggleWorkspaceView('festo-wrapper');
     await warte(1500);
     const k = (window._festoCablesList || []).map(c => c.fromKey + '>' + c.toKey);
@@ -222,6 +222,21 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     return { epneu: !!window.epneuMode, k };
   });
   ok('Steckaufbau: A0.0 auf A1 des Relais, A2 an 0V', !sr.epneu && sr.k.some(x => /^ANS_DOUT_A0\.0>R\d+_S\d+_A1$/.test(x)) && sr.k.some(x => /^R\d+_S\d+_A2>__ANS_BUS_0V__$/.test(x)), JSON.stringify(sr));
+
+  // Christoph 26.11.: FM ist kein Ausgang Q2; A war nach „B := A“ als Relais hängen geblieben
+  console.log('LOGO! ohne Flankenmerker, A wieder Ausgang');
+  const lf = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const ta = document.getElementById('code'); const setze = async c => { ta.value = c; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(1200); };
+    await setze('A := F_TRIG(SIGNAL; FM)'); const k1 = Logo.aktuell().klemmen;
+    await setze('A := F_TRIG(SIGNAL; FM)\nB := FM'); const k2 = Logo.aktuell().klemmen;
+    await setze('A := F_TRIG(SIGNAL)\nB := A'); const t1 = componentTypes.A;
+    await setze('A := F_TRIG(SIGNAL; FM)'); const t2 = componentTypes.A;
+    return { k1, k2, t1, t2, bmk: window._getSkBetriebsmittelLabels().A };
+  });
+  ok('LOGO!: FM fällt weg, A auf Q1', !('FM' in lf.k1) && lf.k1.A === 'Q1', JSON.stringify(lf.k1));
+  ok('LOGO!: gelesener FM ist Merker M', /^M\d+$/.test(lf.k2.FM || ''), JSON.stringify(lf.k2));
+  ok('A ist wieder LED (-PF), sobald es nicht mehr gelesen wird', lf.t1 === 'relais' && lf.t2 === 'led' && /^PF/.test(lf.bmk || ''), JSON.stringify(lf));
 
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);

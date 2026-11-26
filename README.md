@@ -195,7 +195,7 @@ SYSTEM_AKTIV := Q1 && Q2_RS
 
 ## 🔌 Einbetten: VALIS-Brücke
 
-Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `iframe.contentWindow.valisBruecke` mitlesen und bedienen (genutzt vom Pneumatik-Raum der virtuellen Werkstatt auf t-bk.de). Die Simulation bleibt in VALIS, die einbettende Seite spiegelt nur.
+Eine Seite derselben Herkunft kann VALIS in einem `iframe` zeigen und über `iframe.contentWindow.valisBruecke` mitlesen und bedienen (genutzt vom Pneumatik-Raum der virtuellen Werkstatt auf t-bk.de). Die Simulation bleibt in VALIS, die einbettende Seite spiegelt nur. Ab Version 18 startet `valisBruecke.aufgabeStarten(task)` eine `.valitask` als Aufgabe, und `valisBruecke.aufgabe()` meldet `{ id, name, geloest, hilfe, bedingungen }` (hilfe = Tipp oder Lösung genutzt); damit zählt die Werkstatt gelöste Aufgaben für „Mein Können“.
 
 | Aufruf | Ergebnis |
 |---|---|

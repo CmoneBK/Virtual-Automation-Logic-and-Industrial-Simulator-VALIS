@@ -1142,7 +1142,7 @@
 
   // ---------- Live-Werte aus dem VALIS-Zustand ----------
   function wertVon(ref, tiefe) {
-    const st = (typeof spsState !== 'undefined') ? spsState : {}; // eslint-disable-line no-undef
+    const st = window._anzeigeState || ((typeof spsState !== 'undefined') ? spsState : {}); // eslint-disable-line no-undef
     const tm = window.simTimers || {};
     if (!ref) return false;
     if (ref.art === 'c') return ref.k === 'hi';
@@ -1156,7 +1156,8 @@
       case 'OR': return bits().some(Boolean);
       case 'NOT': return !bits()[0];
       case 'CTU': if (b.ctd) return !(tm[b.src] && tm[b.src].q); return !!(tm[b.src] && tm[b.src].q); // CTD: Zähler-Q ist das Gegenteil
-      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'ANDF': case 'NANDF': case 'SSR': return !!(tm[b.src] && tm[b.src].q);
+      case 'ANDF': case 'NANDF': return st[b.src] != null ? !!st[b.src] : !!(tm[b.src] && tm[b.src].q); // mit 300 ms Anzeige
+      case 'TON': case 'TOF': case 'TONOF': case 'BSZ': case 'TP': case 'SSR': return !!(tm[b.src] && tm[b.src].q);
       case 'SHR': return !!st[b.src];
       case 'ASW': case 'AKOMP': {
         const x = (+ein('Ax') || 0) - (b.typ === 'AKOMP' ? (+ein('Ay') || 0) : 0);

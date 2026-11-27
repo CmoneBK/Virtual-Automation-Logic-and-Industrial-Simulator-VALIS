@@ -10285,6 +10285,19 @@ You must output exactly this JSON format. The logic code goes as a single string
             }
             _speicherAlt = neu;
         };
+        // Grafcet-Schreibweise (IEC 60848): `*` heißt UND, `+` heißt ODER. Die
+        // Norm-Ansicht der Schrittkette zeigt Übergänge so an; wer sie so in den
+        // Editor schreibt (`START * REED_HINTEN -> S2`), meint keine Rechnung.
+        // Umgesetzt wird nur, wenn der Ausdruck sonst rein boolesch ist: keine
+        // Zahl, kein Vergleich, kein -, /, %, ?, kein Baustein- oder Funktionsaufruf.
+        window._grafcetUndOder = function(expr) {
+            const s = String(expr == null ? '' : expr);
+            if (!/[*+]/.test(s)) return s;
+            const gerippe = s.replace(/[A-Za-z_ÄÖÜäöüß][A-Za-z0-9_ÄÖÜäöüß]*/g, 'X');
+            if (/[\d.<>=?\/%\-:,;]/.test(gerippe)) return s;
+            if (/X\s*\(/.test(gerippe)) return s;
+            return s.replace(/\s*\*\s*/g, ' && ').replace(/\s*\+\s*/g, ' || ');
+        };
         function parseToGraph(text) {
             const graph = new LogicGraph();
             graph.targetGateCounters = {}; // 🌟 NEU: Lokaler Counter pro Variable (Macht Gatter-IDs immun gegen F5-Disco!)
@@ -10432,6 +10445,9 @@ You must output exactly this JSON format. The logic code goes as a single string
                     .replace(/\bOR\b/gi, '||').replace(/\bODER\b/gi, '||').replace(/\bv\b/g, '||').replace(/∨/g, '||');
                 expressionStr = expressionStr.replace(/&&/g, '##AND##').replace(/&/g, '&&').replace(/##AND##/g, '&&');
                 expressionStr = expressionStr.replace(/\|\|/g, '##OR##').replace(/\|/g, '||').replace(/##OR##/g, '||');
+                // `*`/`+` neben &&, || oder ¬ ist Grafcet-Schreibweise für UND/ODER
+                // (z. B. aus einer Schrittkette in SR-Form), keine Rechnung.
+                if (/[*+]/.test(expressionStr) && /&&|\|\||¬/.test(expressionStr)) expressionStr = window._grafcetUndOder(expressionStr);
                 // 🌟 FIX: [^,]+ erlaubt ab sofort alle Zeichen (inklusive ¬) vor dem Komma!
                 // TONOF(IN, T_EIN, T_AUS) = Ein-/Ausschaltverzögerung (LOGO!), die anderen mit einer Zeit
                 let timerMatch = expressionStr.match(/^(TONOF)\s*\(\s*([^,]+)\s*,\s*((?:T#)?\s*[\d\.]*\s*(?:ms|s)?)\s*,\s*((?:T#)?\s*[\d\.]*\s*(?:ms|s)?)\s*\)$/i)
@@ -12217,6 +12233,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
 
             // Parser: liest den Code Zeile für Zeile als State-Machine.
             // Liefert { chains: [{name, steps, transitions, startLine, endLine}], errors }.
+            // `A * B` / `A + B` im Übergang = Grafcet-UND/ODER (siehe _grafcetUndOder)
+            const _gUO = (e) => (typeof window._grafcetUndOder === 'function') ? window._grafcetUndOder(e) : e;
             function parseChains(code) {
                 const lines = code.split('\n');
                 const chains = [];
@@ -12324,13 +12342,13 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         const im = line.match(RE_INTERLOCK);
                         if (im) {
                             if (step.interlock) errAt(i, 'INTERLOCK in Step "' + step.name + '" mehrfach definiert.');
-                            step.interlock = { expr: im[1].trim(), line: i };
+                            step.interlock = { expr: _gUO(im[1].trim()), line: i };
                             continue;
                         }
                         const vm = line.match(RE_SUPERVISION);
                         if (vm) {
                             if (step.supervision) errAt(i, 'SUPERVISION in Step "' + step.name + '" mehrfach definiert.');
-                            step.supervision = { expr: vm[1].trim(), line: i };
+                            step.supervision = { expr: _gUO(vm[1].trim()), line: i };
                             continue;
                         }
                         // Qualifier-Variante zuerst probieren (P/D/L/S/R/N/C-Prefix)
@@ -12367,7 +12385,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                             targets.forEach(target => {
                                 cur.transitions.push({
                                     from: step.name, to: target,
-                                    cond: tpm[1].trim(),
+                                    cond: _gUO(tpm[1].trim()),
                                     parallel: true, parallelGroup: targets.slice(),
                                     line: i
                                 });
@@ -12376,7 +12394,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         }
                         const tm = line.match(RE_TRANSITION);
                         if (tm) {
-                            cur.transitions.push({ from: step.name, to: tm[2].toUpperCase(), cond: tm[1].trim(), line: i });
+                            cur.transitions.push({ from: step.name, to: tm[2].toUpperCase(), cond: _gUO(tm[1].trim()), line: i });
                             continue;
                         }
                         const sm = line.match(RE_STEP);
@@ -31628,10 +31646,31 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                     const chains = window._schrittkettenChains || [];
                     const inSK = (origIdx) => chains.some(c => origIdx >= c.startLine && origIdx <= c.endLine);
                     const mapped = new Set();
+                    const genLines = expansion.lineMap ? String(expansion.code).split('\n') : [];
+                    const skGemeldet = new Set();
                     parsed.errorLines.forEach(idx => {
                         const orig = expansion.lineMap ? expansion.lineMap[idx] : idx;
                         if (orig === undefined) return;
-                        if (!inSK(orig)) mapped.add(orig);
+                        if (!inSK(orig)) { mapped.add(orig); return; }
+                        // Erzeugte Zeile einer gültigen Kette lässt sich nicht übersetzen
+                        // (z. B. Rechnung und Logik gemischt): sonst fehlten ihre
+                        // Variablen still im Sim-Panel. Fehler an den Übergang bzw.
+                        // die Aktion hängen, aus der die Zeile entstand.
+                        const ch = chains.find(c => orig >= c.startLine && orig <= c.endLine);
+                        if (!ch || orig !== ch.startLine) return;
+                        const gen = genLines[idx] || '';
+                        const quellen = [];
+                        (ch.transitions || []).forEach(t => quellen.push({ line: t.line, text: t.cond }));
+                        (ch.steps || []).forEach(st => {
+                            (st.actions || []).forEach(a => quellen.push({ line: a.line, text: a.rhs }));
+                            if (st.interlock) quellen.push({ line: st.interlock.line, text: st.interlock.expr });
+                            if (st.supervision) quellen.push({ line: st.supervision.line, text: st.supervision.expr });
+                        });
+                        const q = quellen.find(x => x.text && !/^(TRUE|FALSE)$/i.test(x.text) && gen.indexOf(x.text) >= 0);
+                        const zeile = q ? q.line : ch.startLine;
+                        if (skGemeldet.has(zeile)) return;
+                        skGemeldet.add(zeile);
+                        window._schrittkettenErrors.push({ line: zeile, msg: 'Dieser Ausdruck lässt sich nicht übersetzen' + (q ? ': „' + q.text + '“' : '') + '. UND schreibt man &&, & oder * , ODER ||, | oder + , NICHT ¬ oder ! . Rechnung (Zahlen, Vergleiche) und Logik nicht in einem Ausdruck mischen.' });
                     });
                     parsed.errorLines = mapped;
                 }

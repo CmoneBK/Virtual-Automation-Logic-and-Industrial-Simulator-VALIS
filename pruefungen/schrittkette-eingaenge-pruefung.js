@@ -129,7 +129,39 @@ const EINGAENGE = ['START', 'REED_SPANNER_HINTEN', 'REED_AUSWERFER_HINTEN', 'REE
   r = await lauf('SCHRITTKETTE K:\n  STEP S1 (INIT):\n    A := TRUE\n  TRANS:\n    START + X > -> S2\n  STEP S2:\n    B := TRUE\n  TRANS:\n    C -> S1\nEND\n');
   ok('kaputter Übergang: Fehler an seiner Zeile statt still', r.err.includes(4), JSON.stringify(r.err) + ' ' + r.skErr.join(' | '));
 
-  // 6) Beispiel-Schrittketten bleiben fehlerfrei
+  // 6) Rücksprung zum Vorgänger (S1 ⇄ S2) blockiert nicht mehr (Christoph 27.11.2026).
+  // Vorher R2 := Q1 neben S2 := Q1 && A: rücksetzdominant kam S2 nie.
+  const ZWEI = 'SCHRITTKETTE K:\n  STEP S1 (INIT):\n    LED := TRUE\n  TRANS:\n    A -> S2\n  STEP S2:\n    SP := TRUE\n  TRANS:\n    B -> S1\nEND\n';
+  const zweiLauf = async () => page.evaluate(async () => {
+    const w = ms => new Promise(r => setTimeout(r, ms));
+    ['A', 'B'].forEach(n => { try { changeType(n, 'taster'); } catch (e) {} });
+    await w(200);
+    if (!isSimulationActive) toggleSimulation();
+    await w(400);
+    const bild = () => (spsState.LED ? '1' : '-') + (spsState.SP ? '2' : '-');
+    const tipp = async n => { setTaster(n, true); await w(250); setTaster(n, false); await w(250); };
+    // Schrittmerker bleiben beim Codewechsel erhalten: erst in die Grundstellung
+    if (spsState.SP) await tipp('B');
+    const o = [bild()];
+    await tipp('A'); o.push(bild()); await tipp('B'); o.push(bild()); await tipp('A'); o.push(bild());
+    if (isSimulationActive) toggleSimulation();
+    return o.join(' ');
+  });
+  r = await lauf(ZWEI);
+  ok('2 Schritte: keine Fehler', r.err.length === 0 && r.skErr.length === 0, JSON.stringify(r.err) + ' ' + r.skErr.join(' | '));
+  let folge = await zweiLauf();
+  ok('2 Schritte (DSL): S1 → S2 → S1 → S2', folge === '1- -2 1- -2', folge);
+  const zweiSr = await page.evaluate(c => window._printSchrittketteAsSR(window._parseSchrittketten(c).chains[0], { baseNum: 1 }), ZWEI);
+  r = await lauf(zweiSr);
+  folge = await zweiLauf();
+  ok('2 Schritte (SR-Form): S1 → S2 → S1 → S2', folge === '1- -2 1- -2', folge + ' | ' + zweiSr.replace(/\n/g, ' / '));
+  const erkannt = await page.evaluate(code => {
+    const e = (window._recognizeRSChains(code) || [])[0]; const ch = e && (e.chain || e);
+    return ch ? ch.steps.length + ' ' + ch.transitions.map(t => t.from + '>' + t.to + ':' + t.cond).join(',') : 'keine';
+  }, zweiSr);
+  ok('2 Schritte: SR-Form wird wieder als Schrittkette erkannt', /^2 /.test(erkannt) && /:A\b/.test(erkannt) && /:B\b/.test(erkannt), erkannt);
+
+  // 7) Beispiel-Schrittketten bleiben fehlerfrei
   const beispiele = await page.evaluate(() => Object.keys(EXAMPLES).filter(k => /SCHRITTKETTE\s+\w+\s*:/.test(EXAMPLES[k].code || '')));
   for (const k of beispiele) {
     const code = await page.evaluate(k => EXAMPLES[k].code, k);

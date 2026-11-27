@@ -12573,8 +12573,21 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         ? '¬' + fltName(t.from) + ' && (' + effectiveCond + ')'
                         : effectiveCond;
                     sets.get(t.to).push('(' + Q(t.from) + ' && (' + guardedCond + '))');
-                    resets.get(t.from).push(Q(t.to));
+                    t._skGuard = guardedCond;
                 });
+                // Rücksetzen durch den Nachfolger. Führt vom Nachfolger auch ein
+                // Übergang zurück (S1 → S2 und S2 → S1, z. B. 2-Schritt-Kette oder
+                // Rücksprung zum Vorgänger), wäre R2 := Q1 schon wahr, während S2 aus
+                // Q1 gesetzt werden soll; rücksetzdominant käme S2 nie. Dann setzt Q1
+                // den Schritt nur zurück, solange dessen eigener Übergang nicht schaltet:
+                // R2 := Q1 && ¬(Bedingung S1 → S2).
+                c.transitions.forEach(t => {
+                    if (!sets.has(t.to) || !resets.has(t.from)) return;
+                    const zurueck = c.transitions.filter(b => b.from === t.to && b.to === t.from && b._skGuard != null);
+                    if (!zurueck.length) { resets.get(t.from).push(Q(t.to)); return; }
+                    resets.get(t.from).push('(' + Q(t.to) + ' && ' + zurueck.map(b => '¬(' + b._skGuard + ')').join(' && ') + ')');
+                });
+                c.transitions.forEach(t => { delete t._skGuard; });
 
                 // Manuelle Schritt-Steuerung (MAN-Modus): zwei Varianten je nach CONTROL:
                 //   - S_SEL_<step>: per-Step-Bool (z.B. 6 Drucktaster, einer pro Step)

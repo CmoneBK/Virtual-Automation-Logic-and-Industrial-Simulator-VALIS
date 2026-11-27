@@ -89,6 +89,23 @@ const ok = (n, g, d) => { console.log(`  ${g ? '✓' : '✗'} ${n}${d !== undefi
     ok(code + ': FUP und LOGO! ohne Fehler', !v.fehler && v.logo && !/^X /.test(v.logo), JSON.stringify(v).slice(0, 300));
     ok(code + ': SCL', sclRe.test(v.scl) && !/;\s*(HILF|FM)\s*\)/.test(v.scl), v.scl.slice(300, 1500));
   }
+  // Christoph 27.11.: „; NAME“ ist im FUP ein Netzwerk (Merker und Abzweig auf OUT), in der LOGO! am Baustein
+  const ein = await page.evaluate(async () => {
+    const warte = ms => new Promise(r => setTimeout(r, ms));
+    const fw = document.getElementById('fbs-wrapper'); if (fw && fw.style.display === 'none') toggleWorkspaceView('fbs-wrapper');
+    if (!window.fbsFupMode) window._toggleFbsFup();
+    const out = {};
+    for (const c of ['B := CTUD(HOCH, RUNTER, RESET, LADEN, 10; ZAEHLER)', 'B := TON(A, 2; HILF)', 'G := SR(A, C; SP)', 'L := STROMSTOSS(T; M)']) {
+      const ta = document.getElementById('code'); ta.value = c; ta.dispatchEvent(new Event('input', { bubbles: true })); await warte(1300);
+      const t = [...(_fbsDoc().querySelectorAll('#fup-norm-svg text'))].map(x => x.textContent);
+      out[c] = { netze: t.filter(x => /^Netzwerk/.test(x)).length, t: t.join('|'), logo: Logo.zeilen(Logo.aktuell()).map(z => z.text).join(' | ') };
+    }
+    window._toggleFbsFup();
+    return out;
+  });
+  Object.entries(ein).forEach(([c, r]) => ok('FUP: ein Netzwerk für ' + c, r.netze === 1, r.t));
+  ok('LOGO!: Baustein schreibt Merker und Ausgang (→ M1, Q1)', Object.values(ein).slice(0, 3).every(r => /→ M1, Q1/.test(r.logo) && !/ohne Baustein/.test(r.logo)), Object.values(ein).map(r => r.logo).join(' || '));
+
   ok('keine Seitenfehler', fehler.length === 0, fehler.join(' | '));
   console.log(`\n${gut} gut, ${schlecht} schlecht`);
   await browser.close(); srv.close();

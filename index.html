@@ -11040,7 +11040,7 @@ You must output exactly this JSON format. The logic code goes as a single string
             // Marker-Erkennung (// NETZWERK n: Titel) gebraucht.
             graph._sourceText = text;
             // FIX: Filtere die neuen GATE_ Variablen aus der UI-Liste heraus!
-            return { graph, jsCompiledCode, generatedQ: _kurz.generatedQ, flankenMerker: new Set(_kurz.lines.filter(l => l.flankenMerker).map(l => l.flankenMerker)), flankenMerkerVon: new Map(_kurz.lines.filter(l => l.flankeMit).map(l => l.flankeMit)), inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
+            return { graph, jsCompiledCode, generatedQ: _kurz.generatedQ, flankenMerker: new Set(_kurz.lines.filter(l => l.flankenMerker).map(l => l.flankenMerker)), flankenMerkerVon: new Map(_kurz.lines.filter(l => l.flankeMit).map(l => l.flankeMit)), benannteMerker: new Set(_kurz.lines.filter(l => l.bausteinMerker || l.speicherName).map(l => l.bausteinMerker || (String(l.text).match(/^\s*([^\s:=]+)/) || [])[1]).filter(Boolean)), inputs: [...allUsedInputs].filter(i => !definedOutputs.has(i) && !i.startsWith('AND_') && !i.startsWith('OR_') && !i.startsWith('GATE_')), outputs: [...definedOutputs], duplicates: [...duplicateOutputs], errorLines };
         }
 
         // ==========================================================
@@ -31661,6 +31661,7 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 window._generatedQ = parsed.generatedQ || new Set();
                 window._flankenMerker = parsed.flankenMerker || new Set();
                 window._flankenMerkerVon = parsed.flankenMerkerVon || new Map(); // Flankenbaustein-ID → Flankenmerker (M_BIT)
+                window._benannteMerker = parsed.benannteMerker || new Set(); // „; NAME“ an SR/RS und Bausteinen
                 // Reset-Trigger: Code ist komplett leer → Sticky-Pool leeren, damit die
                 // verwaisten Variablen aus alten Sessions nicht endlos hängenbleiben.
                 // (Bewusst NICHT bei nur „kein Code in parsed" — Parse-Fehler reichen nicht.)
@@ -82281,7 +82282,14 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 if (n.type === 'OUTPUT' && fmVon && [...fmVon.values()].includes(n.id)) return;
                 if (n.type === 'OUTPUT' || n.type === 'ARITH') roots.push({ id: n.id, line: lineOf(n.id) });
             });
-            roots.sort((a, b) => (a.line - b.line) || a.id.localeCompare(b.id));
+            // Gleiche Zeile (z. B. „B := CTUD(…; Z)“ → „Z := CTUD(…)“ und „B := Z“):
+            // was gelesen wird, kommt zuerst.
+            const liest = (a, b) => (inEdges.get(a) || []).some(e => e.sourceId === b);
+            roots.sort((a, b) => (a.line - b.line) || (liest(a.id, b.id) ? 1 : liest(b.id, a.id) ? -1 : 0) || a.id.localeCompare(b.id));
+            // „; NAME“: OUT := NAME hängt am Netzwerk von NAME (ein Netzwerk wie in TIA)
+            const benannt = window._benannteMerker instanceof Set ? window._benannteMerker : new Set();
+            const ausMerker = (id) => { const ie = inEdges.get(id) || []; return ie.length === 1 && !ie[0].inverted && benannt.has(ie[0].sourceId) && roots.some(x => x.id === ie[0].sourceId) ? ie[0].sourceId : null; };
+            const merkerItem = new Map(); // Merkername → Zuweisung im Netzwerk
             // Besitzer eines Speichers/Zeitglieds = die Zuweisung, die ihn direkt liest
             const owner = new Map();
             roots.forEach(r => {
@@ -82401,6 +82409,24 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                         // Speicher-Merker des Glieds (Q1, Q2_RS …), Q führt auf „=“ Ausgang.
                         if (isFF) child.ownerName = ffMerker(child.node);
                         body = { kind: 'assign', target: r.id, inv: !!(e && e.inverted), child };
+                    }
+                }
+                if (body.kind === 'assign' || body.kind === 'mem') merkerItem.set(body.kind === 'mem' ? body.target : body.target, body);
+                // „; NAME“: Ergebnis des Bausteins auf den Merker NAME und, als Abzweig, auf OUT.
+                // Beim Speicherglied steht NAME über dem Kasten, Q geht auf „=“ OUT.
+                const _m = body.kind === 'assign' && body.child.kind === 'op' ? ausMerker(r.id) : null;
+                if (_m && merkerItem.has(_m)) {
+                    const p = merkerItem.get(_m);
+                    const pNet = nets.find(nt => nt.items.includes(p));
+                    if (pNet) {
+                        if (p.kind === 'mem') {
+                            p.kind = 'assign'; p.target = r.id; p.inv = !!body.inv; p.child.ownerName = _m;
+                            merkerItem.set(_m, p);
+                        } else {
+                            body.branchOf = p;
+                            pNet.items.push(body);
+                        }
+                        return;
                     }
                 }
                 // Option „Einfache Zuweisungen einsortieren“ (wie im Netzwerkmodus):
@@ -82631,7 +82657,8 @@ SEL_STEP := (SEL_RAW.cv % <span class="num">6</span>) + <span class="num">1</spa
                 let r = right + 40;
                 net.items.forEach(it => {
                     if (it.kind === 'mem') { r = Math.max(r, right + 50); return; }
-                    const w = String(operandInfo(it.target, bmk).name || '').length * ZEICHEN_W;
+                    const _oi = operandInfo(it.target, bmk);
+                    const w = Math.max(String(_oi.name || '').length, it.branchOf ? String(_oi.sub || '').length * 0.85 : 0) * ZEICHEN_W;
                     r = Math.max(r, it.branchOf ? right + 34 + 6 + w + 10 : right + 17 + w / 2 + 10);
                 });
                 return r;

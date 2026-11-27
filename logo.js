@@ -580,7 +580,12 @@
     // Wurzeln: jede Zuweisung (OUTPUT) und jede Rechnung (ARITH), in Code-Reihenfolge
     const wurzeln = [];
     nodes.forEach(n => { if (n.type === 'OUTPUT' || n.type === 'ARITH') wurzeln.push({ id: n.id, zeile: zeileVon(n.id) }); });
-    wurzeln.sort((a, b) => ((a.zeile == null ? 1e9 : a.zeile) - (b.zeile == null ? 1e9 : b.zeile)) || a.id.localeCompare(b.id));
+    // gleiche Zeile („B := CTUD(…; Z)“ → „Z := CTUD(…)“ und „B := Z“): was gelesen wird, zuerst
+    const liest = (a, b) => (inEdges.get(a) || []).some(e => e.sourceId === b);
+    wurzeln.sort((a, b) => ((a.zeile == null ? 1e9 : a.zeile) - (b.zeile == null ? 1e9 : b.zeile)) || (liest(a.id, b.id) ? 1 : liest(b.id, a.id) ? -1 : 0) || a.id.localeCompare(b.id));
+    // „; NAME“: OUT := NAME hängt direkt am Baustein (B004 → M1, Q1), nicht hinter M1
+    const benannt = opt.benannteMerker || window._benannteMerker || new Set();
+    const wurzelRef = new Map();
     wurzeln.forEach(w => {
       const n = nodes.get(w.id);
       const k = modell.klemmen[w.id];
@@ -593,10 +598,11 @@
         }
       } else {
         const e = (inEdges.get(w.id) || [])[0];
-        ref = e ? quelle(e.sourceId) : konst(false);
+        ref = e ? (benannt.has(e.sourceId) && wurzelRef.has(e.sourceId) && wurzelRef.get(e.sourceId).art === 'b' ? wurzelRef.get(e.sourceId) : quelle(e.sourceId)) : konst(false);
         neg = !!(e && e.inverted);
       }
       if (neg) ref = nicht(ref, w.id, w.zeile);
+      wurzelRef.set(w.id, ref);
       if (ref.art === 'b') { if (!ref.b.ziele.includes(k)) ref.b.ziele.push(k); }
       else modell.verbindungen.push({ klemme: k, ref, name: w.id });
       modell.schritte.push({ art: 'k', klemme: k, ref, name: w.id });
@@ -762,10 +768,10 @@
       let s = b.kurz + ' ' + b.name;
       if (b.typ === 'AND' || b.typ === 'OR' || b.typ === 'NOT' || b.typ === 'ANDF' || b.typ === 'NANDF') s += ' · ' + b.ein.map(e => (e.neg ? 'NOT ' : '') + refText(e.ref)).join(', ');
       else {
-        const e = b.ein.filter(x => !((x.pin === 'Dir' || x.pin === 'Ral') && x.ref.art === 'c' && x.ref.k === 'lo')).map(x => x.pin + ' ← ' + refText(x.ref));
+        const e = b.ein.filter(x => !((x.pin === 'Dir' && x.ref.art === 'c') || (x.pin === 'Ral' && x.ref.art === 'c' && x.ref.k === 'lo'))).map(x => x.pin + ' ← ' + refText(x.ref));
         if (e.length) s += ' · ' + e.join(' · ');
         if (b.typ === 'BSZ') s += ' · Ral = lo';
-        if (b.typ === 'CTU') s += ' · Dir = ' + refText((b.ein.find(x => x.pin === 'Dir') || {}).ref || { art: 'c', k: 'lo' });
+        if (b.typ === 'CTU') { const d = (b.ein.find(x => x.pin === 'Dir') || {}).ref || { art: 'c', k: 'lo' }; if (d.art === 'c') s += ' · Dir = ' + refText(d); }
         if (b.par.length) s += ' · ' + b.par.map(p => p.n + ' = ' + p.w).join(', ');
       }
       const ziel = b.ziele.length ? b.ziele : b.abnehmer.map(x => x.kurz);
